@@ -1,57 +1,50 @@
-# [App Name] — AI Intelligence Layer on ABHA
+# Swastha — AI Intelligence Layer on ABHA
 
-Hackathon project: an AI-powered intelligence layer that organizes patients'
-scattered medical records (WhatsApp forwards, PDFs, lab reports) into one
-structured, searchable timeline — built as a layer on top of ABHA, not a
-competitor to it.
+Hackathon project: an AI-powered intelligence layer that organizes patients' scattered medical records (WhatsApp forwards, PDFs, lab reports) into one structured, searchable timeline — built as a layer on top of ABHA, not a competitor to it.
 
-## Repo structure
+## Repo Structure
 
 ```
 .
-├── backend/          FastAPI backend (ingestion, records, search, alerts, profiles)
-│   └── app/
-│       ├── api/      route handlers, one folder per feature
-│       ├── models/   Pydantic + DB models
-│       ├── services/ OCR, LLM structuring, drug interaction logic, RAG
-│       └── db/       DB connection, migrations
+├── backend/          Node/Express backend
+│   └── server.js     Server entrypoint & health routes
 ├── frontend/         React + Vite + Tailwind app
 │   └── src/
-│       ├── pages/    one folder per screen (Login, FamilyVault, Timeline, etc.)
-│       ├── components/  shared UI components
-│       ├── api/      API client functions
-│       └── hooks/    shared React hooks
-├── docs/             design docs, schema, architecture notes
-└── .github/workflows CI (lint/test on push)
+│       ├── pages/    Screen groups (Login, FamilyVault, Timeline, etc.)
+│       ├── api/      API client helper
+│       └── main.jsx
+├── docs/             Design documents & plans
+├── package.json      Consolidated root dependencies and execution scripts
+└── tailwind.config.js Tailwind styling config
 ```
 
-## Getting started
+## Getting Started
 
-### Backend
+### Installation
+Install all dependencies for both the frontend and backend from the root directory:
 ```bash
-cd backend
-python -m venv venv && source venv/bin/activate
-pip install -r requirements.txt
-cp .env.example .env   # fill in DB url + API keys
-uvicorn app.main:app --reload
-```
-
-### Frontend
-```bash
-cd frontend
 npm install
-cp .env.example .env
-npm run dev
 ```
 
-## Team ownership (fill in names)
+### Running the App
+We use consolidated scripts from the root directory to run both environments:
 
-| Area | Owner | Branch prefix |
-|---|---|---|
-| Ingestion pipeline (OCR + LLM structuring) | | `feature/ingestion-*` |
-| Drug interaction + RAG search | | `feature/ai-*` |
-| WhatsApp integration | | `feature/whatsapp-*` |
-| Frontend (Family Vault, Timeline, charts) | | `feature/ui-*` |
-| Demo data + pitch polish | | `feature/demo-*` |
+* **Backend Development Server** (Runs on port `5001` with nodemon):
+  ```bash
+  npm run dev:backend
+  ```
+* **Frontend Development Server** (Runs Vite):
+  ```bash
+  npm run dev:frontend
+  ```
 
-See `docs/design_document.md` for full architecture, schema, and API design.
+### Configuration
+Copy `backend/.env.example` to `backend/.env` (and create `frontend/.env` if frontend secrets are needed) to configure your database URLs and API keys.
+
+## Core Features
+1. **WhatsApp Bot Ingestion**: Send report screenshots/PDFs -> Ingest & structure
+2. **Drug Interaction & Duplicate Medicine Detector**: Warnings on dangerous prescriptions
+3. **Regional Language Report Simplification**: "Explain in Hindi" patient summaries
+4. **Lab Trend Visualization**: Multi-visit time-series charts (Recharts)
+5. **Smart Semantic Search (RAG)**: Conversational question answering grounded in medical records
+6. **Family Health Vault**: Single account with multi-profile management

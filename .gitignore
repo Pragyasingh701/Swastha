@@ -1,17 +1,32 @@
-# Python
-__pycache__/
-*.pyc
-venv/
-.env
-
-# Node
+# Dependency directories
 node_modules/
-dist/
+backend/node_modules/
+frontend/node_modules/
+
+# Environment files
+.env
 .env.local
+.env.*.local
+backend/.env
+frontend/.env
 
-# OS
+# Build outputs
+dist/
+build/
+frontend/dist/
+
+# OS/System files
 .DS_Store
+Thumbs.db
 
-# Editor
+# IDE/Editors
 .vscode/
 .idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Documentation
+docs/
