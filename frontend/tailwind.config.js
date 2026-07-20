@@ -1,8 +1,11 @@
+import forms from "@tailwindcss/forms";
+import containerQueries from "@tailwindcss/container-queries";
+
 /** @type {import('tailwindcss').Config} */
 export default {
   content: [
-    "./frontend/index.html",
-    "./frontend/src/**/*.{js,ts,jsx,tsx}",
+    "./index.html",
+    "./src/**/*.{js,ts,jsx,tsx}",
   ],
   darkMode: "class",
   theme: {
@@ -87,20 +90,77 @@ export default {
         "body-lg": ["Inter", "sans-serif"],
       },
       fontSize: {
-        "label-md": ["14px", { lineHeight: "20px", letterSpacing: "0.01em", fontWeight: "500" }],
-        "label-sm": ["12px", { lineHeight: "16px", letterSpacing: "0.05em", fontWeight: "600" }],
-        "headline-lg": ["32px", { lineHeight: "40px", letterSpacing: "-0.02em", fontWeight: "600" }],
-        display: ["48px", { lineHeight: "56px", letterSpacing: "-0.02em", fontWeight: "700" }],
-        "body-md": ["16px", { lineHeight: "24px", fontWeight: "400" }],
-        "body-sm": ["14px", { lineHeight: "20px", fontWeight: "400" }],
-        "headline-md": ["24px", { lineHeight: "32px", letterSpacing: "-0.01em", fontWeight: "600" }],
-        "headline-lg-mobile": ["24px", { lineHeight: "32px", letterSpacing: "-0.01em", fontWeight: "600" }],
-        "body-lg": ["18px", { lineHeight: "28px", fontWeight: "400" }],
+        "label-md": [
+          "14px",
+          {
+            lineHeight: "20px",
+            letterSpacing: "0.01em",
+            fontWeight: "500",
+          },
+        ],
+        "label-sm": [
+          "12px",
+          {
+            lineHeight: "16px",
+            letterSpacing: "0.05em",
+            fontWeight: "600",
+          },
+        ],
+        "headline-lg": [
+          "32px",
+          {
+            lineHeight: "40px",
+            letterSpacing: "-0.02em",
+            fontWeight: "600",
+          },
+        ],
+        display: [
+          "48px",
+          {
+            lineHeight: "56px",
+            letterSpacing: "-0.02em",
+            fontWeight: "700",
+          },
+        ],
+        "body-md": [
+          "16px",
+          {
+            lineHeight: "24px",
+            fontWeight: "400",
+          },
+        ],
+        "body-sm": [
+          "14px",
+          {
+            lineHeight: "20px",
+            fontWeight: "400",
+          },
+        ],
+        "headline-md": [
+          "24px",
+          {
+            lineHeight: "32px",
+            letterSpacing: "-0.01em",
+            fontWeight: "600",
+          },
+        ],
+        "headline-lg-mobile": [
+          "24px",
+          {
+            lineHeight: "32px",
+            letterSpacing: "-0.01em",
+            fontWeight: "600",
+          },
+        ],
+        "body-lg": [
+          "18px",
+          {
+            lineHeight: "28px",
+            fontWeight: "400",
+          },
+        ],
       },
     },
   },
-  plugins: [
-    require("@tailwindcss/forms"),
-    require("@tailwindcss/container-queries"),
-  ],
+  plugins: [forms, containerQueries],
 };
