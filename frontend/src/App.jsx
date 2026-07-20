@@ -1,29 +1,34 @@
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 
+//landingpage
+import LandingPage from "./modules/landing/pages/LandingPage";
+
 // Authentication
 import Login from "./modules/authentication/Login";
 import Register from "./modules/authentication/Register";
 import ForgotPassword from "./modules/authentication/ForgotPassword";
 import RoleSelection from "./modules/authentication/RoleSelection";
 
-// // Dashboard
-// import Dashboard from "./modules/dashboard/pages/Dashboard";
+// Dashboard
+import Dashboard from "./modules/dashboard/pages/Dashboard";
 
-// // Family
-// import FamilyVault from "./modules/family/pages/FamilyVault";
+// Family
+import FamilyVault from "./modules/family/pages/FamilyVault";
 
-// // Reports
-// import LabTrends from "./modules/reports/components/pages/LabTrends";
+// Reports
+import LabTrends from "./modules/reports/components/pages/LabTrends";
 
-// // Search
-// import AISearch from "./modules/search/pages/AISearch";
+// Search
+import AISearch from "./modules/search/pages/AISearch";
 
 export default function App() {
   return (
     <BrowserRouter>
       <Routes>
+        {/* Landing Page */}
+  <Route path="/" element={<LandingPage />} />
+
         {/* Authentication */}
-        <Route path="/" element={<Login />} />
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
         <Route path="/forgot-password" element={<ForgotPassword />} />
