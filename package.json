@@ -4,6 +4,7 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
+    "dev": "vite",
     "dev:frontend": "vite",
     "dev:backend": "nodemon backend/server.js",
     "build:frontend": "vite build",
@@ -25,6 +26,8 @@
     "twilio": "^5.2.0"
   },
   "devDependencies": {
+    "@tailwindcss/container-queries": "^0.1.1",
+    "@tailwindcss/forms": "^0.5.11",
     "@vitejs/plugin-react": "^4.3.0",
     "autoprefixer": "^10.4.0",
     "nodemon": "^3.1.4",
