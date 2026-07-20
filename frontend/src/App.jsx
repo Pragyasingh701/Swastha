@@ -1,28 +1,40 @@
-import { BrowserRouter, Routes, Route } from 'react-router-dom'
-import LandingPage from './modules/landing/pages/LandingPage'
-import Login from './modules/authentication/components/pages/Login'
-import FamilyVault from './modules/family/pages/FamilyVault'
-import Timeline from './modules/timeline/components/pages/Timeline'
-import Dashboard from './modules/dashboard/pages/Dashboard'
-import RoleSelection from './modules/authentication/components/pages/RoleSelection'
-import RecordDetail from './modules/reports/components/pages/ReportDetails'
-import LabTrends from './modules/reports/components/pages/LabTrends'
-import AISearch from './modules/search/pages/AISearch'
+import { BrowserRouter, Routes, Route } from "react-router-dom";
+
+// Authentication
+import Login from "./modules/authentication/Login";
+import Register from "./modules/authentication/Register";
+import ForgotPassword from "./modules/authentication/ForgotPassword";
+import RoleSelection from "./modules/authentication/RoleSelection";
+
+// // Dashboard
+// import Dashboard from "./modules/dashboard/pages/Dashboard";
+
+// // Family
+// import FamilyVault from "./modules/family/pages/FamilyVault";
+
+// // Reports
+// import LabTrends from "./modules/reports/components/pages/LabTrends";
+
+// // Search
+// import AISearch from "./modules/search/pages/AISearch";
 
 export default function App() {
   return (
     <BrowserRouter>
       <Routes>
-        <Route path="/" element={<LandingPage />} />
+        {/* Authentication */}
+        <Route path="/" element={<Login />} />
         <Route path="/login" element={<Login />} />
+        <Route path="/register" element={<Register />} />
+        <Route path="/forgot-password" element={<ForgotPassword />} />
         <Route path="/role-selection" element={<RoleSelection />} />
-        <Route path="/vault" element={<FamilyVault />} />
-        <Route path="/timeline/:profileId" element={<Timeline />} />
-        <Route path="/record/:recordId" element={<RecordDetail />} />
-        <Route path="/lab-trends/:profileId" element={<LabTrends />} />
-        <Route path="/search/:profileId" element={<AISearch />} />
+
+        {/* Main App */}
         <Route path="/dashboard" element={<Dashboard />} />
+        <Route path="/vault" element={<FamilyVault />} />
+        <Route path="/lab-trends" element={<LabTrends />} />
+        <Route path="/search" element={<AISearch />} />
       </Routes>
     </BrowserRouter>
-  )
+  );
 }
