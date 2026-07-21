@@ -1,0 +1,179 @@
+import React, { createContext, useContext, useState, useEffect } from 'react';
+import { authService } from '../../services/auth';
+
+const AuthContext = createContext(null);
+
+export const AuthProvider = ({ children }) => {
+  const [user, setUser] = useState(() => {
+    try {
+      const savedUser = localStorage.getItem('swastha_user');
+      return savedUser ? JSON.parse(savedUser) : null;
+    } catch (e) {
+      return null;
+    }
+  });
+
+  const [token, setToken] = useState(() => localStorage.getItem('swastha_token') || null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    if (token) {
+      localStorage.setItem('swastha_token', token);
+    } else {
+      localStorage.removeItem('swastha_token');
+    }
+  }, [token]);
+
+  useEffect(() => {
+    if (user) {
+      localStorage.setItem('swastha_user', JSON.stringify(user));
+    } else {
+      localStorage.removeItem('swastha_user');
+    }
+  }, [user]);
+
+  const login = async (email, password) => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const result = await authService.login(email, password);
+      if (result.token && result.user) {
+        setToken(result.token);
+        setUser(result.user);
+      }
+      return result;
+    } catch (err) {
+      setError(err.message);
+      throw err;
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const register = async (userData) => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const result = await authService.register(userData);
+      if (result.token && result.user) {
+        setToken(result.token);
+        setUser(result.user);
+      }
+      return result;
+    } catch (err) {
+      setError(err.message);
+      throw err;
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const loginWithGoogle = async (googleResponse) => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const result = await authService.loginWithGoogle(googleResponse.credential || googleResponse);
+      if (result.token && result.user) {
+        setToken(result.token);
+        setUser(result.user);
+      }
+      return result;
+    } catch (err) {
+      setError(err.message);
+      throw err;
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const registerWithGoogle = async (googleResponse, role = 'patient') => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const result = await authService.registerWithGoogle(googleResponse.credential || googleResponse, role);
+      if (result.token && result.user) {
+        setToken(result.token);
+        setUser(result.user);
+      }
+      return result;
+    } catch (err) {
+      setError(err.message);
+      throw err;
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const verifyOTP = async (email, otpCode) => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const result = await authService.verifyOTP(email, otpCode);
+      if (result.token && result.user) {
+        setToken(result.token);
+        setUser(result.user);
+      }
+      return result;
+    } catch (err) {
+      setError(err.message);
+      throw err;
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const logout = () => {
+    setToken(null);
+    setUser(null);
+    localStorage.removeItem('swastha_token');
+    localStorage.removeItem('swastha_user');
+  };
+
+  const setUserRole = (role) => {
+    if (user) {
+      const updated = { ...user, role, hasSelectedRole: true };
+      setUser(updated);
+      authService.updateRole(user.id || user.email, role);
+    }
+  };
+
+  const sendOTP = async (email) => {
+    try {
+      return await authService.sendOTP(email);
+    } catch (err) {
+      setError(err.message);
+      throw err;
+    }
+  };
+
+  return (
+    <AuthContext.Provider
+      value={{
+        user,
+        token,
+        isAuthenticated: !!token,
+        isLoading,
+        error,
+        login,
+        register,
+        loginWithGoogle,
+        registerWithGoogle,
+        verifyOTP,
+        sendOTP,
+        logout,
+        setUserRole,
+      }}
+    >
+      {children}
+    </AuthContext.Provider>
+  );
+};
+
+export const useAuth = () => {
+  const context = useContext(AuthContext);
+  if (!context) {
+    throw new Error('useAuth must be used within an AuthProvider');
+  }
+  return context;
+};

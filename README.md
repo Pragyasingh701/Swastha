@@ -1,50 +1,157 @@
-# Swastha — AI Intelligence Layer on ABHA
+# 🩺 Swastha — AI Intelligence Layer on ABHA
 
-Hackathon project: an AI-powered intelligence layer that organizes patients' scattered medical records (WhatsApp forwards, PDFs, lab reports) into one structured, searchable timeline — built as a layer on top of ABHA, not a competitor to it.
+**Swastha** is a state-of-the-art healthcare AI intelligence platform designed to organize scattered medical records (PDFs, lab reports, prescriptions) into a unified, searchable timeline. Built as an intelligence layer on top of India's ABHA ecosystem.
 
-## Repo Structure
+---
+
+## 🌟 Key Features
+
+- **Google OAuth 2.0 & Email Authentication**: Seamless social login and email signup with 6-digit security OTP verification.
+- **Supabase Cloud Database Persistence**: Production-grade Postgres database powered by Supabase with Row Level Security (RLS) support.
+- **Account Deduplication**: Enforces single unique user account per email address across Google and Email login methods.
+- **Smart Workspace Routing**: Remembers user role choices (Patient vs. Doctor) and routes returning users directly to their dashboard.
+- **Real SMTP Email Delivery**: Nodemailer integration with HTML templates for OTP codes and password reset links.
+- **Unified Monorepo Architecture**: Single command `npm run dev` boots up Express API (`:5001`) and Vite React frontend (`:5173`) concurrently.
+
+---
+
+## 📁 Repository Structure
 
 ```
-.
-├── backend/          Node/Express backend
-│   └── server.js     Server entrypoint & health routes
-├── frontend/         React + Vite + Tailwind app
-│   └── src/
-│       ├── pages/    Screen groups (Login, FamilyVault, Timeline, etc.)
-│       ├── api/      API client helper
-│       └── main.jsx
-├── docs/             Design documents & plans
-├── package.json      Consolidated root dependencies and execution scripts
-└── tailwind.config.js Tailwind styling config
+Swastha/
+├── backend/                  # Node.js & Express API Server
+│   ├── config/
+│   │   └── supabase.js       # Supabase Client SDK initialization
+│   ├── db/
+│   │   └── users.js          # User database access layer (Supabase / Postgres)
+│   ├── routes/
+│   │   └── auth.js           # Auth routes (Login, Register, Google OAuth, OTP)
+│   ├── utils/
+│   │   └── mailer.js         # Nodemailer SMTP email service
+│   ├── .env.example          # Backend environment variable template
+│   └── server.js             # Backend Express server entry point
+├── frontend/                 # React 18 + Vite + TailwindCSS App
+│   ├── src/
+│   │   ├── context/
+│   │   │   └── AuthContext.jsx # React Context for global auth state
+│   │   ├── modules/
+│   │   │   └── authentication/ # Login, Register, VerifyOTP, RoleSelection UI
+│   │   ├── services/
+│   │   │   └── auth.js         # Frontend Auth API service layer
+│   │   ├── App.jsx             # React Router route declarations
+│   │   └── main.jsx            # Application entry point wrapped with Providers
+│   └── .env.example          # Frontend environment variable template
+├── .gitignore                # Git exclusion rules
+├── package.json              # Monorepo root script & dependency manifest
+└── tailwind.config.js        # Root Tailwind CSS configuration
 ```
 
-## Getting Started
+---
 
-### Installation
-Install all dependencies for both the frontend and backend from the root directory:
+## 🚀 Quick Start Guide
+
+### 1. Prerequisites
+- **Node.js**: `v18+` or `v20+`
+- **npm**: `v9+`
+- **Supabase Account**: Free project at [supabase.com](https://supabase.com)
+
+### 2. Installation
+Install all dependencies for root monorepo, backend, and frontend with a single command:
+
 ```bash
 npm install
 ```
 
-### Running the App
-We use consolidated scripts from the root directory to run both environments:
+---
 
-* **Backend Development Server** (Runs on port `5001` with nodemon):
-  ```bash
-  npm run dev:backend
-  ```
-* **Frontend Development Server** (Runs Vite):
-  ```bash
-  npm run dev:frontend
-  ```
+## ⚙️ Environment Configuration
 
-### Configuration
-Copy `backend/.env.example` to `backend/.env` (and create `frontend/.env` if frontend secrets are needed) to configure your database URLs and API keys.
+### Backend Setup (`backend/.env`)
+Copy `backend/.env.example` to `backend/.env`:
 
-## Core Features
-1. **WhatsApp Bot Ingestion**: Send report screenshots/PDFs -> Ingest & structure
-2. **Drug Interaction & Duplicate Medicine Detector**: Warnings on dangerous prescriptions
-3. **Regional Language Report Simplification**: "Explain in Hindi" patient summaries
-4. **Lab Trend Visualization**: Multi-visit time-series charts (Recharts)
-5. **Smart Semantic Search (RAG)**: Conversational question answering grounded in medical records
-6. **Family Health Vault**: Single account with multi-profile management
+```bash
+cp backend/.env.example backend/.env
+```
+
+Populate the required credentials:
+
+```env
+PORT=5001
+
+# Google OAuth 2.0 Client ID
+GOOGLE_CLIENT_ID=your_google_client_id_here.apps.googleusercontent.com
+
+# JWT Secret
+JWT_SECRET=your_jwt_secret_key_here
+
+# Supabase Credentials (Get from Supabase > Project Settings > API)
+SUPABASE_URL=https://your-project-ref.supabase.co
+SUPABASE_SERVICE_ROLE_KEY=your_supabase_service_role_key_here
+
+# Nodemailer SMTP Email Configuration
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_USER=your_email@gmail.com
+SMTP_PASS=your_16_character_google_app_password
+EMAIL_FROM="Swastha Support" <your_email@gmail.com>
+FRONTEND_URL=http://localhost:5173
+```
+
+### Frontend Setup (`frontend/.env`)
+Copy `frontend/.env.example` to `frontend/.env`:
+
+```bash
+cp frontend/.env.example frontend/.env
+```
+
+Populate frontend environment variables:
+
+```env
+VITE_GOOGLE_CLIENT_ID=your_google_client_id_here.apps.googleusercontent.com
+VITE_API_BASE_URL=http://localhost:5001/api
+```
+
+---
+
+## 🗄️ Database Schema Setup (Supabase)
+
+Run the following SQL snippet in your **Supabase Dashboard > SQL Editor**:
+
+```sql
+CREATE TABLE IF NOT EXISTS users (
+  id VARCHAR(255) PRIMARY KEY,
+  email VARCHAR(255) UNIQUE NOT NULL,
+  name VARCHAR(255),
+  password_hash VARCHAR(255),
+  picture TEXT,
+  role VARCHAR(50) DEFAULT 'patient',
+  auth_provider VARCHAR(50) DEFAULT 'email',
+  specialty VARCHAR(255),
+  license_number VARCHAR(255),
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+```
+
+---
+
+## 🏃 Running the Application
+
+Launch both the **Express Backend** (`http://localhost:5001`) and **Vite Frontend** (`http://localhost:5173`) concurrently:
+
+```bash
+npm run dev
+```
+
+### Individual Development Servers:
+- **Frontend Only**: `npm run dev:frontend`
+- **Backend Only**: `npm run dev:backend`
+
+### Production Build:
+- **Build Frontend Assets**: `npm run build:frontend`
+
+---
+
+## 🛡️ License
+
+Built for the **Swastha Healthcare AI Hackathon**. All rights reserved.
