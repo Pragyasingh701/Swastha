@@ -13,13 +13,19 @@ export default function RoleSelection({ onSelectRole }) {
     }
   }, [user, navigate]);
 
-  const handleSelect = (role) => {
-    setUserRole(role);
-    if (onSelectRole) {
-      onSelectRole(role);
-    }
-    navigate("/dashboard", { replace: true });
-  };
+const handleSelect = (role) => {
+  setUserRole(role);
+
+  if (onSelectRole) {
+    onSelectRole(role);
+  }
+
+  if (role === "doctor") {
+    navigate("/doctor-register");
+  } else {
+    navigate("/patient-register");
+  }
+};
 
   return (
     <div className="bg-background text-on-surface min-h-screen flex flex-col relative overflow-x-hidden">

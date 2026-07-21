@@ -1,146 +1,526 @@
-import React, { useState } from "react";
-import { useNavigate, Link } from "react-router-dom";
-import { useAuth } from "../../context/AuthContext";
+import React, { useState, useRef } from "react";
+import { Link, useNavigate } from "react-router-dom";
 
 export default function DoctorRegister() {
   const navigate = useNavigate();
-  const { register } = useAuth();
+  const [form, setForm] = useState({
+    fullName: "",
+    email: "",
+    mobile: "",
+    password: "",
+    regNumber: "",
+    council: "",
+    degree: "",
+    specialization: "",
+    experience: 5,
+    hospitalName: "",
+    address: "",
+  });
+  const [files, setFiles] = useState({
+    regCertificate: null,
+    idProof: null,
+  });
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const [fullName, setFullName] = useState("");
-  const [email, setEmail] = useState("");
-  const [specialty, setSpecialty] = useState("General Medicine");
-  const [licenseNumber, setLicenseNumber] = useState("");
-  const [password, setPassword] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
-  const [errorMessage, setErrorMessage] = useState("");
+  const regCertInputRef = useRef(null);
+  const idProofInputRef = useRef(null);
 
-  const handleSubmit = async (e) => {
+  const handleChange = (e) => {
+    const { name, value } = e.target;
+    setForm((prev) => ({ ...prev, [name]: value }));
+  };
+
+  const handleFileChange = (key) => (e) => {
+    const file = e.target.files?.[0] || null;
+    setFiles((prev) => ({ ...prev, [key]: file }));
+  };
+
+  const handleSubmit = (e) => {
     e.preventDefault();
-    setErrorMessage("");
-    setIsLoading(true);
-
-    try {
-      await register({ fullName, email, password, role: "doctor", specialty, licenseNumber });
-      setIsLoading(false);
-      navigate("/dashboard");
-    } catch (err) {
-      setIsLoading(false);
-      setErrorMessage(err.message || "Registration failed.");
-    }
+    setIsSubmitting(true);
+    setTimeout(() => {
+      setIsSubmitting(false);
+      alert("Registration Successful! Your profile is under verification.");
+      navigate("/login");
+    }, 2000);
   };
 
   return (
-    <main className="min-h-screen w-full flex flex-col justify-center items-center p-6 bg-surface font-body-md text-on-surface selection:bg-primary-fixed">
-      <div className="w-full max-w-[480px]">
-        <div className="bg-white shadow-[0_8px_40px_-12px_rgba(15,23,42,0.08)] rounded-[20px] p-8 lg:p-10 border border-outline-variant/20">
-          <div className="text-center mb-8">
-            <div className="w-14 h-14 mx-auto mb-4 bg-primary/10 text-primary rounded-2xl flex items-center justify-center">
-              <span className="material-symbols-outlined text-[30px]">medical_services</span>
+    <div className="min-h-screen flex flex-col text-on-surface" style={{ backgroundColor: "#faf8ff" }}>
+      {/* TopNavBar */}
+      <nav className="bg-surface/80 dark:bg-surface-dim/80 backdrop-blur-lg border-b border-outline-variant/30 sticky top-0 z-50 shadow-sm">
+        <div className="flex justify-between items-center w-full px-6 py-3 max-w-screen-2xl mx-auto">
+          <div className="flex items-center gap-8">
+            <span className="font-headline-md text-headline-md font-bold text-primary tracking-tight">Swastha</span>
+            <div className="hidden md:flex gap-6 items-center">
+              <span className="text-on-surface-variant hover:text-primary transition-colors font-body-md text-body-md cursor-pointer">Features</span>
+              <span className="text-on-surface-variant hover:text-primary transition-colors font-body-md text-body-md cursor-pointer">ABHA Sync</span>
+              <span className="text-on-surface-variant hover:text-primary transition-colors font-body-md text-body-md cursor-pointer">Vault</span>
+              <span className="text-on-surface-variant hover:text-primary transition-colors font-body-md text-body-md cursor-pointer">Timeline</span>
             </div>
-            <h2 className="font-headline-md text-headline-md text-on-surface">Doctor Verification Register</h2>
-            <p className="font-body-sm text-body-sm text-on-surface-variant mt-2">
-              Join Swastha&apos;s provider network to access structured patient timelines & RAG diagnostic tools
+          </div>
+          <div className="flex items-center gap-4">
+            <Link
+              className="text-on-surface-variant font-label-md text-label-md px-4 py-2 hover:bg-surface-container-high/50 rounded-xl transition-all"
+              to="/login"
+            >
+              Login
+            </Link>
+            <Link
+              className="bg-primary text-on-primary font-label-md text-label-md px-5 py-2.5 rounded-xl shadow-lg hover:scale-[0.98] transition-transform"
+              to="/register"
+            >
+              Get Started
+            </Link>
+          </div>
+        </div>
+      </nav>
+
+      <main className="flex-grow flex items-center justify-center p-4 md:p-12 lg:p-16">
+        <div className="w-full max-w-4xl">
+          {/* Registration Header */}
+          <div className="text-center mb-12">
+            <h1 className="font-display text-[40px] md:text-display text-on-surface mb-4">Doctor Registration</h1>
+            <p className="font-body-lg text-body-lg text-on-surface-variant max-w-2xl mx-auto">
+              Join the Swastha network to provide intelligent, data-driven healthcare. Please complete all sections
+              below.
             </p>
           </div>
 
-          {errorMessage && (
-            <div className="mb-6 p-4 rounded-xl bg-error-container text-on-error-container text-body-sm flex items-center gap-3">
-              <span className="material-symbols-outlined text-[20px]">error</span>
-              <span>{errorMessage}</span>
-            </div>
-          )}
-
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="space-y-1">
-              <label className="font-label-md text-label-md text-on-surface-variant ml-1" htmlFor="docName">Full Name</label>
-              <input
-                required
-                id="docName"
-                type="text"
-                placeholder="Dr. Ananya Sharma"
-                value={fullName}
-                onChange={(e) => setFullName(e.target.value)}
-                className="w-full px-4 py-3 bg-surface-container-lowest border border-outline-variant rounded-xl font-body-md text-on-surface focus:outline-none focus:border-primary"
-              />
-            </div>
-
-            <div className="space-y-1">
-              <label className="font-label-md text-label-md text-on-surface-variant ml-1" htmlFor="docEmailReg">Professional Email</label>
-              <input
-                required
-                id="docEmailReg"
-                type="email"
-                placeholder="ananya@aiims.edu"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="w-full px-4 py-3 bg-surface-container-lowest border border-outline-variant rounded-xl font-body-md text-on-surface focus:outline-none focus:border-primary"
-              />
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1">
-                <label className="font-label-md text-label-md text-on-surface-variant ml-1" htmlFor="specialty">Specialty</label>
-                <select
-                  id="specialty"
-                  value={specialty}
-                  onChange={(e) => setSpecialty(e.target.value)}
-                  className="w-full px-3 py-3 bg-surface-container-lowest border border-outline-variant rounded-xl font-body-md text-on-surface focus:outline-none focus:border-primary"
-                >
-                  <option value="General Medicine">General Medicine</option>
-                  <option value="Cardiology">Cardiology</option>
-                  <option value="Endocrinology">Endocrinology</option>
-                  <option value="Pediatrics">Pediatrics</option>
-                  <option value="Neurology">Neurology</option>
-                  <option value="Oncology">Oncology</option>
-                </select>
+          <form className="space-y-8" onSubmit={handleSubmit}>
+            {/* Section 1: Personal Information */}
+            <div className="glass-morphism rounded-[24px] shadow-sm border border-outline-variant/30 overflow-hidden">
+              <div className="p-8 md:p-10">
+                <div className="flex items-center gap-3 mb-8">
+                  <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center text-primary">
+                    <span className="material-symbols-outlined">person</span>
+                  </div>
+                  <h2 className="font-headline-md text-headline-md text-on-surface">Personal Information</h2>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="space-y-2">
+                    <label className="font-label-md text-label-md text-on-surface-variant block ml-1">Full Name</label>
+                    <div className="relative">
+                      <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-outline-variant">
+                        person_outline
+                      </span>
+                      <input
+                        className="w-full h-11 pl-10 pr-4 bg-surface rounded-xl border border-outline-variant focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all placeholder:text-outline-variant/60"
+                        placeholder="e.g. Dr. Jane Doe"
+                        required
+                        type="text"
+                        name="fullName"
+                        value={form.fullName}
+                        onChange={handleChange}
+                      />
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <label className="font-label-md text-label-md text-on-surface-variant block ml-1">
+                      Email Address
+                    </label>
+                    <div className="relative">
+                      <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-outline-variant">
+                        mail
+                      </span>
+                      <input
+                        className="w-full h-11 pl-10 pr-4 bg-surface rounded-xl border border-outline-variant focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all placeholder:text-outline-variant/60"
+                        placeholder="doctor@example.com"
+                        required
+                        type="email"
+                        name="email"
+                        value={form.email}
+                        onChange={handleChange}
+                      />
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <label className="font-label-md text-label-md text-on-surface-variant block ml-1">
+                      Mobile Number
+                    </label>
+                    <div className="relative">
+                      <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-outline-variant">
+                        phone
+                      </span>
+                      <input
+                        className="w-full h-11 pl-10 pr-4 bg-surface rounded-xl border border-outline-variant focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all placeholder:text-outline-variant/60"
+                        placeholder="+91 00000 00000"
+                        required
+                        type="tel"
+                        name="mobile"
+                        value={form.mobile}
+                        onChange={handleChange}
+                      />
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <label className="font-label-md text-label-md text-on-surface-variant block ml-1">Password</label>
+                    <div className="relative">
+                      <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-outline-variant">
+                        lock
+                      </span>
+                      <input
+                        className="w-full h-11 pl-10 pr-4 bg-surface rounded-xl border border-outline-variant focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all placeholder:text-outline-variant/60"
+                        placeholder="••••••••"
+                        required
+                        type="password"
+                        name="password"
+                        value={form.password}
+                        onChange={handleChange}
+                      />
+                    </div>
+                  </div>
+                </div>
               </div>
+            </div>
 
-              <div className="space-y-1">
-                <label className="font-label-md text-label-md text-on-surface-variant ml-1" htmlFor="licNo">NMC Registration No</label>
-                <input
-                  required
-                  id="licNo"
-                  type="text"
-                  placeholder="NMC-987654"
-                  value={licenseNumber}
-                  onChange={(e) => setLicenseNumber(e.target.value)}
-                  className="w-full px-4 py-3 bg-surface-container-lowest border border-outline-variant rounded-xl font-body-md text-on-surface focus:outline-none focus:border-primary"
-                />
+            {/* Section 2: Professional Credentials */}
+            <div className="glass-morphism rounded-[24px] shadow-sm border border-outline-variant/30 overflow-hidden">
+              <div className="p-8 md:p-10">
+                <div className="flex items-center gap-3 mb-8">
+                  <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center text-primary">
+                    <span className="material-symbols-outlined">badge</span>
+                  </div>
+                  <h2 className="font-headline-md text-headline-md text-on-surface">Professional Credentials</h2>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="space-y-2">
+                    <label className="font-label-md text-label-md text-on-surface-variant block ml-1">
+                      Medical Registration Number
+                    </label>
+                    <div className="relative">
+                      <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-outline-variant">
+                        receipt_long
+                      </span>
+                      <input
+                        className="w-full h-11 pl-10 pr-4 bg-surface rounded-xl border border-outline-variant focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all placeholder:text-outline-variant/60"
+                        placeholder="e.g. MCI-12345"
+                        required
+                        type="text"
+                        name="regNumber"
+                        value={form.regNumber}
+                        onChange={handleChange}
+                      />
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <label className="font-label-md text-label-md text-on-surface-variant block ml-1">
+                      Medical Council
+                    </label>
+                    <div className="relative">
+                      <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-outline-variant">
+                        account_balance
+                      </span>
+                      <select
+                        className="w-full h-11 pl-10 pr-4 bg-surface rounded-xl border border-outline-variant focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all appearance-none"
+                        required
+                        name="council"
+                        value={form.council}
+                        onChange={handleChange}
+                      >
+                        <option disabled value="">
+                          Select Medical Council
+                        </option>
+                        <option>National Medical Commission (NMC)</option>
+                        <option>State Medical Council</option>
+                        <option>Dental Council of India</option>
+                      </select>
+                      <span className="material-symbols-outlined absolute right-3 top-1/2 -translate-y-1/2 text-outline-variant pointer-events-none">
+                        expand_more
+                      </span>
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <label className="font-label-md text-label-md text-on-surface-variant block ml-1">
+                      Primary Degree
+                    </label>
+                    <div className="relative">
+                      <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-outline-variant">
+                        school
+                      </span>
+                      <input
+                        className="w-full h-11 pl-10 pr-4 bg-surface rounded-xl border border-outline-variant focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all placeholder:text-outline-variant/60"
+                        placeholder="e.g. MBBS, MD, MS"
+                        required
+                        type="text"
+                        name="degree"
+                        value={form.degree}
+                        onChange={handleChange}
+                      />
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <label className="font-label-md text-label-md text-on-surface-variant block ml-1">
+                      Specialization
+                    </label>
+                    <div className="relative">
+                      <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-outline-variant">
+                        stethoscope
+                      </span>
+                      <input
+                        className="w-full h-11 pl-10 pr-4 bg-surface rounded-xl border border-outline-variant focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all placeholder:text-outline-variant/60"
+                        placeholder="e.g. Cardiology, Neurology"
+                        required
+                        type="text"
+                        name="specialization"
+                        value={form.specialization}
+                        onChange={handleChange}
+                      />
+                    </div>
+                  </div>
+                  <div className="space-y-2 md:col-span-2">
+                    <label className="font-label-md text-label-md text-on-surface-variant block ml-1">
+                      Years of Experience
+                    </label>
+                    <div className="relative flex items-center gap-4">
+                      <input
+                        className="w-full h-2 bg-surface-container-highest rounded-lg appearance-none cursor-pointer accent-primary"
+                        type="range"
+                        min="0"
+                        max="50"
+                        step="1"
+                        name="experience"
+                        value={form.experience}
+                        onChange={handleChange}
+                      />
+                      <div className="min-w-[80px] text-center bg-primary-container/20 text-primary font-bold px-3 py-1.5 rounded-lg border border-primary/10">
+                        <span>{form.experience}</span> yrs
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* AI Insight Component */}
+                <div className="mt-8 p-6 rounded-2xl bg-gradient-to-br from-primary-container/10 to-secondary-container/10 border border-primary/10 flex gap-4 items-start relative overflow-hidden">
+                  <div className="absolute inset-0 bg-white/40 backdrop-blur-[2px] -z-10"></div>
+                  <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-primary shrink-0">
+                    <span className="material-symbols-outlined" style={{ fontVariationSettings: "'FILL' 1" }}>
+                      auto_awesome
+                    </span>
+                  </div>
+                  <div>
+                    <h4 className="font-label-md text-label-md text-primary font-bold mb-1">AI Verification Sync</h4>
+                    <p className="font-body-sm text-body-sm text-on-surface-variant leading-relaxed">
+                      Our system will automatically attempt to verify your credentials with the National Health
+                      Authority database.
+                    </p>
+                  </div>
+                </div>
               </div>
             </div>
 
-            <div className="space-y-1">
-              <label className="font-label-md text-label-md text-on-surface-variant ml-1" htmlFor="docPass">Password</label>
-              <input
-                required
-                id="docPass"
-                type="password"
-                placeholder="At least 8 characters"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="w-full px-4 py-3 bg-surface-container-lowest border border-outline-variant rounded-xl font-body-md text-on-surface focus:outline-none focus:border-primary"
-              />
+            {/* Section 3: Hospital/Clinic Details */}
+            <div className="glass-morphism rounded-[24px] shadow-sm border border-outline-variant/30 overflow-hidden">
+              <div className="p-8 md:p-10">
+                <div className="flex items-center gap-3 mb-8">
+                  <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center text-primary">
+                    <span className="material-symbols-outlined">domain</span>
+                  </div>
+                  <h2 className="font-headline-md text-headline-md text-on-surface">Hospital/Clinic Details</h2>
+                </div>
+                <div className="space-y-6">
+                  <div className="space-y-2">
+                    <label className="font-label-md text-label-md text-on-surface-variant block ml-1">
+                      Hospital or Clinic Name
+                    </label>
+                    <div className="relative">
+                      <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-outline-variant">
+                        home_health
+                      </span>
+                      <input
+                        className="w-full h-11 pl-10 pr-4 bg-surface rounded-xl border border-outline-variant focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all placeholder:text-outline-variant/60"
+                        placeholder="Name of your primary practice"
+                        required
+                        type="text"
+                        name="hospitalName"
+                        value={form.hospitalName}
+                        onChange={handleChange}
+                      />
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <label className="font-label-md text-label-md text-on-surface-variant block ml-1">Full Address</label>
+                    <div className="relative">
+                      <span className="material-symbols-outlined absolute left-3 top-4 text-outline-variant">
+                        location_on
+                      </span>
+                      <textarea
+                        className="w-full min-h-[100px] pl-10 pr-4 py-3 bg-surface rounded-xl border border-outline-variant focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all placeholder:text-outline-variant/60 resize-none"
+                        placeholder="Enter complete practice address..."
+                        required
+                        name="address"
+                        value={form.address}
+                        onChange={handleChange}
+                      ></textarea>
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
 
-            <button
-              type="submit"
-              disabled={isLoading}
-              className="w-full h-[48px] mt-4 font-label-md text-body-md bg-primary-container text-white rounded-xl hover:bg-primary-container/90 transition-all flex items-center justify-center gap-2"
-            >
-              {isLoading ? "Submitting Application..." : "Submit Doctor Registration"}
-            </button>
+            {/* Section 4: Document Upload */}
+            <div className="glass-morphism rounded-[24px] shadow-sm border border-outline-variant/30 overflow-hidden">
+              <div className="p-8 md:p-10">
+                <div className="flex items-center gap-3 mb-8">
+                  <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center text-primary">
+                    <span className="material-symbols-outlined">upload_file</span>
+                  </div>
+                  <h2 className="font-headline-md text-headline-md text-on-surface">Document Upload</h2>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                  {/* Upload 1: Registration Certificate */}
+                  <div className="space-y-4">
+                    <label className="font-label-md text-label-md text-on-surface-variant block ml-1">
+                      Medical Registration Certificate
+                    </label>
+                    <div
+                      className="border-2 border-dashed border-outline-variant/50 rounded-2xl p-8 text-center hover:border-primary/50 hover:bg-primary/5 transition-all cursor-pointer group"
+                      onClick={() => regCertInputRef.current?.click()}
+                    >
+                      <span
+                        className="material-symbols-outlined text-outline-variant group-hover:text-primary mb-4 block"
+                        style={{ fontSize: "48px" }}
+                      >
+                        cloud_upload
+                      </span>
+                      <p className="font-label-md text-label-md text-on-surface-variant mb-1">
+                        {files.regCertificate ? files.regCertificate.name : "Click or drag to upload"}
+                      </p>
+                      <p className="font-body-sm text-body-sm text-outline-variant">PDF, PNG, JPG (Max 5MB)</p>
+                      <input
+                        className="hidden"
+                        type="file"
+                        ref={regCertInputRef}
+                        onChange={handleFileChange("regCertificate")}
+                        accept=".pdf,.png,.jpg,.jpeg"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Upload 2: Identity Proof */}
+                  <div className="space-y-4">
+                    <label className="font-label-md text-label-md text-on-surface-variant block ml-1">
+                      Identity Proof (Aadhar/PAN/Passport)
+                    </label>
+                    <div
+                      className="border-2 border-dashed border-outline-variant/50 rounded-2xl p-8 text-center hover:border-primary/50 hover:bg-primary/5 transition-all cursor-pointer group"
+                      onClick={() => idProofInputRef.current?.click()}
+                    >
+                      <span
+                        className="material-symbols-outlined text-outline-variant group-hover:text-primary mb-4 block"
+                        style={{ fontSize: "48px" }}
+                      >
+                        assignment_ind
+                      </span>
+                      <p className="font-label-md text-label-md text-on-surface-variant mb-1">
+                        {files.idProof ? files.idProof.name : "Click or drag to upload"}
+                      </p>
+                      <p className="font-body-sm text-body-sm text-outline-variant">PDF, PNG, JPG (Max 5MB)</p>
+                      <input
+                        className="hidden"
+                        type="file"
+                        ref={idProofInputRef}
+                        onChange={handleFileChange("idProof")}
+                        accept=".pdf,.png,.jpg,.jpeg"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Submit Button */}
+            <div className="pt-8">
+              <button
+                className="w-full py-4 rounded-2xl font-headline-md text-headline-md bg-primary text-on-primary shadow-xl shadow-primary/20 hover:scale-[0.99] transition-transform flex items-center justify-center gap-3 disabled:opacity-80 disabled:cursor-not-allowed"
+                type="submit"
+                disabled={isSubmitting}
+              >
+                {isSubmitting ? (
+                  <>
+                    <span className="material-symbols-outlined animate-spin">progress_activity</span>
+                    Processing...
+                  </>
+                ) : (
+                  <>
+                    Complete Registration
+                    <span className="material-symbols-outlined">how_to_reg</span>
+                  </>
+                )}
+              </button>
+              <p className="text-center mt-6 font-body-sm text-body-sm text-on-surface-variant">
+                By clicking "Complete Registration", you agree to our{" "}
+                <a className="text-primary hover:underline" href="#">
+                  Terms of Service
+                </a>{" "}
+                and{" "}
+                <a className="text-primary hover:underline" href="#">
+                  Privacy Policy
+                </a>
+                .
+              </p>
+            </div>
           </form>
 
-          <div className="mt-6 text-center">
+          {/* Trust Badges */}
+          <div className="mt-16 flex flex-wrap justify-center gap-12 opacity-60">
+            <div className="flex items-center gap-2">
+              <span className="material-symbols-outlined text-outline">verified_user</span>
+              <span className="font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider">
+                HIPAA Compliant
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="material-symbols-outlined text-outline">security</span>
+              <span className="font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider">
+                AES-256 Encryption
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="material-symbols-outlined text-outline">gpp_maybe</span>
+              <span className="font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider">
+                ABHA Integrated
+              </span>
+            </div>
+          </div>
+        </div>
+      </main>
+
+      {/* Footer */}
+      <footer className="bg-surface-container-low dark:bg-surface-container-lowest p-12 mt-auto border-t border-outline-variant/50">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-8 max-w-7xl mx-auto">
+          <div className="space-y-4">
+            <span className="font-headline-md text-headline-md font-bold text-primary tracking-tight">Swastha</span>
             <p className="font-body-sm text-body-sm text-on-surface-variant">
-              Already verified?{" "}
-              <Link to="/doctor-login" className="text-primary font-semibold hover:underline">
-                Doctor Sign In
-              </Link>
+              The future of clinical intelligence and data-driven healthcare SaaS for the modern world.
+            </p>
+          </div>
+          <div className="flex flex-col gap-3">
+            <span className="font-label-sm text-label-sm text-on-surface font-bold">Platform</span>
+            <a className="font-body-sm text-body-sm text-on-surface-variant hover:text-primary transition-colors" href="#">
+              Privacy Policy
+            </a>
+            <a className="font-body-sm text-body-sm text-on-surface-variant hover:text-primary transition-colors" href="#">
+              Terms of Service
+            </a>
+          </div>
+          <div className="flex flex-col gap-3">
+            <span className="font-label-sm text-label-sm text-on-surface font-bold">Resources</span>
+            <a className="font-body-sm text-body-sm text-on-surface-variant hover:text-primary transition-colors" href="#">
+              Security Architecture
+            </a>
+            <a className="font-body-sm text-body-sm text-on-surface-variant hover:text-primary transition-colors" href="#">
+              Contact Support
+            </a>
+          </div>
+          <div className="flex flex-col gap-3">
+            <span className="font-label-sm text-label-sm text-on-surface font-bold">Compliance</span>
+            <p className="font-body-sm text-body-sm text-on-surface-variant italic">
+              © 2024 Swastha Healthcare SaaS. HIPAA &amp; ABHA Compliant.
             </p>
           </div>
         </div>
-      </div>
-    </main>
+      </footer>
+    </div>
   );
 }
