@@ -6,6 +6,16 @@ export default {
   content: [
     "./index.html",
     "./src/**/*.{js,ts,jsx,tsx}",
+    "./layout/**/*.{js,ts,jsx,tsx}",
+    "./routes/**/*.{js,ts,jsx,tsx}",
+    "./services/**/*.{js,ts,jsx,tsx}",
+    "./utils/**/*.{js,ts,jsx,tsx}",
+    "./frontend/index.html",
+    "./frontend/src/**/*.{js,ts,jsx,tsx}",
+    "./frontend/layout/**/*.{js,ts,jsx,tsx}",
+    "./frontend/routes/**/*.{js,ts,jsx,tsx}",
+    "./frontend/services/**/*.{js,ts,jsx,tsx}",
+    "./frontend/utils/**/*.{js,ts,jsx,tsx}",
   ],
   darkMode: "class",
   theme: {
