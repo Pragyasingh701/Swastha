@@ -15,7 +15,6 @@ import DoctorRegister from "./modules/authentication/DoctorRegister";
 
 // Dashboard
 import Dashboard from "./modules/dashboard/pages/Dashboard";
-
 // Family
 import FamilyVault from "./modules/family/pages/FamilyVault";
 
