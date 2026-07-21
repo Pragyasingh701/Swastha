@@ -23,7 +23,29 @@ const resetTokenStore = global.__resetTokenStore; // token => { email, expiresAt
  * Helper to decode / verify Google Credentials
  */
 async function decodeGoogleCredential(credential) {
-  let email, name, picture, sub;
+  if (!credential || typeof credential !== 'string') {
+    throw new Error('Google credential is required');
+  }
+
+  let email;
+  let name;
+  let picture;
+  let sub;
+
+  async function fetchGoogleUserInfo(accessToken) {
+    const response = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`Google userinfo request failed with status ${response.status}`);
+    }
+
+    return response.json();
+  }
+
   if (GOOGLE_CLIENT_ID && GOOGLE_CLIENT_ID !== 'YOUR_GOOGLE_CLIENT_ID_HERE') {
     try {
       const ticket = await googleClient.verifyIdToken({
@@ -37,32 +59,45 @@ async function decodeGoogleCredential(credential) {
       sub = payload.sub;
     } catch (verifyErr) {
       try {
-        const gRes = await fetch(`https://www.googleapis.com/oauth2/v3/userinfo?access_token=${credential}`);
-        if (gRes.ok) {
-          const gUser = await gRes.json();
-          email = gUser.email;
-          name = gUser.name;
-          picture = gUser.picture;
-          sub = gUser.sub;
-        } else {
-          throw verifyErr;
-        }
+        const gUser = await fetchGoogleUserInfo(credential);
+        email = gUser.email;
+        name = gUser.name;
+        picture = gUser.picture;
+        sub = gUser.sub;
       } catch (fetchErr) {
-        throw verifyErr;
+        const combinedError = new Error(`Google token verification failed: ${verifyErr.message}`);
+        combinedError.cause = fetchErr;
+        throw combinedError;
       }
     }
   } else {
     try {
       const decoded = jwt.decode(credential);
-      email = decoded?.email || 'google_user@swastha.app';
-      name = decoded?.name || 'Google User';
-      picture = decoded?.picture || null;
-      sub = decoded?.sub || Date.now();
+      if (!decoded) {
+        const gUser = await fetchGoogleUserInfo(credential);
+        email = gUser.email;
+        name = gUser.name;
+        picture = gUser.picture;
+        sub = gUser.sub;
+      } else {
+        email = decoded?.email || 'google_user@swastha.app';
+        name = decoded?.name || 'Google User';
+        picture = decoded?.picture || null;
+        sub = decoded?.sub || Date.now();
+      }
     } catch (e) {
-      email = 'google_user@swastha.app';
-      name = 'Google User';
+      const gUser = await fetchGoogleUserInfo(credential);
+      email = gUser.email;
+      name = gUser.name;
+      picture = gUser.picture;
+      sub = gUser.sub;
     }
   }
+
+  if (!email) {
+    throw new Error('Could not extract valid email from Google credentials');
+  }
+
   return { email, name, picture, sub };
 }
 
@@ -144,13 +179,14 @@ router.post('/register', async (req, res) => {
  * Google Sign-In on Login Page -> Verifies user exists in DB
  */
 router.post('/google-login', async (req, res) => {
-  const { credential } = req.body;
-  if (!credential) {
+  const { credential, token: googleToken, access_token, id_token } = req.body;
+  const googleCredential = credential || googleToken || access_token || id_token;
+  if (!googleCredential) {
     return res.status(400).json({ message: 'Google credential is required' });
   }
 
   try {
-    const { email } = await decodeGoogleCredential(credential);
+    const { email } = await decodeGoogleCredential(googleCredential);
     if (!email) {
       return res.status(400).json({ message: 'Could not extract valid email from Google credentials' });
     }
@@ -188,13 +224,14 @@ router.post('/google-login', async (req, res) => {
  * Google Sign-Up on Register Page -> Checks if exists, creates account if new
  */
 router.post('/google-register', async (req, res) => {
-  const { credential, role = 'patient' } = req.body;
-  if (!credential) {
+  const { credential, token: googleToken, access_token, id_token, role = 'patient' } = req.body;
+  const googleCredential = credential || googleToken || access_token || id_token;
+  if (!googleCredential) {
     return res.status(400).json({ message: 'Google credential is required' });
   }
 
   try {
-    const { email, name, picture, sub } = await decodeGoogleCredential(credential);
+    const { email, name, picture, sub } = await decodeGoogleCredential(googleCredential);
     if (!email) {
       return res.status(400).json({ message: 'Could not extract valid email from Google credentials' });
     }
@@ -242,8 +279,9 @@ router.post('/google-register', async (req, res) => {
  * Legacy / Fallback POST /api/auth/google route
  */
 router.post('/google', async (req, res) => {
-  const { credential } = req.body;
-  const { email, name, picture, sub } = await decodeGoogleCredential(credential);
+  const { credential, token: googleToken, access_token, id_token } = req.body;
+  const googleCredential = credential || googleToken || access_token || id_token;
+  const { email, name, picture, sub } = await decodeGoogleCredential(googleCredential);
   const normalizedEmail = (email || 'google_user@swastha.app').toLowerCase().trim();
   const existingUser = await findUserByEmail(normalizedEmail);
 
