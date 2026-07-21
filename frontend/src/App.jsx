@@ -6,9 +6,7 @@ import LandingPage from "./modules/landing/pages/LandingPage";
 // Authentication
 import Login from "./modules/authentication/Login";
 import Register from "./modules/authentication/Register";
-import ForgotPassword from "./modules/authentication/ForgotPassword";
-import ResetPassword from "./modules/authentication/ResetPassword";
-import VerifyOTP from "./modules/authentication/VerifyOTP";
+// import ForgotPassword from "./modules/authentication/ForgotPassword";
 import RoleSelection from "./modules/authentication/RoleSelection";
 import DoctorLogin from "./modules/authentication/DoctorLogin";
 import DoctorRegister from "./modules/authentication/DoctorRegister";
@@ -34,9 +32,7 @@ export default function App() {
         {/* Authentication */}
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
-        <Route path="/forgot-password" element={<ForgotPassword />} />
-        <Route path="/reset-password" element={<ResetPassword />} />
-        <Route path="/verify-otp" element={<VerifyOTP />} />
+        {/* <Route path="/forgot-password" element={<ForgotPassword />} /> */}
         <Route path="/role-selection" element={<RoleSelection />} />
         <Route path="/doctor-login" element={<DoctorLogin />} />
         <Route path="/doctor-register" element={<DoctorRegister />} />
