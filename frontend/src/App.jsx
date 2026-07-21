@@ -6,8 +6,11 @@ import LandingPage from "./modules/landing/pages/LandingPage";
 // Authentication
 import Login from "./modules/authentication/Login";
 import Register from "./modules/authentication/Register";
-// import ForgotPassword from "./modules/authentication/ForgotPassword";
 import RoleSelection from "./modules/authentication/RoleSelection";
+
+import DoctorRegister from "./modules/authentication/DoctorRegister";
+import PatientRegister from "./modules/authentication/PatientRegister";
+
 
 // Dashboard
 import Dashboard from "./modules/dashboard/pages/Dashboard";
@@ -25,20 +28,30 @@ export default function App() {
   return (
     <BrowserRouter>
       <Routes>
-        {/* Landing Page */}
-  <Route path="/" element={<LandingPage />} />
+
+  
+
+        {/* Landing */}
+        <Route path="/" element={<LandingPage />} />
+
 
         {/* Authentication */}
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
-        {/* <Route path="/forgot-password" element={<ForgotPassword />} /> */}
         <Route path="/role-selection" element={<RoleSelection />} />
 
-        {/* Main App */}
+        {/* Registration Flows */}
+        <Route path="/doctor-register" element={<DoctorRegister />} />
+        <Route path="/patient-register" element={<PatientRegister />} />
+
+        {/* Main Application */}
         <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/vault" element={<FamilyVault />} />
         <Route path="/lab-trends" element={<LabTrends />} />
         <Route path="/search" element={<AISearch />} />
+
+        {/* 404 */}
+        <Route path="*" element={<h1>404 - Page Not Found</h1>} />
       </Routes>
     </BrowserRouter>
   );
