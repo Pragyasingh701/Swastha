@@ -197,6 +197,7 @@ export default function Login() {
 
               {/* Submit */}
               <button
+              onClick={() => navigate("/dashboard")}
                 className={`w-full h-[48px] font-label-md text-body-md rounded-xl active:scale-[0.98] transition-all duration-200 shadow-md shadow-primary-container/20 flex items-center justify-center gap-2 ${isSuccess
                     ? "bg-green-600 text-white"
                     : "bg-primary-container text-white hover:bg-primary-container/90"
@@ -225,6 +226,7 @@ export default function Login() {
 
             {/* Footer Link */}
             <div className="mt-8 text-center">
+              onClick={() => navigate("/register")}
               <p className="font-body-sm text-body-sm text-on-surface-variant">
                 Don&apos;t have an account?{" "}
                 <Link className="text-primary font-semibold hover:underline" to="/register">
