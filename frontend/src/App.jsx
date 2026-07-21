@@ -11,7 +11,6 @@ import RoleSelection from "./modules/authentication/RoleSelection";
 
 // Dashboard
 import Dashboard from "./modules/dashboard/pages/Dashboard";
-
 // Family
 import FamilyVault from "./modules/family/pages/FamilyVault";
 
