@@ -1,14 +1,16 @@
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 
-// Landing Page
+//landingpage
 import LandingPage from "./modules/landing/pages/LandingPage";
 
 // Authentication
 import Login from "./modules/authentication/Login";
 import Register from "./modules/authentication/Register";
 import RoleSelection from "./modules/authentication/RoleSelection";
+
 import DoctorRegister from "./modules/authentication/DoctorRegister";
 import PatientRegister from "./modules/authentication/PatientRegister";
+
 
 // Dashboard
 import Dashboard from "./modules/dashboard/pages/Dashboard";
@@ -26,8 +28,12 @@ export default function App() {
   return (
     <BrowserRouter>
       <Routes>
+
+  
+
         {/* Landing */}
         <Route path="/" element={<LandingPage />} />
+
 
         {/* Authentication */}
         <Route path="/login" element={<Login />} />
