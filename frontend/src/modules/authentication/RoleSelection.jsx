@@ -1,24 +1,24 @@
-import React from "react";
+import React, { useEffect } from "react";
+import { useNavigate } from "react-router-dom";
+import { useAuth } from "../../context/AuthContext";
 
-/**
- * RoleSelection
- *
- * Converted from static HTML into a clean React component for a
- * Vite + Tailwind project. Tailwind utility classes are unchanged
- * (make sure the custom colors/spacing/fontSize/fontFamily/borderRadius
- * tokens used below — e.g. `primary`, `on-surface`, `headline-md`,
- * `label-sm`, etc. — exist in your tailwind.config.js theme, since they
- * came from a custom config in the original file).
- *
- * Usage:
- *   <RoleSelection
- *     onSelectRole={(role) => navigate(`/${role}`)}
- *   />
- */
-export default function RoleSelection({ onSelectRole = () => {} }) {
+export default function RoleSelection({ onSelectRole }) {
+  const navigate = useNavigate();
+  const { user, setUserRole } = useAuth();
+
+  useEffect(() => {
+    // If user already has a selected role, do not allow staying on /role-selection
+    if (user?.hasSelectedRole || (user?.role && user?.role !== 'none')) {
+      navigate('/dashboard', { replace: true });
+    }
+  }, [user, navigate]);
+
   const handleSelect = (role) => {
-    console.log(`Navigating to ${role} experience...`);
-    onSelectRole(role);
+    setUserRole(role);
+    if (onSelectRole) {
+      onSelectRole(role);
+    }
+    navigate("/dashboard", { replace: true });
   };
 
   return (
@@ -82,7 +82,6 @@ export default function RoleSelection({ onSelectRole = () => {} }) {
               <div className="w-20 h-20 rounded-2xl bg-primary-container/10 flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
                 <span
                   className="material-symbols-outlined text-primary text-[40px]"
-                  data-icon="person"
                 >
                   person
                 </span>
@@ -97,17 +96,14 @@ export default function RoleSelection({ onSelectRole = () => {} }) {
               </p>
               <button
                 type="button"
-                className="w-full bg-primary-container text-on-primary-container py-3.5 px-6 rounded-xl font-label-md text-label-md shadow-md hover:brightness-110 active:scale-[0.98] transition-all flex items-center justify-center gap-2"
+                className="w-full bg-primary-container text-white py-3.5 px-6 rounded-xl font-label-md text-label-md shadow-md hover:brightness-110 active:scale-[0.98] transition-all flex items-center justify-center gap-2"
                 onClick={(e) => {
                   e.stopPropagation();
                   handleSelect("patient");
                 }}
               >
                 Continue as Patient
-                <span
-                  className="material-symbols-outlined text-[18px]"
-                  data-icon="arrow_forward"
-                >
+                <span className="material-symbols-outlined text-[18px]">
                   arrow_forward
                 </span>
               </button>
@@ -115,13 +111,12 @@ export default function RoleSelection({ onSelectRole = () => {} }) {
 
             {/* Card 2: Doctor */}
             <div
-              className="role-card-transition bg-surface-container-lowest/95 border border-outline-variant/30 p-8 rounded-2xl flex flex-col items-center text-center cursor-pointer group"
+              className="role-card-transition bg-surface-container-lowest/95 border border-outline-variant/30 p-8 rounded-2xl flex flex-col items-center text-center cursor-pointer group hover:border-primary/50"
               onClick={() => handleSelect("doctor")}
             >
               <div className="w-20 h-20 rounded-2xl bg-secondary-container/10 flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
                 <span
                   className="material-symbols-outlined text-secondary text-[40px]"
-                  data-icon="stethoscope"
                 >
                   stethoscope
                 </span>
@@ -143,10 +138,7 @@ export default function RoleSelection({ onSelectRole = () => {} }) {
                 }}
               >
                 Continue as Doctor
-                <span
-                  className="material-symbols-outlined text-[18px]"
-                  data-icon="arrow_forward"
-                >
+                <span className="material-symbols-outlined text-[18px]">
                   arrow_forward
                 </span>
               </button>
@@ -156,10 +148,7 @@ export default function RoleSelection({ onSelectRole = () => {} }) {
           {/* Secondary Info */}
           <div className="mt-16 flex flex-wrap justify-center gap-12 opacity-60">
             <div className="flex items-center gap-2">
-              <span
-                className="material-symbols-outlined text-[20px]"
-                data-icon="verified_user"
-              >
+              <span className="material-symbols-outlined text-[20px]">
                 verified_user
               </span>
               <span className="font-label-sm text-label-sm">
@@ -167,10 +156,7 @@ export default function RoleSelection({ onSelectRole = () => {} }) {
               </span>
             </div>
             <div className="flex items-center gap-2">
-              <span
-                className="material-symbols-outlined text-[20px]"
-                data-icon="security"
-              >
+              <span className="material-symbols-outlined text-[20px]">
                 security
               </span>
               <span className="font-label-sm text-label-sm">
@@ -178,10 +164,7 @@ export default function RoleSelection({ onSelectRole = () => {} }) {
               </span>
             </div>
             <div className="flex items-center gap-2">
-              <span
-                className="material-symbols-outlined text-[20px]"
-                data-icon="lock"
-              >
+              <span className="material-symbols-outlined text-[20px]">
                 lock
               </span>
               <span className="font-label-sm text-label-sm">
@@ -252,14 +235,11 @@ export default function RoleSelection({ onSelectRole = () => {} }) {
         </div>
         <div className="max-w-7xl mx-auto mt-12 pt-8 border-t border-outline-variant/30 flex justify-between items-center">
           <span className="font-label-sm text-label-sm text-on-surface-variant">
-            © 2024 Swastha Healthcare SaaS. HIPAA &amp; ABHA Compliant.
+            © 2026 Swastha Healthcare SaaS. HIPAA &amp; ABHA Compliant.
           </span>
           <div className="flex gap-4">
             <div className="w-8 h-8 rounded-full bg-surface-container flex items-center justify-center hover:bg-surface-container-high transition-colors">
-              <span
-                className="material-symbols-outlined text-[18px]"
-                data-icon="share"
-              >
+              <span className="material-symbols-outlined text-[18px]">
                 share
               </span>
             </div>
@@ -267,7 +247,6 @@ export default function RoleSelection({ onSelectRole = () => {} }) {
         </div>
       </footer>
 
-      {/* Component-scoped styles (glass card + gradient border + hover lift) */}
       <style>{`
         .glass-card {
           background: rgba(255, 255, 255, 0.8);
