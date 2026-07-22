@@ -3,6 +3,7 @@ import { OAuth2Client } from 'google-auth-library';
 import jwt from 'jsonwebtoken';
 import { sendOTPEmail, sendPasswordResetEmail } from '../utils/mailer.js';
 import { findUserByEmail, findUserById, createOrUpdateUser, updateUserRole, updateUserPassword } from '../db/users.js';
+import { getFamilyVaultForUser } from '../db/family.js';
 
 const router = express.Router();
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || '';
@@ -201,15 +202,18 @@ router.post('/google-login', async (req, res) => {
       });
     }
 
-    const token = jwt.sign({ userId: existingUser.id, email: existingUser.email, role: existingUser.role }, JWT_SECRET, {
+    const vault = await getFamilyVaultForUser(existingUser.id);
+    const token = jwt.sign({ userId: existingUser.id, email: existingUser.email, role: existingUser.role, vaultId: vault?.vaultId || null }, JWT_SECRET, {
       expiresIn: '7d',
     });
 
     return res.json({
       message: 'Google login successful',
       token,
+      vaultId: vault?.vaultId || null,
       user: {
         ...existingUser,
+        vaultId: vault?.vaultId || null,
         hasSelectedRole: !!(existingUser.role && existingUser.role !== 'none'),
       },
     });
@@ -256,15 +260,18 @@ router.post('/google-register', async (req, res) => {
       authProvider: 'google',
     });
 
-    const token = jwt.sign({ userId: user.id, email: user.email, role: user.role }, JWT_SECRET, {
+    const vault = null;
+    const token = jwt.sign({ userId: user.id, email: user.email, role: user.role, vaultId: vault?.vaultId || null }, JWT_SECRET, {
       expiresIn: '7d',
     });
 
     return res.status(201).json({
       message: 'Google registration successful',
       token,
+      vaultId: vault?.vaultId || null,
       user: {
         ...user,
+        vaultId: vault?.vaultId || null,
         role: null,
         hasSelectedRole: false,
       },
@@ -338,15 +345,18 @@ router.post('/verify-otp', async (req, res) => {
     });
   }
 
-  const token = jwt.sign({ userId: user.id, email: user.email, role: user.role }, JWT_SECRET, {
+  const vault = await getFamilyVaultForUser(user.id);
+  const token = jwt.sign({ userId: user.id, email: user.email, role: user.role, vaultId: vault?.vaultId || null }, JWT_SECRET, {
     expiresIn: '7d',
   });
 
   return res.json({
     message: 'Verification successful',
     token,
+    vaultId: vault?.vaultId || null,
     user: {
       ...user,
+      vaultId: vault?.vaultId || null,
       hasSelectedRole: !!(user.role),
     },
   });
@@ -383,6 +393,45 @@ router.post('/send-otp', async (req, res) => {
   return res.json({
     message: `Verification code sent to ${normalizedEmail}`,
   });
+});
+
+/**
+ * DELETE /api/auth/user
+ * Deletes the authenticated user and their family vault data.
+ */
+router.delete('/user', async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization || '';
+    const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : '';
+
+    if (!token) {
+      return res.status(401).json({ message: 'Authentication required to delete account.' });
+    }
+
+    let decoded;
+    try {
+      decoded = jwt.verify(token, JWT_SECRET);
+    } catch (err) {
+      return res.status(401).json({ message: 'Invalid or expired token.' });
+    }
+
+    const userId = decoded.userId;
+    if (!userId) {
+      return res.status(400).json({ message: 'User ID missing from token.' });
+    }
+
+    await deleteFamilyVaultForUser(userId);
+    const deleted = await deleteUserById(userId);
+
+    if (!deleted) {
+      return res.status(500).json({ message: 'Failed to delete user account.' });
+    }
+
+    return res.json({ message: 'Account and family vault data deleted successfully.' });
+  } catch (error) {
+    console.error('Delete user account error:', error);
+    return res.status(500).json({ message: 'Failed to delete account', error: error.message });
+  }
 });
 
 /**

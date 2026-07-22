@@ -22,6 +22,9 @@ import LabTrends from "./modules/reports/components/pages/LabTrends";
 // Search
 import AISearch from "./modules/search/pages/AISearch";
 
+// Timeline
+import Timeline from "./modules/timeline/components/pages/Timeline";
+
 export default function App() {
   return (
     <BrowserRouter>
@@ -40,6 +43,7 @@ export default function App() {
         {/* Main App */}
         <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/vault" element={<FamilyVault />} />
+        <Route path="/timeline" element={<Timeline />} />
         <Route path="/lab-trends" element={<LabTrends />} />
         <Route path="/search" element={<AISearch />} />
       </Routes>
