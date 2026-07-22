@@ -166,7 +166,7 @@ export const AuthProvider = ({ children }) => {
   const setUserRole = (role) => {
     const currentUser = user || JSON.parse(localStorage.getItem('swastha_user') || 'null');
     if (currentUser) {
-      const updated = { ...currentUser, role, hasSelectedRole: true };
+      const updated = { ...currentUser, role, hasSelectedRole: !!currentUser.hasSelectedRole };
       setUser(updated);
       authService.updateRole(currentUser.id || currentUser.email, role);
     }
