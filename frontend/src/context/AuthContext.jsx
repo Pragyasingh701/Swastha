@@ -182,7 +182,7 @@ export const AuthProvider = ({ children }) => {
         userId: currentUser?.id,
         ...profileData,
       };
-      const result = await authService.updateProfile(payload);
+      const result = await authService.updateProfile(payload, token);
       if (result?.user) {
         setUser(result.user);
       } else {
@@ -191,10 +191,7 @@ export const AuthProvider = ({ children }) => {
       return result;
     } catch (err) {
       setError(err.message);
-      const currentUser = user || JSON.parse(localStorage.getItem('swastha_user') || 'null');
-      // Fallback local update for preview / offline demo
-      setUser((prev) => ({ ...(prev || currentUser || {}), ...profileData, hasSelectedRole: true }));
-      return { user: { ...(currentUser || {}), ...profileData, hasSelectedRole: true } };
+      throw err;
     } finally {
       setIsLoading(false);
     }

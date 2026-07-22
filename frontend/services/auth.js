@@ -107,10 +107,13 @@ export const authService = {
   /**
    * Update User Profile Details (Patient or Doctor Registration)
    */
-  async updateProfile(profileData) {
+  async updateProfile(profileData, token) {
     const response = await fetch(`${API_BASE_URL}/auth/profile`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+      },
       body: JSON.stringify(profileData),
     });
     const data = await response.json();
