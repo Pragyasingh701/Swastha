@@ -127,8 +127,7 @@ export default function DoctorRegister() {
       navigate("/dashboard", { replace: true });
     } catch (err) {
       setIsSubmitting(false);
-      setUserRole("doctor");
-      navigate("/dashboard", { replace: true });
+      setErrorMessage(err.message || "Failed to complete registration. Please check your credentials and try again.");
     }
   };
 
@@ -173,6 +172,13 @@ export default function DoctorRegister() {
               below.
             </p>
           </div>
+
+          {errorMessage && (
+            <div className="mb-6 p-4 rounded-xl bg-error-container text-on-error-container text-body-sm flex items-center gap-3 border border-error/20 shadow-sm">
+              <span className="material-symbols-outlined text-[20px] text-error">error</span>
+              <span className="font-medium">{errorMessage}</span>
+            </div>
+          )}
 
           <form className="space-y-8" onSubmit={handleSubmit}>
             {/* Section 1: Personal Information */}

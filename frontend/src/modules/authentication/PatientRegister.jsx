@@ -34,6 +34,7 @@ export default function PatientRegister() {
   });
   const [agreedToTerms, setAgreedToTerms] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [errorMessage, setErrorMessage] = useState("");
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -42,14 +43,16 @@ export default function PatientRegister() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    setErrorMessage("");
+
     if (!agreedToTerms) {
-      alert("Please accept the Terms of Service & Privacy Policy before completing registration.");
+      setErrorMessage("Please accept the Terms of Service & Privacy Policy before completing registration.");
       return;
     }
 
     const cleanedPhone = formData.phone ? formData.phone.replace(/[\s\-\+\(\)]/g, '') : '';
     if (!/^\d{10,15}$/.test(cleanedPhone) || /^(\d)\1{9,}$/.test(cleanedPhone) || cleanedPhone === '1234567890' || cleanedPhone === '0123456789') {
-      alert("Please enter a valid 10-digit mobile number.");
+      setErrorMessage("Please enter a valid 10-digit mobile number.");
       return;
     }
 
@@ -73,8 +76,7 @@ export default function PatientRegister() {
       navigate("/dashboard", { replace: true });
     } catch (err) {
       setIsLoading(false);
-      setUserRole("patient");
-      navigate("/dashboard", { replace: true });
+      setErrorMessage(err.message || "Failed to complete registration. Please try again.");
     }
   };
 
@@ -181,6 +183,13 @@ export default function PatientRegister() {
                 <span className="material-symbols-outlined text-[20px]">fingerprint</span>
                 Continue with ABHA
               </button>
+
+              {errorMessage && (
+                <div className="p-4 rounded-xl bg-error-container text-on-error-container text-body-sm flex items-center gap-3 border border-error/20 shadow-sm">
+                  <span className="material-symbols-outlined text-[20px] text-error">error</span>
+                  <span className="font-medium">{errorMessage}</span>
+                </div>
+              )}
 
               {/* Form Fields */}
               <form className="space-y-md" onSubmit={handleSubmit}>
