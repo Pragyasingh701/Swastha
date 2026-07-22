@@ -499,11 +499,15 @@ router.post('/role', async (req, res) => {
  */
 router.post('/profile', authenticateToken, async (req, res) => {
   const { email, userId, role, ...profileDetails } = req.body;
-  const targetEmail = email || (userId && userId.includes('@') ? userId : null);
+  let targetEmail = email || (userId && userId.includes('@') ? userId : null);
   const targetRole = role || profileDetails.role;
 
-  // Verify that the authenticated user is updating their own profile
-  if (req.user.email.toLowerCase() !== targetEmail?.toLowerCase() && req.user.userId !== userId) {
+  const authEmail = (req.user.email || '').toLowerCase().trim();
+  if (!targetEmail && authEmail) {
+    targetEmail = authEmail;
+  }
+
+  if (authEmail && targetEmail && authEmail !== targetEmail.toLowerCase().trim()) {
     return res.status(403).json({ message: 'Forbidden. You can only update your own profile.' });
   }
 
