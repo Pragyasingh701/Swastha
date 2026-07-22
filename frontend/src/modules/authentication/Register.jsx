@@ -6,7 +6,6 @@ import { useAuth } from "../../context/AuthContext";
 export default function Register() {
   const navigate = useNavigate();
   const { register, registerWithGoogle } = useAuth();
-
   const [formData, setFormData] = useState({
     fullname: "",
     email: "",
@@ -78,7 +77,7 @@ export default function Register() {
     }
   };
 
-  const handleGoogleAuth = useGoogleLogin({
+  const handleGoogleRegister = useGoogleLogin({
     onSuccess: async (tokenResponse) => {
       setIsGoogleLoading(true);
       setErrorMessage("");
@@ -99,10 +98,10 @@ export default function Register() {
       } catch (err) {
         setIsGoogleLoading(false);
         if (err.message?.includes("already exists") || err.message?.includes("log in instead")) {
-          setErrorMessage("An account with this Google email already exists.");
-          setShowLoginPrompt(true);
+          setErrorMessage("An account with this Google email already exists. Please log in instead.");
+          navigate("/login");
         } else {
-          setErrorMessage(err.message || "Google Registration failed.");
+          setErrorMessage(err.message || "Google Sign-Up failed. Please try again.");
         }
       }
     },
@@ -191,13 +190,31 @@ export default function Register() {
                 </div>
               </li>
             </ul>
+            <div className="mt-12 pt-8 border-t border-outline-variant/30 flex items-center gap-4">
+              <div className="flex -space-x-3">
+                <div className="w-10 h-10 rounded-full border-2 border-white bg-surface-dim"></div>
+                <div className="w-10 h-10 rounded-full border-2 border-white bg-surface-dim"></div>
+                <div className="w-10 h-10 rounded-full border-2 border-white bg-surface-dim"></div>
+              </div>
+              <p className="font-label-md text-label-md text-on-surface-variant">
+                Joined by 10k+ health enthusiasts
+              </p>
+            </div>
           </div>
         </section>
 
         {/* Right Column: Registration Form */}
         <section className="w-full lg:w-1/2 flex flex-col p-8 md:p-16 lg:p-20 bg-surface-container-lowest justify-center">
           <div className="max-w-md mx-auto w-full">
-            <div className="mb-8">
+            {/* Mobile Branding */}
+            <div className="lg:hidden flex items-center gap-2 mb-10">
+              <span className="material-symbols-outlined text-primary !text-3xl">health_metrics</span>
+              <span className="font-headline-md text-headline-md font-bold text-primary tracking-tighter">
+                Swastha
+              </span>
+            </div>
+
+            <div className="mb-10">
               <h2 className="font-headline-lg text-headline-lg text-on-surface font-bold tracking-tight mb-2">
                 Create your account
               </h2>
@@ -223,10 +240,10 @@ export default function Register() {
               </div>
             )}
 
-            <form className="space-y-4" onSubmit={handleSubmit}>
+            <form className="space-y-5" onSubmit={handleSubmit}>
               {/* Full Name */}
               <div>
-                <label className="block font-label-md text-label-md text-on-surface-variant mb-1 ml-1" htmlFor="fullname">
+                <label className="block font-label-md text-label-md text-on-surface-variant mb-1.5 ml-1" htmlFor="fullname">
                   Full Name
                 </label>
                 <div className="relative group">
@@ -237,7 +254,7 @@ export default function Register() {
                     required
                     className="w-full h-11 pl-11 bg-surface border border-outline-variant rounded-xl focus:ring-4 focus:ring-primary/10 focus:border-primary outline-none transition-all placeholder:text-outline-variant/60 font-body-md text-body-md"
                     id="fullname"
-                    placeholder="Dr. Sarah Johnson or Ananya Sharma"
+                    placeholder="Dr. Sarah Johnson"
                     type="text"
                     value={formData.fullname}
                     onChange={handleChange}
@@ -247,7 +264,7 @@ export default function Register() {
 
               {/* Email */}
               <div>
-                <label className="block font-label-md text-label-md text-on-surface-variant mb-1 ml-1" htmlFor="email">
+                <label className="block font-label-md text-label-md text-on-surface-variant mb-1.5 ml-1" htmlFor="email">
                   Email Address
                 </label>
                 <div className="relative group">
@@ -268,7 +285,7 @@ export default function Register() {
 
               {/* Phone Number */}
               <div>
-                <label className="block font-label-md text-label-md text-on-surface-variant mb-1 ml-1" htmlFor="phone">
+                <label className="block font-label-md text-label-md text-on-surface-variant mb-1.5 ml-1" htmlFor="phone">
                   Phone Number
                 </label>
                 <div className="relative group">
@@ -279,7 +296,7 @@ export default function Register() {
                     required
                     className="w-full h-11 pl-11 bg-surface border border-outline-variant rounded-xl focus:ring-4 focus:ring-primary/10 focus:border-primary outline-none transition-all placeholder:text-outline-variant/60 font-body-md text-body-md"
                     id="phone"
-                    placeholder="+91 98765 43210"
+                    placeholder="+1 (555) 000-0000"
                     type="tel"
                     value={formData.phone}
                     onChange={handleChange}
@@ -288,9 +305,9 @@ export default function Register() {
               </div>
 
               {/* Password Grid */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <label className="block font-label-md text-label-md text-on-surface-variant mb-1 ml-1" htmlFor="password">
+                  <label className="block font-label-md text-label-md text-on-surface-variant mb-1.5 ml-1" htmlFor="password">
                     Password
                   </label>
                   <div className="relative group">
@@ -309,7 +326,7 @@ export default function Register() {
                   </div>
                 </div>
                 <div>
-                  <label className="block font-label-md text-label-md text-on-surface-variant mb-1 ml-1" htmlFor="confirmPassword">
+                  <label className="block font-label-md text-label-md text-on-surface-variant mb-1.5 ml-1" htmlFor="confirmPassword">
                     Confirm Password
                   </label>
                   <div className="relative group">
@@ -353,15 +370,11 @@ export default function Register() {
                 </label>
               </div>
 
-              {/* Submit */}
+              {/* Actions */}
               <button
-                className={`w-full h-12 rounded-xl font-body-md text-body-md font-bold shadow-lg transition-all flex items-center justify-center gap-2 ${
-                  isSuccess
-                    ? "bg-green-600 text-white"
-                    : "bg-primary text-white hover:bg-primary/90"
-                }`}
+                className="w-full bg-primary text-white h-12 rounded-xl font-body-md text-body-md font-bold shadow-lg hover:shadow-primary/20 hover:scale-[1.01] active:scale-[0.98] transition-all flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed disabled:hover:scale-100"
                 type="submit"
-                disabled={isLoading || isSuccess || isGoogleLoading}
+                disabled={isLoading || !agreedToTerms}
               >
                 {isLoading ? (
                   <>
@@ -371,27 +384,31 @@ export default function Register() {
                     </svg>
                     Creating Account...
                   </>
-                ) : isSuccess ? (
-                  "Verification Code Sent!"
                 ) : (
                   "Create Account"
                 )}
               </button>
 
-              <div className="relative py-3 flex items-center gap-4">
+              <div className="relative py-4 flex items-center gap-4">
                 <div className="h-px bg-outline-variant/50 flex-1"></div>
                 <span className="font-label-sm text-label-sm text-outline-variant">OR CONTINUE WITH</span>
                 <div className="h-px bg-outline-variant/50 flex-1"></div>
               </div>
 
               <button
+                className="w-full h-12 border border-outline-variant rounded-xl flex items-center justify-center gap-3 font-body-md text-body-md font-semibold text-on-surface hover:bg-surface-container-low transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
                 type="button"
-                onClick={() => handleGoogleAuth()}
-                disabled={isGoogleLoading}
-                className="w-full h-12 border border-outline-variant rounded-xl flex items-center justify-center gap-3 font-body-md text-body-md font-semibold text-on-surface hover:bg-surface-container-low transition-colors"
+                onClick={() => handleGoogleRegister()}
+                disabled={isGoogleLoading || isLoading || !agreedToTerms}
               >
                 {isGoogleLoading ? (
-                  "Authenticating Google..."
+                  <>
+                    <svg className="animate-spin h-5 w-5 text-primary" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    Creating account...
+                  </>
                 ) : (
                   <>
                     <svg className="w-5 h-5" viewBox="0 0 24 24">
@@ -406,7 +423,7 @@ export default function Register() {
               </button>
             </form>
 
-            <div className="mt-8 text-center">
+            <div className="mt-10 text-center">
               <p className="font-body-md text-body-md text-on-surface-variant">
                 Already have an account?{" "}
                 <Link className="text-primary font-bold hover:underline" to="/login">
@@ -414,9 +431,51 @@ export default function Register() {
                 </Link>
               </p>
             </div>
+
+            {/* Security Trust Badges */}
+            <div className="mt-12 flex flex-col items-center gap-4">
+              <div className="flex items-center gap-6 opacity-60">
+                <div className="flex items-center gap-1.5">
+                  <span className="material-symbols-outlined !text-[18px]">verified_user</span>
+                  <span className="font-label-sm text-label-sm">Secure SSL Encryption</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="material-symbols-outlined !text-[18px]">health_and_safety</span>
+                  <span className="font-label-sm text-label-sm">HIPAA Compliant</span>
+                </div>
+              </div>
+              <div className="flex items-center gap-1.5 px-3 py-1 bg-surface-container rounded-full opacity-70">
+                <span
+                  className="material-symbols-outlined !text-[14px] text-primary"
+                  style={{ fontVariationSettings: "'FILL' 1" }}
+                >
+                  shield
+                </span>
+                <span className="font-label-sm text-[10px] uppercase tracking-widest font-bold">
+                  Encrypted &amp; Anonymous
+                </span>
+              </div>
+            </div>
           </div>
         </section>
       </main>
+
+      {/* Footer Component (Minimal) */}
+      <footer className="fixed bottom-0 left-0 right-0 p-4 flex justify-between items-center z-50 pointer-events-none">
+        <div className="pointer-events-auto">
+          <span className="font-label-sm text-label-sm text-on-surface-variant/50">
+            © 2024 Swastha Healthcare SaaS. HIPAA &amp; ABHA Compliant.
+          </span>
+        </div>
+        <div className="pointer-events-auto flex gap-6">
+          <a className="font-label-sm text-label-sm text-on-surface-variant/50 hover:text-primary transition-colors" href="#">
+            Privacy
+          </a>
+          <a className="font-label-sm text-label-sm text-on-surface-variant/50 hover:text-primary transition-colors" href="#">
+            Terms
+          </a>
+        </div>
+      </footer>
     </div>
   );
 }

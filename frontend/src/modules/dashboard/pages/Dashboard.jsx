@@ -1,4 +1,7 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { useAuth } from "../../../context/AuthContext";
+import { authService } from "../../../services/auth";
 import {
   LayoutGrid,
   TrendingUp,
@@ -35,12 +38,12 @@ const hba1cData = [
 ];
 
 const navItems = [
-  { label: "Dashboard", icon: LayoutGrid, active: true },
-  { label: "Health Timeline", icon: TrendingUp },
-  { label: "Medical Vault", icon: Folder },
-  { label: "Family Records", icon: Users },
-  { label: "Medicine Safety", icon: ClipboardList },
-  { label: "Lab Insights", icon: TrendingUp },
+  { label: "Dashboard", icon: LayoutGrid, active: true, route: "/dashboard" },
+  { label: "Health Timeline", icon: TrendingUp, route: "/timeline" },
+  { label: "Medical Vault", icon: Folder, route: "/vault" },
+  { label: "Family Records", icon: Users, route: "/vault" },
+  { label: "Medicine Safety", icon: ClipboardList, route: "/search" },
+  { label: "Lab Insights", icon: TrendingUp, route: "/lab-trends" },
 ];
 
 const recentUploads = [
@@ -104,6 +107,8 @@ const statCards = [
 ];
 
 function Sidebar() {
+  const navigate = useNavigate();
+
   return (
     <aside className="hidden lg:flex lg:flex-col w-64 shrink-0 bg-slate-50 border-r border-slate-200 min-h-screen px-4 py-6">
       <div className="px-2 mb-8">
@@ -116,9 +121,11 @@ function Sidebar() {
       </div>
 
       <nav className="flex-1 space-y-1">
-        {navItems.map(({ label, icon: Icon, active }) => (
+        {navItems.map(({ label, icon: Icon, active, route }) => (
           <button
             key={label}
+            type="button"
+            onClick={() => route && navigate(route)}
             className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
               active
                 ? "bg-blue-100 text-blue-700"
@@ -132,9 +139,13 @@ function Sidebar() {
       </nav>
 
       <div className="space-y-3 pt-4">
-        <button className="w-full flex items-center justify-center gap-2 bg-blue-700 hover:bg-blue-800 transition-colors text-white text-sm font-semibold py-2.5 rounded-lg">
+        <button
+          type="button"
+          onClick={() => navigate('/vault')}
+          className="w-full flex items-center justify-center gap-2 bg-blue-700 hover:bg-blue-800 transition-colors text-white text-sm font-semibold py-2.5 rounded-lg"
+        >
           <PlusCircle size={18} />
-          Upload New Report
+          Open Family Vault
         </button>
 
         <div className="space-y-1 pt-2">
@@ -152,7 +163,7 @@ function Sidebar() {
   );
 }
 
-function Header() {
+function Header({ profile }) {
   return (
     <header className="flex items-center gap-4 px-6 lg:px-8 py-5 border-b border-slate-200 bg-white">
       <div className="flex-1 relative max-w-xl">
@@ -175,13 +186,15 @@ function Header() {
       <div className="flex items-center gap-3 pl-3 border-l border-slate-200">
         <div className="text-right hidden sm:block">
           <p className="text-sm font-semibold text-slate-800">
-            Dr. Arjun Mehta
+            {profile?.name || 'Loading user...'}
           </p>
-          <p className="text-xs text-slate-400">Personal Health Profile</p>
+          <p className="text-xs text-slate-400">
+            {profile?.email || 'Fetching profile from database...'}
+          </p>
         </div>
         <img
-          src="https://i.pravatar.cc/80?img=12"
-          alt="Dr. Arjun Mehta"
+          src={profile?.picture || 'https://i.pravatar.cc/80?img=12'}
+          alt={profile?.name || 'User profile'}
           className="w-9 h-9 rounded-full object-cover"
         />
       </div>
@@ -434,27 +447,88 @@ function Footer() {
 }
 
 export default function Dashboard() {
+  const navigate = useNavigate();
+  const { token, user: cachedUser, isAuthenticated } = useAuth();
+  const [profile, setProfile] = useState(cachedUser);
+  const [isProfileLoading, setIsProfileLoading] = useState(false);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    async function loadProfile() {
+      if (!isAuthenticated || !token) {
+        setProfile(cachedUser);
+        return;
+      }
+
+      setIsProfileLoading(true);
+      try {
+        const result = await authService.getProfile(token);
+        if (isMounted && result?.user) {
+          setProfile(result.user);
+        }
+      } catch {
+        if (isMounted) {
+          setProfile(cachedUser);
+        }
+      } finally {
+        if (isMounted) {
+          setIsProfileLoading(false);
+        }
+      }
+    }
+
+    loadProfile();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [cachedUser, isAuthenticated, token]);
+
   return (
     <div className="flex min-h-screen bg-slate-50 text-slate-900">
       <Sidebar />
 
       <div className="flex-1 flex flex-col min-w-0">
-        <Header />
+        <Header profile={profile} />
 
         <main className="flex-1 px-6 lg:px-8 py-8">
           <div className="flex items-center justify-between mb-6">
             <div>
               <h2 className="text-2xl font-bold text-slate-900">
-                Welcome back, Arjun
+                Welcome back, {profile?.name || 'User'}
               </h2>
               <p className="text-sm text-slate-500 mt-1">
-                Your clinical intelligence overview for today.
+                {isProfileLoading
+                  ? 'Loading your profile from the database...'
+                  : profile?.role
+                    ? `${profile.role.charAt(0).toUpperCase() + profile.role.slice(1)} profile from the database.`
+                    : 'Your clinical intelligence overview for today.'}
               </p>
             </div>
             <span className="flex items-center gap-2 bg-blue-50 text-blue-700 text-sm font-medium px-4 py-2 rounded-lg">
               <ShieldCheck size={16} />
-              ABHA Synced
+              {profile?.email ? 'Profile Synced' : 'ABHA Synced'}
             </span>
+          </div>
+
+          <div className="mb-6 flex flex-wrap gap-3">
+            <button
+              type="button"
+              onClick={() => navigate('/vault')}
+              className="flex items-center gap-2 rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-slate-800"
+            >
+              <Users size={16} />
+              Open Family Vault
+            </button>
+            <button
+              type="button"
+              onClick={() => navigate('/dashboard')}
+              className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition-colors hover:bg-slate-50"
+            >
+              <LayoutGrid size={16} />
+              Stay on Dashboard
+            </button>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 mb-6">

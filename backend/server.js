@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import authRoutes from './routes/auth.js';
+import familyRoutes from './routes/family.js';
 
 import fs from 'fs';
 
@@ -20,6 +21,7 @@ app.use('/uploads', express.static('uploads'));
 
 // Routes
 app.use('/api/auth', authRoutes);
+app.use('/api/family', familyRoutes);
 
 // Health check endpoint
 app.get('/health', (req, res) => {

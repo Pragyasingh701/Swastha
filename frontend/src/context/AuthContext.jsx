@@ -16,6 +16,7 @@ export const AuthProvider = ({ children }) => {
   const [token, setToken] = useState(() => localStorage.getItem('swastha_token') || null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [authReady, setAuthReady] = useState(false);
 
   useEffect(() => {
     if (token) {
@@ -32,6 +33,38 @@ export const AuthProvider = ({ children }) => {
       localStorage.removeItem('swastha_user');
     }
   }, [user]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function hydrateProfileFromDatabase() {
+      if (!token) {
+        if (!cancelled) {
+          setAuthReady(true);
+        }
+        return;
+      }
+
+      try {
+        const result = await authService.getProfile(token);
+        if (!cancelled && result?.user) {
+          setUser(result.user);
+        }
+      } catch {
+        // Keep the cached local auth state if the backend is unavailable.
+      } finally {
+        if (!cancelled) {
+          setAuthReady(true);
+        }
+      }
+    }
+
+    hydrateProfileFromDatabase();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [token]);
 
   const login = async (email, password) => {
     setIsLoading(true);
@@ -191,6 +224,7 @@ export const AuthProvider = ({ children }) => {
         user,
         token,
         isAuthenticated: !!token,
+        authReady,
         isLoading,
         error,
         login,
