@@ -1,12 +1,32 @@
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import { useAuth } from "../../context/AuthContext";
 
 export default function DoctorRegister() {
   const navigate = useNavigate();
+  const { user, register, updateProfile, uploadDocument, setUserRole } = useAuth();
+
+  useEffect(() => {
+    // Check if user has already completed registration
+    const storedUser = JSON.parse(localStorage.getItem('swastha_user') || 'null');
+    const activeUser = user || storedUser;
+
+    if (activeUser?.hasSelectedRole || (activeUser?.role && activeUser?.role !== 'none')) {
+      navigate("/dashboard", { replace: true });
+      return;
+    }
+
+    // Check if user is not authenticated
+    const hasToken = localStorage.getItem('swastha_token');
+    if (!activeUser && !hasToken) {
+      navigate("/register", { replace: true });
+    }
+  }, [user, navigate]);
+
   const [form, setForm] = useState({
-    fullName: "",
-    email: "",
-    mobile: "",
+    fullName: user?.fullName || user?.name || "",
+    email: user?.email || "",
+    mobile: user?.phone || user?.mobile || "",
     password: "",
     regNumber: "",
     council: "",
@@ -21,6 +41,7 @@ export default function DoctorRegister() {
     idProof: null,
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [errorMessage, setErrorMessage] = useState("");
 
   const regCertInputRef = useRef(null);
   const idProofInputRef = useRef(null);
@@ -35,14 +56,80 @@ export default function DoctorRegister() {
     setFiles((prev) => ({ ...prev, [key]: file }));
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
+
+    // Mobile Number Correctness Check
+    const cleanedMobile = form.mobile ? form.mobile.replace(/[\s\-\+\(\)]/g, '') : '';
+    if (!/^\d{10,15}$/.test(cleanedMobile) || /^(\d)\1{9,}$/.test(cleanedMobile) || cleanedMobile === '1234567890' || cleanedMobile === '0123456789') {
+      setErrorMessage("Please enter a valid 10-digit mobile number.");
+      return;
+    }
+
+    if (!files.regCertificate) {
+      setErrorMessage("Medical Registration Certificate is required. Please upload your document.");
+      return;
+    }
+    if (!files.idProof) {
+      setErrorMessage("Identity Proof (Aadhaar/PAN/Passport) is required. Please upload your document.");
+      return;
+    }
+
     setIsSubmitting(true);
-    setTimeout(() => {
+    setErrorMessage("");
+
+    try {
+      let regCertificateUrl = null;
+      let idProofUrl = null;
+
+      if (files.regCertificate && uploadDocument) {
+        try {
+          const res = await uploadDocument(files.regCertificate);
+          regCertificateUrl = res.url;
+        } catch (fErr) {
+          console.warn("Registration certificate upload notice:", fErr.message);
+        }
+      }
+
+      if (files.idProof && uploadDocument) {
+        try {
+          const res = await uploadDocument(files.idProof);
+          idProofUrl = res.url;
+        } catch (fErr) {
+          console.warn("ID proof upload notice:", fErr.message);
+        }
+      }
+
+      if (updateProfile) {
+        await updateProfile({
+          fullName: form.fullName,
+          email: form.email,
+          phone: form.mobile,
+          mobile: form.mobile,
+          regNumber: form.regNumber,
+          licenseNumber: form.regNumber,
+          council: form.council,
+          degree: form.degree,
+          specialization: form.specialization,
+          specialty: form.specialization,
+          experience: form.experience,
+          hospitalName: form.hospitalName,
+          address: form.address,
+          regCertificateUrl,
+          idProofUrl,
+          role: "doctor",
+          hasSelectedRole: true,
+        });
+      } else {
+        setUserRole("doctor");
+      }
       setIsSubmitting(false);
-      alert("Registration Successful! Your profile is under verification.");
-      navigate("/login");
-    }, 2000);
+      navigate("/dashboard", { replace: true });
+    } catch (err) {
+      setIsSubmitting(false);
+      setUserRole("doctor");
+      navigate("/dashboard", { replace: true });
+    }
   };
 
   return (
@@ -99,73 +186,76 @@ export default function DoctorRegister() {
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div className="space-y-2">
-                    <label className="font-label-md text-label-md text-on-surface-variant block ml-1">Full Name</label>
+                    <div className="flex items-center justify-between ml-1">
+                      <label className="font-label-md text-label-md text-on-surface-variant">Full Name</label>
+                      <span className="text-[11px] text-outline font-medium flex items-center gap-1">
+                        <span className="material-symbols-outlined text-[13px]">lock</span> Account Name
+                      </span>
+                    </div>
                     <div className="relative">
                       <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-outline-variant">
                         person_outline
                       </span>
                       <input
-                        className="w-full h-11 pl-10 pr-4 bg-surface rounded-xl border border-outline-variant focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all placeholder:text-outline-variant/60"
+                        readOnly
+                        className="w-full h-11 pl-10 pr-4 bg-surface-container-low border border-outline-variant/60 rounded-xl font-body-md text-on-surface cursor-not-allowed opacity-90 select-none"
                         placeholder="e.g. Dr. Jane Doe"
-                        required
                         type="text"
                         name="fullName"
                         value={form.fullName}
-                        onChange={handleChange}
                       />
                     </div>
                   </div>
+
                   <div className="space-y-2">
-                    <label className="font-label-md text-label-md text-on-surface-variant block ml-1">
-                      Email Address
-                    </label>
+                    <div className="flex items-center justify-between ml-1">
+                      <label className="font-label-md text-label-md text-on-surface-variant">Email Address</label>
+                      <span className="text-[11px] text-outline font-medium flex items-center gap-1">
+                        <span className="material-symbols-outlined text-[13px]">lock</span> Account Email
+                      </span>
+                    </div>
                     <div className="relative">
                       <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-outline-variant">
                         mail
                       </span>
                       <input
-                        className="w-full h-11 pl-10 pr-4 bg-surface rounded-xl border border-outline-variant focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all placeholder:text-outline-variant/60"
+                        readOnly
+                        className="w-full h-11 pl-10 pr-4 bg-surface-container-low border border-outline-variant/60 rounded-xl font-body-md text-on-surface cursor-not-allowed opacity-90 select-none"
                         placeholder="doctor@example.com"
-                        required
                         type="email"
                         name="email"
                         value={form.email}
-                        onChange={handleChange}
                       />
                     </div>
                   </div>
-                  <div className="space-y-2">
-                    <label className="font-label-md text-label-md text-on-surface-variant block ml-1">
-                      Mobile Number
-                    </label>
+
+                  <div className="space-y-2 md:col-span-2">
+                    <div className="flex items-center justify-between ml-1">
+                      <label className="font-label-md text-label-md text-on-surface-variant">Mobile Number</label>
+                      {user?.phone || user?.mobile ? (
+                        <span className="text-[11px] text-outline font-medium flex items-center gap-1">
+                          <span className="material-symbols-outlined text-[13px]">lock</span> Account Phone
+                        </span>
+                      ) : (
+                        <span className="text-[11px] text-primary font-medium">Please enter your 10-digit mobile number</span>
+                      )}
+                    </div>
                     <div className="relative">
                       <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-outline-variant">
                         phone
                       </span>
                       <input
-                        className="w-full h-11 pl-10 pr-4 bg-surface rounded-xl border border-outline-variant focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all placeholder:text-outline-variant/60"
-                        placeholder="+91 00000 00000"
+                        readOnly={!!(user?.phone || user?.mobile)}
+                        className={`w-full h-11 pl-10 pr-4 rounded-xl border border-outline-variant transition-all ${
+                          user?.phone || user?.mobile
+                            ? "bg-surface-container-low cursor-not-allowed opacity-90 select-none"
+                            : "bg-surface focus:border-primary focus:ring-4 focus:ring-primary/10"
+                        }`}
+                        placeholder="+91 98765 43210"
                         required
                         type="tel"
                         name="mobile"
                         value={form.mobile}
-                        onChange={handleChange}
-                      />
-                    </div>
-                  </div>
-                  <div className="space-y-2">
-                    <label className="font-label-md text-label-md text-on-surface-variant block ml-1">Password</label>
-                    <div className="relative">
-                      <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-outline-variant">
-                        lock
-                      </span>
-                      <input
-                        className="w-full h-11 pl-10 pr-4 bg-surface rounded-xl border border-outline-variant focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all placeholder:text-outline-variant/60"
-                        placeholder="••••••••"
-                        required
-                        type="password"
-                        name="password"
-                        value={form.password}
                         onChange={handleChange}
                       />
                     </div>

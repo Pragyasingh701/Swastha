@@ -131,16 +131,54 @@ export const AuthProvider = ({ children }) => {
   };
 
   const setUserRole = (role) => {
-    if (user) {
-      const updated = { ...user, role, hasSelectedRole: true };
+    const currentUser = user || JSON.parse(localStorage.getItem('swastha_user') || 'null');
+    if (currentUser) {
+      const updated = { ...currentUser, role, hasSelectedRole: true };
       setUser(updated);
-      authService.updateRole(user.id || user.email, role);
+      authService.updateRole(currentUser.id || currentUser.email, role);
+    }
+  };
+
+  const updateProfile = async (profileData) => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const currentUser = user || JSON.parse(localStorage.getItem('swastha_user') || 'null');
+      const payload = {
+        email: currentUser?.email || profileData?.email,
+        userId: currentUser?.id,
+        ...profileData,
+      };
+      const result = await authService.updateProfile(payload);
+      if (result?.user) {
+        setUser(result.user);
+      } else {
+        setUser((prev) => ({ ...(prev || currentUser || {}), ...profileData, hasSelectedRole: true }));
+      }
+      return result;
+    } catch (err) {
+      setError(err.message);
+      const currentUser = user || JSON.parse(localStorage.getItem('swastha_user') || 'null');
+      // Fallback local update for preview / offline demo
+      setUser((prev) => ({ ...(prev || currentUser || {}), ...profileData, hasSelectedRole: true }));
+      return { user: { ...(currentUser || {}), ...profileData, hasSelectedRole: true } };
+    } finally {
+      setIsLoading(false);
     }
   };
 
   const sendOTP = async (email) => {
     try {
       return await authService.sendOTP(email);
+    } catch (err) {
+      setError(err.message);
+      throw err;
+    }
+  };
+
+  const uploadDocument = async (file) => {
+    try {
+      return await authService.uploadDocument(file);
     } catch (err) {
       setError(err.message);
       throw err;
@@ -163,6 +201,8 @@ export const AuthProvider = ({ children }) => {
         sendOTP,
         logout,
         setUserRole,
+        updateProfile,
+        uploadDocument,
       }}
     >
       {children}
