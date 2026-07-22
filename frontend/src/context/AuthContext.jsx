@@ -211,7 +211,7 @@ export const AuthProvider = ({ children }) => {
 
   const uploadDocument = async (file) => {
     try {
-      return await authService.uploadDocument(file);
+      return await authService.uploadDocument(file, token);
     } catch (err) {
       setError(err.message);
       throw err;

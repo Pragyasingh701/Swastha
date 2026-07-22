@@ -51,22 +51,56 @@ const storage = multer.diskStorage({
   },
 });
 
-const upload = multer({ storage });
+const upload = multer({
+  storage,
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB file size limit
+  fileFilter: (req, file, cb) => {
+    const allowed = ['application/pdf', 'image/jpeg', 'image/png', 'image/webp'];
+    if (allowed.includes(file.mimetype)) {
+      cb(null, true);
+    } else {
+      cb(new Error('Invalid file type. Only PDF, JPEG, PNG, and WEBP files are allowed.'));
+    }
+  },
+});
+
+// Middleware to authenticate JWT bearer tokens
+const authenticateToken = (req, res, next) => {
+  const authHeader = req.headers.authorization || '';
+  const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : '';
+
+  if (!token) {
+    return res.status(401).json({ message: 'Authentication required. Please log in.' });
+  }
+
+  try {
+    const decoded = jwt.verify(token, JWT_SECRET);
+    req.user = decoded;
+    next();
+  } catch (err) {
+    return res.status(401).json({ message: 'Invalid or expired authentication token.' });
+  }
+};
 
 /**
  * POST /api/auth/upload
  * Document Upload Handler (Medical Registration Certificate & Identity Proof)
  */
-router.post('/upload', upload.single('file'), (req, res) => {
-  if (!req.file) {
-    return res.status(400).json({ message: 'No file uploaded' });
-  }
-  const fileUrl = `/uploads/${req.file.filename}`;
-  return res.json({
-    message: 'File uploaded successfully',
-    url: fileUrl,
-    filename: req.file.filename,
-    originalName: req.file.originalname,
+router.post('/upload', authenticateToken, (req, res) => {
+  upload.single('file')(req, res, (err) => {
+    if (err) {
+      return res.status(400).json({ message: err.message || 'File upload failed.' });
+    }
+    if (!req.file) {
+      return res.status(400).json({ message: 'No file uploaded.' });
+    }
+    const fileUrl = `/uploads/${req.file.filename}`;
+    return res.json({
+      message: 'File uploaded successfully',
+      url: fileUrl,
+      filename: req.file.filename,
+      originalName: req.file.originalname,
+    });
   });
 });
 

@@ -121,11 +121,16 @@ export const authService = {
   /**
    * Upload Registration Certificate or ID Proof Document
    */
-  async uploadDocument(file) {
+  async uploadDocument(file, token) {
     const formData = new FormData();
     formData.append('file', file);
+    const headers = {};
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
     const response = await fetch(`${API_BASE_URL}/auth/upload`, {
       method: 'POST',
+      headers,
       body: formData,
     });
     const data = await response.json();
