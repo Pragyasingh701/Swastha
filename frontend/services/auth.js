@@ -108,11 +108,12 @@ export const authService = {
    * Update User Profile Details (Patient or Doctor Registration)
    */
   async updateProfile(profileData, token) {
+    const activeToken = token || localStorage.getItem('swastha_token');
     const response = await fetch(`${API_BASE_URL}/auth/profile`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+        ...(activeToken ? { 'Authorization': `Bearer ${activeToken}` } : {}),
       },
       body: JSON.stringify(profileData),
     });
@@ -125,15 +126,12 @@ export const authService = {
    * Upload Registration Certificate or ID Proof Document
    */
   async uploadDocument(file, token) {
+    const activeToken = token || localStorage.getItem('swastha_token');
     const formData = new FormData();
     formData.append('file', file);
-    const headers = {};
-    if (token) {
-      headers['Authorization'] = `Bearer ${token}`;
-    }
     const response = await fetch(`${API_BASE_URL}/auth/upload`, {
       method: 'POST',
-      headers,
+      headers: activeToken ? { Authorization: `Bearer ${activeToken}` } : undefined,
       body: formData,
     });
     const data = await response.json();
