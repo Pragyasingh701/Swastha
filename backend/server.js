@@ -28,6 +28,15 @@ app.get('/health', (req, res) => {
   res.json({ status: 'ok', service: 'Swastha Backend', timestamp: new Date() });
 });
 
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
+});
+
+server.on('error', (error) => {
+  if (error.code === 'EADDRINUSE') {
+    console.error(`Port ${PORT} is already in use. Please stop the other process or set a different PORT in .env.`);
+    process.exit(1);
+  }
+  console.error('Server error:', error);
+  process.exit(1);
 });

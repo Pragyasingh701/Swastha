@@ -43,6 +43,16 @@ export async function getFamilyDashboard() {
   return request('/summary');
 }
 
+export async function getFamilyVault() {
+  return request('/vault');
+}
+
+export async function createFamilyVault() {
+  return request('/vault', {
+    method: 'POST',
+  });
+}
+
 export async function getFamilyMembers() {
   return request('/members');
 }
@@ -69,6 +79,8 @@ export async function deleteFamilyMember(memberId) {
 
 export default {
   getFamilyDashboard,
+  getFamilyVault,
+  createFamilyVault,
   getFamilyMembers,
   createFamilyMember,
   updateFamilyMember,

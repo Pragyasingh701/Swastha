@@ -1,11 +1,27 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { AlertCircle, RefreshCw, ShieldCheck, Sparkles, Users } from 'lucide-react';
+import {
+  AlertCircle,
+  Bell,
+  ClipboardList,
+  Folder,
+  HelpCircle,
+  LayoutGrid,
+  PlusCircle,
+  Search,
+  Settings,
+  ShieldCheck,
+  Sparkles,
+  TrendingUp,
+  Users,
+} from 'lucide-react';
 import { useAuth } from '../../../context/AuthContext';
 import {
   createFamilyMember,
+  createFamilyVault,
   deleteFamilyMember,
   getFamilyDashboard,
+  getFamilyVault,
   updateFamilyMember,
 } from '../../../api/family';
 import FamilyMember from './FamilyMember';
@@ -75,6 +91,68 @@ function validateForm(form, isEditing = false) {
   return errors;
 }
 
+const navItems = [
+  { label: 'Dashboard', icon: LayoutGrid, route: '/dashboard' },
+  { label: 'Health Timeline', icon: TrendingUp, route: '/timeline' },
+  { label: 'Medical Vault', icon: Folder, route: '/vault' },
+  { label: 'Family Records', icon: Users, route: '/vault' },
+  { label: 'Medicine Safety', icon: ClipboardList, route: '/search' },
+  { label: 'Lab Insights', icon: TrendingUp, route: '/lab-trends' },
+];
+
+function Sidebar() {
+  const navigate = useNavigate();
+
+  return (
+    <aside className="hidden lg:flex lg:flex-col w-64 shrink-0 border-r border-slate-200 bg-slate-50 px-4 py-6 min-h-screen">
+      <div className="mb-8 px-2">
+        <h1 className="text-xl font-bold leading-tight text-blue-700">Swastha AI</h1>
+        <p className="mt-0.5 text-[10px] font-medium tracking-widest text-slate-400">CLINICAL INTELLIGENCE</p>
+      </div>
+
+      <nav className="flex-1 space-y-1">
+        {navItems.map(({ label, icon: Icon, route }) => (
+          <button
+            key={label}
+            type="button"
+            onClick={() => route && navigate(route)}
+            className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-100"
+            aria-label={label}
+            title={label}
+          >
+            <Icon size={18} />
+            {label}
+          </button>
+        ))}
+      </nav>
+
+      <div className="space-y-3 pt-4">
+        <button
+          type="button"
+          onClick={() => navigate('/vault')}
+          className="flex w-full items-center justify-center gap-2 rounded-lg bg-blue-700 px-3 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-blue-800"
+          title="Open Family Vault"
+          aria-label="Open Family Vault"
+        >
+          <PlusCircle size={18} />
+          Open Family Vault
+        </button>
+
+        <div className="space-y-1 pt-2">
+          <button type="button" className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-100" title="Settings" aria-label="Settings">
+            <Settings size={18} />
+            Settings
+          </button>
+          <button type="button" className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-100" title="Support" aria-label="Support">
+            <HelpCircle size={18} />
+            Support
+          </button>
+        </div>
+      </div>
+    </aside>
+  );
+}
+
 function StatCard({ label, value, detail }) {
   return (
     <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
@@ -82,6 +160,36 @@ function StatCard({ label, value, detail }) {
       <p className="mt-2 text-3xl font-bold text-slate-900">{value}</p>
       <p className="mt-1 text-sm text-slate-500">{detail}</p>
     </div>
+  );
+}
+
+function Header({ userName, userEmail }) {
+  return (
+    <header className="flex items-center gap-4 border-b border-slate-200 bg-white px-6 py-5 lg:px-8">
+      <div className="flex-1 relative max-w-xl">
+        <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+        <input
+          type="text"
+          placeholder="Search medical history, labs, or insights..."
+          className="w-full rounded-lg border border-slate-200 bg-slate-50 py-2.5 pl-9 pr-4 text-sm text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-200"
+        />
+      </div>
+
+      <button type="button" className="relative rounded-lg p-2 hover:bg-slate-100">
+        <Bell size={20} className="text-slate-600" />
+        <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-red-500" />
+      </button>
+
+      <div className="flex items-center gap-3 border-l border-slate-200 pl-3">
+        <div className="hidden text-right sm:block">
+          <p className="text-sm font-semibold text-slate-800">{userName || 'Loading user...'}</p>
+          <p className="text-xs text-slate-400">{userEmail || 'Fetching profile...'}</p>
+        </div>
+        <div className="flex h-9 w-9 items-center justify-center rounded-full bg-blue-100 font-semibold text-blue-700">
+          {(userName || 'U').charAt(0).toUpperCase()}
+        </div>
+      </div>
+    </header>
   );
 }
 
@@ -106,8 +214,17 @@ export default function FamilyVault() {
   const [notice, setNotice] = useState('');
   const [fieldErrors, setFieldErrors] = useState({});
   const [serverErrorMeta, setServerErrorMeta] = useState(null);
+  const [familyVault, setFamilyVault] = useState(null);
+  const [showVaultModal, setShowVaultModal] = useState(false);
+  const [vaultCreating, setVaultCreating] = useState(false);
 
   async function loadFamilyVault() {
+    if (!isAuthenticated || !token) {
+      setError('Please log in to access Family Vault.');
+      setLoading(false);
+      return;
+    }
+
     setLoading(true);
     setError('');
 
@@ -124,6 +241,40 @@ export default function FamilyVault() {
     }
   }
 
+  async function loadVaultStatus() {
+    if (!isAuthenticated || !token) {
+      setFamilyVault(null);
+      setShowVaultModal(false);
+      return;
+    }
+
+    try {
+      const data = await getFamilyVault();
+      const vault = data?.vault || null;
+      setFamilyVault(vault);
+      setShowVaultModal(!vault);
+    } catch (loadError) {
+      setError(loadError.message || 'Failed to load family vault status');
+    }
+  }
+
+  async function handleCreateFamilyVault() {
+    setVaultCreating(true);
+    setError('');
+
+    try {
+      const data = await createFamilyVault();
+      const vault = data?.vault || null;
+      setFamilyVault(vault);
+      setShowVaultModal(false);
+      setNotice(data?.message || 'Family vault created successfully.');
+    } catch (createError) {
+      setError(createError.message || 'Failed to create family vault');
+    } finally {
+      setVaultCreating(false);
+    }
+  }
+
   useEffect(() => {
     if (!authReady) {
       return;
@@ -134,6 +285,7 @@ export default function FamilyVault() {
       return;
     }
 
+    loadVaultStatus();
     loadFamilyVault();
   }, [authReady, isAuthenticated, navigate, token, user]);
 
@@ -145,18 +297,38 @@ export default function FamilyVault() {
   }
 
   function handleEdit(member) {
+    if (!isAuthenticated || !token) {
+      setError('Please log in first to manage family members.');
+      navigate('/login', { replace: true });
+      return;
+    }
+
+    if (!familyVault) {
+      setShowVaultModal(true);
+      setError('Create a family vault first to manage family members.');
+      return;
+    }
+
     setEditingMemberId(member.id);
     setFieldErrors({});
+    setError('');
+    setNotice('');
+    setServerErrorMeta(null);
     setForm({
       name: member.name || '',
       age: member.age ?? '',
       relationship: member.relationship || '',
-      relationshipTag: member.relationship_tag || '',
-      healthOverview: member.health_overview || '',
+      relationshipTag: member.relationshipTag || member.relationship_tag || '',
+      healthOverview: member.healthOverview || member.health_overview || '',
       notes: member.notes || '',
-      lastVisitDate: member.last_visit_date || '',
-      nextCheckupDate: member.next_checkup_date || '',
+      lastVisitDate: member.lastVisitDate || member.last_visit_date || '',
+      nextCheckupDate: member.nextCheckupDate || member.next_checkup_date || '',
     });
+
+    // Scroll the form into view so the user sees the pre-populated fields
+    setTimeout(() => {
+      document.querySelector('form')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, 50);
   }
 
   async function handleSubmit(event) {
@@ -164,6 +336,18 @@ export default function FamilyVault() {
     setError('');
     setNotice('');
     setServerErrorMeta(null);
+
+    if (!isAuthenticated || !token) {
+      setError('Please log in first to add family members.');
+      navigate('/login', { replace: true });
+      return;
+    }
+
+    if (!familyVault) {
+      setShowVaultModal(true);
+      setError('Create a family vault first to add family members.');
+      return;
+    }
 
     const nextFieldErrors = validateForm(form, Boolean(editingMemberId));
     if (Object.keys(nextFieldErrors).length > 0) {
@@ -232,10 +416,61 @@ export default function FamilyVault() {
   }
 
   const isEditing = Boolean(editingMemberId);
+  const canManageMembers = Boolean(familyVault);
+  const healthOverviewCards = (healthOverview || [])
+    .filter((item) => item.relationshipTag || item.relationship || item.healthOverview || item.notes)
+    .map((item) => ({
+      label: item.name || 'Family member',
+      tag: item.relationshipTag || 'No tag added',
+      relationship: item.relationship || 'Relationship not set',
+      detail: item.healthOverview || item.notes || 'No health overview added yet.',
+    }));
+  const relationshipTagChips = (relationshipTags || []).map((tag, index) => {
+    if (typeof tag === 'string') {
+      return { key: tag || `tag-${index}`, label: tag };
+    }
+
+    return { key: tag?.label || `tag-${index}`, label: tag?.label || 'Tag', count: tag?.count };
+  });
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900">
-      <section className="border-b border-slate-200 bg-gradient-to-br from-slate-950 via-slate-900 to-blue-950 px-6 py-14 text-white">
+      {showVaultModal ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 px-4">
+          <div className="w-full max-w-md rounded-3xl border border-slate-200 bg-white p-6 shadow-2xl">
+            <div className="inline-flex items-center rounded-full bg-blue-50 px-3 py-1 text-sm font-medium text-blue-700">
+              <ShieldCheck size={16} className="mr-2" />
+              Family Admin Setup
+            </div>
+            <h2 className="mt-4 text-2xl font-semibold text-slate-900">Create your family vault</h2>
+            <p className="mt-2 text-sm leading-6 text-slate-600">
+              Set up a private family vault and create a vault ID for the family admin. You can add family members after the vault is created.
+            </p>
+            <div className="mt-6 flex flex-wrap gap-3">
+              <button
+                type="button"
+                onClick={handleCreateFamilyVault}
+                disabled={vaultCreating}
+                className="inline-flex items-center justify-center rounded-2xl bg-blue-700 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-blue-800 disabled:cursor-not-allowed disabled:opacity-70"
+              >
+                {vaultCreating ? 'Creating...' : 'Create Family Vault'}
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowVaultModal(false)}
+                className="inline-flex items-center justify-center rounded-2xl border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-700 transition-colors hover:bg-slate-50"
+              >
+                Later
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+      <div className="flex min-h-screen flex-col lg:flex-row">
+        <Sidebar />
+        <div className="flex-1">
+          <Header userName={user?.name || user?.fullName} userEmail={user?.email} />
+          <section className="border-b border-slate-200 bg-gradient-to-br from-slate-950 via-slate-900 to-blue-950 px-6 py-14 text-white">
         <div className="mx-auto flex max-w-7xl flex-col gap-8 lg:flex-row lg:items-end lg:justify-between">
           <div className="max-w-3xl space-y-5">
             <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm text-white/80 backdrop-blur">
@@ -250,18 +485,24 @@ export default function FamilyVault() {
             </div>
           </div>
 
-          <button
-            type="button"
-            onClick={loadFamilyVault}
-            className="inline-flex items-center justify-center gap-2 rounded-2xl border border-white/15 bg-white/10 px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-white/15"
-          >
-            <RefreshCw size={16} />
-            Refresh vault
-          </button>
+          {!familyVault ? (
+            <button
+              type="button"
+              onClick={() => {
+                setError('');
+                setNotice('');
+                setShowVaultModal(true);
+              }}
+              className="inline-flex items-center justify-center gap-2 rounded-2xl border border-white/15 bg-white/10 px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-white/15"
+            >
+              <PlusCircle size={16} />
+              Create Family Vault
+            </button>
+          ) : null}
         </div>
-      </section>
+          </section>
 
-      <main className="mx-auto max-w-7xl px-6 py-10">
+          <main className="mx-auto max-w-7xl px-6 py-10">
         {error ? (
           <div className="mb-6 flex items-start gap-3 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-rose-700">
             <AlertCircle className="mt-0.5 shrink-0" size={18} />
@@ -306,12 +547,13 @@ export default function FamilyVault() {
             </div>
 
             <div className="mt-5 grid gap-4 sm:grid-cols-2">
-              {healthOverview.length > 0 ? (
-                healthOverview.map((item) => (
+              {healthOverviewCards.length > 0 ? (
+                healthOverviewCards.map((item) => (
                   <div key={item.label} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
                     <p className="text-sm font-medium text-slate-500">{item.label}</p>
-                    <p className="mt-2 text-3xl font-bold text-slate-900">{item.value}</p>
-                    <p className="mt-1 text-sm text-slate-500">{item.detail}</p>
+                    <p className="mt-2 text-sm font-semibold uppercase tracking-wide text-blue-700">Tag: {item.tag}</p>
+                    <p className="mt-1 text-sm text-slate-600">Relationship: {item.relationship}</p>
+                    <p className="mt-2 text-sm text-slate-500">{item.detail}</p>
                   </div>
                 ))
               ) : (
@@ -324,10 +566,10 @@ export default function FamilyVault() {
             <div className="mt-6">
               <div className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-400">Relationship Tags</div>
               <div className="flex flex-wrap gap-2">
-                {relationshipTags.length > 0 ? (
-                  relationshipTags.map((tag) => (
-                    <span key={tag.label} className="rounded-full border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700">
-                      {tag.label} <span className="text-slate-400">({tag.count})</span>
+                {relationshipTagChips.length > 0 ? (
+                  relationshipTagChips.map((tag) => (
+                    <span key={tag.key} className="rounded-full border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700">
+                      {tag.label} {tag.count !== undefined ? <span className="text-slate-400">({tag.count})</span> : null}
                     </span>
                   ))
                 ) : (
@@ -345,7 +587,13 @@ export default function FamilyVault() {
               <p className="mt-1 text-sm text-slate-500">Update names, relationships, and health notes from one form.</p>
             </div>
 
-            <form className="mt-5 space-y-4" onSubmit={handleSubmit}>
+            {!canManageMembers ? (
+              <div className="mt-5 rounded-2xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-700">
+                Create a family vault first to add or edit family members.
+              </div>
+            ) : null}
+
+            <form className={`mt-5 space-y-4 ${!canManageMembers ? 'pointer-events-none opacity-70' : ''}`} onSubmit={handleSubmit}>
               <div className="grid gap-4 sm:grid-cols-2">
                 <label className="space-y-2">
                   <span className="text-sm font-medium text-slate-700">Name</span>
@@ -456,7 +704,7 @@ export default function FamilyVault() {
               <div className="flex flex-wrap gap-3 pt-2">
                 <button
                   type="submit"
-                  disabled={saving}
+                  disabled={saving || !canManageMembers}
                   className="inline-flex items-center justify-center rounded-2xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white transition-colors hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-70"
                 >
                   {saving ? 'Saving...' : isEditing ? 'Update Member' : 'Add Member'}
@@ -500,7 +748,9 @@ export default function FamilyVault() {
             )}
           </div>
         </section>
-      </main>
+          </main>
+        </div>
+      </div>
     </div>
   );
 }
