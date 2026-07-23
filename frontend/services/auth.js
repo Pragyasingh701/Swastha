@@ -105,6 +105,41 @@ export const authService = {
   },
 
   /**
+   * Update User Profile Details (Patient or Doctor Registration)
+   */
+  async updateProfile(profileData, token) {
+    const activeToken = token || localStorage.getItem('swastha_token');
+    const response = await fetch(`${API_BASE_URL}/auth/profile`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(activeToken ? { 'Authorization': `Bearer ${activeToken}` } : {}),
+      },
+      body: JSON.stringify(profileData),
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.message || 'Failed to save profile details');
+    return data;
+  },
+
+  /**
+   * Upload Registration Certificate or ID Proof Document
+   */
+  async uploadDocument(file, token) {
+    const activeToken = token || localStorage.getItem('swastha_token');
+    const formData = new FormData();
+    formData.append('file', file);
+    const response = await fetch(`${API_BASE_URL}/auth/upload`, {
+      method: 'POST',
+      headers: activeToken ? { Authorization: `Bearer ${activeToken}` } : undefined,
+      body: formData,
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.message || 'Document upload failed');
+    return data;
+  },
+
+  /**
    * Request password reset link
    */
   async forgotPassword(email) {

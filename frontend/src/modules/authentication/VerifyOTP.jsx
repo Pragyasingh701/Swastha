@@ -16,8 +16,8 @@ export default function VerifyOTP() {
   const inputRefs = useRef([]);
 
   useEffect(() => {
-    // Only redirect if no active email state in navigation AND user is already fully authenticated
-    if (!location.state?.email && user && (user.hasSelectedRole || (user.role && user.role !== 'none'))) {
+    // Only redirect if no active email state in navigation AND user is already fully authenticated with a selected role
+    if (!location.state?.email && user && user.hasSelectedRole) {
       navigate('/dashboard', { replace: true });
     }
   }, [user, navigate, location.state]);
@@ -59,7 +59,7 @@ export default function VerifyOTP() {
     try {
       const result = await verifyOTP(email, otpString);
       setIsLoading(false);
-      if (result?.user?.hasSelectedRole || (result?.user?.role && result?.user?.role !== 'none')) {
+      if (result?.user?.hasSelectedRole) {
         navigate("/dashboard", { replace: true });
       } else {
         navigate("/role-selection", { replace: true });

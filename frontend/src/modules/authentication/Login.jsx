@@ -21,17 +21,20 @@ export default function Login() {
     e.preventDefault();
     setErrorMessage("");
     setShowRegisterPrompt(false);
+
+    if (!email.trim() || !password) {
+      setErrorMessage("Please enter your email address and password.");
+      return;
+    }
+
     setIsLoading(true);
 
     try {
-      const result = await login(email, password);
+      const result = await login(email.trim(), password);
       setIsLoading(false);
 
       if (result?.requiresOTP) {
-        setIsSuccess(true);
-        setTimeout(() => {
-          navigate("/verify-otp", { state: { email, isLogin: true } });
-        }, 500);
+        navigate("/verify-otp", { state: { email: email.trim(), mode: "login" } });
         return;
       }
 
@@ -42,7 +45,7 @@ export default function Login() {
         } else {
           navigate("/role-selection", { replace: true });
         }
-      }, 800);
+      }, 500);
     } catch (err) {
       setIsLoading(false);
       setErrorMessage(err.message || "Invalid credentials. Please try again.");
@@ -58,6 +61,12 @@ export default function Login() {
       try {
         const result = await loginWithGoogle(tokenResponse.access_token || tokenResponse);
         setIsGoogleLoading(false);
+
+        if (result?.requiresOTP) {
+          navigate("/verify-otp", { state: { email: result.email, isRegister: false } });
+          return;
+        }
+
         setTimeout(() => {
           if (result?.user?.hasSelectedRole || (result?.user?.role && result?.user?.role !== 'none')) {
             navigate("/dashboard", { replace: true });
@@ -227,6 +236,7 @@ export default function Login() {
                   <span className="absolute left-4 top-1/2 -translate-y-1/2 material-symbols-outlined text-outline text-[20px]">mail</span>
                   <input
                     required
+                    autoComplete="off"
                     className="w-full pl-11 pr-4 py-3 bg-surface-container-lowest border border-outline-variant rounded-xl font-body-md text-body-md text-on-surface placeholder:text-outline/60 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all duration-200"
                     id="email"
                     placeholder="name@example.com"
@@ -246,6 +256,7 @@ export default function Login() {
                   <span className="absolute left-4 top-1/2 -translate-y-1/2 material-symbols-outlined text-outline text-[20px]">lock</span>
                   <input
                     required
+                    autoComplete="new-password"
                     className="w-full pl-11 pr-11 py-3 bg-surface-container-lowest border border-outline-variant rounded-xl font-body-md text-body-md text-on-surface placeholder:text-outline/60 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all duration-200"
                     id="password"
                     placeholder="••••••••"
@@ -286,11 +297,10 @@ export default function Login() {
 
               {/* Submit */}
               <button
-              onClick={() => navigate("/dashboard")}
                 className={`w-full h-[48px] font-label-md text-body-md rounded-xl active:scale-[0.98] transition-all duration-200 shadow-md shadow-primary-container/20 flex items-center justify-center gap-2 ${isSuccess
-                    ? "bg-green-600 text-white"
-                    : "bg-primary-container text-white hover:bg-primary-container/90"
-                }`}
+                  ? "bg-green-600 text-white"
+                  : "bg-primary-container text-white hover:bg-primary-container/90"
+                  }`}
                 type="submit"
                 disabled={isLoading || isSuccess || isGoogleLoading}
               >
@@ -314,7 +324,6 @@ export default function Login() {
             </form>
 
             <div className="mt-8 text-center">
-              onClick={() => navigate("/register")}
               <p className="font-body-sm text-body-sm text-on-surface-variant">
                 Don&apos;t have an account?{" "}
                 <Link className="text-primary font-semibold hover:underline" to="/register">

@@ -15,12 +15,28 @@ export default function DoctorLogin() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setErrorMessage("");
+
+    if (!email.trim() || !password) {
+      setErrorMessage("Please enter your professional email and password.");
+      return;
+    }
+
     setIsLoading(true);
 
     try {
-      await login(email, password);
+      const result = await login(email.trim(), password);
       setIsLoading(false);
-      navigate("/dashboard");
+
+      if (result?.requiresOTP) {
+        navigate("/verify-otp", { state: { email: email.trim(), mode: "login" } });
+        return;
+      }
+
+      if (result?.user?.hasSelectedRole || (result?.user?.role && result?.user?.role !== 'none')) {
+        navigate("/dashboard", { replace: true });
+      } else {
+        navigate("/doctor-register", { replace: true });
+      }
     } catch (err) {
       setIsLoading(false);
       setErrorMessage(err.message || "Invalid doctor credentials.");
@@ -55,6 +71,7 @@ export default function DoctorLogin() {
               </label>
               <input
                 required
+                autoComplete="off"
                 id="docEmail"
                 type="email"
                 placeholder="dr.name@hospital.com"
@@ -69,7 +86,7 @@ export default function DoctorLogin() {
                 Medical License / NMC ID
               </label>
               <input
-                required
+                autoComplete="off"
                 id="license"
                 type="text"
                 placeholder="MCI-12345-2022"
@@ -85,6 +102,7 @@ export default function DoctorLogin() {
               </label>
               <input
                 required
+                autoComplete="new-password"
                 id="docPassword"
                 type="password"
                 placeholder="••••••••"

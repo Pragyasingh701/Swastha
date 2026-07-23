@@ -1,6 +1,9 @@
 import express from 'express';
 import { OAuth2Client } from 'google-auth-library';
 import jwt from 'jsonwebtoken';
+import multer from 'multer';
+import path from 'path';
+import fs from 'fs';
 import { sendOTPEmail, sendPasswordResetEmail } from '../utils/mailer.js';
 import { findUserByEmail, findUserById, createOrUpdateUser, updateUserRole, updateUserPassword } from '../db/users.js';
 import { getFamilyVaultForUser } from '../db/family.js';
@@ -19,6 +22,88 @@ if (!global.__resetTokenStore) {
 
 const otpStore = global.__otpStore; // email => { code, expiresAt }
 const resetTokenStore = global.__resetTokenStore; // token => { email, expiresAt }
+
+// Periodic cleanup to prevent memory leaks from expired OTPs & Reset Tokens
+if (!global.__storeCleanupInterval) {
+  global.__storeCleanupInterval = setInterval(() => {
+    const now = Date.now();
+    for (const [key, data] of otpStore.entries()) {
+      if (data.expiresAt < now) otpStore.delete(key);
+    }
+    for (const [key, data] of resetTokenStore.entries()) {
+      if (data.expiresAt < now) resetTokenStore.delete(key);
+    }
+  }, 5 * 60 * 1000);
+}
+
+// Multer Storage Setup for uploaded documents (Certificates, ID Proofs)
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const uploadDir = 'uploads/';
+    if (!fs.existsSync(uploadDir)) {
+      fs.mkdirSync(uploadDir, { recursive: true });
+    }
+    cb(null, uploadDir);
+  },
+  filename: (req, file, cb) => {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
+    const ext = path.extname(file.originalname);
+    cb(null, file.fieldname + '-' + uniqueSuffix + ext);
+  },
+});
+
+const upload = multer({
+  storage,
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB file size limit
+  fileFilter: (req, file, cb) => {
+    const allowed = ['application/pdf', 'image/jpeg', 'image/png', 'image/webp'];
+    if (allowed.includes(file.mimetype)) {
+      cb(null, true);
+    } else {
+      cb(new Error('Invalid file type. Only PDF, JPEG, PNG, and WEBP files are allowed.'));
+    }
+  },
+});
+
+// Middleware to authenticate JWT bearer tokens
+const authenticateToken = (req, res, next) => {
+  const authHeader = req.headers.authorization || '';
+  const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : '';
+
+  if (!token) {
+    return res.status(401).json({ message: 'Authentication required. Please log in.' });
+  }
+
+  try {
+    const decoded = jwt.verify(token, JWT_SECRET);
+    req.user = decoded;
+    next();
+  } catch (err) {
+    return res.status(401).json({ message: 'Invalid or expired authentication token.' });
+  }
+};
+
+/**
+ * POST /api/auth/upload
+ * Document Upload Handler (Medical Registration Certificate & Identity Proof)
+ */
+router.post('/upload', authenticateToken, (req, res) => {
+  upload.single('file')(req, res, (err) => {
+    if (err) {
+      return res.status(400).json({ message: err.message || 'File upload failed.' });
+    }
+    if (!req.file) {
+      return res.status(400).json({ message: 'No file uploaded.' });
+    }
+    const fileUrl = `/uploads/${req.file.filename}`;
+    return res.json({
+      message: 'File uploaded successfully',
+      url: fileUrl,
+      filename: req.file.filename,
+      originalName: req.file.originalname,
+    });
+  });
+});
 
 /**
  * Helper to decode / verify Google Credentials
@@ -119,8 +204,16 @@ router.post('/login', async (req, res) => {
     return res.status(404).json({ message: 'No account found with this email address. Please create an account first.' });
   }
 
+  // Check if account was registered via Google Sign-In
+  if (user.auth_provider === 'google' || !user.password_hash) {
+    return res.status(400).json({
+      message: 'This account was registered using Google Sign-In. Please click "Continue with Google" to log in.',
+      isGoogleUser: true,
+    });
+  }
+
   // Password Verification
-  if (user.password_hash && user.password_hash !== password) {
+  if (user.password_hash !== password) {
     return res.status(401).json({ message: 'Incorrect password. Please try again.' });
   }
 
@@ -137,14 +230,38 @@ router.post('/login', async (req, res) => {
   });
 });
 
+// Validation helpers for email & phone correctness
+function isValidEmail(email) {
+  if (!email || typeof email !== 'string') return false;
+  const regex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+  return regex.test(email.trim());
+}
+
+function isValidPhone(phone) {
+  if (!phone || typeof phone !== 'string') return false;
+  const cleaned = phone.replace(/[\s\-\+\(\)]/g, '');
+  if (!/^\d{10,15}$/.test(cleaned)) return false;
+  if (/^(\d)\1{9,}$/.test(cleaned)) return false; // Rejects 0000000000, 1111111111, etc.
+  if (cleaned === '1234567890' || cleaned === '0123456789') return false;
+  return true;
+}
+
 /**
  * POST /api/auth/register
  * Email & Password Registration -> Creates account, sends 6-digit OTP
  */
 router.post('/register', async (req, res) => {
-  const { fullName, email, password, role = 'patient', specialty, licenseNumber } = req.body;
-  if (!email || !password) {
-    return res.status(400).json({ message: 'Email and password are required' });
+  const { fullName, email, password, phone, role = 'none', specialty, licenseNumber } = req.body;
+  if (!fullName || !email || !password || !phone) {
+    return res.status(400).json({ message: 'Full Name, Email, Phone Number, and Password are all required.' });
+  }
+
+  if (!isValidEmail(email)) {
+    return res.status(400).json({ message: 'Please enter a valid email address (e.g., name@example.com).' });
+  }
+
+  if (!isValidPhone(phone)) {
+    return res.status(400).json({ message: 'Please enter a valid 10-digit mobile number.' });
   }
 
   const normalizedEmail = email.toLowerCase().trim();
@@ -202,20 +319,23 @@ router.post('/google-login', async (req, res) => {
       });
     }
 
-    const vault = await getFamilyVaultForUser(existingUser.id);
-    const token = jwt.sign({ userId: existingUser.id, email: existingUser.email, role: existingUser.role, vaultId: vault?.vaultId || null }, JWT_SECRET, {
-      expiresIn: '7d',
-    });
+    // Reject Google Login if account was created via Email & Password
+    if (existingUser.auth_provider === 'email' || (existingUser.password_hash && existingUser.auth_provider !== 'google')) {
+      return res.status(400).json({
+        isEmailUser: true,
+        message: 'This account was registered using Email & Password. Please sign in with your email address and password.',
+      });
+    }
+
+    // Generate 6-digit OTP code for Google Login Verification
+    const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
+    otpStore.set(normalizedEmail, { code: otpCode, expiresAt: Date.now() + 10 * 60 * 1000 });
+    await sendOTPEmail(normalizedEmail, otpCode);
 
     return res.json({
-      message: 'Google login successful',
-      token,
-      vaultId: vault?.vaultId || null,
-      user: {
-        ...existingUser,
-        vaultId: vault?.vaultId || null,
-        hasSelectedRole: !!(existingUser.role && existingUser.role !== 'none'),
-      },
+      requiresOTP: true,
+      email: normalizedEmail,
+      message: 'Verification code sent to your Google email address.',
     });
   } catch (error) {
     console.error('Google login error:', error);
@@ -225,7 +345,7 @@ router.post('/google-login', async (req, res) => {
 
 /**
  * POST /api/auth/google-register
- * Google Sign-Up on Register Page -> Checks if exists, creates account if new
+ * Google Sign-Up on Register Page -> Checks if exists, sends OTP code
  */
 router.post('/google-register', async (req, res) => {
   const { credential, token: googleToken, access_token, id_token, role = 'patient' } = req.body;
@@ -250,7 +370,8 @@ router.post('/google-register', async (req, res) => {
       });
     }
 
-    const user = await createOrUpdateUser({
+    // Create account entry
+    await createOrUpdateUser({
       id: 'usr_g_' + (sub || Date.now()),
       email: normalizedEmail,
       name,
@@ -260,21 +381,15 @@ router.post('/google-register', async (req, res) => {
       authProvider: 'google',
     });
 
-    const vault = null;
-    const token = jwt.sign({ userId: user.id, email: user.email, role: user.role, vaultId: vault?.vaultId || null }, JWT_SECRET, {
-      expiresIn: '7d',
-    });
+    // Generate 6-digit OTP code for Google Registration Verification
+    const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
+    otpStore.set(normalizedEmail, { code: otpCode, expiresAt: Date.now() + 10 * 60 * 1000 });
+    await sendOTPEmail(normalizedEmail, otpCode);
 
     return res.status(201).json({
-      message: 'Google registration successful',
-      token,
-      vaultId: vault?.vaultId || null,
-      user: {
-        ...user,
-        vaultId: vault?.vaultId || null,
-        role: null,
-        hasSelectedRole: false,
-      },
+      requiresOTP: true,
+      email: normalizedEmail,
+      message: 'Verification code sent to your Google email address.',
     });
   } catch (error) {
     console.error('Google registration error:', error);
@@ -291,6 +406,13 @@ router.post('/google', async (req, res) => {
   const { email, name, picture, sub } = await decodeGoogleCredential(googleCredential);
   const normalizedEmail = (email || 'google_user@swastha.app').toLowerCase().trim();
   const existingUser = await findUserByEmail(normalizedEmail);
+
+  if (existingUser && (existingUser.auth_provider === 'email' || (existingUser.password_hash && existingUser.auth_provider !== 'google'))) {
+    return res.status(400).json({
+      isEmailUser: true,
+      message: 'This account was registered using Email & Password. Please sign in with your email address and password.',
+    });
+  }
 
   const user = await createOrUpdateUser({
     id: existingUser ? existingUser.id : ('usr_g_' + (sub || Date.now())),
@@ -310,7 +432,7 @@ router.post('/google', async (req, res) => {
     token,
     user: {
       ...user,
-      hasSelectedRole: !!(user.role),
+      hasSelectedRole: !!(user.role && user.role !== 'none'),
     },
   });
 });
@@ -340,7 +462,7 @@ router.post('/verify-otp', async (req, res) => {
     user = await createOrUpdateUser({
       email: key,
       name: key.split('@')[0],
-      role: 'patient',
+      role: 'none',
       authProvider: 'email',
     });
   }
@@ -357,7 +479,7 @@ router.post('/verify-otp', async (req, res) => {
     user: {
       ...user,
       vaultId: vault?.vaultId || null,
-      hasSelectedRole: !!(user.role),
+      hasSelectedRole: !!(user.role && user.role !== 'none'),
     },
   });
 });
@@ -373,6 +495,86 @@ router.post('/role', async (req, res) => {
 
   await updateUserRole(userId, role);
   return res.json({ message: 'Role updated successfully', role });
+});
+
+/**
+ * POST /api/auth/profile
+ * Updates user profile details (Patient or Doctor registration forms)
+ */
+router.post('/profile', authenticateToken, async (req, res) => {
+  const { email, userId, role, ...profileDetails } = req.body;
+  let targetEmail = email || (userId && userId.includes('@') ? userId : null);
+  const targetRole = role || profileDetails.role;
+
+  const authEmail = (req.user.email || '').toLowerCase().trim();
+  if (!targetEmail && authEmail) {
+    targetEmail = authEmail;
+  }
+
+  if (authEmail && targetEmail && authEmail !== targetEmail.toLowerCase().trim()) {
+    return res.status(403).json({ message: 'Forbidden. You can only update your own profile.' });
+  }
+
+  // Patient Mandatory Fields Validation
+  if (targetRole === 'patient') {
+    const { fullName, dob, bloodGroup, phone } = profileDetails;
+    if (!fullName || !dob || !bloodGroup) {
+      return res.status(400).json({
+        message: 'All patient details (Full Name, Date of Birth, Blood Group, and Phone Number) are mandatory.',
+      });
+    }
+    if (phone && !isValidPhone(phone)) {
+      return res.status(400).json({ message: 'Please enter a valid 10-digit mobile number.' });
+    }
+  }
+
+  // Doctor Mandatory Fields Validation
+  if (targetRole === 'doctor') {
+    const { fullName, phone, mobile, regNumber, licenseNumber, council, degree, specialization, specialty, hospitalName, address, regCertificateUrl, idProofUrl } = profileDetails;
+    const nameVal = fullName || profileDetails.name;
+    const phoneVal = phone || mobile;
+    const licVal = regNumber || licenseNumber;
+    const specVal = specialization || specialty;
+
+    if (!nameVal || !phoneVal || !licVal || !council || !degree || !specVal || !hospitalName || !address || !regCertificateUrl || !idProofUrl) {
+      return res.status(400).json({
+        message: 'All doctor credentials (Full Name, Mobile Number, Medical Registration #, Council, Degree, Specialization, Hospital/Clinic Name, Practice Address, Registration Certificate, and ID Proof) are mandatory.',
+      });
+    }
+    if (phoneVal && !isValidPhone(phoneVal)) {
+      return res.status(400).json({ message: 'Please enter a valid 10-digit mobile number.' });
+    }
+  }
+
+  try {
+    let userToUpdate = null;
+    if (targetEmail) {
+      userToUpdate = await findUserByEmail(targetEmail);
+    } else if (userId) {
+      userToUpdate = await findUserById(userId);
+    }
+
+    const emailToUse = userToUpdate?.email || targetEmail || profileDetails.email;
+    if (!emailToUse) {
+      return res.status(400).json({ message: 'User email or ID is required to save profile details.' });
+    }
+
+    const savedUser = await createOrUpdateUser({
+      ...userToUpdate,
+      ...profileDetails,
+      email: emailToUse,
+      role: targetRole || userToUpdate?.role || 'patient',
+      hasSelectedRole: true,
+    });
+
+    return res.json({
+      message: 'User profile updated successfully',
+      user: savedUser,
+    });
+  } catch (error) {
+    console.error('Profile update error:', error);
+    return res.status(500).json({ message: 'Failed to update profile', error: error.message });
+  }
 });
 
 /**
@@ -440,10 +642,25 @@ router.delete('/user', async (req, res) => {
 router.post('/forgot-password', async (req, res) => {
   const { email } = req.body;
   if (!email) {
-    return res.status(400).json({ message: 'Email address is required' });
+    return res.status(400).json({ message: 'Email address is required.' });
   }
 
   const normalizedEmail = email.toLowerCase().trim();
+  const existingUser = await findUserByEmail(normalizedEmail);
+
+  // 1. Check if the user exists in database records
+  if (!existingUser) {
+    return res.status(404).json({
+      message: 'No registered account found with this email address. Please check your email or create a new account.',
+    });
+  }
+
+  // 2. Check if account provider is email (Google accounts do not use passwords)
+  if (existingUser.auth_provider === 'google' || (!existingUser.password_hash && existingUser.auth_provider !== 'email')) {
+    return res.status(400).json({
+      message: 'This account was registered using Google Sign-In and does not have a password. Please log in using "Continue with Google".',
+    });
+  }
 
   // Clear any existing reset tokens for this email
   for (const [t, data] of resetTokenStore.entries()) {
