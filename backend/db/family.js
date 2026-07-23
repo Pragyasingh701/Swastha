@@ -1,381 +1,344 @@
-import { randomUUID } from 'crypto';
 import supabase from '../config/supabase.js';
 
-const FAMILY_TABLE = process.env.FAMILY_TABLE_NAME || 'family_vault';
-const FALLBACK_FAMILY_TABLE = FAMILY_TABLE === 'family_vault' ? 'family_members' : 'family_vault';
+const FAMILY_VAULT_TABLE = process.env.FAMILY_VAULT_TABLE_NAME || 'vault_table';
+const FAMILY_MEMBERS_TABLE = process.env.FAMILY_MEMBERS_TABLE_NAME || 'family_members';
 
-if (supabase && !process.env.FAMILY_TABLE_NAME) {
-  console.warn(`ℹ️ [Family Vault] FAMILY_TABLE_NAME is not set, defaulting to "${FAMILY_TABLE}"`);
-}
-
-if (!global.__familyMembersStore) {
-  global.__familyMembersStore = new Map();
-}
-
-const familyMembersStore = global.__familyMembersStore;
-
-function normalizeText(value) {
-  if (typeof value !== 'string') return '';
-  return value.trim();
-}
-
-function normalizeInteger(value) {
-  if (value === null || value === undefined || value === '') return null;
-  const parsed = Number.parseInt(value, 10);
-  return Number.isFinite(parsed) ? parsed : null;
-}
-
-function normalizeDate(value) {
-  const text = normalizeText(value);
-  return text || null;
-}
-
-function normalizeRecordShape(record = {}) {
-  if (!record || typeof record !== 'object') return record;
-
-  const normalized = { ...record };
-  const idValue = normalized.id ?? normalized['id uuid'] ?? normalized.id;
-  if (idValue !== undefined) {
-    normalized.id = String(idValue);
-  }
-  delete normalized['id uuid'];
-  return normalized;
-}
-
-// Pick `incoming` if it was explicitly provided (even if empty string / null), otherwise keep `fallback`.
-function pickDefined(incoming, fallback) {
-  return incoming !== undefined ? incoming : fallback;
-}
-
-function buildMemberRecord(ownerUserId, memberData = {}, existingRecord = {}) {
-  const now = new Date().toISOString();
-  const existingId = existingRecord?.id ?? memberData?.id;
+function normalizeMember(row) {
+  if (!row) return null;
 
   return {
-    id: existingId ? String(existingId) : randomUUID(),
-    owner_user_id: ownerUserId,
-    name: normalizeText(pickDefined(memberData.name, existingRecord.name)),
-    relationship: normalizeText(pickDefined(memberData.relationship, existingRecord.relationship)),
-    relationship_tag: normalizeText(
-      pickDefined(memberData.relationshipTag ?? memberData.relationship_tag, existingRecord.relationship_tag),
-    ),
-    health_overview: normalizeText(
-      pickDefined(memberData.healthOverview ?? memberData.health_overview, existingRecord.health_overview),
-    ),
-    notes: normalizeText(pickDefined(memberData.notes, existingRecord.notes)),
-    last_visit_date: normalizeDate(
-      pickDefined(memberData.lastVisitDate ?? memberData.last_visit_date, existingRecord.last_visit_date),
-    ),
-    next_checkup_date: normalizeDate(
-      pickDefined(memberData.nextCheckupDate ?? memberData.next_checkup_date, existingRecord.next_checkup_date),
-    ),
-    age: normalizeInteger(memberData.age !== undefined ? memberData.age : existingRecord.age),
-    created_at: existingRecord.created_at || now,
-    updated_at: now,
+    id: row.id,
+    userId: row.user_id,
+    vaultId: row.vault_id,
+    name: row.name,
+    age: row.age,
+    relationship: row.relationship,
+    relationshipTag: row.relationship_tag,
+    healthOverview: row.health_overview,
+    notes: row.notes,
+    lastVisitDate: row.last_visit_date,
+    nextCheckupDate: row.next_checkup_date,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    deletedAt: row.deleted_at,
   };
 }
 
-function getOwnerRecords(ownerUserId) {
-  return familyMembersStore.get(ownerUserId) || [];
+function applyUserScope(query, { userId }) {
+  let scopedQuery = query;
+
+  if (userId) {
+    scopedQuery = scopedQuery.eq('user_id', userId);
+  }
+
+  return scopedQuery;
 }
 
-function setOwnerRecords(ownerUserId, records) {
-  familyMembersStore.set(ownerUserId, records);
-}
-
-function createLocalRecord(ownerUserId, record = {}) {
+function buildMemberPayload(memberData = {}) {
   const now = new Date().toISOString();
-  const nextRecord = {
-    ...record,
-    id: record.id ? String(record.id) : randomUUID(),
-    owner_user_id: ownerUserId,
-    created_at: record.created_at || now,
-    updated_at: record.updated_at || now,
+
+  return {
+    name: memberData.name?.trim() || null,
+    age: memberData.age ?? null,
+    relationship: memberData.relationship?.trim() || null,
+    relationship_tag: memberData.relationshipTag?.trim() || memberData.relationship_tag || null,
+    health_overview: memberData.healthOverview?.trim() || memberData.health_overview || null,
+    notes: memberData.notes?.trim() || null,
+    last_visit_date: memberData.lastVisitDate || memberData.last_visit_date || null,
+    next_checkup_date: memberData.nextCheckupDate || memberData.next_checkup_date || null,
+    user_id: memberData.userId || memberData.user_id || null,
+    vault_id: memberData.vaultId || memberData.vault_id || null,
+    created_at: now,
+    updated_at: now,
+    deleted_at: null,
+  };
+}
+
+function buildMemberUpdatePayload(memberData = {}) {
+  const payload = {
+    name: memberData.name?.trim() || null,
+    age: memberData.age ?? null,
+    relationship: memberData.relationship?.trim() || null,
+    relationship_tag: memberData.relationshipTag?.trim() || memberData.relationship_tag || null,
+    health_overview: memberData.healthOverview?.trim() || memberData.health_overview || null,
+    notes: memberData.notes?.trim() || null,
+    last_visit_date: memberData.lastVisitDate || memberData.last_visit_date || null,
+    next_checkup_date: memberData.nextCheckupDate || memberData.next_checkup_date || null,
+    updated_at: new Date().toISOString(),
   };
 
-  const records = getOwnerRecords(ownerUserId);
-  const nextRecords = [nextRecord, ...records.filter((item) => item.id !== nextRecord.id)];
-  setOwnerRecords(ownerUserId, nextRecords);
-  return nextRecord;
+  Object.keys(payload).forEach((key) => {
+    if (payload[key] === undefined) {
+      delete payload[key];
+    }
+  });
+
+  return payload;
 }
 
-function updateLocalRecord(ownerUserId, memberId, updates = {}) {
-  const records = getOwnerRecords(ownerUserId);
-  const existingRecord = records.find((item) => String(item.id) === String(memberId)) || {};
-  const nextRecord = {
-    ...existingRecord,
-    ...updates,
-    id: String(memberId),
-    owner_user_id: ownerUserId,
-    created_at: existingRecord.created_at || updates.created_at || new Date().toISOString(),
-    updated_at: updates.updated_at || new Date().toISOString(),
+function normalizeVault(row) {
+  if (!row) return null;
+
+  return {
+    id: row.id,
+    vaultId: row.vault_id,
+    userId: row.user_id,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    deletedAt: row.deleted_at,
   };
-
-  const nextRecords = records.map((item) => (item.id === memberId ? nextRecord : item));
-  setOwnerRecords(ownerUserId, nextRecords);
-  return nextRecord;
 }
 
-function deleteLocalRecord(ownerUserId, memberId) {
-  const records = getOwnerRecords(ownerUserId);
-  setOwnerRecords(ownerUserId, records.filter((item) => String(item.id) !== String(memberId)));
-  return { deleted: true };
-}
-
-function sortMembers(records) {
-  return [...records].sort((left, right) => new Date(right.updated_at).getTime() - new Date(left.updated_at).getTime());
-}
-
-function isMissingTableError(error) {
-  const message = (error?.message || '').toLowerCase();
-  return (
-    error?.code === '42P01' ||
-    error?.code === 'PGRST205' ||
-    message.includes('does not exist') ||
-    message.includes('schema cache') ||
-    message.includes('could not find the table') ||
-    message.includes('relation')
-  );
-}
-
-async function runTableQuery(tableName, action, payload) {
-  try {
-    if (action === 'read') {
-      return await supabase
-        .from(tableName)
-        .select('*')
-        .eq('owner_user_id', payload.ownerUserId)
-        .order('updated_at', { ascending: false });
-    }
-
-    if (action === 'create') {
-      return await supabase.from(tableName).insert(payload.record).select().single();
-    }
-
-    if (action === 'update') {
-      return await supabase
-        .from(tableName)
-        .update(payload.updates)
-        .eq('id', payload.memberId)
-        .eq('owner_user_id', payload.ownerUserId)
-        .select()
-        .single();
-    }
-
-    if (action === 'delete') {
-      return await supabase
-        .from(tableName)
-        .delete()
-        .eq('id', payload.memberId)
-        .eq('owner_user_id', payload.ownerUserId);
-    }
-
-    throw new Error(`Unsupported family table action: ${action}`);
-  } catch (error) {
-    return { data: null, error };
+function buildStableVaultId(userId) {
+  const normalizedUserId = String(userId || '').trim();
+  if (!normalizedUserId) {
+    return null;
   }
+
+  const safeSeed = normalizedUserId.replace(/[^a-zA-Z0-9]/g, '').slice(0, 24) || 'user';
+  return `vault_${safeSeed.toLowerCase()}_${Date.now().toString(36)}`;
 }
 
-async function readFromDatabase(ownerUserId) {
+export const getFamilyVaultForUser = async (userId) => {
   if (!supabase) return null;
+  if (!userId) return null;
 
   try {
-    const primaryResult = await runTableQuery(FAMILY_TABLE, 'read', { ownerUserId });
-    const { data, error } = primaryResult;
+    const { data, error } = await supabase
+      .from(FAMILY_VAULT_TABLE)
+      .select('*')
+      .eq('user_id', userId)
+      .maybeSingle();
 
-    if (!error) {
-      return (data || []).map((item) => normalizeRecordShape(item));
-    }
-
-    if (isMissingTableError(error)) {
-      return sortMembers(getOwnerRecords(ownerUserId));
-    }
-
-    throw new Error(error.message || 'Failed to read family members from database');
-  } catch (error) {
-    console.warn('Supabase family read notice:', error.message);
-    throw error;
-  }
-}
-
-async function writeToDatabase(action, payload) {
-  if (!supabase) return null;
-
-  try {
-    const primaryResult = await runTableQuery(FAMILY_TABLE, action, payload);
-
-    if (action === 'delete') {
-      const { error } = primaryResult;
-      if (!error) {
-        deleteLocalRecord(payload.ownerUserId, payload.memberId);
-        return { deleted: true };
-      }
-      if (!isMissingTableError(error)) throw error;
-
-      return deleteLocalRecord(payload.ownerUserId, payload.memberId);
-    }
-
-    const { data, error } = primaryResult;
-    if (!error) return normalizeRecordShape(data);
-
-    if (!isMissingTableError(error)) {
+    if (error && error.code !== 'PGRST116') {
       throw error;
     }
 
-    if (action === 'create') {
-      return createLocalRecord(payload.ownerUserId, payload.record);
+    return normalizeVault(data || null);
+  } catch (err) {
+    console.warn('Supabase family vault lookup warning:', err.message);
+    return null;
+  }
+};
+
+export const createOrGetFamilyVaultForUser = async (userId) => {
+  if (!supabase) return null;
+  if (!userId) return null;
+
+  try {
+    const { data: existingVault, error: selectError } = await supabase
+      .from(FAMILY_VAULT_TABLE)
+      .select('*')
+      .eq('user_id', userId)
+      .maybeSingle();
+
+    if (selectError && selectError.code !== 'PGRST116') {
+      throw selectError;
     }
 
-    if (action === 'update') {
-      return updateLocalRecord(payload.ownerUserId, payload.memberId, payload.updates);
-    }
-
-    throw error;
-  } catch (error) {
-    console.warn(`Supabase family ${action} notice:`, error.message);
-    throw error;
-  }
-}
-
-export async function listFamilyMembers(ownerUserId) {
-  if (!ownerUserId) return [];
-
-  if (supabase) {
-    return await readFromDatabase(ownerUserId);
-  }
-
-  return sortMembers(getOwnerRecords(ownerUserId));
-}
-
-export async function createFamilyMember(ownerUserId, memberData) {
-  if (!ownerUserId) throw new Error('ownerUserId is required');
-
-  const record = buildMemberRecord(ownerUserId, memberData);
-
-  if (supabase) {
-    const recordForInsert = { ...record };
-    delete recordForInsert.id;
-    return await writeToDatabase('create', { ownerUserId, record: recordForInsert });
-  }
-
-  return createLocalRecord(ownerUserId, record);
-}
-
-export async function updateFamilyMember(ownerUserId, memberId, updates) {
-  if (!ownerUserId) throw new Error('ownerUserId is required');
-  if (!memberId) throw new Error('memberId is required');
-
-  if (supabase) {
-    // Build a flat update object with only the fields the caller actually sent,
-    // mapped to the DB column names.  This avoids overwriting columns that weren't
-    // part of the request and removes the dependency on the in-memory store.
-    const dbUpdates = { updated_at: new Date().toISOString() };
-
-    if (updates.name !== undefined) dbUpdates.name = normalizeText(updates.name);
-    if (updates.relationship !== undefined) dbUpdates.relationship = normalizeText(updates.relationship);
-    if (updates.relationshipTag !== undefined || updates.relationship_tag !== undefined)
-      dbUpdates.relationship_tag = normalizeText(updates.relationshipTag ?? updates.relationship_tag);
-    if (updates.healthOverview !== undefined || updates.health_overview !== undefined)
-      dbUpdates.health_overview = normalizeText(updates.healthOverview ?? updates.health_overview);
-    if (updates.notes !== undefined) dbUpdates.notes = normalizeText(updates.notes);
-    if (updates.lastVisitDate !== undefined || updates.last_visit_date !== undefined)
-      dbUpdates.last_visit_date = normalizeDate(updates.lastVisitDate ?? updates.last_visit_date);
-    if (updates.nextCheckupDate !== undefined || updates.next_checkup_date !== undefined)
-      dbUpdates.next_checkup_date = normalizeDate(updates.nextCheckupDate ?? updates.next_checkup_date);
-    if (updates.age !== undefined) dbUpdates.age = normalizeInteger(updates.age);
-
-    return await writeToDatabase('update', {
-      memberId,
-      ownerUserId,
-      updates: dbUpdates,
-    });
-  }
-
-  // Local / in-memory fallback — full merge is fine here because the store is always warm.
-  const existingRecord = getOwnerRecords(ownerUserId).find((item) => item.id === memberId);
-  const record = buildMemberRecord(ownerUserId, updates, existingRecord || { id: memberId, created_at: new Date().toISOString() });
-  return updateLocalRecord(ownerUserId, memberId, record);
-}
-
-export async function removeFamilyMember(ownerUserId, memberId) {
-  if (!ownerUserId) throw new Error('ownerUserId is required');
-  if (!memberId) throw new Error('memberId is required');
-
-  if (supabase) {
-    return await writeToDatabase('delete', { ownerUserId, memberId });
-  }
-
-  return deleteLocalRecord(ownerUserId, memberId);
-}
-
-export async function getFamilyDashboard(ownerUserId) {
-  const members = await listFamilyMembers(ownerUserId);
-
-  const totalMembers = members.length;
-  const relationshipMap = new Map();
-  let upcomingCheckups = 0;
-  let membersWithHealthNotes = 0;
-  let recentVisits = 0;
-
-  const today = new Date();
-  const upcomingWindow = new Date();
-  upcomingWindow.setDate(today.getDate() + 30);
-
-  for (const member of members) {
-    const tag = member.relationship_tag || member.relationship || 'Unspecified';
-    relationshipMap.set(tag, (relationshipMap.get(tag) || 0) + 1);
-
-    if (member.health_overview) {
-      membersWithHealthNotes += 1;
-    }
-
-    if (member.last_visit_date) {
-      recentVisits += 1;
-    }
-
-    if (member.next_checkup_date) {
-      const checkupDate = new Date(member.next_checkup_date);
-      if (!Number.isNaN(checkupDate.getTime()) && checkupDate >= today && checkupDate <= upcomingWindow) {
-        upcomingCheckups += 1;
+    if (existingVault) {
+      if (existingVault.vault_id) {
+        return normalizeVault(existingVault);
       }
+
+      const vaultId = buildStableVaultId(userId);
+      const { data, error } = await supabase
+        .from(FAMILY_VAULT_TABLE)
+        .update({ vault_id: vaultId, updated_at: new Date().toISOString() })
+        .eq('id', existingVault.id)
+        .select()
+        .single();
+
+      if (error) {
+        throw error;
+      }
+
+      return normalizeVault(data);
     }
+
+    const vaultId = buildStableVaultId(userId);
+    const { data, error } = await supabase
+      .from(FAMILY_VAULT_TABLE)
+      .insert({
+        vault_id: vaultId,
+        user_id: userId,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        deleted_at: null,
+      })
+      .select()
+      .single();
+
+    if (error) {
+      throw error;
+    }
+
+    return normalizeVault(data);
+  } catch (err) {
+    console.warn('Supabase family vault ensure warning:', err.message);
+    return null;
+  }
+};
+
+export const listFamilyMembers = async ({ userId, includeDeleted = false } = {}) => {
+  if (!supabase) throw new Error('Supabase client is not configured');
+  if (!userId) throw new Error('userId is required');
+
+  try {
+    let query = supabase
+      .from(FAMILY_MEMBERS_TABLE)
+      .select('*');
+
+    query = applyUserScope(query, { userId });
+
+    if (!includeDeleted) {
+      query = query.is('deleted_at', null);
+    }
+
+    const { data, error } = await query.order('created_at', { ascending: false });
+
+    if (error) {
+      if (error.code === 'PGRST205' || error.code === '42P01' || error.message?.includes('Could not find the table')) {
+        return [];
+      }
+      throw error;
+    }
+
+    return (data || []).map(normalizeMember);
+  } catch (err) {
+    if (err?.code === 'PGRST205' || err?.message?.includes('Could not find the table')) {
+      return [];
+    }
+    throw err;
+  }
+};
+
+export const createFamilyMember = async ({ userId, ...memberData }) => {
+  if (!supabase) throw new Error('Supabase client is not configured');
+  if (!userId) throw new Error('userId is required');
+
+  const vault = await getFamilyVaultForUser(userId);
+  if (!vault?.vaultId) {
+    throw new Error('Family vault not found. Create a family vault before adding members.');
   }
 
-  const relationshipTags = [...relationshipMap.entries()]
-    .map(([label, count]) => ({ label, count }))
-    .sort((left, right) => right.count - left.count || left.label.localeCompare(right.label));
+  const payload = buildMemberPayload({ ...memberData, userId, vaultId: vault.vaultId });
+
+  try {
+    const { data, error } = await supabase
+      .from(FAMILY_MEMBERS_TABLE)
+      .insert(payload)
+      .select()
+      .single();
+
+    if (error) {
+      if (error.code === 'PGRST205' || error.code === '42P01' || error.message?.includes('Could not find the table')) {
+        throw new Error('Family members table is not available yet. Please retry after the schema is initialized.');
+      }
+      throw error;
+    }
+
+    return normalizeMember(data);
+  } catch (err) {
+    if (err?.code === 'PGRST205' || err?.message?.includes('Could not find the table')) {
+      throw new Error('Family members table is not available yet. Please retry after the schema is initialized.');
+    }
+    throw err;
+  }
+};
+
+export const updateFamilyMember = async (memberId, { userId, ...memberData }) => {
+  if (!supabase) throw new Error('Supabase client is not configured');
+  if (!memberId) throw new Error('memberId is required');
+
+  const updates = buildMemberUpdatePayload({ ...memberData, userId });
+
+  let query = supabase
+    .from(FAMILY_MEMBERS_TABLE)
+    .update(updates)
+    .eq('id', memberId);
+
+  query = applyUserScope(query, { userId });
+
+  const { data, error } = await query.select().single();
+
+  if (error) {
+    throw error;
+  }
+
+  return normalizeMember(data);
+};
+
+export const deleteFamilyMember = async (memberId, { userId } = {}) => {
+  if (!supabase) throw new Error('Supabase client is not configured');
+  if (!memberId) throw new Error('memberId is required');
+
+  let query = supabase
+    .from(FAMILY_MEMBERS_TABLE)
+    .delete()
+    .eq('id', memberId);
+
+  query = applyUserScope(query, { userId });
+
+  const { data, error } = await query.select().single();
+
+  if (error) {
+    throw error;
+  }
+
+  return normalizeMember(data);
+};
+
+export const deleteFamilyVaultForUser = async (userId) => {
+  if (!supabase) return null;
+  if (!userId) return null;
+
+  try {
+    const vault = await getFamilyVaultForUser(userId);
+    if (!vault?.vaultId) {
+      return { deletedVault: false, deletedMembers: 0 };
+    }
+
+    const { error: membersError } = await supabase
+      .from(FAMILY_MEMBERS_TABLE)
+      .delete()
+      .eq('user_id', userId);
+
+    if (membersError) {
+      throw membersError;
+    }
+
+    const { error: vaultError } = await supabase
+      .from(FAMILY_VAULT_TABLE)
+      .delete()
+      .eq('user_id', userId);
+
+    if (vaultError) {
+      throw vaultError;
+    }
+
+    return { deletedVault: true, deletedMembers: 1 };
+  } catch (err) {
+    console.warn('Supabase family vault delete warning:', err.message);
+    return null;
+  }
+};
+
+export const getFamilyVaultSummary = async ({ userId } = {}) => {
+  const members = await listFamilyMembers({ userId, includeDeleted: false });
+
+  const relationshipTags = [...new Set(members.map((member) => member.relationshipTag).filter(Boolean))].sort();
+  const upcomingCheckups = members.filter((member) => member.nextCheckupDate).length;
+  const membersWithHealthNotes = members.filter((member) => member.healthOverview || member.notes).length;
+  const recentVisits = members.filter((member) => member.lastVisitDate).length;
 
   return {
-    members,
-    summary: {
-      totalMembers,
-      relationshipTagCount: relationshipTags.length,
-      upcomingCheckups,
-      membersWithHealthNotes,
-      recentVisits,
-    },
+    totalMembers: members.length,
+    relationshipTagCount: relationshipTags.length,
+    upcomingCheckups,
+    membersWithHealthNotes,
+    recentVisits,
     relationshipTags,
-    healthOverview: [
-      {
-        label: 'Total Members',
-        value: totalMembers,
-        detail: 'People tracked in the vault',
-      },
-      {
-        label: 'Relationship Tags',
-        value: relationshipTags.length,
-        detail: 'Grouped family categories',
-      },
-      {
-        label: 'Upcoming Checkups',
-        value: upcomingCheckups,
-        detail: 'Next 30 days',
-      },
-      {
-        label: 'Health Notes',
-        value: membersWithHealthNotes,
-        detail: 'Members with summary notes',
-      },
-    ],
+    healthOverview: members.filter((member) => member.healthOverview || member.notes),
   };
-}
+};
