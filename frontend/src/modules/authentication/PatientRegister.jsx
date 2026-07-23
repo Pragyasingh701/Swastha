@@ -1,12 +1,32 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import { useAuth } from "../../context/AuthContext";
 
 export default function PatientRegister() {
   const navigate = useNavigate();
+  const { user, register, updateProfile, setUserRole } = useAuth();
+
+  useEffect(() => {
+    // Check if user has already completed registration
+    const storedUser = JSON.parse(localStorage.getItem('swastha_user') || 'null');
+    const activeUser = user || storedUser;
+
+    if (activeUser?.hasSelectedRole || (activeUser?.role && activeUser?.role !== 'none')) {
+      navigate("/dashboard", { replace: true });
+      return;
+    }
+
+    // Check if user is not authenticated
+    const hasToken = localStorage.getItem('swastha_token');
+    if (!activeUser && !hasToken) {
+      navigate("/register", { replace: true });
+    }
+  }, [user, navigate]);
+
   const [formData, setFormData] = useState({
-    fullName: "",
-    email: "",
-    phone: "",
+    fullName: user?.fullName || user?.name || "",
+    email: user?.email || "",
+    phone: user?.phone || user?.mobile || "",
     dob: "",
     bloodGroup: "",
     password: "",
@@ -14,19 +34,50 @@ export default function PatientRegister() {
   });
   const [agreedToTerms, setAgreedToTerms] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [errorMessage, setErrorMessage] = useState("");
 
   const handleChange = (e) => {
     const { name, value } = e.target;
     setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
+    setErrorMessage("");
+
+    if (!agreedToTerms) {
+      setErrorMessage("Please accept the Terms of Service & Privacy Policy before completing registration.");
+      return;
+    }
+
+    const cleanedPhone = formData.phone ? formData.phone.replace(/[\s\-\+\(\)]/g, '') : '';
+    if (!/^\d{10,15}$/.test(cleanedPhone) || /^(\d)\1{9,}$/.test(cleanedPhone) || cleanedPhone === '1234567890' || cleanedPhone === '0123456789') {
+      setErrorMessage("Please enter a valid 10-digit mobile number.");
+      return;
+    }
+
     setIsLoading(true);
-    setTimeout(() => {
+
+    try {
+      if (updateProfile) {
+        await updateProfile({
+          fullName: formData.fullName,
+          email: formData.email,
+          phone: formData.phone,
+          dob: formData.dob,
+          bloodGroup: formData.bloodGroup,
+          role: "patient",
+          hasSelectedRole: true,
+        });
+      } else {
+        setUserRole("patient");
+      }
       setIsLoading(false);
-      navigate("/role-selection");
-    }, 1200);
+      navigate("/dashboard", { replace: true });
+    } catch (err) {
+      setIsLoading(false);
+      setErrorMessage(err.message || "Failed to complete registration. Please try again.");
+    }
   };
 
   return (
@@ -133,55 +184,87 @@ export default function PatientRegister() {
                 Continue with ABHA
               </button>
 
+              {errorMessage && (
+                <div className="p-4 rounded-xl bg-error-container text-on-error-container text-body-sm flex items-center gap-3 border border-error/20 shadow-sm">
+                  <span className="material-symbols-outlined text-[20px] text-error">error</span>
+                  <span className="font-medium">{errorMessage}</span>
+                </div>
+              )}
+
               {/* Form Fields */}
               <form className="space-y-md" onSubmit={handleSubmit}>
                 <div className="space-y-sm">
-                  <label className="font-label-md text-label-md text-on-surface-variant block ml-1">Full Name</label>
+                  <div className="flex items-center justify-between ml-1">
+                    <label className="font-label-md text-label-md text-on-surface-variant block">Full Name</label>
+                    <span className="text-[11px] text-outline font-medium flex items-center gap-1">
+                      <span className="material-symbols-outlined text-[13px]">lock</span> Account Name
+                    </span>
+                  </div>
                   <div className="relative">
                     <span className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-outline text-[20px]">
                       person
                     </span>
                     <input
-                      className="w-full h-[48px] pl-12 pr-4 bg-surface-container-low border border-outline-variant rounded-xl focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all font-body-md text-body-md placeholder:text-outline/50"
+                      readOnly
+                      className="w-full h-[48px] pl-12 pr-4 bg-surface-container-low border border-outline-variant/60 rounded-xl font-body-md text-body-md text-on-surface cursor-not-allowed opacity-90 select-none"
                       placeholder="Johnathan Doe"
                       type="text"
                       name="fullName"
                       value={formData.fullName}
-                      onChange={handleChange}
                     />
                   </div>
                 </div>
 
                 <div className="space-y-sm">
-                  <label className="font-label-md text-label-md text-on-surface-variant block ml-1">
-                    Email Address
-                  </label>
+                  <div className="flex items-center justify-between ml-1">
+                    <label className="font-label-md text-label-md text-on-surface-variant block">
+                      Email Address
+                    </label>
+                    <span className="text-[11px] text-outline font-medium flex items-center gap-1">
+                      <span className="material-symbols-outlined text-[13px]">lock</span> Account Email
+                    </span>
+                  </div>
                   <div className="relative">
                     <span className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-outline text-[20px]">
                       mail
                     </span>
                     <input
-                      className="w-full h-[48px] pl-12 pr-4 bg-surface-container-low border border-outline-variant rounded-xl focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all font-body-md text-body-md placeholder:text-outline/50"
+                      readOnly
+                      className="w-full h-[48px] pl-12 pr-4 bg-surface-container-low border border-outline-variant/60 rounded-xl font-body-md text-body-md text-on-surface cursor-not-allowed opacity-90 select-none"
                       placeholder="john@healthcare.com"
                       type="email"
                       name="email"
                       value={formData.email}
-                      onChange={handleChange}
                     />
                   </div>
                 </div>
 
                 <div className="space-y-sm">
-                  <label className="font-label-md text-label-md text-on-surface-variant block ml-1">
-                    Phone Number
-                  </label>
+                  <div className="flex items-center justify-between ml-1">
+                    <label className="font-label-md text-label-md text-on-surface-variant block">
+                      Phone Number
+                    </label>
+                    {user?.phone || user?.mobile ? (
+                      <span className="text-[11px] text-outline font-medium flex items-center gap-1">
+                        <span className="material-symbols-outlined text-[13px]">lock</span> Account Phone
+                      </span>
+                    ) : (
+                      <span className="text-[11px] text-primary font-medium">Please enter your 10-digit phone number</span>
+                    )}
+                  </div>
                   <div className="relative">
                     <span className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-outline text-[20px]">
                       call
                     </span>
                     <input
-                      className="w-full h-[48px] pl-12 pr-4 bg-surface-container-low border border-outline-variant rounded-xl focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all font-body-md text-body-md placeholder:text-outline/50"
+                      readOnly={!!(user?.phone || user?.mobile)}
+                      className={`w-full h-[48px] pl-12 pr-4 rounded-xl border border-outline-variant transition-all font-body-md text-body-md ${
+                        user?.phone || user?.mobile
+                          ? "bg-surface-container-low cursor-not-allowed opacity-90 select-none"
+                          : "bg-surface-container-low focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none"
+                      }`}
                       placeholder="+91 98765 43210"
+                      required
                       type="tel"
                       name="phone"
                       value={formData.phone}
@@ -190,6 +273,7 @@ export default function PatientRegister() {
                   </div>
                 </div>
 
+                {/* Date of Birth & Blood Group */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-md">
                   <div className="space-y-sm">
                     <label className="font-label-md text-label-md text-on-surface-variant block ml-1">
@@ -200,6 +284,7 @@ export default function PatientRegister() {
                         calendar_today
                       </span>
                       <input
+                        required
                         className="w-full h-[48px] pl-12 pr-4 bg-surface-container-low border border-outline-variant rounded-xl focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all font-body-md text-body-md placeholder:text-outline/50"
                         type="date"
                         name="dob"
@@ -217,6 +302,7 @@ export default function PatientRegister() {
                         water_drop
                       </span>
                       <select
+                        required
                         className="w-full h-[48px] pl-12 pr-4 bg-surface-container-low border border-outline-variant rounded-xl focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all font-body-md text-body-md appearance-none"
                         name="bloodGroup"
                         value={formData.bloodGroup}
@@ -238,44 +324,10 @@ export default function PatientRegister() {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-md">
-                  <div className="space-y-sm">
-                    <label className="font-label-md text-label-md text-on-surface-variant block ml-1">Password</label>
-                    <div className="relative">
-                      <span className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-outline text-[20px]">
-                        lock
-                      </span>
-                      <input
-                        className="w-full h-[48px] pl-12 pr-4 bg-surface-container-low border border-outline-variant rounded-xl focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all font-body-md text-body-md placeholder:text-outline/50"
-                        placeholder="••••••••"
-                        type="password"
-                        name="password"
-                        value={formData.password}
-                        onChange={handleChange}
-                      />
-                    </div>
-                  </div>
-                  <div className="space-y-sm">
-                    <label className="font-label-md text-label-md text-on-surface-variant block ml-1">Confirm</label>
-                    <div className="relative">
-                      <span className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-outline text-[20px]">
-                        lock_reset
-                      </span>
-                      <input
-                        className="w-full h-[48px] pl-12 pr-4 bg-surface-container-low border border-outline-variant rounded-xl focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all font-body-md text-body-md placeholder:text-outline/50"
-                        placeholder="••••••••"
-                        type="password"
-                        name="confirmPassword"
-                        value={formData.confirmPassword}
-                        onChange={handleChange}
-                      />
-                    </div>
-                  </div>
-                </div>
-
                 {/* Terms */}
                 <div className="flex items-start gap-3 py-2">
                   <input
+                    required
                     className="mt-1 w-5 h-5 rounded border-outline-variant text-primary focus:ring-primary/20 cursor-pointer"
                     id="terms"
                     type="checkbox"
@@ -299,7 +351,7 @@ export default function PatientRegister() {
                 <button
                   className="w-full h-[52px] bg-primary-container text-on-primary-container font-label-md text-label-md font-semibold rounded-xl hover:shadow-lg hover:shadow-primary/10 transition-all active:scale-[0.99] mt-md disabled:opacity-70 disabled:cursor-not-allowed disabled:active:scale-100 flex items-center justify-center gap-2"
                   type="submit"
-                  disabled={isLoading || !agreedToTerms}
+                  disabled={isLoading}
                 >
                   {isLoading ? (
                     <>

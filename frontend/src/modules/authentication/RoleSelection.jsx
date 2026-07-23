@@ -7,25 +7,23 @@ export default function RoleSelection({ onSelectRole }) {
   const { user, setUserRole } = useAuth();
 
   useEffect(() => {
-    // If user already has a selected role, do not allow staying on /role-selection
-    if (user?.hasSelectedRole || (user?.role && user?.role !== 'none')) {
+    // Only redirect to dashboard if user has completely finished role-specific registration
+    if (user?.hasSelectedRole) {
       navigate('/dashboard', { replace: true });
     }
   }, [user, navigate]);
 
-const handleSelect = (role) => {
-  setUserRole(role);
+  const handleSelect = (role) => {
+    if (onSelectRole) {
+      onSelectRole(role);
+    }
 
-  if (onSelectRole) {
-    onSelectRole(role);
-  }
-
-  if (role === "doctor") {
-    navigate("/doctor-register");
-  } else {
-    navigate("/patient-register");
-  }
-};
+    if (role === "doctor") {
+      navigate("/doctor-register");
+    } else {
+      navigate("/patient-register");
+    }
+  };
 
   return (
     <div className="bg-background text-on-surface min-h-screen flex flex-col relative overflow-x-hidden">

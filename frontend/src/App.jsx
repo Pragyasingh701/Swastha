@@ -10,6 +10,10 @@ import RoleSelection from "./modules/authentication/RoleSelection";
 
 import DoctorRegister from "./modules/authentication/DoctorRegister";
 import PatientRegister from "./modules/authentication/PatientRegister";
+import DoctorLogin from "./modules/authentication/DoctorLogin";
+import VerifyOTP from "./modules/authentication/VerifyOTP";
+import ForgotPassword from "./modules/authentication/ForgotPassword";
+import ResetPassword from "./modules/authentication/ResetPassword";
 
 
 // Dashboard
@@ -39,8 +43,12 @@ export default function App() {
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
         <Route path="/role-selection" element={<RoleSelection />} />
+        <Route path="/verify-otp" element={<VerifyOTP />} />
+        <Route path="/forgot-password" element={<ForgotPassword />} />
+        <Route path="/reset-password" element={<ResetPassword />} />
 
-        {/* Registration Flows */}
+        {/* Registration & Doctor Login Flows */}
+        <Route path="/doctor-login" element={<DoctorLogin />} />
         <Route path="/doctor-register" element={<DoctorRegister />} />
         <Route path="/patient-register" element={<PatientRegister />} />
 

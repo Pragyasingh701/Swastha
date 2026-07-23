@@ -5,7 +5,7 @@ import { useAuth } from "../../context/AuthContext";
 
 export default function Register() {
   const navigate = useNavigate();
-  const { registerWithGoogle } = useAuth();
+  const { register, registerWithGoogle } = useAuth();
   const [formData, setFormData] = useState({
     fullname: "",
     email: "",
@@ -15,37 +15,86 @@ export default function Register() {
   });
   const [agreedToTerms, setAgreedToTerms] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [isSuccess, setIsSuccess] = useState(false);
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
+  const [showLoginPrompt, setShowLoginPrompt] = useState(false);
 
   const handleChange = (e) => {
     const { id, value } = e.target;
     setFormData((prev) => ({ ...prev, [id]: value }));
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
+    if (!agreedToTerms) {
+      setErrorMessage("Please accept the Terms of Service & Privacy Policy.");
+      return;
+    }
+    if (formData.password !== formData.confirmPassword) {
+      setErrorMessage("Passwords do not match.");
+      return;
+    }
+    if (formData.password.length < 6) {
+      setErrorMessage("Password must be at least 6 characters long.");
+      return;
+    }
+
+    setErrorMessage("");
+    setShowLoginPrompt(false);
     setIsLoading(true);
-    setTimeout(() => {
+
+    try {
+      const result = await register({
+        fullName: formData.fullname,
+        email: formData.email,
+        password: formData.password,
+        phone: formData.phone,
+        role: "none",
+      });
       setIsLoading(false);
-      navigate("/role-selection");
-    }, 1200);
+
+      if (result?.requiresOTP) {
+        setIsSuccess(true);
+        setTimeout(() => {
+          navigate("/verify-otp", { state: { email: formData.email, isRegister: true } });
+        }, 500);
+        return;
+      }
+
+      setIsSuccess(true);
+      setTimeout(() => {
+        navigate("/role-selection", { replace: true });
+      }, 800);
+    } catch (err) {
+      setIsLoading(false);
+      if (err.message?.includes("already exists") || err.message?.includes("log in instead")) {
+        setErrorMessage("An account with this email already exists.");
+        setShowLoginPrompt(true);
+      } else {
+        setErrorMessage(err.message || "Registration failed. Please try again.");
+      }
+    }
   };
 
   const handleGoogleRegister = useGoogleLogin({
     onSuccess: async (tokenResponse) => {
       setIsGoogleLoading(true);
       setErrorMessage("");
+      setShowLoginPrompt(false);
 
       try {
-        const result = await registerWithGoogle(tokenResponse.access_token || tokenResponse);
+        const result = await registerWithGoogle(tokenResponse.access_token || tokenResponse, "none");
         setIsGoogleLoading(false);
 
-        if (result?.user?.hasSelectedRole || (result?.user?.role && result?.user?.role !== 'none')) {
-          navigate("/dashboard", { replace: true });
-        } else {
-          navigate("/role-selection", { replace: true });
+        if (result?.requiresOTP) {
+          navigate("/verify-otp", { state: { email: result.email, isRegister: true } });
+          return;
         }
+
+        setTimeout(() => {
+          navigate("/role-selection", { replace: true });
+        }, 500);
       } catch (err) {
         setIsGoogleLoading(false);
         if (err.message?.includes("already exists") || err.message?.includes("log in instead")) {
@@ -99,6 +148,7 @@ export default function Register() {
               Your entire medical journey,{" "}
               <span className="text-primary">unified by intelligence.</span>
             </h1>
+
             <ul className="space-y-6">
               <li className="flex items-start gap-4">
                 <span className="material-symbols-outlined text-primary bg-primary/10 p-1.5 rounded-lg">
@@ -173,12 +223,22 @@ export default function Register() {
               </p>
             </div>
 
-            {errorMessage ? (
-              <div className="mb-5 p-4 rounded-xl bg-error-container text-on-error-container text-body-sm flex items-center gap-2">
-                <span className="material-symbols-outlined text-[20px]">error</span>
-                <span>{errorMessage}</span>
+            {errorMessage && (
+              <div className="mb-6 p-4 rounded-xl bg-error-container text-on-error-container text-body-sm flex flex-col gap-2">
+                <div className="flex items-center gap-3">
+                  <span className="material-symbols-outlined text-[20px]">error</span>
+                  <span>{errorMessage}</span>
+                </div>
+                {showLoginPrompt && (
+                  <Link
+                    to="/login"
+                    className="mt-2 inline-flex items-center justify-center py-2 px-4 bg-primary text-white text-label-md rounded-lg font-semibold hover:bg-primary/90 transition-all"
+                  >
+                    Log into existing account
+                  </Link>
+                )}
               </div>
-            ) : null}
+            )}
 
             <form className="space-y-5" onSubmit={handleSubmit}>
               {/* Full Name */}
@@ -191,6 +251,7 @@ export default function Register() {
                     person
                   </span>
                   <input
+                    required
                     className="w-full h-11 pl-11 bg-surface border border-outline-variant rounded-xl focus:ring-4 focus:ring-primary/10 focus:border-primary outline-none transition-all placeholder:text-outline-variant/60 font-body-md text-body-md"
                     id="fullname"
                     placeholder="Dr. Sarah Johnson"
@@ -211,6 +272,7 @@ export default function Register() {
                     mail
                   </span>
                   <input
+                    required
                     className="w-full h-11 pl-11 bg-surface border border-outline-variant rounded-xl focus:ring-4 focus:ring-primary/10 focus:border-primary outline-none transition-all placeholder:text-outline-variant/60 font-body-md text-body-md"
                     id="email"
                     placeholder="sarah.j@healthcare.com"
@@ -231,6 +293,7 @@ export default function Register() {
                     call
                   </span>
                   <input
+                    required
                     className="w-full h-11 pl-11 bg-surface border border-outline-variant rounded-xl focus:ring-4 focus:ring-primary/10 focus:border-primary outline-none transition-all placeholder:text-outline-variant/60 font-body-md text-body-md"
                     id="phone"
                     placeholder="+1 (555) 000-0000"
@@ -252,6 +315,7 @@ export default function Register() {
                       lock
                     </span>
                     <input
+                      required
                       className="w-full h-11 pl-11 bg-surface border border-outline-variant rounded-xl focus:ring-4 focus:ring-primary/10 focus:border-primary outline-none transition-all placeholder:text-outline-variant/60 font-body-md text-body-md"
                       id="password"
                       placeholder="••••••••"
@@ -270,6 +334,7 @@ export default function Register() {
                       shield_lock
                     </span>
                     <input
+                      required
                       className="w-full h-11 pl-11 bg-surface border border-outline-variant rounded-xl focus:ring-4 focus:ring-primary/10 focus:border-primary outline-none transition-all placeholder:text-outline-variant/60 font-body-md text-body-md"
                       id="confirmPassword"
                       placeholder="••••••••"
