@@ -10,6 +10,12 @@ import {
   ReferenceArea,
 } from "recharts";
 import {
+  LayoutGrid,
+  Activity,
+  FolderOpen,
+  Users,
+  ClipboardList,
+  LineChart as LineChartIcon,
   Search,
   Bell,
   Droplet,
@@ -26,6 +32,15 @@ import {
   Fingerprint,
   AtSign,
 } from "lucide-react";
+
+const NAV_ITEMS = [
+  { label: "Dashboard", icon: LayoutGrid },
+  { label: "Health Timeline", icon: Activity },
+  { label: "Medical Vault", icon: FolderOpen },
+  { label: "Family Records", icon: Users },
+  { label: "Medicine Safety", icon: ClipboardList },
+  { label: "Lab Insights", icon: LineChartIcon, active: true },
+];
 
 /* -----------------------------------------------------------
    Sample data — swap for real values fetched by patientId.
@@ -121,21 +136,69 @@ export default function LabInsights() {
   const data = useMemo(() => RANGES[range], [range]);
 
   return (
-    <div className="px-10 py-8 bg-[#F6F7FB] min-h-screen">
-      <PageHeader />
-      <StatRow />
+    <div className="flex min-h-screen bg-[#F6F7FB]">
+      <Sidebar />
 
-      <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-6 mt-6">
-        <GlucoseTrendCard range={range} setRange={setRange} data={data} />
-        <div className="flex flex-col gap-6">
-          <AiInsightCard />
-          <FollowUpCard />
+      <div className="flex-1 px-10 py-8">
+        <PageHeader />
+        <StatRow />
+
+        <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-6 mt-6">
+          <GlucoseTrendCard range={range} setRange={setRange} data={data} />
+          <div className="flex flex-col gap-6">
+            <AiInsightCard />
+            <FollowUpCard />
+          </div>
+        </div>
+
+        <PhysicianSummary />
+        <Footer />
+      </div>
+    </div>
+  );
+}
+
+/* ------------------------------ Sidebar ------------------------------ */
+
+function Sidebar() {
+  return (
+    <aside className="w-64 shrink-0 bg-white border-r border-slate-100 flex flex-col py-6 px-4">
+      <div className="flex items-center gap-2.5 px-2 mb-8">
+        <div className="w-9 h-9 rounded-xl bg-blue-600 flex items-center justify-center text-white transition-transform duration-300 hover:rotate-6">
+          <ShieldCheck size={20} />
+        </div>
+        <div>
+          <p className="font-semibold text-slate-900 leading-tight">
+            Swastha AI
+          </p>
+          <p className="text-xs text-slate-400 leading-tight">
+            Clinical Intelligence
+          </p>
         </div>
       </div>
 
-      <PhysicianSummary />
-      <Footer />
-    </div>
+      <nav className="flex flex-col gap-1">
+        {NAV_ITEMS.map(({ label, icon: Icon, active }) => (
+          <button
+            key={label}
+            className={`group flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-all duration-200
+              ${
+                active
+                  ? "bg-blue-50 text-blue-600 font-medium"
+                  : "text-slate-500 hover:bg-slate-50 hover:text-slate-800 hover:pl-4"
+              }`}
+          >
+            <Icon
+              size={18}
+              className={`transition-transform duration-200 ${
+                active ? "" : "group-hover:scale-110"
+              }`}
+            />
+            {label}
+          </button>
+        ))}
+      </nav>
+    </aside>
   );
 }
 
