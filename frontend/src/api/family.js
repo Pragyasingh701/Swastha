@@ -64,6 +64,13 @@ export async function createFamilyMember(memberData) {
   });
 }
 
+export async function sendFamilyMemberAuthorization(memberData) {
+  return request('/members/authorize', {
+    method: 'POST',
+    body: JSON.stringify(memberData),
+  });
+}
+
 export async function updateFamilyMember(memberId, memberData) {
   return request(`/members/${memberId}`, {
     method: 'PATCH',

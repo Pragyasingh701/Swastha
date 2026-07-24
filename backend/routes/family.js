@@ -3,13 +3,16 @@ import jwt from 'jsonwebtoken';
 import {
   createFamilyMember,
   createOrGetFamilyVaultForUser,
+  createPendingFamilyMemberAuthorizationRequest,
   deleteFamilyVaultForUser,
   getFamilyVaultForUser,
   getFamilyVaultSummary,
   listFamilyMembers,
   deleteFamilyMember,
   updateFamilyMember,
+  confirmPendingFamilyMemberAuthorizationRequest,
 } from '../db/family.js';
+import { sendFamilyMemberAuthorizationEmail } from '../utils/mailer.js';
 
 const router = express.Router();
 const JWT_SECRET = process.env.JWT_SECRET || 'swastha_dev_secret_key_2026';
@@ -117,6 +120,94 @@ async function createMemberHandler(req, res) {
 }
 
 router.post('/members', createMemberHandler);
+
+router.post('/members/authorize', async (req, res) => {
+  try {
+    const user = getAuthUser(req);
+    if (!user?.userId) {
+      return res.status(401).json({ message: 'Authentication required for Family Vault requests.' });
+    }
+
+    const recipientEmail = req.body?.email?.trim();
+    if (!recipientEmail) {
+      return res.status(400).json({ message: 'Recipient email is required.' });
+    }
+
+    const inviterEmail = req.body?.inviterEmail?.trim() || user?.email || null;
+    const memberName = req.body?.name?.trim() || null;
+
+    const { authorizationToken } = await createPendingFamilyMemberAuthorizationRequest({
+      ...req.body,
+      userId: user.userId,
+      requestedByEmail: inviterEmail,
+    });
+
+    await sendFamilyMemberAuthorizationEmail(recipientEmail, inviterEmail, memberName, authorizationToken);
+
+    return res.json({ message: 'Authorization request sent. The member will be added after they approve it.' });
+  } catch (error) {
+    console.error('Family member authorization email error:', error);
+    return res.status(500).json({ message: 'Failed to send authorization mail', error: error.message });
+  }
+});
+
+router.get('/members/authorize/confirm', async (req, res) => {
+  try {
+    const authorizationToken = req.query?.token?.trim();
+    if (!authorizationToken) {
+      return res.status(400).send('Missing authorization token.');
+    }
+
+    const authorizedByEmail = req.query?.email?.trim() || null;
+    const confirmedMember = await confirmPendingFamilyMemberAuthorizationRequest(authorizationToken, authorizedByEmail);
+    const message = confirmedMember
+      ? 'You gave permission for this family member to become an admin of the family vault.'
+      : 'This authorization link is invalid or has already been used.';
+
+    return res.send(`<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Family Vault Permission</title>
+    <style>
+      body { font-family: Arial, sans-serif; background: #f8fafc; color: #0f172a; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; }
+      .card { background: white; border-radius: 16px; padding: 32px; box-shadow: 0 12px 30px rgba(15, 23, 42, 0.08); max-width: 560px; text-align: center; }
+      h2 { margin-top: 0; color: #2563eb; }
+      p { line-height: 1.6; color: #475569; }
+    </style>
+  </head>
+  <body>
+    <div class="card">
+      <h2>Permission Updated</h2>
+      <p>${message}</p>
+    </div>
+  </body>
+</html>`);
+  } catch (error) {
+    console.error('Family member authorization confirmation error:', error);
+    return res.send(`<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Family Vault Permission</title>
+    <style>
+      body { font-family: Arial, sans-serif; background: #f8fafc; color: #0f172a; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; }
+      .card { background: white; border-radius: 16px; padding: 32px; box-shadow: 0 12px 30px rgba(15, 23, 42, 0.08); max-width: 560px; text-align: center; }
+      h2 { margin-top: 0; color: #2563eb; }
+      p { line-height: 1.6; color: #475569; }
+    </style>
+  </head>
+  <body>
+    <div class="card">
+      <h2>Permission Updated</h2>
+      <p>This authorization link is invalid or has already been used.</p>
+    </div>
+  </body>
+</html>`);
+  }
+});
 
 async function listMembersHandler(req, res) {
   try {

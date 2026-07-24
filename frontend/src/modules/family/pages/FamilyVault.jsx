@@ -7,6 +7,7 @@ import {
   Folder,
   HelpCircle,
   LayoutGrid,
+  Mail,
   PlusCircle,
   Search,
   Settings,
@@ -22,9 +23,10 @@ import {
   deleteFamilyMember,
   getFamilyDashboard,
   getFamilyVault,
+  sendFamilyMemberAuthorization,
   updateFamilyMember,
 } from '../../../api/family';
-import FamilyMember from './FamilyMember';
+import FamilyMember, { parseMemberNotesAndEmail } from './FamilyMember';
 
 const emptyForm = {
   name: '',
@@ -35,11 +37,13 @@ const emptyForm = {
   notes: '',
   lastVisitDate: '',
   nextCheckupDate: '',
+  email: '',
 };
 
-function validateForm(form, isEditing = false) {
+function validateForm(form, isEditing = false, addMethod = 'manual') {
   const errors = {};
   const name = form.name.trim();
+  const email = form.email ? form.email.trim() : '';
   const relationship = form.relationship.trim();
   const relationshipTag = form.relationshipTag.trim();
   const healthOverview = form.healthOverview.trim();
@@ -51,6 +55,14 @@ function validateForm(form, isEditing = false) {
     errors.name = 'Name must be at least 2 characters';
   } else if (name.length > 80) {
     errors.name = 'Name must be 80 characters or less';
+  }
+
+  if (addMethod === 'email' || email) {
+    if (addMethod === 'email' && !email) {
+      errors.email = 'Email address is required in Email mode';
+    } else if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      errors.email = 'Please enter a valid email address';
+    }
   }
 
   if (form.age !== '' && form.age !== null && form.age !== undefined) {
@@ -84,7 +96,7 @@ function validateForm(form, isEditing = false) {
     errors.nextCheckupDate = 'Next checkup date must be valid';
   }
 
-  if (isEditing && Object.keys(errors).length === 0 && !name && !relationship && !relationshipTag && !healthOverview && !notes && !form.age && !form.lastVisitDate && !form.nextCheckupDate) {
+  if (isEditing && Object.keys(errors).length === 0 && !name && !relationship && !relationshipTag && !healthOverview && !notes && !form.age && !form.lastVisitDate && !form.nextCheckupDate && !email) {
     errors.form = 'At least one field is required to update a member';
   }
 
@@ -207,6 +219,7 @@ export default function FamilyVault() {
   const [relationshipTags, setRelationshipTags] = useState([]);
   const [healthOverview, setHealthOverview] = useState([]);
   const [form, setForm] = useState(emptyForm);
+  const [addMethod, setAddMethod] = useState('manual');
   const [editingMemberId, setEditingMemberId] = useState(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -292,6 +305,7 @@ export default function FamilyVault() {
   function resetForm() {
     setForm(emptyForm);
     setEditingMemberId(null);
+    setAddMethod('manual');
     setFieldErrors({});
     setServerErrorMeta(null);
   }
@@ -309,7 +323,10 @@ export default function FamilyVault() {
       return;
     }
 
+    const { notes: cleanedNotes, email } = parseMemberNotesAndEmail(member.notes || '');
+
     setEditingMemberId(member.id);
+    setAddMethod(email ? 'email' : 'manual');
     setFieldErrors({});
     setError('');
     setNotice('');
@@ -320,7 +337,8 @@ export default function FamilyVault() {
       relationship: member.relationship || '',
       relationshipTag: member.relationshipTag || member.relationship_tag || '',
       healthOverview: member.healthOverview || member.health_overview || '',
-      notes: member.notes || '',
+      notes: cleanedNotes,
+      email: email,
       lastVisitDate: member.lastVisitDate || member.last_visit_date || '',
       nextCheckupDate: member.nextCheckupDate || member.next_checkup_date || '',
     });
@@ -349,7 +367,7 @@ export default function FamilyVault() {
       return;
     }
 
-    const nextFieldErrors = validateForm(form, Boolean(editingMemberId));
+    const nextFieldErrors = validateForm(form, Boolean(editingMemberId), addMethod);
     if (Object.keys(nextFieldErrors).length > 0) {
       setFieldErrors(nextFieldErrors);
       return;
@@ -358,24 +376,46 @@ export default function FamilyVault() {
     setFieldErrors({});
     setSaving(true);
 
+    let finalNotes = form.notes.trim();
+    if (form.email && form.email.trim()) {
+      finalNotes = `[Email: ${form.email.trim()}]\n${finalNotes}`.trim();
+    }
+
     const payload = {
       name: form.name.trim(),
       age: form.age === '' ? null : Number(form.age),
       relationship: form.relationship.trim(),
       relationshipTag: form.relationshipTag.trim(),
       healthOverview: form.healthOverview.trim(),
-      notes: form.notes.trim(),
+      notes: finalNotes,
       lastVisitDate: form.lastVisitDate,
       nextCheckupDate: form.nextCheckupDate,
+      authorizationMethod: addMethod === 'email' ? 'mail' : 'manual',
     };
 
     try {
-      if (editingMemberId) {
-        await updateFamilyMember(editingMemberId, payload);
-        setNotice('Family member updated successfully.');
+      if (addMethod === 'email' && form.email?.trim()) {
+        await sendFamilyMemberAuthorization({
+          name: form.name.trim(),
+          email: form.email.trim(),
+          inviterEmail: user?.email,
+          notes: payload.notes,
+          relationship: payload.relationship,
+          relationshipTag: payload.relationshipTag,
+          healthOverview: payload.healthOverview,
+          age: payload.age,
+          lastVisitDate: payload.lastVisitDate,
+          nextCheckupDate: payload.nextCheckupDate,
+        });
+        setNotice('Authorization request sent. The member will be added after they approve it.');
       } else {
-        await createFamilyMember(payload);
-        setNotice('Family member added successfully.');
+        if (editingMemberId) {
+          await updateFamilyMember(editingMemberId, payload);
+          setNotice('Family member updated successfully.');
+        } else {
+          await createFamilyMember(payload);
+          setNotice('Family member added successfully.');
+        }
       }
 
       resetForm();
@@ -419,12 +459,15 @@ export default function FamilyVault() {
   const canManageMembers = Boolean(familyVault);
   const healthOverviewCards = (healthOverview || [])
     .filter((item) => item.relationshipTag || item.relationship || item.healthOverview || item.notes)
-    .map((item) => ({
-      label: item.name || 'Family member',
-      tag: item.relationshipTag || 'No tag added',
-      relationship: item.relationship || 'Relationship not set',
-      detail: item.healthOverview || item.notes || 'No health overview added yet.',
-    }));
+    .map((item) => {
+      const { notes: cleanedNotes } = parseMemberNotesAndEmail(item.notes || '');
+      return {
+        label: item.name || 'Family member',
+        tag: item.relationshipTag || 'No tag added',
+        relationship: item.relationship || 'Relationship not set',
+        detail: item.healthOverview || cleanedNotes || 'No health overview added yet.',
+      };
+    });
   const relationshipTagChips = (relationshipTags || []).map((tag, index) => {
     if (typeof tag === 'string') {
       return { key: tag || `tag-${index}`, label: tag };
@@ -649,6 +692,45 @@ export default function FamilyVault() {
                 </label>
               </div>
 
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <p className="text-sm font-medium text-slate-700">Authorization mode</p>
+                <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAddMethod('manual');
+                      setForm((current) => ({ ...current, email: '' }));
+                    }}
+                    className={`rounded-2xl border px-4 py-3 text-left text-sm font-medium transition-colors ${addMethod === 'manual' ? 'border-blue-400 bg-blue-50 text-blue-700' : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-100'}`}
+                  >
+                    <span className="block">Manual entry</span>
+                    <span className="mt-1 block text-xs font-normal text-slate-500">Save the member details directly in your vault.</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setAddMethod('email')}
+                    className={`rounded-2xl border px-4 py-3 text-left text-sm font-medium transition-colors ${addMethod === 'email' ? 'border-blue-400 bg-blue-50 text-blue-700' : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-100'}`}
+                  >
+                    <span className="block">Direct authorization via mail</span>
+                    <span className="mt-1 block text-xs font-normal text-slate-500">Send an authorization email to the person and save them in the vault.</span>
+                  </button>
+                </div>
+              </div>
+
+              {addMethod === 'email' ? (
+                <label className="space-y-2 block">
+                  <span className="text-sm font-medium text-slate-700">Recipient email</span>
+                  <input
+                    type="email"
+                    value={form.email}
+                    onChange={(event) => setForm({ ...form, email: event.target.value })}
+                    className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 outline-none transition-colors focus:border-blue-400 focus:bg-white"
+                    placeholder="person@example.com"
+                  />
+                  {fieldErrors.email ? <p className="text-sm text-rose-600">{fieldErrors.email}</p> : null}
+                </label>
+              ) : null}
+
               <label className="space-y-2 block">
                 <span className="text-sm font-medium text-slate-700">Health Overview</span>
                 <textarea
@@ -707,7 +789,7 @@ export default function FamilyVault() {
                   disabled={saving || !canManageMembers}
                   className="inline-flex items-center justify-center rounded-2xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white transition-colors hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-70"
                 >
-                  {saving ? 'Saving...' : isEditing ? 'Update Member' : 'Add Member'}
+                  {saving ? 'Sending...' : isEditing ? 'Update Member' : addMethod === 'email' ? 'Ask for Permission' : 'Add Member'}
                 </button>
 
                 {isEditing ? (

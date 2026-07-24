@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { CalendarDays, Edit3, Eye, HeartPulse, Trash2, Users } from 'lucide-react';
+import { CalendarDays, Edit3, Eye, HeartPulse, Mail, Trash2, Users } from 'lucide-react';
 
 function formatDate(value) {
   if (!value) return 'Not set';
@@ -15,6 +15,18 @@ function formatDate(value) {
   });
 }
 
+export function parseMemberNotesAndEmail(rawNotes) {
+  if (!rawNotes) return { notes: '', email: '' };
+  const emailRegex = /\[Email:\s*([^\]]+)\]/;
+  const match = rawNotes.match(emailRegex);
+  if (match) {
+    const email = match[1].trim();
+    const cleanedNotes = rawNotes.replace(emailRegex, '').trim();
+    return { notes: cleanedNotes, email };
+  }
+  return { notes: rawNotes, email: '' };
+}
+
 export default function FamilyMember({ member, onEdit, onDelete }) {
   const navigate = useNavigate();
   const [expanded, setExpanded] = useState(false);
@@ -23,7 +35,10 @@ export default function FamilyMember({ member, onEdit, onDelete }) {
   const relationship = member.relationship || 'Relationship not set';
   const age = member.age ?? 'Not set';
   const healthOverview = member.healthOverview || member.health_overview || 'No health overview added yet.';
-  const notes = member.notes || 'No extra notes stored.';
+  
+  const { notes: cleanedNotes, email } = parseMemberNotesAndEmail(member.notes || '');
+  const notesText = cleanedNotes || 'No extra notes stored.';
+  
   const lastVisitDate = member.lastVisitDate || member.last_visit_date;
   const nextCheckupDate = member.nextCheckupDate || member.next_checkup_date;
 
@@ -39,9 +54,14 @@ export default function FamilyMember({ member, onEdit, onDelete }) {
               </span>
             ) : null}
           </div>
-          <p className="mt-1 text-sm text-slate-500">
-            {relationship}
-            {age !== 'Not set' ? ` • ${age} years` : ''}
+          <p className="mt-1 flex flex-wrap items-center gap-1.5 text-sm text-slate-500">
+            <span>{relationship}</span>
+            {age !== 'Not set' ? <span>• {age} years</span> : ''}
+            {email ? (
+              <span className="inline-flex items-center gap-1 text-slate-400">
+                • <Mail size={14} className="text-slate-400" /> {email}
+              </span>
+            ) : null}
           </p>
         </div>
 
@@ -98,7 +118,7 @@ export default function FamilyMember({ member, onEdit, onDelete }) {
             Notes
           </div>
           <p className="mt-2 text-sm text-slate-700">
-            {notes}
+            {notesText}
           </p>
         </div>
 
@@ -121,6 +141,12 @@ export default function FamilyMember({ member, onEdit, onDelete }) {
             <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Age</p>
             <p className="mt-2 text-sm font-medium text-slate-700">{age}</p>
           </div>
+          {email ? (
+            <div className="rounded-xl bg-white p-3 shadow-sm">
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Email Address</p>
+              <p className="mt-2 text-sm font-medium text-blue-700">{email}</p>
+            </div>
+          ) : null}
           <div className="rounded-xl bg-white p-3 shadow-sm">
             <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Last Visited</p>
             <p className="mt-2 text-sm font-medium text-slate-700">{formatDate(lastVisitDate)}</p>
@@ -135,7 +161,7 @@ export default function FamilyMember({ member, onEdit, onDelete }) {
           </div>
           <div className="rounded-xl bg-white p-3 shadow-sm md:col-span-2 xl:col-span-3">
             <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Notes</p>
-            <p className="mt-2 text-sm font-medium text-slate-700">{notes}</p>
+            <p className="mt-2 text-sm font-medium text-slate-700">{notesText}</p>
           </div>
         </div>
       ) : null}
