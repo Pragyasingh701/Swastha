@@ -27,13 +27,30 @@ export function parseMemberNotesAndEmail(rawNotes) {
   return { notes: rawNotes, email: '' };
 }
 
+function parseAgeFromMember(member) {
+  if (member?.age !== null && member?.age !== undefined && member?.age !== '') {
+    return member.age;
+  }
+
+  const healthOverview = member?.healthOverview || member?.health_overview || '';
+  const notes = member?.notes || '';
+  const textToSearch = `${healthOverview}\n${notes}`;
+  const ageMatch = textToSearch.match(/\b(age|age:|age\s*=)\s*[:=]?\s*(\d{1,3})\b/i);
+
+  if (ageMatch?.[2]) {
+    return Number(ageMatch[2]);
+  }
+
+  return 'Not set';
+}
+
 export default function FamilyMember({ member, onEdit, onDelete }) {
   const navigate = useNavigate();
   const [expanded, setExpanded] = useState(false);
 
   const relationshipTag = member.relationshipTag || member.relationship_tag || 'No tag added';
   const relationship = member.relationship || 'Relationship not set';
-  const age = member.age ?? 'Not set';
+  const age = parseAgeFromMember(member);
   const healthOverview = member.healthOverview || member.health_overview || 'No health overview added yet.';
   
   const { notes: cleanedNotes, email } = parseMemberNotesAndEmail(member.notes || '');
