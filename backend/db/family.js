@@ -1,7 +1,16 @@
+import crypto from 'crypto';
 import supabase from '../config/supabase.js';
 
 const FAMILY_VAULT_TABLE = process.env.FAMILY_VAULT_TABLE_NAME || 'vault_table';
 const FAMILY_MEMBERS_TABLE = process.env.FAMILY_MEMBERS_TABLE_NAME || 'family_members';
+
+function escapeRegExp(value) {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function isPendingAuthorizationMember(member) {
+  return member?.authorizationStatus === 'pending' || Boolean(member?.notes && /\[PendingAuthorization:[^\]]+\]/.test(member.notes));
+}
 
 function normalizeMember(row) {
   if (!row) return null;
@@ -18,6 +27,12 @@ function normalizeMember(row) {
     notes: row.notes,
     lastVisitDate: row.last_visit_date,
     nextCheckupDate: row.next_checkup_date,
+    authorizationStatus: row.authorization_status || 'approved',
+    authorizationToken: row.authorization_token || null,
+    authorizationRequestedAt: row.authorization_requested_at || null,
+    authorizationApprovedAt: row.authorization_approved_at || null,
+    requestedByEmail: row.requested_by_email || null,
+    authorizedByEmail: row.authorized_by_email || null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     deletedAt: row.deleted_at,
@@ -46,6 +61,12 @@ function buildMemberPayload(memberData = {}) {
     notes: memberData.notes?.trim() || null,
     last_visit_date: memberData.lastVisitDate || memberData.last_visit_date || null,
     next_checkup_date: memberData.nextCheckupDate || memberData.next_checkup_date || null,
+    authorization_status: memberData.authorizationStatus || memberData.authorization_status || (memberData.authorizationMethod === 'mail' ? 'pending' : 'approved'),
+    authorization_token: memberData.authorizationToken || memberData.authorization_token || null,
+    authorization_requested_at: memberData.authorizationRequestedAt || memberData.authorization_requested_at || null,
+    authorization_approved_at: memberData.authorizationApprovedAt || memberData.authorization_approved_at || null,
+    requested_by_email: memberData.requestedByEmail || memberData.requested_by_email || null,
+    authorized_by_email: memberData.authorizedByEmail || memberData.authorized_by_email || null,
     user_id: memberData.userId || memberData.user_id || null,
     vault_id: memberData.vaultId || memberData.vault_id || null,
     created_at: now,
@@ -64,6 +85,12 @@ function buildMemberUpdatePayload(memberData = {}) {
     notes: memberData.notes?.trim() || null,
     last_visit_date: memberData.lastVisitDate || memberData.last_visit_date || null,
     next_checkup_date: memberData.nextCheckupDate || memberData.next_checkup_date || null,
+    authorization_status: memberData.authorizationStatus || memberData.authorization_status,
+    authorization_token: memberData.authorizationToken || memberData.authorization_token,
+    authorization_requested_at: memberData.authorizationRequestedAt || memberData.authorization_requested_at,
+    authorization_approved_at: memberData.authorizationApprovedAt || memberData.authorization_approved_at,
+    requested_by_email: memberData.requestedByEmail || memberData.requested_by_email,
+    authorized_by_email: memberData.authorizedByEmail || memberData.authorized_by_email,
     updated_at: new Date().toISOString(),
   };
 
@@ -204,7 +231,7 @@ export const listFamilyMembers = async ({ userId, includeDeleted = false } = {})
       throw error;
     }
 
-    return (data || []).map(normalizeMember);
+    return (data || []).map(normalizeMember).filter((member) => !isPendingAuthorizationMember(member));
   } catch (err) {
     if (err?.code === 'PGRST205' || err?.message?.includes('Could not find the table')) {
       return [];
@@ -243,6 +270,105 @@ export const createFamilyMember = async ({ userId, ...memberData }) => {
     if (err?.code === 'PGRST205' || err?.message?.includes('Could not find the table')) {
       throw new Error('Family members table is not available yet. Please retry after the schema is initialized.');
     }
+    throw err;
+  }
+};
+
+export const createPendingFamilyMemberAuthorizationRequest = async ({ userId, ...memberData }) => {
+  if (!supabase) throw new Error('Supabase client is not configured');
+  if (!userId) throw new Error('userId is required');
+
+  const vault = await getFamilyVaultForUser(userId);
+  if (!vault?.vaultId) {
+    throw new Error('Family vault not found. Create a family vault before requesting authorization.');
+  }
+
+  const authorizationToken = crypto.randomBytes(16).toString('hex');
+  const pendingNotes = [memberData.notes?.trim(), `[PendingAuthorization:${authorizationToken}]`]
+    .filter(Boolean)
+    .join('\n')
+    .trim();
+
+  const payload = buildMemberPayload({
+    ...memberData,
+    userId,
+    vaultId: vault.vaultId,
+    notes: pendingNotes,
+    authorizationStatus: 'pending',
+    authorizationToken,
+    authorizationRequestedAt: new Date().toISOString(),
+    requestedByEmail: memberData.requestedByEmail || memberData.requested_by_email || null,
+  });
+
+  try {
+    const { data, error } = await supabase
+      .from(FAMILY_MEMBERS_TABLE)
+      .insert(payload)
+      .select()
+      .single();
+
+    if (error) {
+      if (error.code === 'PGRST205' || error.code === '42P01' || error.message?.includes('Could not find the table')) {
+        throw new Error('Family members table is not available yet. Please retry after the schema is initialized.');
+      }
+      throw error;
+    }
+
+    return {
+      member: normalizeMember(data),
+      authorizationToken,
+    };
+  } catch (err) {
+    if (err?.code === 'PGRST205' || err?.message?.includes('Could not find the table')) {
+      throw new Error('Family members table is not available yet. Please retry after the schema is initialized.');
+    }
+    throw err;
+  }
+};
+
+export const confirmPendingFamilyMemberAuthorizationRequest = async (authorizationToken, authorizedByEmail = null) => {
+  if (!supabase) throw new Error('Supabase client is not configured');
+  if (!authorizationToken) throw new Error('authorizationToken is required');
+
+  try {
+    const { data, error } = await supabase
+      .from(FAMILY_MEMBERS_TABLE)
+      .select('*')
+      .is('deleted_at', null);
+
+    if (error) {
+      throw error;
+    }
+
+    const row = (data || []).find((item) => (item.notes || '').includes(`[PendingAuthorization:${authorizationToken}]`));
+    if (!row) {
+      return null;
+    }
+
+    const cleanedNotes = (row.notes || '')
+      .replace(new RegExp(`\\[PendingAuthorization:${escapeRegExp(authorizationToken)}\\]`, 'g'), '')
+      .trim();
+
+    const { data: updatedRow, error: updateError } = await supabase
+      .from(FAMILY_MEMBERS_TABLE)
+      .update({
+        notes: cleanedNotes || null,
+        authorization_status: 'approved',
+        authorization_token: null,
+        authorization_approved_at: new Date().toISOString(),
+        authorized_by_email: authorizedByEmail || null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', row.id)
+      .select()
+      .single();
+
+    if (updateError) {
+      throw updateError;
+    }
+
+    return normalizeMember(updatedRow);
+  } catch (err) {
     throw err;
   }
 };

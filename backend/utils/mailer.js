@@ -95,3 +95,40 @@ export const sendPasswordResetEmail = async (email, resetToken) => {
     console.log(`==========================================\n`);
   }
 };
+
+export const sendFamilyMemberAuthorizationEmail = async (email, inviterEmail, memberName, authorizationToken) => {
+  const transporter = createTransporter();
+  const authorizeUrl = `${process.env.BACKEND_URL || 'http://localhost:5001'}/api/family/members/authorize/confirm?token=${authorizationToken}&email=${encodeURIComponent(email)}`;
+  const subject = 'Swastha — Please Authorize Family Vault Access';
+  const html = `
+    <div style="font-family: Arial, sans-serif; max-width: 540px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 12px; background-color: #ffffff;">
+      <h2 style="color: #004ac6; margin-bottom: 10px;">Authorize access to the Family Vault</h2>
+      <p style="font-size: 14px; color: #434655;">${memberName ? `${memberName} has been added to a Family Vault and is requesting your authorization.` : 'A new family member has been added to a Family Vault and is requesting your permission.'}</p>
+      <p style="font-size: 14px; color: #434655;">${inviterEmail ? `This request was sent by ${inviterEmail}. Please review and grant the required access permission.` : 'Please review and grant the required access permission for the shared health workspace.'}</p>
+      <div style="text-align: center; margin: 25px 0;">
+        <a href="${authorizeUrl}" style="background-color: #2563eb; color: #ffffff; padding: 12px 24px; text-decoration: none; border-radius: 8px; font-weight: bold; display: inline-block;">
+          Authorize Access
+        </a>
+      </div>
+      <p style="font-size: 14px; color: #434655;">Once you authorize, the family member will be granted permission to become an admin of the family vault.</p>
+      <p style="font-size: 12px; color: #737686;">If you did not expect this permission request, you can safely ignore this email.</p>
+    </div>
+  `;
+
+  if (transporter) {
+    await transporter.sendMail({
+      from: process.env.EMAIL_FROM || '"Swastha Support" <noreply@swastha.app>',
+      to: email,
+      subject,
+      html,
+    });
+    console.log(`[Mailer] Family authorization email sent to ${email}`);
+  } else {
+    console.log(`\n==========================================`);
+    console.log(`📧 [DEV EMAIL SIMULATOR]`);
+    console.log(`To: ${email}`);
+    console.log(`Subject: ${subject}`);
+    console.log(`Authorization URL: ${authorizeUrl}`);
+    console.log(`==========================================\n`);
+  }
+};
