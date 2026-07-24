@@ -1,15 +1,14 @@
 import React, { useState } from "react";
-import { useParams } from "react-router-dom";
+import { useParams, useNavigate } from "react-router-dom";
 import {
   LayoutGrid,
-  Activity,
-  FolderOpen,
+  TrendingUp,
+  Folder,
   Users,
-  ShieldCheck,
-  LineChart,
+  ClipboardList,
   Settings,
   HelpCircle,
-  Plus,
+  PlusCircle,
   Search,
   SlidersHorizontal,
   ChevronDown,
@@ -20,7 +19,6 @@ import {
   Download,
   Sparkles,
   FlaskConical,
-  ClipboardList,
   ScanLine,
   Syringe,
 } from "lucide-react";
@@ -30,13 +28,14 @@ import {
    Swap `timelineEvents` for real data fetched by profileId.
 ------------------------------------------------------------ */
 
-const NAV_ITEMS = [
-  { label: "Dashboard", icon: LayoutGrid },
-  { label: "Health Timeline", icon: Activity, active: true },
-  { label: "Medical Vault", icon: FolderOpen },
-  { label: "Family Records", icon: Users },
-  { label: "Medicine Safety", icon: ShieldCheck },
-  { label: "Lab Insights", icon: LineChart },
+// Same nav list as Dashboard.jsx / LabTrends.jsx, with Health Timeline active
+const navItems = [
+  { label: "Dashboard", icon: LayoutGrid, route: "/dashboard" },
+  { label: "Health Timeline", icon: TrendingUp, active: true, route: "/timeline" },
+  { label: "Medical Vault", icon: Folder, route: "/vault" },
+  { label: "Family Records", icon: Users, route: "/vault" },
+  { label: "Medicine Safety", icon: ClipboardList, route: "/search" },
+  { label: "Lab Insights", icon: TrendingUp, route: "/lab-trends" },
 ];
 
 const FILTERS = ["All Members", "Lab Reports", "Prescriptions", "MRI/Scans"];
@@ -115,7 +114,7 @@ export default function Timeline() {
   const [activeFilter, setActiveFilter] = useState("All Members");
 
   return (
-    <div className="min-h-screen bg-[#F6F7FB] flex">
+    <div className="min-h-screen bg-slate-50 flex">
       <Sidebar />
 
       <main className="flex-1 px-10 py-8">
@@ -154,64 +153,60 @@ export default function Timeline() {
 }
 
 /* ---------------------------- Sidebar ---------------------------- */
+/* Copied from Dashboard.jsx / LabTrends.jsx so all pages share identical behavior. */
 
 function Sidebar() {
+  const navigate = useNavigate();
+
   return (
-    <aside className="w-64 shrink-0 bg-white border-r border-slate-100 flex flex-col py-6 px-4">
-      <div className="flex items-center gap-2.5 px-2 mb-8">
-        <div className="w-9 h-9 rounded-xl bg-blue-600 flex items-center justify-center text-white transition-transform duration-300 hover:rotate-6">
-          <ShieldCheck size={20} />
-        </div>
-        <div>
-          <p className="font-semibold text-slate-900 leading-tight">
-            Swastha AI
-          </p>
-          <p className="text-xs text-slate-400 leading-tight">
-            Clinical Intelligence
-          </p>
-        </div>
+    <aside className="hidden lg:flex lg:flex-col w-64 shrink-0 bg-slate-50 border-r border-slate-200 min-h-screen px-4 py-6">
+      <div className="px-2 mb-8">
+        <h1 className="text-xl font-bold text-blue-700 leading-tight">
+          Swastha AI
+        </h1>
+        <p className="text-[10px] tracking-widest text-slate-400 font-medium mt-0.5">
+          CLINICAL INTELLIGENCE
+        </p>
       </div>
 
-      <nav className="flex flex-col gap-1">
-        {NAV_ITEMS.map(({ label, icon: Icon, active }) => (
+      <nav className="flex-1 space-y-1">
+        {navItems.map(({ label, icon: Icon, active, route }) => (
           <button
             key={label}
-            className={`group flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-all duration-200
-              ${
-                active
-                  ? "bg-blue-50 text-blue-600 font-medium"
-                  : "text-slate-500 hover:bg-slate-50 hover:text-slate-800 hover:pl-4"
-              }`}
+            type="button"
+            onClick={() => route && navigate(route)}
+            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+              active
+                ? "bg-blue-100 text-blue-700"
+                : "text-slate-600 hover:bg-slate-100"
+            }`}
           >
-            <Icon
-              size={18}
-              className={`transition-transform duration-200 ${
-                active ? "" : "group-hover:scale-110"
-              }`}
-            />
+            <Icon size={18} />
             {label}
           </button>
         ))}
       </nav>
 
-      <button className="mt-6 flex items-center justify-center gap-2 bg-blue-600 text-white text-sm font-medium py-3 rounded-xl transition-all duration-200 hover:bg-blue-700 hover:shadow-md hover:-translate-y-0.5">
-        <Plus size={16} />
-        Upload New Report
-      </button>
+      <div className="space-y-3 pt-4">
+        <button
+          type="button"
+          onClick={() => navigate("/vault")}
+          className="w-full flex items-center justify-center gap-2 bg-blue-700 hover:bg-blue-800 transition-colors text-white text-sm font-semibold py-2.5 rounded-lg"
+        >
+          <PlusCircle size={18} />
+          Open Family Vault
+        </button>
 
-      <div className="mt-auto flex flex-col gap-1 pt-6">
-        {[
-          { label: "Settings", icon: Settings },
-          { label: "Support", icon: HelpCircle },
-        ].map(({ label, icon: Icon }) => (
-          <button
-            key={label}
-            className="group flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-slate-500 transition-all duration-200 hover:bg-slate-50 hover:text-slate-800 hover:pl-4"
-          >
-            <Icon size={18} className="transition-transform duration-200 group-hover:scale-110" />
-            {label}
+        <div className="space-y-1 pt-2">
+          <button className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-100">
+            <Settings size={18} />
+            Settings
           </button>
-        ))}
+          <button className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-100">
+            <HelpCircle size={18} />
+            Support
+          </button>
+        </div>
       </div>
     </aside>
   );
@@ -305,7 +300,7 @@ function TimelineRow({ event }) {
     <div className="relative flex gap-5">
       {/* dot */}
       <div
-        className={`relative z-10 w-11 h-11 shrink-0 rounded-full flex items-center justify-center ring-8 ring-[#F6F7FB] ${dotStyles[event.kind]}
+        className={`relative z-10 w-11 h-11 shrink-0 rounded-full flex items-center justify-center ring-8 ring-slate-50 ${dotStyles[event.kind]}
           transition-transform duration-300 hover:scale-110 ${
             event.kind === "alert" ? "animate-[pulse_2.5s_ease-in-out_infinite]" : ""
           }`}
