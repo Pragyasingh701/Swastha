@@ -23,10 +23,10 @@ app.use('/uploads', express.static('uploads'));
 app.use('/api/auth', authRoutes);
 app.use('/api/family', familyRoutes);
 
-// Health check endpoint
-app.get('/health', (req, res) => {
-  res.json({ status: 'ok', service: 'Swastha Backend', timestamp: new Date() });
-});
+// Health check / Keep-alive endpoints for Render & cron-job.org
+app.get('/', (req, res) => res.status(200).send('OK'));
+app.get('/health', (req, res) => res.status(200).send('OK'));
+app.get('/api/health', (req, res) => res.status(200).send('OK'));
 
 const server = app.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);

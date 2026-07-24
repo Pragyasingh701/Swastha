@@ -7,7 +7,9 @@
     "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
     "dev:frontend": "vite frontend",
     "dev:backend": "nodemon backend/server.js",
+    "build": "vite build frontend",
     "build:frontend": "vite build frontend",
+    "start": "node backend/server.js",
     "start:backend": "node backend/server.js"
   },
   "dependencies": {
