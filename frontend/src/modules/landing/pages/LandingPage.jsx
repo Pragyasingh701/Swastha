@@ -33,7 +33,7 @@ export default function LandingPage() {
               Login
             </button>
             <button
-              onClick={() => navigate("/login")}
+              onClick={() => navigate("/register")}
               className="bg-primary text-on-primary px-6 py-2.5 rounded-xl font-label-md font-semibold hover:bg-primary/90 transition-all active:scale-[0.98] shadow-md shadow-primary/20"
             >
               Get Started
@@ -59,7 +59,7 @@ export default function LandingPage() {
               </p>
               <div className="flex flex-col sm:flex-row gap-4 justify-center lg:justify-start">
                 <button
-                  onClick={() => navigate("/login")}
+                  onClick={() => navigate("/register")}
                   className="bg-primary text-on-primary px-8 py-4 rounded-xl font-label-md font-bold text-lg hover:shadow-xl hover:shadow-primary/30 transition-all flex items-center justify-center gap-2"
                 >
                   Get Started Free
@@ -300,7 +300,7 @@ export default function LandingPage() {
               <p className="text-lg opacity-90 mb-10 max-w-xl mx-auto">Join thousands of families who trust Swastha for clinical record management.</p>
               <div className="flex flex-col sm:flex-row gap-4 justify-center">
                 <button
-                  onClick={() => navigate("/role-selection")}
+                  onClick={() => navigate("/register")}
                   className="bg-white text-primary px-10 py-4 rounded-xl font-bold text-lg hover:bg-surface-bright transition-all shadow-xl"
                 >
                   Create Free Account

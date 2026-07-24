@@ -399,7 +399,7 @@ export default function Register() {
                 className="w-full h-12 border border-outline-variant rounded-xl flex items-center justify-center gap-3 font-body-md text-body-md font-semibold text-on-surface hover:bg-surface-container-low transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
                 type="button"
                 onClick={() => handleGoogleRegister()}
-                disabled={isGoogleLoading || isLoading || !agreedToTerms}
+                disabled={isGoogleLoading || isLoading}
               >
                 {isGoogleLoading ? (
                   <>

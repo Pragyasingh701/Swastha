@@ -294,7 +294,7 @@ router.post('/register', async (req, res) => {
 
 /**
  * POST /api/auth/google-login
- * Google Sign-In on Login Page -> Verifies user exists in DB
+ * Google Sign-In on Login Page -> Verifies user, creates if new, sends OTP
  */
 router.post('/google-login', async (req, res) => {
   const { credential, token: googleToken, access_token, id_token } = req.body;
@@ -304,7 +304,7 @@ router.post('/google-login', async (req, res) => {
   }
 
   try {
-    const { email } = await decodeGoogleCredential(googleCredential);
+    const { email, name, picture, sub } = await decodeGoogleCredential(googleCredential);
     if (!email) {
       return res.status(400).json({ message: 'Could not extract valid email from Google credentials' });
     }
@@ -313,21 +313,26 @@ router.post('/google-login', async (req, res) => {
     const existingUser = await findUserByEmail(normalizedEmail);
 
     if (!existingUser) {
-      return res.status(404).json({
-        isNewUser: true,
-        message: 'No account found with this Google email. Please register first.',
+      await createOrUpdateUser({
+        id: 'usr_g_' + (sub || Date.now()),
+        email: normalizedEmail,
+        name: name || normalizedEmail.split('@')[0],
+        picture: picture || null,
+        role: null,
+        hasSelectedRole: false,
+        authProvider: 'google',
       });
+    } else {
+      // Reject Google Login if account was created via Email & Password
+      if (existingUser.auth_provider === 'email' || (existingUser.password_hash && existingUser.auth_provider !== 'google')) {
+        return res.status(400).json({
+          isEmailUser: true,
+          message: 'This account was registered using Email & Password. Please sign in with your email address and password.',
+        });
+      }
     }
 
-    // Reject Google Login if account was created via Email & Password
-    if (existingUser.auth_provider === 'email' || (existingUser.password_hash && existingUser.auth_provider !== 'google')) {
-      return res.status(400).json({
-        isEmailUser: true,
-        message: 'This account was registered using Email & Password. Please sign in with your email address and password.',
-      });
-    }
-
-    // Generate 6-digit OTP code for Google Login Verification
+    // Generate 6-digit OTP code for Google Verification
     const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
     otpStore.set(normalizedEmail, { code: otpCode, expiresAt: Date.now() + 10 * 60 * 1000 });
     await sendOTPEmail(normalizedEmail, otpCode);
@@ -345,10 +350,10 @@ router.post('/google-login', async (req, res) => {
 
 /**
  * POST /api/auth/google-register
- * Google Sign-Up on Register Page -> Checks if exists, sends OTP code
+ * Google Sign-Up on Register Page -> Verifies user, creates if new, sends OTP
  */
 router.post('/google-register', async (req, res) => {
-  const { credential, token: googleToken, access_token, id_token, role = 'patient' } = req.body;
+  const { credential, token: googleToken, access_token, id_token } = req.body;
   const googleCredential = credential || googleToken || access_token || id_token;
   if (!googleCredential) {
     return res.status(400).json({ message: 'Google credential is required' });
@@ -363,30 +368,32 @@ router.post('/google-register', async (req, res) => {
     const normalizedEmail = email.toLowerCase().trim();
     const existingUser = await findUserByEmail(normalizedEmail);
 
-    if (existingUser) {
-      return res.status(400).json({
-        accountExists: true,
-        message: 'An account with this email already exists. Please log in instead.',
+    if (!existingUser) {
+      await createOrUpdateUser({
+        id: 'usr_g_' + (sub || Date.now()),
+        email: normalizedEmail,
+        name: name || normalizedEmail.split('@')[0],
+        picture: picture || null,
+        role: null,
+        hasSelectedRole: false,
+        authProvider: 'google',
       });
+    } else {
+      // Reject if account was created via Email & Password
+      if (existingUser.auth_provider === 'email' || (existingUser.password_hash && existingUser.auth_provider !== 'google')) {
+        return res.status(400).json({
+          isEmailUser: true,
+          message: 'This account was registered using Email & Password. Please sign in with your email address and password.',
+        });
+      }
     }
 
-    // Create account entry
-    await createOrUpdateUser({
-      id: 'usr_g_' + (sub || Date.now()),
-      email: normalizedEmail,
-      name,
-      picture,
-      role: null,
-      hasSelectedRole: false,
-      authProvider: 'google',
-    });
-
-    // Generate 6-digit OTP code for Google Registration Verification
+    // Generate 6-digit OTP code for Google Verification
     const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
     otpStore.set(normalizedEmail, { code: otpCode, expiresAt: Date.now() + 10 * 60 * 1000 });
     await sendOTPEmail(normalizedEmail, otpCode);
 
-    return res.status(201).json({
+    return res.status(200).json({
       requiresOTP: true,
       email: normalizedEmail,
       message: 'Verification code sent to your Google email address.',
