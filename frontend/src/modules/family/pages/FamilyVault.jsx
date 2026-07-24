@@ -106,11 +106,13 @@ function validateForm(form, isEditing = false, addMethod = 'manual') {
 const navItems = [
   { label: 'Dashboard', icon: LayoutGrid, route: '/dashboard' },
   { label: 'Health Timeline', icon: TrendingUp, route: '/timeline' },
-  { label: 'Medical Vault', icon: Folder, route: '/vault' },
+  { label: 'Medical Vault', icon: Folder, route: '/medical-vault' },
   { label: 'Family Records', icon: Users, route: '/vault' },
   { label: 'Medicine Safety', icon: ClipboardList, route: '/search' },
   { label: 'Lab Insights', icon: TrendingUp, route: '/lab-trends' },
 ];
+
+const VAULT_PROMPT_STORAGE_KEY = 'swastha.familyVaultPromptShown';
 
 function Sidebar() {
   const navigate = useNavigate();
@@ -219,7 +221,7 @@ export default function FamilyVault() {
   const [relationshipTags, setRelationshipTags] = useState([]);
   const [healthOverview, setHealthOverview] = useState([]);
   const [form, setForm] = useState(emptyForm);
-  const [addMethod, setAddMethod] = useState('manual');
+  const [addMethod, setAddMethod] = useState('email');
   const [editingMemberId, setEditingMemberId] = useState(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -230,6 +232,15 @@ export default function FamilyVault() {
   const [familyVault, setFamilyVault] = useState(null);
   const [showVaultModal, setShowVaultModal] = useState(false);
   const [vaultCreating, setVaultCreating] = useState(false);
+  const hasShownVaultPromptRef = React.useRef(false);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    hasShownVaultPromptRef.current = window.sessionStorage.getItem(VAULT_PROMPT_STORAGE_KEY) === 'true';
+  }, []);
 
   async function loadFamilyVault() {
     if (!isAuthenticated || !token) {
@@ -239,7 +250,6 @@ export default function FamilyVault() {
     }
 
     setLoading(true);
-    setError('');
 
     try {
       const data = await getFamilyDashboard();
@@ -265,7 +275,19 @@ export default function FamilyVault() {
       const data = await getFamilyVault();
       const vault = data?.vault || null;
       setFamilyVault(vault);
-      setShowVaultModal(!vault);
+
+      if (!vault && !hasShownVaultPromptRef.current) {
+        hasShownVaultPromptRef.current = true;
+        if (typeof window !== 'undefined') {
+          window.sessionStorage.setItem(VAULT_PROMPT_STORAGE_KEY, 'true');
+        }
+        setShowVaultModal(true);
+      } else if (!vault) {
+        setShowVaultModal(false);
+        setError('Create a family vault first to manage family members.');
+      } else {
+        setShowVaultModal(false);
+      }
     } catch (loadError) {
       setError(loadError.message || 'Failed to load family vault status');
     }
@@ -281,6 +303,8 @@ export default function FamilyVault() {
       setFamilyVault(vault);
       setShowVaultModal(false);
       setNotice(data?.message || 'Family vault created successfully.');
+      await loadVaultStatus();
+      await loadFamilyVault();
     } catch (createError) {
       setError(createError.message || 'Failed to create family vault');
     } finally {
@@ -305,7 +329,7 @@ export default function FamilyVault() {
   function resetForm() {
     setForm(emptyForm);
     setEditingMemberId(null);
-    setAddMethod('manual');
+    setAddMethod('email');
     setFieldErrors({});
     setServerErrorMeta(null);
   }
@@ -326,7 +350,7 @@ export default function FamilyVault() {
     const { notes: cleanedNotes, email } = parseMemberNotesAndEmail(member.notes || '');
 
     setEditingMemberId(member.id);
-    setAddMethod(email ? 'email' : 'manual');
+    setAddMethod('email');
     setFieldErrors({});
     setError('');
     setNotice('');
@@ -390,11 +414,11 @@ export default function FamilyVault() {
       notes: finalNotes,
       lastVisitDate: form.lastVisitDate,
       nextCheckupDate: form.nextCheckupDate,
-      authorizationMethod: addMethod === 'email' ? 'mail' : 'manual',
+      authorizationMethod: 'mail',
     };
 
     try {
-      if (addMethod === 'email' && form.email?.trim()) {
+      if (form.email?.trim()) {
         await sendFamilyMemberAuthorization({
           name: form.name.trim(),
           email: form.email.trim(),
@@ -500,7 +524,11 @@ export default function FamilyVault() {
               </button>
               <button
                 type="button"
-                onClick={() => setShowVaultModal(false)}
+                onClick={() => {
+                  setShowVaultModal(false);
+                  setError('Create a family vault first to manage family members.');
+                  setNotice('');
+                }}
                 className="inline-flex items-center justify-center rounded-2xl border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-700 transition-colors hover:bg-slate-50"
               >
                 Later
@@ -692,44 +720,17 @@ export default function FamilyVault() {
                 </label>
               </div>
 
-              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                <p className="text-sm font-medium text-slate-700">Authorization mode</p>
-                <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setAddMethod('manual');
-                      setForm((current) => ({ ...current, email: '' }));
-                    }}
-                    className={`rounded-2xl border px-4 py-3 text-left text-sm font-medium transition-colors ${addMethod === 'manual' ? 'border-blue-400 bg-blue-50 text-blue-700' : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-100'}`}
-                  >
-                    <span className="block">Manual entry</span>
-                    <span className="mt-1 block text-xs font-normal text-slate-500">Save the member details directly in your vault.</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setAddMethod('email')}
-                    className={`rounded-2xl border px-4 py-3 text-left text-sm font-medium transition-colors ${addMethod === 'email' ? 'border-blue-400 bg-blue-50 text-blue-700' : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-100'}`}
-                  >
-                    <span className="block">Direct authorization via mail</span>
-                    <span className="mt-1 block text-xs font-normal text-slate-500">Send an authorization email to the person and save them in the vault.</span>
-                  </button>
-                </div>
-              </div>
-
-              {addMethod === 'email' ? (
-                <label className="space-y-2 block">
-                  <span className="text-sm font-medium text-slate-700">Recipient email</span>
-                  <input
-                    type="email"
-                    value={form.email}
-                    onChange={(event) => setForm({ ...form, email: event.target.value })}
-                    className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 outline-none transition-colors focus:border-blue-400 focus:bg-white"
-                    placeholder="person@example.com"
-                  />
-                  {fieldErrors.email ? <p className="text-sm text-rose-600">{fieldErrors.email}</p> : null}
-                </label>
-              ) : null}
+              <label className="space-y-2 block">
+                <span className="text-sm font-medium text-slate-700">Recipient email</span>
+                <input
+                  type="email"
+                  value={form.email}
+                  onChange={(event) => setForm({ ...form, email: event.target.value })}
+                  className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 outline-none transition-colors focus:border-blue-400 focus:bg-white"
+                  placeholder="person@example.com"
+                />
+                {fieldErrors.email ? <p className="text-sm text-rose-600">{fieldErrors.email}</p> : null}
+              </label>
 
               <label className="space-y-2 block">
                 <span className="text-sm font-medium text-slate-700">Health Overview</span>
@@ -789,7 +790,7 @@ export default function FamilyVault() {
                   disabled={saving || !canManageMembers}
                   className="inline-flex items-center justify-center rounded-2xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white transition-colors hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-70"
                 >
-                  {saving ? 'Sending...' : isEditing ? 'Update Member' : addMethod === 'email' ? 'Ask for Permission' : 'Add Member'}
+                  {saving ? 'Sending...' : isEditing ? 'Update Member' : 'Ask for Permission'}
                 </button>
 
                 {isEditing ? (

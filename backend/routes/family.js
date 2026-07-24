@@ -13,6 +13,7 @@ import {
   confirmPendingFamilyMemberAuthorizationRequest,
 } from '../db/family.js';
 import { sendFamilyMemberAuthorizationEmail } from '../utils/mailer.js';
+import { findUserById } from '../db/users.js';
 
 const router = express.Router();
 const JWT_SECRET = process.env.JWT_SECRET || 'swastha_dev_secret_key_2026';
@@ -55,6 +56,48 @@ router.post('/vault', async (req, res) => {
     }
 
     const vault = await createOrGetFamilyVaultForUser(user.userId);
+
+    if (vault?.vaultId) {
+      const existingMembers = await listFamilyMembers({ userId: user.userId });
+      const userProfile = await findUserById(user.userId);
+      const profileName = userProfile?.name || userProfile?.fullName || user?.name || user?.fullName || user?.email?.split('@')[0] || 'Me';
+      const dob = userProfile?.dob || userProfile?.date_of_birth || null;
+      const bloodGroup = userProfile?.bloodGroup || userProfile?.blood_group || null;
+      const age = dob ? (() => {
+        const birthDate = new Date(dob);
+        if (Number.isNaN(birthDate.getTime())) {
+          return null;
+        }
+
+        const today = new Date();
+        let calculatedAge = today.getFullYear() - birthDate.getFullYear();
+        const monthDifference = today.getMonth() - birthDate.getMonth();
+        if (monthDifference < 0 || (monthDifference === 0 && today.getDate() < birthDate.getDate())) {
+          calculatedAge -= 1;
+        }
+        return calculatedAge;
+      })() : null;
+      const profileDetails = [dob ? `DOB: ${dob}` : '', bloodGroup ? `Blood Group: ${bloodGroup}` : ''].filter(Boolean).join(' • ');
+      const hasSelfMember = existingMembers.some((member) => {
+        const relationship = String(member?.relationship || '').trim().toLowerCase();
+        const tag = String(member?.relationshipTag || '').trim().toLowerCase();
+        const name = String(member?.name || '').trim().toLowerCase();
+        return relationship === 'self' || tag === 'self' || name === profileName.trim().toLowerCase();
+      });
+
+      if (!hasSelfMember) {
+        await createFamilyMember({
+          userId: user.userId,
+          name: profileName,
+          age: age !== null ? age : null,
+          relationship: 'Self',
+          relationshipTag: 'Self',
+          healthOverview: profileDetails || 'Profile details',
+          notes: 'Auto-added from user profile',
+        });
+      }
+    }
+
     return res.status(201).json({
       message: 'Family vault created successfully',
       vault,
