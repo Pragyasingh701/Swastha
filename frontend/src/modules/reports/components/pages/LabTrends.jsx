@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   AreaChart,
   Area,
@@ -11,13 +12,16 @@ import {
 } from "recharts";
 import {
   LayoutGrid,
-  Activity,
-  FolderOpen,
+  TrendingUp,
+  Folder,
   Users,
   ClipboardList,
-  LineChart as LineChartIcon,
   Search,
   Bell,
+  Settings,
+  HelpCircle,
+  PlusCircle,
+  ShieldCheck,
   Droplet,
   HeartPulse,
   Sun,
@@ -26,20 +30,20 @@ import {
   Minus,
   FlaskConical,
   Syringe,
-  ShieldCheck,
   Lock,
   QrCode,
   Fingerprint,
   AtSign,
 } from "lucide-react";
 
-const NAV_ITEMS = [
-  { label: "Dashboard", icon: LayoutGrid },
-  { label: "Health Timeline", icon: Activity },
-  { label: "Medical Vault", icon: FolderOpen },
-  { label: "Family Records", icon: Users },
-  { label: "Medicine Safety", icon: ClipboardList },
-  { label: "Lab Insights", icon: LineChartIcon, active: true },
+// Same nav list as Dashboard.jsx, with Lab Insights marked active
+const navItems = [
+  { label: "Dashboard", icon: LayoutGrid, route: "/dashboard" },
+  { label: "Health Timeline", icon: TrendingUp, route: "/timeline" },
+  { label: "Medical Vault", icon: Folder, route: "/vault" },
+  { label: "Family Records", icon: Users, route: "/vault" },
+  { label: "Medicine Safety", icon: ClipboardList, route: "/search" },
+  { label: "Lab Insights", icon: TrendingUp, active: true, route: "/lab-trends" },
 ];
 
 /* -----------------------------------------------------------
@@ -136,7 +140,7 @@ export default function LabInsights() {
   const data = useMemo(() => RANGES[range], [range]);
 
   return (
-    <div className="flex min-h-screen bg-[#F6F7FB]">
+    <div className="flex min-h-screen bg-slate-50">
       <Sidebar />
 
       <div className="flex-1 px-10 py-8">
@@ -159,45 +163,61 @@ export default function LabInsights() {
 }
 
 /* ------------------------------ Sidebar ------------------------------ */
+/* Copied from Dashboard.jsx so both pages share identical behavior. */
 
 function Sidebar() {
+  const navigate = useNavigate();
+
   return (
-    <aside className="w-64 shrink-0 bg-white border-r border-slate-100 flex flex-col py-6 px-4">
-      <div className="flex items-center gap-2.5 px-2 mb-8">
-        <div className="w-9 h-9 rounded-xl bg-blue-600 flex items-center justify-center text-white transition-transform duration-300 hover:rotate-6">
-          <ShieldCheck size={20} />
-        </div>
-        <div>
-          <p className="font-semibold text-slate-900 leading-tight">
-            Swastha AI
-          </p>
-          <p className="text-xs text-slate-400 leading-tight">
-            Clinical Intelligence
-          </p>
-        </div>
+    <aside className="hidden lg:flex lg:flex-col w-64 shrink-0 bg-slate-50 border-r border-slate-200 min-h-screen px-4 py-6">
+      <div className="px-2 mb-8">
+        <h1 className="text-xl font-bold text-blue-700 leading-tight">
+          Swastha AI
+        </h1>
+        <p className="text-[10px] tracking-widest text-slate-400 font-medium mt-0.5">
+          CLINICAL INTELLIGENCE
+        </p>
       </div>
 
-      <nav className="flex flex-col gap-1">
-        {NAV_ITEMS.map(({ label, icon: Icon, active }) => (
+      <nav className="flex-1 space-y-1">
+        {navItems.map(({ label, icon: Icon, active, route }) => (
           <button
             key={label}
-            className={`group flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-all duration-200
-              ${
-                active
-                  ? "bg-blue-50 text-blue-600 font-medium"
-                  : "text-slate-500 hover:bg-slate-50 hover:text-slate-800 hover:pl-4"
-              }`}
+            type="button"
+            onClick={() => route && navigate(route)}
+            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+              active
+                ? "bg-blue-100 text-blue-700"
+                : "text-slate-600 hover:bg-slate-100"
+            }`}
           >
-            <Icon
-              size={18}
-              className={`transition-transform duration-200 ${
-                active ? "" : "group-hover:scale-110"
-              }`}
-            />
+            <Icon size={18} />
             {label}
           </button>
         ))}
       </nav>
+
+      <div className="space-y-3 pt-4">
+        <button
+          type="button"
+          onClick={() => navigate("/vault")}
+          className="w-full flex items-center justify-center gap-2 bg-blue-700 hover:bg-blue-800 transition-colors text-white text-sm font-semibold py-2.5 rounded-lg"
+        >
+          <PlusCircle size={18} />
+          Open Family Vault
+        </button>
+
+        <div className="space-y-1 pt-2">
+          <button className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-100">
+            <Settings size={18} />
+            Settings
+          </button>
+          <button className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-100">
+            <HelpCircle size={18} />
+            Support
+          </button>
+        </div>
+      </div>
     </aside>
   );
 }
