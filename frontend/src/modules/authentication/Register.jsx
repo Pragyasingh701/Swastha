@@ -78,13 +78,16 @@ export default function Register() {
   };
 
   const handleGoogleRegister = useGoogleLogin({
+    scope: 'email profile openid',
+    flow: 'implicit',
     onSuccess: async (tokenResponse) => {
       setIsGoogleLoading(true);
       setErrorMessage("");
       setShowLoginPrompt(false);
 
       try {
-        const result = await registerWithGoogle(tokenResponse.access_token || tokenResponse, "none");
+        const tokenToSend = tokenResponse?.access_token || tokenResponse?.credential || tokenResponse?.id_token || tokenResponse;
+        const result = await registerWithGoogle(tokenToSend, "none");
         setIsGoogleLoading(false);
 
         if (result?.requiresOTP) {
@@ -105,8 +108,9 @@ export default function Register() {
         }
       }
     },
-    onError: () => {
+    onError: (errorResponse) => {
       setIsGoogleLoading(false);
+      console.error("Google Register Error:", errorResponse);
       setErrorMessage("Google Sign-Up popup failed or was closed.");
     },
   });

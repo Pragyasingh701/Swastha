@@ -106,7 +106,10 @@ export const AuthProvider = ({ children }) => {
     setIsLoading(true);
     setError(null);
     try {
-      const result = await authService.loginWithGoogle(googleResponse.credential || googleResponse);
+      const tokenToSend = typeof googleResponse === 'object' && googleResponse !== null
+        ? (googleResponse.access_token || googleResponse.credential || googleResponse.id_token || googleResponse.token || googleResponse)
+        : googleResponse;
+      const result = await authService.loginWithGoogle(tokenToSend);
       if (result.token && result.user) {
         setToken(result.token);
         setUser(result.user);
@@ -124,7 +127,10 @@ export const AuthProvider = ({ children }) => {
     setIsLoading(true);
     setError(null);
     try {
-      const result = await authService.registerWithGoogle(googleResponse.credential || googleResponse, role);
+      const tokenToSend = typeof googleResponse === 'object' && googleResponse !== null
+        ? (googleResponse.access_token || googleResponse.credential || googleResponse.id_token || googleResponse.token || googleResponse)
+        : googleResponse;
+      const result = await authService.registerWithGoogle(tokenToSend, role);
       if (result.token && result.user) {
         setToken(result.token);
         setUser(result.user);

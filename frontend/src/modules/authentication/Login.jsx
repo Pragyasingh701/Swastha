@@ -53,13 +53,16 @@ export default function Login() {
   };
 
   const handleGoogleAuth = useGoogleLogin({
+    scope: 'email profile openid',
+    flow: 'implicit',
     onSuccess: async (tokenResponse) => {
       setIsGoogleLoading(true);
       setErrorMessage("");
       setShowRegisterPrompt(false);
 
       try {
-        const result = await loginWithGoogle(tokenResponse.access_token || tokenResponse);
+        const tokenToSend = tokenResponse?.access_token || tokenResponse?.credential || tokenResponse?.id_token || tokenResponse;
+        const result = await loginWithGoogle(tokenToSend);
         setIsGoogleLoading(false);
 
         if (result?.requiresOTP) {
@@ -84,8 +87,9 @@ export default function Login() {
         }
       }
     },
-    onError: () => {
+    onError: (errorResponse) => {
       setIsGoogleLoading(false);
+      console.error("Google Login Error:", errorResponse);
       setErrorMessage("Google Sign-In popup failed or was closed.");
     },
   });

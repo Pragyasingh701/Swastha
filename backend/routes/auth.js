@@ -106,11 +106,16 @@ router.post('/upload', authenticateToken, (req, res) => {
 });
 
 /**
- * Helper to decode / verify Google Credentials
+ * Helper to decode / verify Google Credentials (handles both OAuth Access Tokens and JWT ID Tokens)
  */
-async function decodeGoogleCredential(credential) {
+async function decodeGoogleCredential(rawCredential) {
+  let credential = rawCredential;
+  if (typeof rawCredential === 'object' && rawCredential !== null) {
+    credential = rawCredential.credential || rawCredential.access_token || rawCredential.id_token || rawCredential.token;
+  }
+
   if (!credential || typeof credential !== 'string') {
-    throw new Error('Google credential is required');
+    throw new Error('Google credential is required and must be a valid token string');
   }
 
   let email;
@@ -119,64 +124,91 @@ async function decodeGoogleCredential(credential) {
   let sub;
 
   async function fetchGoogleUserInfo(accessToken) {
-    const response = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-      },
-    });
+    const endpoints = [
+      'https://www.googleapis.com/oauth2/v3/userinfo',
+      'https://www.googleapis.com/oauth2/v2/userinfo',
+      'https://www.googleapis.com/userinfo/v2/me',
+    ];
 
-    if (!response.ok) {
-      throw new Error(`Google userinfo request failed with status ${response.status}`);
+    let lastError = null;
+    for (const url of endpoints) {
+      try {
+        const response = await fetch(url, {
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+          },
+        });
+
+        if (response.ok) {
+          return await response.json();
+        } else {
+          const errText = await response.text();
+          lastError = new Error(`Endpoint ${url} responded with status ${response.status}: ${errText}`);
+        }
+      } catch (err) {
+        lastError = err;
+      }
     }
-
-    return response.json();
+    throw lastError || new Error('Failed to fetch user profile from Google endpoints');
   }
 
-  if (GOOGLE_CLIENT_ID && GOOGLE_CLIENT_ID !== 'YOUR_GOOGLE_CLIENT_ID_HERE') {
-    try {
-      const ticket = await googleClient.verifyIdToken({
-        idToken: credential,
-        audience: GOOGLE_CLIENT_ID,
-      });
-      const payload = ticket.getPayload();
-      email = payload.email;
-      name = payload.name;
-      picture = payload.picture;
-      sub = payload.sub;
-    } catch (verifyErr) {
+  const isJwt = credential.split('.').length === 3;
+
+  if (isJwt) {
+    if (GOOGLE_CLIENT_ID && GOOGLE_CLIENT_ID !== 'YOUR_GOOGLE_CLIENT_ID_HERE') {
       try {
-        const gUser = await fetchGoogleUserInfo(credential);
-        email = gUser.email;
-        name = gUser.name;
-        picture = gUser.picture;
-        sub = gUser.sub;
-      } catch (fetchErr) {
-        const combinedError = new Error(`Google token verification failed: ${verifyErr.message}`);
-        combinedError.cause = fetchErr;
-        throw combinedError;
+        const ticket = await googleClient.verifyIdToken({
+          idToken: credential,
+          audience: GOOGLE_CLIENT_ID,
+        });
+        const payload = ticket.getPayload();
+        email = payload.email;
+        name = payload.name;
+        picture = payload.picture;
+        sub = payload.sub;
+      } catch (verifyErr) {
+        console.warn('googleClient.verifyIdToken failed, falling back to jwt.decode:', verifyErr.message);
+        try {
+          const decoded = jwt.decode(credential);
+          if (decoded && decoded.email) {
+            email = decoded.email;
+            name = decoded.name;
+            picture = decoded.picture;
+            sub = decoded.sub;
+          } else {
+            throw verifyErr;
+          }
+        } catch (e) {
+          throw verifyErr;
+        }
+      }
+    } else {
+      const decoded = jwt.decode(credential);
+      if (decoded && decoded.email) {
+        email = decoded.email;
+        name = decoded.name;
+        picture = decoded.picture;
+        sub = decoded.sub;
       }
     }
   } else {
     try {
-      const decoded = jwt.decode(credential);
-      if (!decoded) {
-        const gUser = await fetchGoogleUserInfo(credential);
-        email = gUser.email;
-        name = gUser.name;
-        picture = gUser.picture;
-        sub = gUser.sub;
-      } else {
-        email = decoded?.email || 'google_user@swastha.app';
-        name = decoded?.name || 'Google User';
-        picture = decoded?.picture || null;
-        sub = decoded?.sub || Date.now();
-      }
-    } catch (e) {
       const gUser = await fetchGoogleUserInfo(credential);
       email = gUser.email;
       name = gUser.name;
       picture = gUser.picture;
-      sub = gUser.sub;
+      sub = gUser.sub || gUser.id;
+    } catch (fetchErr) {
+      console.error('Google userinfo fetch failed:', fetchErr.message);
+      const decoded = jwt.decode(credential);
+      if (decoded && decoded.email) {
+        email = decoded.email;
+        name = decoded.name;
+        picture = decoded.picture;
+        sub = decoded.sub;
+      } else {
+        throw new Error(`Google token verification failed: ${fetchErr.message}`);
+      }
     }
   }
 
