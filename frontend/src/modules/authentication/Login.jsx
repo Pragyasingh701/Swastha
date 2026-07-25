@@ -61,8 +61,31 @@ export default function Login() {
       setShowRegisterPrompt(false);
 
       try {
-        const tokenToSend = tokenResponse?.access_token || tokenResponse?.credential || tokenResponse?.id_token || tokenResponse;
-        const result = await loginWithGoogle(tokenToSend);
+        let payloadToSend = tokenResponse?.access_token || tokenResponse?.credential || tokenResponse?.id_token || tokenResponse;
+
+        if (tokenResponse?.access_token) {
+          try {
+            const userinfoRes = await fetch("https://www.googleapis.com/oauth2/v3/userinfo", {
+              headers: { Authorization: `Bearer ${tokenResponse.access_token}` },
+            });
+            if (userinfoRes.ok) {
+              const gProfile = await userinfoRes.json();
+              if (gProfile?.email) {
+                payloadToSend = {
+                  credential: tokenResponse.access_token,
+                  email: gProfile.email,
+                  name: gProfile.name,
+                  picture: gProfile.picture,
+                  sub: gProfile.sub,
+                };
+              }
+            }
+          } catch (e) {
+            console.warn("Client userinfo fetch fallback warning:", e);
+          }
+        }
+
+        const result = await loginWithGoogle(payloadToSend);
         setIsGoogleLoading(false);
 
         if (result?.requiresOTP) {

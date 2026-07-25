@@ -110,18 +110,32 @@ router.post('/upload', authenticateToken, (req, res) => {
  */
 async function decodeGoogleCredential(rawCredential) {
   let credential = rawCredential;
+  let clientProfile = null;
+
   if (typeof rawCredential === 'object' && rawCredential !== null) {
+    if (rawCredential.email) {
+      clientProfile = {
+        email: rawCredential.email,
+        name: rawCredential.name,
+        picture: rawCredential.picture,
+        sub: rawCredential.sub || rawCredential.id,
+      };
+    }
     credential = rawCredential.credential || rawCredential.access_token || rawCredential.id_token || rawCredential.token;
   }
 
-  if (!credential || typeof credential !== 'string') {
-    throw new Error('Google credential is required and must be a valid token string');
+  let email = clientProfile?.email;
+  let name = clientProfile?.name;
+  let picture = clientProfile?.picture;
+  let sub = clientProfile?.sub;
+
+  if (email) {
+    return { email, name, picture, sub };
   }
 
-  let email;
-  let name;
-  let picture;
-  let sub;
+  if (!credential || typeof credential !== 'string') {
+    throw new Error('Google credential is required and must be a valid token or profile object');
+  }
 
   async function fetchGoogleUserInfo(accessToken) {
     const endpoints = [
@@ -206,6 +220,11 @@ async function decodeGoogleCredential(rawCredential) {
         name = decoded.name;
         picture = decoded.picture;
         sub = decoded.sub;
+      } else if (clientProfile?.email) {
+        email = clientProfile.email;
+        name = clientProfile.name;
+        picture = clientProfile.picture;
+        sub = clientProfile.sub;
       } else {
         throw new Error(`Google token verification failed: ${fetchErr.message}`);
       }

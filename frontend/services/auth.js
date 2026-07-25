@@ -36,14 +36,11 @@ export const authService = {
    * Google Login (on Login page) -> verifies existing account
    */
   async loginWithGoogle(credential) {
-    const tokenToSend = typeof credential === 'object' && credential !== null
-      ? (credential.access_token || credential.credential || credential.id_token || credential.token)
-      : credential;
-
+    const payload = typeof credential === 'object' && credential !== null ? credential : { credential };
     const response = await fetch(`${API_BASE_URL}/auth/google-login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ credential: tokenToSend }),
+      body: JSON.stringify(payload),
     });
     const data = await response.json();
     if (!response.ok) throw new Error(data.message || 'Google Sign-In failed');
@@ -54,14 +51,11 @@ export const authService = {
    * Google Register (on Register page) -> checks existing or creates new account
    */
   async registerWithGoogle(credential, role = 'patient') {
-    const tokenToSend = typeof credential === 'object' && credential !== null
-      ? (credential.access_token || credential.credential || credential.id_token || credential.token)
-      : credential;
-
+    const payload = typeof credential === 'object' && credential !== null ? { ...credential, role } : { credential, role };
     const response = await fetch(`${API_BASE_URL}/auth/google-register`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ credential: tokenToSend, role }),
+      body: JSON.stringify(payload),
     });
     const data = await response.json();
     if (!response.ok) throw new Error(data.message || 'Google Registration failed');
