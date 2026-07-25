@@ -114,7 +114,7 @@ export const createOrUpdateUser = async (userData) => {
 
   if (supabase) {
     try {
-      const upsertPayload = {
+      const fullPayload = {
         id: userId,
         email: normalizedEmail,
         name,
@@ -139,19 +139,15 @@ export const createOrUpdateUser = async (userData) => {
 
       const { data, error } = await supabase
         .from('users')
-        .upsert(upsertPayload, { onConflict: 'email' })
-        .select()
-        .single();
+        .upsert(fullPayload)
+        .select();
 
-      if (!error && data) {
+      if (!error && data && data.length > 0) {
+        const userRow = data[0];
         console.log(`⚡ [Supabase] Unique user record updated in database: ${normalizedEmail}`);
-        savedUser = { ...savedUser, ...data, hasSelectedRole: !!(data.role && data.role !== 'none') };
+        savedUser = { ...savedUser, ...userRow, hasSelectedRole: !!(userRow.role && userRow.role !== 'none') };
       } else if (error) {
-        if (error.code === '42501') {
-          console.warn('⚠️ [Supabase RLS Warning] Table "users" has Row Level Security (RLS) enabled. Please run `ALTER TABLE users DISABLE ROW LEVEL SECURITY;` in Supabase SQL Editor or use SUPABASE_SERVICE_ROLE_KEY in backend/.env');
-        } else {
-          console.warn('Supabase upsert notice:', error.message);
-        }
+        console.warn('Supabase upsert notice:', error.message);
       }
     } catch (err) {
       console.warn('Supabase upsert warning:', err.message);

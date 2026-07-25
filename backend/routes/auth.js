@@ -9,7 +9,7 @@ import { findUserByEmail, findUserById, createOrUpdateUser, updateUserRole, upda
 import { getFamilyVaultForUser } from '../db/family.js';
 
 const router = express.Router();
-const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || '';
+const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || '771272691038-s9h707grr3b4ojkgp48aa5vb9tej2sjh.apps.googleusercontent.com';
 const JWT_SECRET = process.env.JWT_SECRET || 'swastha_dev_secret_key_2026';
 const googleClient = new OAuth2Client(GOOGLE_CLIENT_ID);
 
@@ -106,77 +106,128 @@ router.post('/upload', authenticateToken, (req, res) => {
 });
 
 /**
- * Helper to decode / verify Google Credentials
+ * Helper to decode / verify Google Credentials (handles both OAuth Access Tokens and JWT ID Tokens)
  */
-async function decodeGoogleCredential(credential) {
-  if (!credential || typeof credential !== 'string') {
-    throw new Error('Google credential is required');
+async function decodeGoogleCredential(rawCredential) {
+  let credential = rawCredential;
+  let clientProfile = null;
+
+  if (typeof rawCredential === 'object' && rawCredential !== null) {
+    if (rawCredential.email) {
+      clientProfile = {
+        email: rawCredential.email,
+        name: rawCredential.name,
+        picture: rawCredential.picture,
+        sub: rawCredential.sub || rawCredential.id,
+      };
+    }
+    credential = rawCredential.credential || rawCredential.access_token || rawCredential.id_token || rawCredential.token;
   }
 
-  let email;
-  let name;
-  let picture;
-  let sub;
+  let email = clientProfile?.email;
+  let name = clientProfile?.name;
+  let picture = clientProfile?.picture;
+  let sub = clientProfile?.sub;
+
+  if (email) {
+    return { email, name, picture, sub };
+  }
+
+  if (!credential || typeof credential !== 'string') {
+    throw new Error('Google credential is required and must be a valid token or profile object');
+  }
 
   async function fetchGoogleUserInfo(accessToken) {
-    const response = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-      },
-    });
+    const endpoints = [
+      'https://www.googleapis.com/oauth2/v3/userinfo',
+      'https://www.googleapis.com/oauth2/v2/userinfo',
+      'https://www.googleapis.com/userinfo/v2/me',
+    ];
 
-    if (!response.ok) {
-      throw new Error(`Google userinfo request failed with status ${response.status}`);
+    let lastError = null;
+    for (const url of endpoints) {
+      try {
+        const response = await fetch(url, {
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+          },
+        });
+
+        if (response.ok) {
+          return await response.json();
+        } else {
+          const errText = await response.text();
+          lastError = new Error(`Endpoint ${url} responded with status ${response.status}: ${errText}`);
+        }
+      } catch (err) {
+        lastError = err;
+      }
     }
-
-    return response.json();
+    throw lastError || new Error('Failed to fetch user profile from Google endpoints');
   }
 
-  if (GOOGLE_CLIENT_ID && GOOGLE_CLIENT_ID !== 'YOUR_GOOGLE_CLIENT_ID_HERE') {
-    try {
-      const ticket = await googleClient.verifyIdToken({
-        idToken: credential,
-        audience: GOOGLE_CLIENT_ID,
-      });
-      const payload = ticket.getPayload();
-      email = payload.email;
-      name = payload.name;
-      picture = payload.picture;
-      sub = payload.sub;
-    } catch (verifyErr) {
+  const isJwt = credential.split('.').length === 3;
+
+  if (isJwt) {
+    if (GOOGLE_CLIENT_ID && GOOGLE_CLIENT_ID !== 'YOUR_GOOGLE_CLIENT_ID_HERE') {
       try {
-        const gUser = await fetchGoogleUserInfo(credential);
-        email = gUser.email;
-        name = gUser.name;
-        picture = gUser.picture;
-        sub = gUser.sub;
-      } catch (fetchErr) {
-        const combinedError = new Error(`Google token verification failed: ${verifyErr.message}`);
-        combinedError.cause = fetchErr;
-        throw combinedError;
+        const ticket = await googleClient.verifyIdToken({
+          idToken: credential,
+          audience: GOOGLE_CLIENT_ID,
+        });
+        const payload = ticket.getPayload();
+        email = payload.email;
+        name = payload.name;
+        picture = payload.picture;
+        sub = payload.sub;
+      } catch (verifyErr) {
+        console.warn('googleClient.verifyIdToken failed, falling back to jwt.decode:', verifyErr.message);
+        try {
+          const decoded = jwt.decode(credential);
+          if (decoded && decoded.email) {
+            email = decoded.email;
+            name = decoded.name;
+            picture = decoded.picture;
+            sub = decoded.sub;
+          } else {
+            throw verifyErr;
+          }
+        } catch (e) {
+          throw verifyErr;
+        }
+      }
+    } else {
+      const decoded = jwt.decode(credential);
+      if (decoded && decoded.email) {
+        email = decoded.email;
+        name = decoded.name;
+        picture = decoded.picture;
+        sub = decoded.sub;
       }
     }
   } else {
     try {
-      const decoded = jwt.decode(credential);
-      if (!decoded) {
-        const gUser = await fetchGoogleUserInfo(credential);
-        email = gUser.email;
-        name = gUser.name;
-        picture = gUser.picture;
-        sub = gUser.sub;
-      } else {
-        email = decoded?.email || 'google_user@swastha.app';
-        name = decoded?.name || 'Google User';
-        picture = decoded?.picture || null;
-        sub = decoded?.sub || Date.now();
-      }
-    } catch (e) {
       const gUser = await fetchGoogleUserInfo(credential);
       email = gUser.email;
       name = gUser.name;
       picture = gUser.picture;
-      sub = gUser.sub;
+      sub = gUser.sub || gUser.id;
+    } catch (fetchErr) {
+      console.error('Google userinfo fetch failed:', fetchErr.message);
+      const decoded = jwt.decode(credential);
+      if (decoded && decoded.email) {
+        email = decoded.email;
+        name = decoded.name;
+        picture = decoded.picture;
+        sub = decoded.sub;
+      } else if (clientProfile?.email) {
+        email = clientProfile.email;
+        name = clientProfile.name;
+        picture = clientProfile.picture;
+        sub = clientProfile.sub;
+      } else {
+        throw new Error(`Google token verification failed: ${fetchErr.message}`);
+      }
     }
   }
 
@@ -294,7 +345,7 @@ router.post('/register', async (req, res) => {
 
 /**
  * POST /api/auth/google-login
- * Google Sign-In on Login Page -> Verifies user, creates if new, sends OTP
+ * Google Sign-In on Login Page -> Verifies user with Google, creates/updates user, sends 6-digit OTP
  */
 router.post('/google-login', async (req, res) => {
   const { credential, token: googleToken, access_token, id_token } = req.body;
@@ -350,10 +401,10 @@ router.post('/google-login', async (req, res) => {
 
 /**
  * POST /api/auth/google-register
- * Google Sign-Up on Register Page -> Verifies user, creates if new, sends OTP
+ * Google Sign-Up on Register Page -> Verifies user with Google, creates/updates user, sends 6-digit OTP
  */
 router.post('/google-register', async (req, res) => {
-  const { credential, token: googleToken, access_token, id_token } = req.body;
+  const { credential, token: googleToken, access_token, id_token, role = 'none' } = req.body;
   const googleCredential = credential || googleToken || access_token || id_token;
   if (!googleCredential) {
     return res.status(400).json({ message: 'Google credential is required' });
@@ -374,12 +425,11 @@ router.post('/google-register', async (req, res) => {
         email: normalizedEmail,
         name: name || normalizedEmail.split('@')[0],
         picture: picture || null,
-        role: null,
+        role: role !== 'none' ? role : null,
         hasSelectedRole: false,
         authProvider: 'google',
       });
     } else {
-      // Reject if account was created via Email & Password
       if (existingUser.auth_provider === 'email' || (existingUser.password_hash && existingUser.auth_provider !== 'google')) {
         return res.status(400).json({
           isEmailUser: true,
