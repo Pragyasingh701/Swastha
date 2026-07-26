@@ -3,36 +3,84 @@ import { authService } from '../../services/auth';
 
 const AuthContext = createContext(null);
 
-export const AuthProvider = ({ children }) => {
-  const [user, setUser] = useState(() => {
-    try {
-      const savedUser = localStorage.getItem('swastha_user');
-      return savedUser ? JSON.parse(savedUser) : null;
-    } catch (e) {
-      return null;
-    }
-  });
+const getInitialAuth = () => {
+  try {
+    const remember = localStorage.getItem('swastha_remember');
+    const localToken = localStorage.getItem('swastha_token');
+    const localUser = localStorage.getItem('swastha_user');
+    const sessionToken = sessionStorage.getItem('swastha_token');
+    const sessionUser = sessionStorage.getItem('swastha_user');
 
-  const [token, setToken] = useState(() => localStorage.getItem('swastha_token') || null);
+    if (remember === 'true' && localToken) {
+      return {
+        token: localToken,
+        user: localUser ? JSON.parse(localUser) : null,
+      };
+    }
+    if (sessionToken) {
+      return {
+        token: sessionToken,
+        user: sessionUser ? JSON.parse(sessionUser) : null,
+      };
+    }
+    if (localToken && remember !== 'false') {
+      return {
+        token: localToken,
+        user: localUser ? JSON.parse(localUser) : null,
+      };
+    }
+  } catch (e) {
+    console.error('Error parsing initial auth state:', e);
+  }
+  return { token: null, user: null };
+};
+
+export const AuthProvider = ({ children }) => {
+  const initialAuth = getInitialAuth();
+  const [user, setUser] = useState(initialAuth.user);
+  const [token, setToken] = useState(initialAuth.token);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
   const [authReady, setAuthReady] = useState(false);
 
-  useEffect(() => {
-    if (token) {
-      localStorage.setItem('swastha_token', token);
+  const saveAuthSession = (newToken, newUser, remember = false) => {
+    setToken(newToken);
+    setUser(newUser);
+
+    if (newToken && newUser) {
+      if (remember) {
+        localStorage.setItem('swastha_token', newToken);
+        localStorage.setItem('swastha_user', JSON.stringify(newUser));
+        localStorage.setItem('swastha_remember', 'true');
+        sessionStorage.removeItem('swastha_token');
+        sessionStorage.removeItem('swastha_user');
+      } else {
+        sessionStorage.setItem('swastha_token', newToken);
+        sessionStorage.setItem('swastha_user', JSON.stringify(newUser));
+        localStorage.setItem('swastha_remember', 'false');
+        localStorage.removeItem('swastha_token');
+        localStorage.removeItem('swastha_user');
+      }
     } else {
       localStorage.removeItem('swastha_token');
+      localStorage.removeItem('swastha_user');
+      localStorage.removeItem('swastha_remember');
+      sessionStorage.removeItem('swastha_token');
+      sessionStorage.removeItem('swastha_user');
     }
-  }, [token]);
+  };
 
   useEffect(() => {
-    if (user) {
-      localStorage.setItem('swastha_user', JSON.stringify(user));
+    if (!token) return;
+    const isRemembered = localStorage.getItem('swastha_remember') === 'true';
+    if (isRemembered) {
+      if (token) localStorage.setItem('swastha_token', token);
+      if (user) localStorage.setItem('swastha_user', JSON.stringify(user));
     } else {
-      localStorage.removeItem('swastha_user');
+      if (token) sessionStorage.setItem('swastha_token', token);
+      if (user) sessionStorage.setItem('swastha_user', JSON.stringify(user));
     }
-  }, [user]);
+  }, [user, token]);
 
   useEffect(() => {
     let cancelled = false;
@@ -51,7 +99,7 @@ export const AuthProvider = ({ children }) => {
           setUser(result.user);
         }
       } catch {
-        // Keep the cached local auth state if the backend is unavailable.
+        // Keep cached local auth state if backend unavailable
       } finally {
         if (!cancelled) {
           setAuthReady(true);
@@ -66,14 +114,13 @@ export const AuthProvider = ({ children }) => {
     };
   }, [token]);
 
-  const login = async (email, password) => {
+  const login = async (email, password, remember = false) => {
     setIsLoading(true);
     setError(null);
     try {
       const result = await authService.login(email, password);
       if (result.token && result.user) {
-        setToken(result.token);
-        setUser(result.user);
+        saveAuthSession(result.token, result.user, remember);
       }
       return result;
     } catch (err) {
@@ -84,14 +131,13 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  const register = async (userData) => {
+  const register = async (userData, remember = true) => {
     setIsLoading(true);
     setError(null);
     try {
       const result = await authService.register(userData);
       if (result.token && result.user) {
-        setToken(result.token);
-        setUser(result.user);
+        saveAuthSession(result.token, result.user, remember);
       }
       return result;
     } catch (err) {
@@ -102,7 +148,7 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  const loginWithGoogle = async (googleResponse) => {
+  const loginWithGoogle = async (googleResponse, remember = false) => {
     setIsLoading(true);
     setError(null);
     try {
@@ -111,8 +157,7 @@ export const AuthProvider = ({ children }) => {
         : googleResponse;
       const result = await authService.loginWithGoogle(tokenToSend);
       if (result.token && result.user) {
-        setToken(result.token);
-        setUser(result.user);
+        saveAuthSession(result.token, result.user, remember);
       }
       return result;
     } catch (err) {
@@ -123,7 +168,7 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  const registerWithGoogle = async (googleResponse, role = 'patient') => {
+  const registerWithGoogle = async (googleResponse, role = 'patient', remember = true) => {
     setIsLoading(true);
     setError(null);
     try {
@@ -132,8 +177,7 @@ export const AuthProvider = ({ children }) => {
         : googleResponse;
       const result = await authService.registerWithGoogle(tokenToSend, role);
       if (result.token && result.user) {
-        setToken(result.token);
-        setUser(result.user);
+        saveAuthSession(result.token, result.user, remember);
       }
       return result;
     } catch (err) {
@@ -144,14 +188,13 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  const verifyOTP = async (email, otpCode) => {
+  const verifyOTP = async (email, otpCode, remember = true) => {
     setIsLoading(true);
     setError(null);
     try {
       const result = await authService.verifyOTP(email, otpCode);
       if (result.token && result.user) {
-        setToken(result.token);
-        setUser(result.user);
+        saveAuthSession(result.token, result.user, remember);
       }
       return result;
     } catch (err) {
@@ -163,14 +206,17 @@ export const AuthProvider = ({ children }) => {
   };
 
   const logout = () => {
-    setToken(null);
-    setUser(null);
-    localStorage.removeItem('swastha_token');
-    localStorage.removeItem('swastha_user');
+    saveAuthSession(null, null, false);
   };
 
   const setUserRole = (role) => {
-    const currentUser = user || JSON.parse(localStorage.getItem('swastha_user') || 'null');
+    const currentUser = user || (() => {
+      try {
+        return JSON.parse(localStorage.getItem('swastha_user') || sessionStorage.getItem('swastha_user') || 'null');
+      } catch (e) {
+        return null;
+      }
+    })();
     if (currentUser) {
       const updated = { ...currentUser, role, hasSelectedRole: !!currentUser.hasSelectedRole };
       setUser(updated);
@@ -182,7 +228,13 @@ export const AuthProvider = ({ children }) => {
     setIsLoading(true);
     setError(null);
     try {
-      const currentUser = user || JSON.parse(localStorage.getItem('swastha_user') || 'null');
+      const currentUser = user || (() => {
+        try {
+          return JSON.parse(localStorage.getItem('swastha_user') || sessionStorage.getItem('swastha_user') || 'null');
+        } catch (e) {
+          return null;
+        }
+      })();
       const payload = {
         email: currentUser?.email || profileData?.email,
         userId: currentUser?.id,
@@ -254,3 +306,4 @@ export const useAuth = () => {
   }
   return context;
 };
+
