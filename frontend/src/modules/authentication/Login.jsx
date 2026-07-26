@@ -30,7 +30,7 @@ export default function Login() {
     setIsLoading(true);
 
     try {
-      const result = await login(email.trim(), password);
+      const result = await login(email.trim(), password, rememberMe);
       setIsLoading(false);
 
       if (result?.requiresOTP) {
@@ -85,7 +85,7 @@ export default function Login() {
           }
         }
 
-        const result = await loginWithGoogle(payloadToSend);
+        const result = await loginWithGoogle(payloadToSend, rememberMe);
         setIsGoogleLoading(false);
 
         if (result?.requiresOTP) {

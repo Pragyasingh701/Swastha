@@ -15,6 +15,7 @@ import {
   Sparkles,
   TrendingUp,
   Users,
+  LogOut,
 } from 'lucide-react';
 import { useAuth } from '../../../context/AuthContext';
 import {
@@ -178,6 +179,14 @@ function StatCard({ label, value, detail }) {
 }
 
 function Header({ userName, userEmail }) {
+  const { logout } = useAuth();
+  const navigate = useNavigate();
+
+  const handleLogout = () => {
+    logout();
+    navigate('/login', { replace: true });
+  };
+
   return (
     <header className="flex items-center gap-4 border-b border-slate-200 bg-white px-6 py-5 lg:px-8">
       <div className="flex-1 relative max-w-xl">
@@ -202,6 +211,14 @@ function Header({ userName, userEmail }) {
         <div className="flex h-9 w-9 items-center justify-center rounded-full bg-blue-100 font-semibold text-blue-700">
           {(userName || 'U').charAt(0).toUpperCase()}
         </div>
+        <button
+          type="button"
+          onClick={handleLogout}
+          title="Log out"
+          className="p-2 text-slate-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors flex items-center justify-center ml-1"
+        >
+          <LogOut size={20} />
+        </button>
       </div>
     </header>
   );
