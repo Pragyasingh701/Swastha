@@ -30,6 +30,7 @@ import AISearch from "./modules/search/pages/AISearch";
 
 // Timeline
 import Timeline from "./modules/timeline/components/pages/Timeline";
+import MedicalVault from "./modules/vault/pages/MedicalVault";
 
 export default function App() {
   return (
@@ -57,10 +58,12 @@ export default function App() {
 
         {/* Main Application */}
         <Route path="/dashboard" element={<Dashboard />} />
-        <Route path="/vault" element={<FamilyVault />} />
+        <Route path="/vault" element={<MedicalVault />} />
+        <Route path="/family-vault" element={<FamilyVault />} />
         <Route path="/timeline" element={<Timeline />} />
         <Route path="/lab-trends" element={<LabTrends />} />
         <Route path="/search" element={<AISearch />} />
+        <Route path="/vault" element={<MedicalVault />} />
 
         {/* 404 */}
         <Route path="*" element={<h1>404 - Page Not Found</h1>} />

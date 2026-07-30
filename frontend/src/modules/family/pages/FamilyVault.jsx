@@ -106,8 +106,8 @@ function validateForm(form, isEditing = false, addMethod = 'manual') {
 const navItems = [
   { label: 'Dashboard', icon: LayoutGrid, route: '/dashboard' },
   { label: 'Health Timeline', icon: TrendingUp, route: '/timeline' },
-  { label: 'Medical Vault', icon: Folder, route: '/medical-vault' },
-  { label: 'Family Records', icon: Users, route: '/vault' },
+  { label: 'Medical Vault', icon: Folder, route: '/vault' },
+  { label: 'Family Records', icon: Users, route: '/family-vault' },
   { label: 'Medicine Safety', icon: ClipboardList, route: '/search' },
   { label: 'Lab Insights', icon: TrendingUp, route: '/lab-trends' },
 ];
@@ -143,7 +143,7 @@ function Sidebar() {
       <div className="space-y-3 pt-4">
         <button
           type="button"
-          onClick={() => navigate('/vault')}
+          onClick={() => navigate('/family-vault')}   // was '/vault'
           className="flex w-full items-center justify-center gap-2 rounded-lg bg-blue-700 px-3 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-blue-800"
           title="Open Family Vault"
           aria-label="Open Family Vault"
