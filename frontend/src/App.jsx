@@ -103,36 +103,59 @@ export default function App() {
         <Route path="/patient-register" element={<GuestRoute><PatientRegister /></GuestRoute>} />
 
         {/* Protected Main Application Routes */}
-        <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
-        <Route path="/vault" element={<ProtectedRoute><FamilyVault /></ProtectedRoute>} />
-        <Route path="/timeline" element={<ProtectedRoute><Timeline /></ProtectedRoute>} />
-        <Route path="/lab-trends" element={<ProtectedRoute><LabTrends /></ProtectedRoute>} />
-        <Route path="/search" element={<ProtectedRoute><AISearch /></ProtectedRoute>} />
+       <Route
+  path="/dashboard"
+  element={
+    <ProtectedRoute>
+      <Dashboard />
+    </ProtectedRoute>
+  }
+/>
 
-        {/* Landing */}
-        <Route path="/" element={<LandingPage />} />
+<Route
+  path="/vault"
+  element={
+    <ProtectedRoute>
+      <MedicalVault />
+    </ProtectedRoute>
+  }
+/>
 
+<Route
+  path="/family-vault"
+  element={
+    <ProtectedRoute>
+      <FamilyVault />
+    </ProtectedRoute>
+  }
+/>
 
-        {/* Authentication */}
-        <Route path="/login" element={<Login />} />
-        <Route path="/register" element={<Register />} />
-        <Route path="/role-selection" element={<RoleSelection />} />
-        <Route path="/verify-otp" element={<VerifyOTP />} />
-        <Route path="/forgot-password" element={<ForgotPassword />} />
-        <Route path="/reset-password" element={<ResetPassword />} />
+<Route
+  path="/timeline"
+  element={
+    <ProtectedRoute>
+      <Timeline />
+    </ProtectedRoute>
+  }
+/>
 
-        {/* Registration & Doctor Login Flows */}
-        <Route path="/doctor-login" element={<DoctorLogin />} />
-        <Route path="/doctor-register" element={<DoctorRegister />} />
-        <Route path="/patient-register" element={<PatientRegister />} />
+<Route
+  path="/lab-trends"
+  element={
+    <ProtectedRoute>
+      <LabTrends />
+    </ProtectedRoute>
+  }
+/>
 
-        {/* Main Application */}
-        <Route path="/dashboard" element={<Dashboard />} />
-        <Route path="/vault" element={<MedicalVault />} />
-<Route path="/family-vault" element={<FamilyVault />} />
-        <Route path="/timeline" element={<Timeline />} />
-        <Route path="/lab-trends" element={<LabTrends />} />
-        <Route path="/search" element={<AISearch />} />
+<Route
+  path="/search"
+  element={
+    <ProtectedRoute>
+      <AISearch />
+    </ProtectedRoute>
+  }
+/>
 
         {/* 404 / Wildcard Fallback */}
         <Route path="*" element={<WildcardRedirect />} />
