@@ -29,6 +29,7 @@ import AISearch from "./modules/search/pages/AISearch";
 
 // Timeline
 import Timeline from "./modules/timeline/components/pages/Timeline";
+import MedicalVault from "./modules/vault/pages/MedicalVault";
 
 function LoadingSpinner() {
   return (
@@ -107,6 +108,31 @@ export default function App() {
         <Route path="/timeline" element={<ProtectedRoute><Timeline /></ProtectedRoute>} />
         <Route path="/lab-trends" element={<ProtectedRoute><LabTrends /></ProtectedRoute>} />
         <Route path="/search" element={<ProtectedRoute><AISearch /></ProtectedRoute>} />
+
+        {/* Landing */}
+        <Route path="/" element={<LandingPage />} />
+
+
+        {/* Authentication */}
+        <Route path="/login" element={<Login />} />
+        <Route path="/register" element={<Register />} />
+        <Route path="/role-selection" element={<RoleSelection />} />
+        <Route path="/verify-otp" element={<VerifyOTP />} />
+        <Route path="/forgot-password" element={<ForgotPassword />} />
+        <Route path="/reset-password" element={<ResetPassword />} />
+
+        {/* Registration & Doctor Login Flows */}
+        <Route path="/doctor-login" element={<DoctorLogin />} />
+        <Route path="/doctor-register" element={<DoctorRegister />} />
+        <Route path="/patient-register" element={<PatientRegister />} />
+
+        {/* Main Application */}
+        <Route path="/dashboard" element={<Dashboard />} />
+        <Route path="/vault" element={<MedicalVault />} />
+<Route path="/family-vault" element={<FamilyVault />} />
+        <Route path="/timeline" element={<Timeline />} />
+        <Route path="/lab-trends" element={<LabTrends />} />
+        <Route path="/search" element={<AISearch />} />
 
         {/* 404 / Wildcard Fallback */}
         <Route path="*" element={<WildcardRedirect />} />
