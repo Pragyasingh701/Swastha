@@ -1,32 +1,44 @@
-import nodemailer from 'nodemailer';
+import dotenv from 'dotenv';
 
 /**
- * Configure Nodemailer Transporter
+ * Swastha Mailer Utility — Powered by Brevo HTTPS REST API (Port 443)
  */
-const createTransporter = () => {
-  const host = process.env.SMTP_HOST;
-  const port = process.env.SMTP_PORT || 587;
-  const user = process.env.SMTP_USER;
-  const pass = process.env.SMTP_PASS;
 
-  if (host && user && pass) {
-    return nodemailer.createTransport({
-      host,
-      port: Number(port),
-      secure: port === '465',
-      auth: { user, pass },
+async function sendEmailViaBrevo(to, subject, html) {
+  const apiKey = process.env.BREVO_API_KEY;
+  if (!apiKey) return false;
+
+  try {
+    const res = await fetch('https://api.brevo.com/v3/smtp/email', {
+      method: 'POST',
+      headers: {
+        'api-key': apiKey,
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+      },
+      body: JSON.stringify({
+        sender: { name: 'Swastha Support', email: process.env.EMAIL_FROM_ADDRESS || 'swasthaprojectt@gmail.com' },
+        to: [{ email: to }],
+        subject,
+        htmlContent: html,
+      }),
     });
+
+    if (res.ok) {
+      console.log(`[Brevo HTTPS Mailer] Email delivered successfully to ${to}`);
+      return true;
+    } else {
+      const errText = await res.text();
+      console.error(`[Brevo Mailer Error] ${res.status}: ${errText}`);
+      return false;
+    }
+  } catch (err) {
+    console.error(`[Brevo Mailer Exception]`, err.message);
+    return false;
   }
+}
 
-  // Fallback for local development if real SMTP credentials aren't set
-  return null;
-};
-
-/**
- * Send OTP Verification Email
- */
 export const sendOTPEmail = async (email, otpCode) => {
-  const transporter = createTransporter();
   const subject = 'Swastha — Verification Code';
   const html = `
     <div style="font-family: Arial, sans-serif; max-width: 500px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 12px; background-color: #ffffff;">
@@ -39,29 +51,13 @@ export const sendOTPEmail = async (email, otpCode) => {
     </div>
   `;
 
-  if (transporter) {
-    await transporter.sendMail({
-      from: process.env.EMAIL_FROM || '"Swastha Support" <noreply@swastha.app>',
-      to: email,
-      subject,
-      html,
-    });
-    console.log(`[Mailer] OTP email sent successfully to ${email}`);
-  } else {
-    console.log(`\n==========================================`);
-    console.log(`📧 [DEV EMAIL SIMULATOR]`);
-    console.log(`To: ${email}`);
-    console.log(`Subject: ${subject}`);
-    console.log(`OTP Code: ${otpCode}`);
-    console.log(`==========================================\n`);
+  const sent = await sendEmailViaBrevo(email, subject, html);
+  if (!sent) {
+    console.log(`📧 [SWASTHA MAILER] Verification code generated for ${email}`);
   }
 };
 
-/**
- * Send Password Reset Link Email
- */
 export const sendPasswordResetEmail = async (email, resetToken) => {
-  const transporter = createTransporter();
   const resetUrl = `${process.env.FRONTEND_URL || 'http://localhost:5173'}/reset-password?token=${resetToken}`;
   const subject = 'Swastha — Reset Your Password';
   const html = `
@@ -78,26 +74,10 @@ export const sendPasswordResetEmail = async (email, resetToken) => {
     </div>
   `;
 
-  if (transporter) {
-    await transporter.sendMail({
-      from: process.env.EMAIL_FROM || '"Swastha Support" <noreply@swastha.app>',
-      to: email,
-      subject,
-      html,
-    });
-    console.log(`[Mailer] Password reset email sent to ${email}`);
-  } else {
-    console.log(`\n==========================================`);
-    console.log(`📧 [DEV EMAIL SIMULATOR]`);
-    console.log(`To: ${email}`);
-    console.log(`Subject: ${subject}`);
-    console.log(`Reset URL: ${resetUrl}`);
-    console.log(`==========================================\n`);
-  }
+  await sendEmailViaBrevo(email, subject, html);
 };
 
 export const sendFamilyMemberAuthorizationEmail = async (email, inviterEmail, memberName, authorizationToken) => {
-  const transporter = createTransporter();
   const authorizeUrl = `${process.env.BACKEND_URL || 'http://localhost:5001'}/api/family/members/authorize/confirm?token=${authorizationToken}&email=${encodeURIComponent(email)}`;
   const subject = 'Swastha — Please Authorize Family Vault Access';
   const html = `
@@ -115,20 +95,5 @@ export const sendFamilyMemberAuthorizationEmail = async (email, inviterEmail, me
     </div>
   `;
 
-  if (transporter) {
-    await transporter.sendMail({
-      from: process.env.EMAIL_FROM || '"Swastha Support" <noreply@swastha.app>',
-      to: email,
-      subject,
-      html,
-    });
-    console.log(`[Mailer] Family authorization email sent to ${email}`);
-  } else {
-    console.log(`\n==========================================`);
-    console.log(`📧 [DEV EMAIL SIMULATOR]`);
-    console.log(`To: ${email}`);
-    console.log(`Subject: ${subject}`);
-    console.log(`Authorization URL: ${authorizeUrl}`);
-    console.log(`==========================================\n`);
-  }
+  await sendEmailViaBrevo(email, subject, html);
 };

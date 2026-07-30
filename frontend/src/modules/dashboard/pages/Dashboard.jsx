@@ -18,6 +18,7 @@ import {
   FileText,
   Sparkles,
   ChevronRight,
+  LogOut,
 } from "lucide-react";
 import {
   LineChart,
@@ -164,6 +165,14 @@ function Sidebar() {
 }
 
 function Header({ profile }) {
+  const { logout } = useAuth();
+  const navigate = useNavigate();
+
+  const handleLogout = () => {
+    logout();
+    navigate('/login', { replace: true });
+  };
+
   return (
     <header className="flex items-center gap-4 px-6 lg:px-8 py-5 border-b border-slate-200 bg-white">
       <div className="flex-1 relative max-w-xl">
@@ -197,6 +206,14 @@ function Header({ profile }) {
           alt={profile?.name || 'User profile'}
           className="w-9 h-9 rounded-full object-cover"
         />
+        <button
+          type="button"
+          onClick={handleLogout}
+          title="Log out"
+          className="p-2 text-slate-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors flex items-center justify-center ml-1"
+        >
+          <LogOut size={20} />
+        </button>
       </div>
     </header>
   );

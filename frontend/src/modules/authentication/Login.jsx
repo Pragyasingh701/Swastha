@@ -30,7 +30,7 @@ export default function Login() {
     setIsLoading(true);
 
     try {
-      const result = await login(email.trim(), password);
+      const result = await login(email.trim(), password, rememberMe);
       setIsLoading(false);
 
       if (result?.requiresOTP) {
@@ -53,13 +53,39 @@ export default function Login() {
   };
 
   const handleGoogleAuth = useGoogleLogin({
+    scope: 'email profile openid',
+    flow: 'implicit',
     onSuccess: async (tokenResponse) => {
       setIsGoogleLoading(true);
       setErrorMessage("");
       setShowRegisterPrompt(false);
 
       try {
-        const result = await loginWithGoogle(tokenResponse.access_token || tokenResponse);
+        let payloadToSend = tokenResponse?.access_token || tokenResponse?.credential || tokenResponse?.id_token || tokenResponse;
+
+        if (tokenResponse?.access_token) {
+          try {
+            const userinfoRes = await fetch("https://www.googleapis.com/oauth2/v3/userinfo", {
+              headers: { Authorization: `Bearer ${tokenResponse.access_token}` },
+            });
+            if (userinfoRes.ok) {
+              const gProfile = await userinfoRes.json();
+              if (gProfile?.email) {
+                payloadToSend = {
+                  credential: tokenResponse.access_token,
+                  email: gProfile.email,
+                  name: gProfile.name,
+                  picture: gProfile.picture,
+                  sub: gProfile.sub,
+                };
+              }
+            }
+          } catch (e) {
+            console.warn("Client userinfo fetch fallback warning:", e);
+          }
+        }
+
+        const result = await loginWithGoogle(payloadToSend, rememberMe);
         setIsGoogleLoading(false);
 
         if (result?.requiresOTP) {
@@ -84,8 +110,9 @@ export default function Login() {
         }
       }
     },
-    onError: () => {
+    onError: (errorResponse) => {
       setIsGoogleLoading(false);
+      console.error("Google Login Error:", errorResponse);
       setErrorMessage("Google Sign-In popup failed or was closed.");
     },
   });

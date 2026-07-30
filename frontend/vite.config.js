@@ -4,6 +4,10 @@ import path from 'path';
 
 export default defineConfig({
   plugins: [react()],
+  build: {
+    outDir: '../dist',
+    emptyOutDir: true,
+  },
   resolve: {
     alias: {
       react: path.resolve(__dirname, '../node_modules/react'),

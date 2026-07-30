@@ -78,13 +78,39 @@ export default function Register() {
   };
 
   const handleGoogleRegister = useGoogleLogin({
+    scope: 'email profile openid',
+    flow: 'implicit',
     onSuccess: async (tokenResponse) => {
       setIsGoogleLoading(true);
       setErrorMessage("");
       setShowLoginPrompt(false);
 
       try {
-        const result = await registerWithGoogle(tokenResponse.access_token || tokenResponse, "none");
+        let payloadToSend = tokenResponse?.access_token || tokenResponse?.credential || tokenResponse?.id_token || tokenResponse;
+
+        if (tokenResponse?.access_token) {
+          try {
+            const userinfoRes = await fetch("https://www.googleapis.com/oauth2/v3/userinfo", {
+              headers: { Authorization: `Bearer ${tokenResponse.access_token}` },
+            });
+            if (userinfoRes.ok) {
+              const gProfile = await userinfoRes.json();
+              if (gProfile?.email) {
+                payloadToSend = {
+                  credential: tokenResponse.access_token,
+                  email: gProfile.email,
+                  name: gProfile.name,
+                  picture: gProfile.picture,
+                  sub: gProfile.sub,
+                };
+              }
+            }
+          } catch (e) {
+            console.warn("Client userinfo fetch fallback warning:", e);
+          }
+        }
+
+        const result = await registerWithGoogle(payloadToSend, "none");
         setIsGoogleLoading(false);
 
         if (result?.requiresOTP) {
@@ -105,8 +131,9 @@ export default function Register() {
         }
       }
     },
-    onError: () => {
+    onError: (errorResponse) => {
       setIsGoogleLoading(false);
+      console.error("Google Register Error:", errorResponse);
       setErrorMessage("Google Sign-Up popup failed or was closed.");
     },
   });
