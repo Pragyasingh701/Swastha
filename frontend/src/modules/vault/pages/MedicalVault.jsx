@@ -36,7 +36,6 @@ const navItems = [
   { label: "Health Timeline", icon: TrendingUp, route: "/timeline" },
   { label: "Medical Vault", icon: Folder, active: true, route: "/vault" },
   { label: "Family Records", icon: Users, route: "/family-vault" },
-  { label: "Medicine Safety", icon: ClipboardList, route: "/search" },
   { label: "Lab Insights", icon: TrendingUp, route: "/lab-trends" },
 ];
 

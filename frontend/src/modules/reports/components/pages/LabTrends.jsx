@@ -42,7 +42,6 @@ const navItems = [
   { label: "Health Timeline", icon: TrendingUp, route: "/timeline" },
   { label: "Medical Vault", icon: Folder, route: "/vault" },
   { label: "Family Records", icon: Users, route: "/vault" },
-  { label: "Medicine Safety", icon: ClipboardList, route: "/search" },
   { label: "Lab Insights", icon: TrendingUp, active: true, route: "/lab-trends" },
 ];
 
