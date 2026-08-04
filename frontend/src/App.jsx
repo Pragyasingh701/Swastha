@@ -42,26 +42,55 @@ function LoadingSpinner() {
   );
 }
 
-// GuestRoute: Restricted to unauthenticated users only.
-// Authenticated users trying to access these routes are redirected to /dashboard.
+// Helper function to check if user has completed role selection
+function hasCompletedRole(user) {
+  if (!user) return false;
+  return Boolean(user.hasSelectedRole || (user.role && user.role !== 'none'));
+}
+
+// GuestRoute: Restricted to unauthenticated users (or users who haven't completed role setup yet).
+// If authenticated & role is completed -> redirect to /dashboard.
+// If authenticated & NO role -> redirect to /role-selection.
 function GuestRoute({ children }) {
-  const { isAuthenticated, authReady } = useAuth();
+  const { isAuthenticated, user, authReady } = useAuth();
 
   if (!authReady) {
     return <LoadingSpinner />;
   }
 
   if (isAuthenticated) {
+    if (hasCompletedRole(user)) {
+      return <Navigate to="/dashboard" replace />;
+    } else {
+      return <Navigate to="/role-selection" replace />;
+    }
+  }
+
+  return children;
+}
+
+// OnboardingRoute: Accessible during role setup & registration.
+// If user has ALREADY completed role selection -> redirect to /dashboard.
+// Otherwise -> render onboarding page (role selection, doctor/patient register, verify otp).
+function OnboardingRoute({ children }) {
+  const { isAuthenticated, user, authReady } = useAuth();
+
+  if (!authReady) {
+    return <LoadingSpinner />;
+  }
+
+  if (isAuthenticated && hasCompletedRole(user)) {
     return <Navigate to="/dashboard" replace />;
   }
 
   return children;
 }
 
-// ProtectedRoute: Restricted to authenticated users only.
-// Unauthenticated users trying to access these routes are redirected to /login.
+// ProtectedRoute: Restricted to authenticated users who have completed role setup.
+// Unauthenticated users -> redirect to /login.
+// Authenticated users without role -> redirect to /role-selection.
 function ProtectedRoute({ children }) {
-  const { isAuthenticated, authReady } = useAuth();
+  const { isAuthenticated, user, authReady } = useAuth();
   const location = useLocation();
 
   if (!authReady) {
@@ -72,18 +101,26 @@ function ProtectedRoute({ children }) {
     return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
+  if (!hasCompletedRole(user)) {
+    return <Navigate to="/role-selection" replace />;
+  }
+
   return children;
 }
 
 // Fallback route redirect based on auth status
 function WildcardRedirect() {
-  const { isAuthenticated, authReady } = useAuth();
+  const { isAuthenticated, user, authReady } = useAuth();
 
   if (!authReady) {
     return <LoadingSpinner />;
   }
 
-  return <Navigate to={isAuthenticated ? "/dashboard" : "/"} replace />;
+  if (!isAuthenticated) {
+    return <Navigate to="/" replace />;
+  }
+
+  return <Navigate to={hasCompletedRole(user) ? "/dashboard" : "/role-selection"} replace />;
 }
 
 export default function App() {
@@ -94,68 +131,70 @@ export default function App() {
         <Route path="/" element={<GuestRoute><LandingPage /></GuestRoute>} />
         <Route path="/login" element={<GuestRoute><Login /></GuestRoute>} />
         <Route path="/register" element={<GuestRoute><Register /></GuestRoute>} />
-        <Route path="/role-selection" element={<GuestRoute><RoleSelection /></GuestRoute>} />
-        <Route path="/verify-otp" element={<GuestRoute><VerifyOTP /></GuestRoute>} />
+        <Route path="/doctor-login" element={<GuestRoute><DoctorLogin /></GuestRoute>} />
         <Route path="/forgot-password" element={<GuestRoute><ForgotPassword /></GuestRoute>} />
         <Route path="/reset-password" element={<GuestRoute><ResetPassword /></GuestRoute>} />
-        <Route path="/doctor-login" element={<GuestRoute><DoctorLogin /></GuestRoute>} />
-        <Route path="/doctor-register" element={<GuestRoute><DoctorRegister /></GuestRoute>} />
-        <Route path="/patient-register" element={<GuestRoute><PatientRegister /></GuestRoute>} />
+
+        {/* Onboarding & Verification Routes */}
+        <Route path="/verify-otp" element={<OnboardingRoute><VerifyOTP /></OnboardingRoute>} />
+        <Route path="/role-selection" element={<OnboardingRoute><RoleSelection /></OnboardingRoute>} />
+        <Route path="/doctor-register" element={<OnboardingRoute><DoctorRegister /></OnboardingRoute>} />
+        <Route path="/patient-register" element={<OnboardingRoute><PatientRegister /></OnboardingRoute>} />
 
         {/* Protected Main Application Routes */}
-       <Route
-  path="/dashboard"
-  element={
-    <ProtectedRoute>
-      <Dashboard />
-    </ProtectedRoute>
-  }
-/>
+        <Route
+          path="/dashboard"
+          element={
+            <ProtectedRoute>
+              <Dashboard />
+            </ProtectedRoute>
+          }
+        />
 
-<Route
-  path="/vault"
-  element={
-    <ProtectedRoute>
-      <MedicalVault />
-    </ProtectedRoute>
-  }
-/>
+        <Route
+          path="/vault"
+          element={
+            <ProtectedRoute>
+              <MedicalVault />
+            </ProtectedRoute>
+          }
+        />
 
-<Route
-  path="/family-vault"
-  element={
-    <ProtectedRoute>
-      <FamilyVault />
-    </ProtectedRoute>
-  }
-/>
+        <Route
+          path="/family-vault"
+          element={
+            <ProtectedRoute>
+              <FamilyVault />
+            </ProtectedRoute>
+          }
+        />
 
-<Route
-  path="/timeline"
-  element={
-    <ProtectedRoute>
-      <Timeline />
-    </ProtectedRoute>
-  }
-/>
+        <Route
+          path="/timeline"
+          element={
+            <ProtectedRoute>
+              <Timeline />
+            </ProtectedRoute>
+          }
+        />
 
-<Route
-  path="/lab-trends"
-  element={
-    <ProtectedRoute>
-      <LabTrends />
-    </ProtectedRoute>
-  }
-/>
+        <Route
+          path="/lab-trends"
+          element={
+            <ProtectedRoute>
+              <LabTrends />
+            </ProtectedRoute>
+          }
+        />
 
-<Route
-  path="/search"
-  element={
-    <ProtectedRoute>
-      <AISearch />
-    </ProtectedRoute>
-  }
-/>
+        <Route
+          path="/search"
+          element={
+            <ProtectedRoute>
+              <AISearch />
+            </ProtectedRoute>
+          }
+        />
 
         {/* 404 / Wildcard Fallback */}
         <Route path="*" element={<WildcardRedirect />} />
