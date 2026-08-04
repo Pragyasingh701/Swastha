@@ -1,5 +1,5 @@
 import React from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import {
   LayoutGrid,
   TrendingUp,
@@ -127,6 +127,8 @@ export default function MedicalVault() {
 
 function Sidebar() {
   const navigate = useNavigate();
+  const location = useLocation();
+  const pathname = location.pathname;
 
   return (
     <aside className="hidden lg:flex lg:flex-col w-64 shrink-0 bg-slate-50 border-r border-slate-200 min-h-screen px-4 py-6">
@@ -140,21 +142,25 @@ function Sidebar() {
       </div>
 
       <nav className="flex-1 space-y-1">
-        {navItems.map(({ label, icon: Icon, active, route }) => (
-          <button
-            key={label}
-            type="button"
-            onClick={() => route && navigate(route)}
-            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
-              active
-                ? "bg-blue-100 text-blue-700"
-                : "text-slate-600 hover:bg-slate-100"
-            }`}
-          >
+        {navItems.map(({ label, icon: Icon, active, route }) => {
+          const isActive = Boolean(route && (pathname === route || pathname.startsWith(`${route}/`))) || active;
+
+          return (
+            <button
+              key={label}
+              type="button"
+              onClick={() => route && navigate(route)}
+              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                isActive
+                  ? "bg-blue-100 text-blue-700"
+                  : "text-slate-600 hover:bg-slate-100"
+              }`}
+            >
             <Icon size={18} />
             {label}
-          </button>
-        ))}
+            </button>
+          );
+        })}
       </nav>
 
       <div className="space-y-3 pt-4">
