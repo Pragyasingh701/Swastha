@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
+import UploadReports from "../../../reports/components/pages/UploadReports";
 import {
   LayoutGrid,
   TrendingUp,
@@ -8,7 +9,7 @@ import {
   ClipboardList,
   Settings,
   HelpCircle,
-  PlusCircle,
+  UploadCloud,
   Search,
   SlidersHorizontal,
   ChevronDown,
@@ -21,6 +22,8 @@ import {
   FlaskConical,
   ScanLine,
   Syringe,
+  FileText,
+  CheckCircle2,
 } from "lucide-react";
 
 /* -----------------------------------------------------------
@@ -38,6 +41,14 @@ const navItems = [
 ];
 
 const FILTERS = ["All Members", "Lab Reports", "Prescriptions", "MRI/Scans"];
+
+// Categories a user can pick when uploading a new report manually.
+const UPLOAD_CATEGORIES = [
+  { value: "Lab Reports", icon: FlaskConical, kind: "upload" },
+  { value: "Prescriptions", icon: ClipboardList, kind: "medication" },
+  { value: "MRI/Scans", icon: ScanLine, kind: "imaging" },
+  { value: "Immunizations", icon: Syringe, kind: "upload" },
+];
 
 const timelineEvents = [
   {
@@ -99,6 +110,7 @@ const tagStyles = {
   danger: "text-red-600",
   info: "text-blue-600",
   neutral: "text-slate-700",
+  upload: "text-indigo-600",
 };
 
 const dotStyles = {
@@ -106,15 +118,22 @@ const dotStyles = {
   medication: "bg-blue-50 text-blue-500 ring-blue-100",
   imaging: "bg-slate-100 text-slate-600 ring-slate-200",
   immunization: "bg-red-50 text-red-500 ring-red-100",
+  upload: "bg-indigo-50 text-indigo-500 ring-indigo-100",
 };
 
 export default function Timeline() {
   const { profileId } = useParams();
   const [activeFilter, setActiveFilter] = useState("All Members");
+  const [events, setEvents] = useState(timelineEvents);
+  const [showUploadModal, setShowUploadModal] = useState(false);
+
+  function handleAddEvent(newEvent) {
+    setEvents((prev) => [newEvent, ...prev]);
+  }
 
   return (
     <div className="min-h-screen bg-slate-50 flex">
-      <Sidebar />
+      <Sidebar onUploadClick={() => setShowUploadModal(true)} />
 
       <main className="flex-1 px-10 py-8">
         <header className="flex items-start justify-between mb-6">
@@ -145,8 +164,15 @@ export default function Timeline() {
 
         <FilterBar activeFilter={activeFilter} setActiveFilter={setActiveFilter} />
 
-        <TimelineList activeFilter={activeFilter} />
+        <TimelineList activeFilter={activeFilter} events={events} />
       </main>
+
+      {showUploadModal && (
+    <UploadReports
+        onClose={() => setShowUploadModal(false)}
+        onSubmit={handleAddEvent}
+    />
+)}
     </div>
   );
 }
@@ -154,7 +180,7 @@ export default function Timeline() {
 /* ---------------------------- Sidebar ---------------------------- */
 /* Copied from Dashboard.jsx / LabTrends.jsx so all pages share identical behavior. */
 
-function Sidebar() {
+function Sidebar({ onUploadClick }) {
   const navigate = useNavigate();
 
   return (
@@ -189,11 +215,11 @@ function Sidebar() {
       <div className="space-y-3 pt-4">
         <button
           type="button"
-          onClick={() => navigate("/vault")}
-          className="w-full flex items-center justify-center gap-2 bg-blue-700 hover:bg-blue-800 transition-colors text-white text-sm font-semibold py-2.5 rounded-lg"
+          onClick={onUploadClick}
+          className="w-full flex items-center justify-center gap-2 bg-blue-700 hover:bg-blue-800 transition-all duration-200 hover:shadow-md hover:-translate-y-0.5 text-white text-sm font-semibold py-2.5 rounded-lg"
         >
-          <PlusCircle size={18} />
-          Open Family Vault
+          <UploadCloud size={18} />
+          Upload New Report
         </button>
 
         <div className="space-y-1 pt-2">
@@ -267,23 +293,23 @@ function FilterBar({ activeFilter, setActiveFilter }) {
 
 /* -------------------------- Timeline list -------------------------- */
 
-function TimelineList({ activeFilter }) {
-  const events =
+function TimelineList({ activeFilter, events }) {
+  const filteredEvents =
     !activeFilter || activeFilter === "All Members"
-      ? timelineEvents
-      : timelineEvents.filter((event) => event.category === activeFilter);
+      ? events
+      : events.filter((event) => event.category === activeFilter);
 
   return (
     <div className="relative pl-4">
       <div className="absolute left-[27px] top-2 bottom-2 border-l-2 border-dashed border-slate-200" />
 
-      {events.length === 0 ? (
+      {filteredEvents.length === 0 ? (
         <p className="text-slate-400 text-sm py-10 text-center">
           No entries match this filter yet.
         </p>
       ) : (
         <div className="flex flex-col gap-8">
-          {events.map((event) => (
+          {filteredEvents.map((event) => (
             <TimelineRow key={event.id} event={event} />
           ))}
         </div>
