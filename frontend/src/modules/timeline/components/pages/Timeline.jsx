@@ -1,10 +1,6 @@
 import React, { useState } from "react";
-<<<<<<< HEAD
-import { useParams, useNavigate } from "react-router-dom";
-import UploadReports from "../../../reports/components/pages/UploadReports";
-=======
 import { useParams, useLocation, useNavigate } from "react-router-dom";
->>>>>>> 57802d8 (fixed family records dasboard)
+import UploadReports from "../../../reports/components/pages/UploadReports";
 import {
   LayoutGrid,
   TrendingUp,
