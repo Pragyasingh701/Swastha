@@ -227,9 +227,11 @@ function Header({ profile }) {
 
 function StatCard({ icon: Icon, tag, tagColor, value, label, iconBg }) {
   return (
-    <div className="bg-white border border-slate-200 rounded-xl p-5">
+    <div className="group bg-white border border-slate-200 rounded-2xl p-5 transition-all duration-300 hover:-translate-y-1 hover:shadow-lg hover:border-slate-300">
       <div className="flex items-start justify-between mb-4">
-        <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${iconBg}`}>
+        <div
+          className={`w-10 h-10 rounded-lg flex items-center justify-center ${iconBg} transition-transform duration-300 group-hover:scale-110`}
+        >
           <Icon size={18} />
         </div>
         {tag && (
@@ -246,7 +248,7 @@ function StatCard({ icon: Icon, tag, tagColor, value, label, iconBg }) {
 
 function Hba1cChart() {
   return (
-    <div className="bg-white border border-slate-200 rounded-xl p-6">
+    <div className="bg-white border border-slate-200 rounded-2xl p-6 transition-all duration-300 hover:shadow-lg hover:border-slate-300">
       <div className="flex items-start justify-between mb-1">
         <div>
           <h3 className="text-lg font-semibold text-slate-900">
@@ -271,9 +273,11 @@ function Hba1cChart() {
               tick={{ fill: "#94a3b8", fontSize: 12 }}
             />
             <Tooltip
+              cursor={{ stroke: "#cbd5e1", strokeDasharray: "4 4" }}
               contentStyle={{
-                borderRadius: 8,
+                borderRadius: 10,
                 border: "1px solid #e2e8f0",
+                boxShadow: "0 4px 12px rgba(15,23,42,0.08)",
                 fontSize: 12,
               }}
             />
@@ -282,14 +286,16 @@ function Hba1cChart() {
               dataKey="value"
               stroke="#2563eb"
               strokeWidth={2.5}
-              dot={{ r: 4, fill: "#2563eb" }}
-              activeDot={{ r: 6 }}
+              dot={{ r: 4, fill: "#2563eb", strokeWidth: 0 }}
+              activeDot={{ r: 7, fill: "#2563eb", stroke: "#fff", strokeWidth: 3 }}
+              isAnimationActive
+              animationDuration={600}
             />
           </LineChart>
         </ResponsiveContainer>
       </div>
 
-      <div className="flex gap-3 bg-slate-50 rounded-lg p-4 mt-2">
+      <div className="flex gap-3 bg-slate-50 border border-slate-100 rounded-xl p-4 mt-2 transition-colors duration-200 hover:bg-slate-100/70">
         <Sparkles size={18} className="text-blue-600 shrink-0 mt-0.5" />
         <p className="text-sm text-slate-600">
           <span className="font-semibold text-slate-800">AI Observation: </span>
@@ -539,18 +545,10 @@ export default function Dashboard() {
             <button
               type="button"
               onClick={() => navigate('/family-vault')}
-              className="flex items-center gap-2 rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-slate-800"
+              className="flex items-center gap-2 rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white transition-all duration-200 hover:bg-slate-800 hover:shadow-md hover:-translate-y-0.5"
             >
               <Users size={16} />
               Open Family Vault
-            </button>
-            <button
-              type="button"
-              onClick={() => navigate('/dashboard')}
-              className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition-colors hover:bg-slate-50"
-            >
-              <LayoutGrid size={16} />
-              Stay on Dashboard
             </button>
           </div>
 
