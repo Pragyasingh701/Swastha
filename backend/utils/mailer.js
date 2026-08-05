@@ -78,7 +78,7 @@ export const sendPasswordResetEmail = async (email, resetToken) => {
 };
 
 export const sendFamilyMemberAuthorizationEmail = async (email, inviterEmail, memberName, authorizationToken) => {
-  const authorizeUrl = `${process.env.BACKEND_URL || 'http://localhost:5001'}/api/family/members/authorize/confirm?token=${authorizationToken}&email=${encodeURIComponent(email)}`;
+  const authorizeUrl = `${process.env.BACKEND_URL || 'http://localhost:5001'}/api/family/members/authorize/confirm?token=${authorizationToken}`;
   const subject = 'Swastha — Please Authorize Family Vault Access';
   const html = `
     <div style="font-family: Arial, sans-serif; max-width: 540px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 12px; background-color: #ffffff;">
@@ -95,5 +95,5 @@ export const sendFamilyMemberAuthorizationEmail = async (email, inviterEmail, me
     </div>
   `;
 
-  await sendEmailViaBrevo(email, subject, html);
+  return await sendEmailViaBrevo(email, subject, html);
 };

@@ -3,6 +3,7 @@ import supabase from '../config/supabase.js';
 
 const FAMILY_VAULT_TABLE = process.env.FAMILY_VAULT_TABLE_NAME || 'vault_table';
 const FAMILY_MEMBERS_TABLE = process.env.FAMILY_MEMBERS_TABLE_NAME || 'family_members';
+const FAMILY_USER_ID_COLUMN = process.env.FAMILY_USER_ID_COLUMN || 'user_id';
 
 function escapeRegExp(value) {
   return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -14,10 +15,11 @@ function isPendingAuthorizationMember(member) {
 
 function normalizeMember(row) {
   if (!row) return null;
+  const userIdFromRow = row[FAMILY_USER_ID_COLUMN] ?? row.user_id ?? row.userId ?? null;
 
   return {
     id: row.id,
-    userId: row.user_id,
+    user_id: userIdFromRow,
     vaultId: row.vault_id,
     name: row.name,
     age: row.age,
@@ -28,7 +30,6 @@ function normalizeMember(row) {
     lastVisitDate: row.last_visit_date,
     nextCheckupDate: row.next_checkup_date,
     authorizationStatus: row.authorization_status || 'approved',
-    authorizationToken: row.authorization_token || null,
     authorizationRequestedAt: row.authorization_requested_at || null,
     authorizationApprovedAt: row.authorization_approved_at || null,
     requestedByEmail: row.requested_by_email || null,
@@ -43,7 +44,7 @@ function applyUserScope(query, { userId }) {
   let scopedQuery = query;
 
   if (userId) {
-    scopedQuery = scopedQuery.eq('user_id', userId);
+    scopedQuery = scopedQuery.eq(FAMILY_USER_ID_COLUMN, userId);
   }
 
   return scopedQuery;
@@ -67,7 +68,7 @@ function buildMemberPayload(memberData = {}) {
     authorization_approved_at: memberData.authorizationApprovedAt || memberData.authorization_approved_at || null,
     requested_by_email: memberData.requestedByEmail || memberData.requested_by_email || null,
     authorized_by_email: memberData.authorizedByEmail || memberData.authorized_by_email || null,
-    user_id: memberData.userId || memberData.user_id || null,
+    [FAMILY_USER_ID_COLUMN]: memberData.userId || memberData.user_id || null,
     vault_id: memberData.vaultId || memberData.vault_id || null,
     created_at: now,
     updated_at: now,
@@ -76,40 +77,39 @@ function buildMemberPayload(memberData = {}) {
 }
 
 function buildMemberUpdatePayload(memberData = {}) {
-  const payload = {
-    name: memberData.name?.trim() || null,
-    age: memberData.age ?? null,
-    relationship: memberData.relationship?.trim() || null,
-    relationship_tag: memberData.relationshipTag?.trim() || memberData.relationship_tag || null,
-    health_overview: memberData.healthOverview?.trim() || memberData.health_overview || null,
-    notes: memberData.notes?.trim() || null,
-    last_visit_date: memberData.lastVisitDate || memberData.last_visit_date || null,
-    next_checkup_date: memberData.nextCheckupDate || memberData.next_checkup_date || null,
-    authorization_status: memberData.authorizationStatus || memberData.authorization_status,
-    authorization_token: memberData.authorizationToken || memberData.authorization_token,
-    authorization_requested_at: memberData.authorizationRequestedAt || memberData.authorization_requested_at,
-    authorization_approved_at: memberData.authorizationApprovedAt || memberData.authorization_approved_at,
-    requested_by_email: memberData.requestedByEmail || memberData.requested_by_email,
-    authorized_by_email: memberData.authorizedByEmail || memberData.authorized_by_email,
-    updated_at: new Date().toISOString(),
-  };
+  const payload = {};
+  const now = new Date().toISOString();
 
-  Object.keys(payload).forEach((key) => {
-    if (payload[key] === undefined) {
-      delete payload[key];
-    }
-  });
+  const has = (key) => Object.prototype.hasOwnProperty.call(memberData, key);
+
+  if (has('name')) payload.name = memberData.name?.trim() || null;
+  if (has('age')) payload.age = memberData.age ?? null;
+  if (has('relationship')) payload.relationship = memberData.relationship?.trim() || null;
+  if (has('relationshipTag') || has('relationship_tag')) payload.relationship_tag = memberData.relationshipTag?.trim() || memberData.relationship_tag || null;
+  if (has('healthOverview') || has('health_overview')) payload.health_overview = memberData.healthOverview?.trim() || memberData.health_overview || null;
+  if (has('notes')) payload.notes = memberData.notes?.trim() || null;
+  if (has('lastVisitDate') || has('last_visit_date')) payload.last_visit_date = memberData.lastVisitDate || memberData.last_visit_date || null;
+  if (has('nextCheckupDate') || has('next_checkup_date')) payload.next_checkup_date = memberData.nextCheckupDate || memberData.next_checkup_date || null;
+  if (has('authorizationStatus') || has('authorization_status')) payload.authorization_status = memberData.authorizationStatus || memberData.authorization_status;
+  if (has('authorizationToken') || has('authorization_token')) payload.authorization_token = memberData.authorizationToken || memberData.authorization_token;
+  if (has('authorizationRequestedAt') || has('authorization_requested_at')) payload.authorization_requested_at = memberData.authorizationRequestedAt || memberData.authorization_requested_at;
+  if (has('authorizationApprovedAt') || has('authorization_approved_at')) payload.authorization_approved_at = memberData.authorizationApprovedAt || memberData.authorization_approved_at;
+  if (has('requestedByEmail') || has('requested_by_email')) payload.requested_by_email = memberData.requestedByEmail || memberData.requested_by_email;
+  if (has('authorizedByEmail') || has('authorized_by_email')) payload.authorized_by_email = memberData.authorizedByEmail || memberData.authorized_by_email;
+
+  payload.updated_at = now;
 
   return payload;
 }
 
 function normalizeVault(row) {
   if (!row) return null;
+  const userIdFromRow = row[FAMILY_USER_ID_COLUMN] ?? row.user_id ?? row.userId ?? null;
 
   return {
     id: row.id,
     vaultId: row.vault_id,
-    userId: row.user_id,
+    userId: userIdFromRow,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     deletedAt: row.deleted_at,
@@ -134,7 +134,7 @@ export const getFamilyVaultForUser = async (userId) => {
     const { data, error } = await supabase
       .from(FAMILY_VAULT_TABLE)
       .select('*')
-      .eq('user_id', userId)
+      .eq(FAMILY_USER_ID_COLUMN, userId)
       .maybeSingle();
 
     if (error && error.code !== 'PGRST116') {
@@ -156,7 +156,7 @@ export const createOrGetFamilyVaultForUser = async (userId) => {
     const { data: existingVault, error: selectError } = await supabase
       .from(FAMILY_VAULT_TABLE)
       .select('*')
-      .eq('user_id', userId)
+      .eq(FAMILY_USER_ID_COLUMN, userId)
       .maybeSingle();
 
     if (selectError && selectError.code !== 'PGRST116') {
@@ -188,7 +188,7 @@ export const createOrGetFamilyVaultForUser = async (userId) => {
       .from(FAMILY_VAULT_TABLE)
       .insert({
         vault_id: vaultId,
-        user_id: userId,
+        [FAMILY_USER_ID_COLUMN]: userId,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
         deleted_at: null,
@@ -284,16 +284,13 @@ export const createPendingFamilyMemberAuthorizationRequest = async ({ userId, ..
   }
 
   const authorizationToken = crypto.randomBytes(16).toString('hex');
-  const pendingNotes = [memberData.notes?.trim(), `[PendingAuthorization:${authorizationToken}]`]
-    .filter(Boolean)
-    .join('\n')
-    .trim();
+  const notes = memberData.notes?.trim() || null;
 
   const payload = buildMemberPayload({
     ...memberData,
     userId,
     vaultId: vault.vaultId,
-    notes: pendingNotes,
+    notes,
     authorizationStatus: 'pending',
     authorizationToken,
     authorizationRequestedAt: new Date().toISOString(),
@@ -331,18 +328,29 @@ export const confirmPendingFamilyMemberAuthorizationRequest = async (authorizati
   if (!authorizationToken) throw new Error('authorizationToken is required');
 
   try {
-    const { data, error } = await supabase
+    const { data: row, error } = await supabase
       .from(FAMILY_MEMBERS_TABLE)
       .select('*')
-      .is('deleted_at', null);
+      .eq('authorization_token', authorizationToken)
+      .is('deleted_at', null)
+      .maybeSingle();
 
     if (error) {
       throw error;
     }
 
-    const row = (data || []).find((item) => (item.notes || '').includes(`[PendingAuthorization:${authorizationToken}]`));
     if (!row) {
       return null;
+    }
+
+    const requestedAt = row.authorization_requested_at ? new Date(row.authorization_requested_at) : null;
+    const ttlHours = parseInt(process.env.AUTH_TOKEN_TTL_HOURS || '72', 10);
+    if (requestedAt) {
+      const ageMs = Date.now() - requestedAt.getTime();
+      if (ageMs > ttlHours * 3600 * 1000) {
+        // token expired
+        return null;
+      }
     }
 
     const cleanedNotes = (row.notes || '')
@@ -425,25 +433,28 @@ export const deleteFamilyVaultForUser = async (userId) => {
       return { deletedVault: false, deletedMembers: 0 };
     }
 
-    const { error: membersError } = await supabase
+    const { data: deletedMembersData, error: membersError } = await supabase
       .from(FAMILY_MEMBERS_TABLE)
       .delete()
-      .eq('user_id', userId);
+      .eq(FAMILY_USER_ID_COLUMN, userId)
+      .select('id');
 
     if (membersError) {
       throw membersError;
     }
 
+    const deletedMembersCount = Array.isArray(deletedMembersData) ? deletedMembersData.length : 0;
+
     const { error: vaultError } = await supabase
       .from(FAMILY_VAULT_TABLE)
       .delete()
-      .eq('user_id', userId);
+      .eq(FAMILY_USER_ID_COLUMN, userId);
 
     if (vaultError) {
       throw vaultError;
     }
 
-    return { deletedVault: true, deletedMembers: 1 };
+    return { deletedVault: true, deletedMembers: deletedMembersCount };
   } catch (err) {
     console.warn('Supabase family vault delete warning:', err.message);
     return null;

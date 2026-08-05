@@ -3,6 +3,7 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import authRoutes from './routes/auth.js';
 import familyRoutes from './routes/family.js';
+import reportsRoutes from './routes/reports.js';
 
 import fs from 'fs';
 
@@ -22,6 +23,7 @@ app.use('/uploads', express.static('uploads'));
 // Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/family', familyRoutes);
+app.use('/api/reports', reportsRoutes);
 
 // Health check / Keep-alive endpoints for Render & cron-job.org
 app.get('/', (req, res) => res.status(200).send('OK'));

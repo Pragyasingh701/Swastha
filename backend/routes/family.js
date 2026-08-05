@@ -179,13 +179,27 @@ router.post('/members/authorize', async (req, res) => {
     const inviterEmail = req.body?.inviterEmail?.trim() || user?.email || null;
     const memberName = req.body?.name?.trim() || null;
 
-    const { authorizationToken } = await createPendingFamilyMemberAuthorizationRequest({
+    const { member, authorizationToken } = await createPendingFamilyMemberAuthorizationRequest({
       ...req.body,
       userId: user.userId,
       requestedByEmail: inviterEmail,
     });
 
-    await sendFamilyMemberAuthorizationEmail(recipientEmail, inviterEmail, memberName, authorizationToken);
+    const sent = await sendFamilyMemberAuthorizationEmail(recipientEmail, inviterEmail, memberName, authorizationToken);
+
+    if (!sent) {
+      console.error('Failed to send family authorization email to', recipientEmail);
+      // rollback the pending member to avoid stale pending rows
+      try {
+        if (member?.id) {
+          await deleteFamilyMember(member.id, { userId: user.userId });
+        }
+      } catch (delErr) {
+        console.error('Failed to rollback pending member after email failure:', delErr);
+      }
+
+      return res.status(500).json({ message: 'Failed to send authorization email' });
+    }
 
     return res.json({ message: 'Authorization request sent. The member will be added after they approve it.' });
   } catch (error) {
@@ -201,8 +215,7 @@ router.get('/members/authorize/confirm', async (req, res) => {
       return res.status(400).send('Missing authorization token.');
     }
 
-    const authorizedByEmail = req.query?.email?.trim() || null;
-    const confirmedMember = await confirmPendingFamilyMemberAuthorizationRequest(authorizationToken, authorizedByEmail);
+    const confirmedMember = await confirmPendingFamilyMemberAuthorizationRequest(authorizationToken);
     const message = confirmedMember
       ? 'You gave permission for this family member to become an admin of the family vault.'
       : 'This authorization link is invalid or has already been used.';

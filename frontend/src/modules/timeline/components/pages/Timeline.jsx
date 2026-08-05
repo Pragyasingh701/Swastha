@@ -1,6 +1,8 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { useParams, useLocation, useNavigate } from "react-router-dom";
 import UploadReports from "../../../reports/components/pages/UploadReports";
+import { useAuth } from "../../../../context/AuthContext";
+import * as reportService from "../../../../api/reports";
 import {
   LayoutGrid,
   TrendingUp,
@@ -123,12 +125,142 @@ const dotStyles = {
 
 export default function Timeline() {
   const { profileId } = useParams();
+  const { token, isAuthenticated } = useAuth();
   const [activeFilter, setActiveFilter] = useState("All Members");
-  const [events, setEvents] = useState(timelineEvents);
+  const [events, setEvents] = useState([]);
   const [showUploadModal, setShowUploadModal] = useState(false);
+  const [selectedEvent, setSelectedEvent] = useState(null);
+  const [loading, setLoading] = useState(false);
 
-  function handleAddEvent(newEvent) {
-    setEvents((prev) => [newEvent, ...prev]);
+  const sortEvents = (list) => {
+    return [...list].sort((a, b) => {
+      const dateA = new Date(a.reportDate || a.date || a.createdAt || a.created_at || null);
+      const dateB = new Date(b.reportDate || b.date || b.createdAt || b.created_at || null);
+      return dateB - dateA;
+    });
+  };
+
+  const mapReportToEvent = (report) => {
+    const normalizedDate = report.reportDate || report.date || report.createdAt || report.created_at;
+    const displayDate = normalizedDate ? new Date(normalizedDate).toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+    }) : 'Unknown date';
+
+    const category = report.category || 'Consultation';
+    const kindMap = {
+      'Prescription': 'medication',
+      'Prescriptions': 'medication',
+      'Lab Report': 'alert',
+      'Lab Reports': 'alert',
+      'Imaging': 'imaging',
+      'MRI/Scans': 'imaging',
+      'Vaccination': 'immunization',
+      'Immunizations': 'immunization',
+    };
+
+    const iconMap = {
+      'Prescription': ClipboardList,
+      'Prescriptions': ClipboardList,
+      'Lab Report': FlaskConical,
+      'Lab Reports': FlaskConical,
+      'Imaging': ScanLine,
+      'MRI/Scans': ScanLine,
+      'Vaccination': Syringe,
+      'Immunizations': Syringe,
+      'Consultation': FileText,
+    };
+
+    const tagTone = {
+      medication: 'info',
+      alert: 'danger',
+      imaging: 'neutral',
+      immunization: 'neutral',
+      upload: 'info',
+    }[kindMap[category] || 'info'];
+
+    const icon = iconMap[category] || FileText;
+    const kind = kindMap[category] || 'upload';
+
+    return {
+      id: report.id || `${report.userId}-${normalizedDate}-${Math.random()}`,
+      category,
+      kind,
+      icon,
+      tag: category.toUpperCase(),
+      tagTone,
+      title: report.title || `${category} Report`,
+      meta: `${displayDate} · ${report.hospital || 'Medical Record'}`,
+      hospital: report.hospital || '',
+      doctor: report.doctor || '',
+      diagnosis: report.diagnosis || '',
+      medicines: report.medicines || '',
+      notes: report.notes,
+      fileName: report.fileUrl ? report.fileUrl.split('/').pop() : report.fileName || report.file?.name || '',
+      rightTitle: report.doctor || '',
+      rightSub: `${report.medicines ? report.medicines : report.diagnosis || ''}`,
+      stat: report.diagnosis ? { label: report.diagnosis, sub: report.medicines || '' } : undefined,
+      reportDate: normalizedDate,
+    };
+  };
+
+  const loadTimelineEvents = async () => {
+    if (!isAuthenticated || !token) {
+      setEvents([]);
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const response = await reportService.getTimelineReports(token);
+      const mapped = (response.reports || []).map(mapReportToEvent);
+      setEvents(sortEvents(mapped));
+    } catch (err) {
+      console.error('Failed to load timeline reports:', err);
+      setEvents([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadTimelineEvents();
+  }, [profileId, isAuthenticated, token]);
+
+  async function handleAddEvent(newEvent) {
+    const { file, ...rest } = newEvent;
+    const mapped = {
+      ...rest,
+      reportDate: newEvent.date || newEvent.reportDate || new Date().toISOString(),
+      category: newEvent.category || 'Consultation',
+      fileUrl: file?.name || newEvent.fileUrl || null,
+    };
+
+    if (!newEvent?.id || newEvent.id.toString().startsWith('temp-')) {
+      try {
+        const response = await reportService.createTimelineReport(mapped, token);
+        const event = mapReportToEvent(response.report);
+        setEvents((prev) => sortEvents([event, ...prev]));
+        return event;
+      } catch (error) {
+        console.error('Failed to save manual timeline report:', error);
+        throw error;
+      }
+    }
+
+    setEvents((prev) => sortEvents([mapped, ...prev]));
+    return mapped;
+  }
+
+  async function handleDeleteEvent(reportId) {
+    try {
+      await reportService.deleteTimelineReport(reportId);
+      setEvents((prev) => prev.filter((event) => String(event.id) !== String(reportId)));
+      setSelectedEvent(null);
+    } catch (error) {
+      console.error('Failed to delete timeline report:', error);
+    }
   }
 
   return (
@@ -164,15 +296,23 @@ export default function Timeline() {
 
         <FilterBar activeFilter={activeFilter} setActiveFilter={setActiveFilter} />
 
-        <TimelineList activeFilter={activeFilter} events={events} />
+        <TimelineList activeFilter={activeFilter} events={events} loading={loading} onSelectEvent={setSelectedEvent} />
       </main>
 
       {showUploadModal && (
-    <UploadReports
-        onClose={() => setShowUploadModal(false)}
-        onSubmit={handleAddEvent}
-    />
-)}
+        <UploadReports
+          onClose={() => setShowUploadModal(false)}
+          onSubmit={handleAddEvent}
+        />
+      )}
+
+      {selectedEvent && (
+        <EventDetails
+          event={selectedEvent}
+          onClose={() => setSelectedEvent(null)}
+          onDelete={() => handleDeleteEvent(selectedEvent.id)}
+        />
+      )}
     </div>
   );
 }
@@ -299,7 +439,7 @@ function FilterBar({ activeFilter, setActiveFilter }) {
 
 /* -------------------------- Timeline list -------------------------- */
 
-function TimelineList({ activeFilter, events }) {
+function TimelineList({ activeFilter, events, loading, onSelectEvent }) {
   const filteredEvents =
     !activeFilter || activeFilter === "All Members"
       ? events
@@ -309,14 +449,16 @@ function TimelineList({ activeFilter, events }) {
     <div className="relative pl-4">
       <div className="absolute left-[27px] top-2 bottom-2 border-l-2 border-dashed border-slate-200" />
 
-      {filteredEvents.length === 0 ? (
+      {loading ? (
+        <p className="text-slate-400 text-sm py-10 text-center">Loading timeline...</p>
+      ) : filteredEvents.length === 0 ? (
         <p className="text-slate-400 text-sm py-10 text-center">
           No entries match this filter yet.
         </p>
       ) : (
         <div className="flex flex-col gap-8">
           {filteredEvents.map((event) => (
-            <TimelineRow key={event.id} event={event} />
+            <TimelineRow key={event.id} event={event} onSelect={() => onSelectEvent(event)} />
           ))}
         </div>
       )}
@@ -324,7 +466,7 @@ function TimelineList({ activeFilter, events }) {
   );
 }
 
-function TimelineRow({ event }) {
+function TimelineRow({ event, onSelect }) {
   const Icon = event.icon;
 
   return (
@@ -339,7 +481,9 @@ function TimelineRow({ event }) {
         <Icon size={18} />
       </div>
 
-      <EventCard event={event} />
+      <button type="button" className="w-full text-left" onClick={onSelect}>
+        <EventCard event={event} />
+      </button>
     </div>
   );
 }
@@ -380,35 +524,51 @@ function EventCard({ event }) {
           )}
         </div>
 
-        {/* right-side content varies by event kind */}
-        {event.stat && (
-          <div className="shrink-0 bg-red-50 border border-red-100 rounded-xl px-4 py-2.5 text-right transition-transform duration-200 group-hover:scale-105">
-            <p className="text-red-600 font-semibold text-sm">
-              {event.stat.label}
-            </p>
-            <p className="text-red-400 text-xs mt-0.5">{event.stat.sub}</p>
-          </div>
-        )}
+        {/* details section */}
+      </div>
 
-        {event.rightTitle && (
-          <div className="shrink-0 text-right">
-            <p className="text-blue-600 font-medium">{event.rightTitle}</p>
-            <p className="text-slate-400 text-sm mt-0.5">{event.rightSub}</p>
-          </div>
-        )}
-
-        {event.rightBadge && (
-          <span className="shrink-0 text-emerald-600 text-sm font-medium">
-            {event.rightBadge}
+      <div className="mt-4 flex flex-wrap gap-2 items-center">
+        {event.category && (
+          <span className="inline-flex items-center rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold uppercase tracking-[0.24em] text-slate-600">
+            {event.category}
           </span>
         )}
-
-        {event.image && (
-          <button className="shrink-0 w-9 h-9 rounded-lg flex items-center justify-center text-slate-400 transition-all duration-200 hover:bg-slate-50 hover:text-blue-600 hover:scale-110">
-            <Download size={17} />
-          </button>
+        {event.fileName && (
+          <span className="inline-flex items-center rounded-full bg-slate-50 border border-slate-200 px-3 py-1 text-xs text-slate-500">
+            {event.fileName}
+          </span>
         )}
       </div>
+
+      <div className="mt-4 grid gap-3 sm:grid-cols-2">
+        <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
+          <p className="text-xs text-slate-500 uppercase tracking-[0.24em]">Doctor</p>
+          <p className="mt-2 text-sm font-semibold text-slate-900">{event.doctor || 'Unknown'}</p>
+          {event.hospital && (
+            <p className="mt-1 text-xs text-slate-500">{event.hospital}</p>
+          )}
+        </div>
+
+        <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
+          <p className="text-xs text-slate-500 uppercase tracking-[0.24em]">Summary</p>
+          {event.diagnosis ? (
+            <>
+              <p className="mt-2 text-sm font-semibold text-slate-900">{event.diagnosis}</p>
+              {event.medicines && (
+                <p className="mt-1 text-xs text-slate-500">{event.medicines}</p>
+              )}
+            </>
+          ) : (
+            <p className="mt-2 text-sm text-slate-500">No additional summary available.</p>
+          )}
+        </div>
+      </div>
+
+      {event.notes && (
+        <p className="mt-4 text-sm leading-6 text-slate-500 line-clamp-2">
+          {event.notes}
+        </p>
+      )}
 
       {event.image && (
         <div className="mt-4 relative">
@@ -446,3 +606,102 @@ function EventCard({ event }) {
     </div>
   );
 }
+
+function EventDetails({ event, onClose, onDelete }) {
+  const formattedDate = event.reportDate
+    ? new Date(event.reportDate).toLocaleDateString('en-US', {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+      })
+    : 'Unknown date';
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 px-4 py-6">
+      <div className="w-full max-w-2xl rounded-3xl bg-white p-6 shadow-2xl">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <p className="text-sm font-semibold uppercase tracking-[0.24em] text-blue-600">
+              {event.category || event.tag}
+            </p>
+            <h2 className="mt-3 text-2xl font-semibold text-slate-900">
+              {event.title}
+            </h2>
+            <p className="mt-2 text-sm text-slate-500">
+              {formattedDate} · {event.hospital || 'Medical Record'}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-full border border-slate-200 bg-slate-50 p-3 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-700"
+          >
+            <X size={18} />
+          </button>
+        </div>
+
+        <div className="mt-6 grid gap-4 sm:grid-cols-2">
+          {event.doctor && (
+            <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
+              <p className="text-sm text-slate-500">Doctor</p>
+              <p className="mt-2 text-base font-semibold text-slate-900">{event.doctor}</p>
+            </div>
+          )}
+
+          {event.category && (
+            <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
+              <p className="text-sm text-slate-500">Category</p>
+              <p className="mt-2 text-base font-semibold text-slate-900">{event.category}</p>
+            </div>
+          )}
+
+          {event.diagnosis && (
+            <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
+              <p className="text-sm text-slate-500">Diagnosis</p>
+              <p className="mt-2 text-base font-semibold text-slate-900">{event.diagnosis}</p>
+            </div>
+          )}
+
+          {event.medicines && (
+            <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
+              <p className="text-sm text-slate-500">Medicines</p>
+              <p className="mt-2 text-base font-semibold text-slate-900">{event.medicines}</p>
+            </div>
+          )}
+        </div>
+
+        {event.fileName ? (
+          <div className="mt-6 rounded-2xl border border-slate-100 bg-slate-50 p-4">
+            <p className="text-sm text-slate-500">Attached File</p>
+            <p className="mt-2 text-sm font-semibold text-slate-900 break-all">{event.fileName}</p>
+          </div>
+        ) : null}
+
+        {event.notes ? (
+          <div className="mt-6 rounded-2xl border border-slate-100 bg-slate-50 p-4">
+            <p className="text-sm text-slate-500">Notes</p>
+            <p className="mt-2 text-sm text-slate-600 whitespace-pre-line">{event.notes}</p>
+          </div>
+        ) : null}
+
+        <div className="mt-8 flex flex-wrap gap-3">
+          <button
+            type="button"
+            onClick={onDelete}
+            className="inline-flex items-center justify-center rounded-2xl bg-rose-600 px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-rose-700"
+          >
+            Delete Event
+          </button>
+          <button
+            type="button"
+            onClick={onClose}
+            className="inline-flex items-center justify-center rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition-colors hover:bg-slate-50"
+          >
+            Close
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
