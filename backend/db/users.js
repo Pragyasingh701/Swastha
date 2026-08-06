@@ -74,8 +74,14 @@ export const createOrUpdateUser = async (userData) => {
   const experience = userData.experience !== undefined ? userData.experience : (existingUser?.experience || null);
   const hospitalName = userData.hospitalName || userData.hospital_name || existingUser?.hospitalName || existingUser?.hospital_name || null;
   const address = userData.address || userData.hospital_address || existingUser?.address || existingUser?.hospital_address || null;
-  const regCertificateUrl = userData.regCertificateUrl || userData.reg_certificate_url || existingUser?.reg_certificate_url || null;
-  const idProofUrl = userData.idProofUrl || userData.id_proof_url || existingUser?.id_proof_url || null;
+  const regCertificateUrl = userData.regCertificateUrl || userData.reg_certificate_url || userData.certificateUrl || userData.certificate_url || existingUser?.reg_certificate_url || null;
+  const idProofUrl = userData.idProofUrl || userData.id_proof_url || userData.idProof || userData.id_proof || existingUser?.id_proof_url || null;
+  const consultationFee = userData.consultationFee || userData.consultation_fee || existingUser?.consultation_fee || null;
+  const bio = userData.bio || existingUser?.bio || null;
+
+  const certExtractedData = userData.certExtractedData || userData.cert_extracted_data || existingUser?.cert_extracted_data || null;
+  const licenseExpiryDate = userData.licenseExpiryDate || userData.license_expiry_date || existingUser?.license_expiry_date || null;
+  const verificationStatus = userData.verificationStatus || userData.verification_status || existingUser?.verification_status || (role === 'doctor' ? 'verified' : 'unverified');
 
   let savedUser = {
     id: userId,
@@ -108,6 +114,15 @@ export const createOrUpdateUser = async (userData) => {
     regCertificateUrl,
     id_proof_url: idProofUrl,
     idProofUrl,
+    cert_extracted_data: certExtractedData,
+    certExtractedData,
+    license_expiry_date: licenseExpiryDate,
+    licenseExpiryDate,
+    verification_status: verificationStatus,
+    verificationStatus,
+    consultation_fee: consultationFee,
+    consultationFee,
+    bio,
     created_at: existingUser?.created_at || new Date().toISOString(),
     updated_at: new Date().toISOString(),
   };
@@ -134,6 +149,9 @@ export const createOrUpdateUser = async (userData) => {
         address,
         reg_certificate_url: regCertificateUrl,
         id_proof_url: idProofUrl,
+        cert_extracted_data: certExtractedData,
+        license_expiry_date: licenseExpiryDate,
+        verification_status: verificationStatus,
         updated_at: new Date().toISOString(),
       };
 
