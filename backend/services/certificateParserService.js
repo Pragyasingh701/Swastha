@@ -13,7 +13,7 @@ if (fs.existsSync('./backend/.env')) {
 /**
  * Helper to convert file path or relative URL to clean Base64 data and mime type
  */
-function fileToBase64Payload(fileInput) {
+async function fileToBase64Payload(fileInput) {
   if (!fileInput) return null;
 
   if (typeof fileInput === 'string' && fileInput.startsWith('data:image/')) {
@@ -33,9 +33,9 @@ function fileToBase64Payload(fileInput) {
     }
 
     if (fs.existsSync(filePath)) {
-      const fileBuffer = fs.readFileSync(filePath);
+      const fileBuffer = await fs.promises.readFile(filePath);
       const ext = path.extname(filePath).toLowerCase();
-      const mime = ext === '.png' ? 'image/png' : ext === '.webp' ? 'image/webp' : 'image/jpeg';
+      const mime = ext === '.png' ? 'image/png' : ext === '.webp' ? 'image/webp' : ext === '.pdf' ? 'application/pdf' : 'image/jpeg';
       const base64Data = fileBuffer.toString('base64');
       return {
         data: base64Data,
@@ -117,15 +117,6 @@ Respond strictly in JSON format. Example:
         }
       }
     }
-
-    if (lastError) {
-      return {
-        success: false,
-        engine: 'Google Gemini 2.0 Flash Vision AI',
-        isMedicalCertificate: false,
-        validationError: `Gemini API Notice: ${lastError}`,
-      };
-    }
   }
 
   return null;
@@ -135,8 +126,8 @@ Respond strictly in JSON format. Example:
  * Evaluate Parsed Vision JSON Result against manually entered Form Registration Number
  */
 function evaluateParsedCertificate(parsed, doctorData = {}) {
-  const formRegFull = (doctorData.regNumber || doctorData.licenseNumber || '').toUpperCase();
-  const formRegClean = formRegFull.replace(/[^A-Z0-9]/g, '');
+  const formRegFull = (doctorData.regNumber || doctorData.licenseNumber || '').trim();
+  const formRegClean = formRegFull.replace(/[^A-Z0-9]/g, '').toUpperCase();
   const formRegDigits = formRegFull.replace(/[^0-9]/g, '');
 
   const ocrRegFull = (parsed.regNumber || '').toUpperCase();
@@ -173,7 +164,7 @@ function evaluateParsedCertificate(parsed, doctorData = {}) {
       regNumber: parsed.regNumber || (regMatches ? formRegFull : 'N/A'),
       medicalCouncil: parsed.medicalCouncil || doctorData.council || 'Medical Council',
       qualifications: Array.isArray(parsed.qualifications) && parsed.qualifications.length > 0 ? parsed.qualifications : [doctorData.degree || 'MBBS'],
-      expiryDate: parsed.expiryDate || new Date(Date.now() + 4 * 365 * 86400000).toISOString().split('T')[0],
+      expiryDate: parsed.expiryDate || null,
       isExpired: !!parsed.isExpired,
     },
     validation: {
@@ -197,7 +188,16 @@ export async function processMedicalCertificate(fileInput, doctorData = {}) {
     };
   }
 
-  const payload = fileToBase64Payload(fileInput);
+  if (!process.env.GEMINI_API_KEY) {
+    return {
+      success: false,
+      engine: 'Gemini Vision AI',
+      isMedicalCertificate: false,
+      validationError: 'GEMINI_API_KEY is not configured in backend environment variables.',
+    };
+  }
+
+  const payload = await fileToBase64Payload(fileInput);
   if (!payload) {
     return {
       success: false,
@@ -216,6 +216,6 @@ export async function processMedicalCertificate(fileInput, doctorData = {}) {
     success: false,
     engine: 'Vision AI Status Check',
     isMedicalCertificate: false,
-    validationError: 'Vision AI is currently busy or rate-limited. Please retry in a few seconds.',
+    validationError: 'Vision AI service is currently busy or rate-limited. Please retry in a few seconds.',
   };
 }
