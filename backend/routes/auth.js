@@ -7,6 +7,7 @@ import fs from 'fs';
 import { sendOTPEmail, sendPasswordResetEmail } from '../utils/mailer.js';
 import { findUserByEmail, findUserById, createOrUpdateUser, updateUserRole, updateUserPassword } from '../db/users.js';
 import { getFamilyVaultForUser } from '../db/family.js';
+import { processMedicalCertificate } from '../services/certificateParserService.js';
 
 const router = express.Router();
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || '771272691038-s9h707grr3b4ojkgp48aa5vb9tej2sjh.apps.googleusercontent.com';
@@ -95,10 +96,14 @@ router.post('/upload', authenticateToken, (req, res) => {
     if (!req.file) {
       return res.status(400).json({ message: 'No file uploaded.' });
     }
-    const fileUrl = `/uploads/${req.file.filename}`;
+    const protocol = req.protocol || 'http';
+    const host = req.get('host') || 'localhost:5001';
+    const fullFileUrl = `${protocol}://${host}/uploads/${req.file.filename}`;
+    const relativeUrl = `/uploads/${req.file.filename}`;
     return res.json({
       message: 'File uploaded successfully',
-      url: fileUrl,
+      url: fullFileUrl,
+      relativeUrl: relativeUrl,
       filename: req.file.filename,
       originalName: req.file.originalname,
     });
@@ -585,22 +590,45 @@ router.post('/profile', authenticateToken, async (req, res) => {
     }
   }
 
-  // Doctor Mandatory Fields Validation
+  // Doctor Mandatory Fields & Certificate Extraction Pipeline
+  let extractedCertMeta = {};
   if (targetRole === 'doctor') {
-    const { fullName, phone, mobile, regNumber, licenseNumber, council, degree, specialization, specialty, hospitalName, address, regCertificateUrl, idProofUrl } = profileDetails;
+    const { fullName, phone, mobile, dob, regNumber, licenseNumber, council, degree, specialization, specialty, hospitalName, address } = profileDetails;
+    const certUrl = profileDetails.regCertificateUrl || profileDetails.reg_certificate_url || profileDetails.certificateUrl || profileDetails.certificate_url;
     const nameVal = fullName || profileDetails.name;
     const phoneVal = phone || mobile;
     const licVal = regNumber || licenseNumber;
     const specVal = specialization || specialty;
 
-    if (!nameVal || !phoneVal || !licVal || !council || !degree || !specVal || !hospitalName || !address || !regCertificateUrl || !idProofUrl) {
+    if (!nameVal || !phoneVal || !dob || !licVal || !council || !degree || !specVal || !hospitalName || !address || !certUrl) {
       return res.status(400).json({
-        message: 'All doctor credentials (Full Name, Mobile Number, Medical Registration #, Council, Degree, Specialization, Hospital/Clinic Name, Practice Address, Registration Certificate, and ID Proof) are mandatory.',
+        message: 'All doctor credentials (Full Name, Date of Birth, Mobile Number, Medical Registration #, Council, Degree, Specialization, Hospital/Clinic Name, Practice Address, and Registration Certificate) are mandatory.',
       });
     }
     if (phoneVal && !isValidPhone(phoneVal)) {
       return res.status(400).json({ message: 'Please enter a valid 10-digit mobile number.' });
     }
+
+    // Process & Extract Medical Data from Uploaded Certificate
+    const certAnalysis = await processMedicalCertificate(regCertificateUrl, {
+      fullName: nameVal,
+      regNumber: licVal,
+      council,
+      degree,
+      specialization: specVal,
+    });
+
+    if (certAnalysis.isMedicalCertificate === false) {
+      return res.status(400).json({
+        message: certAnalysis.validationError || 'Uploaded file is not a valid Medical Registration Certificate. Please upload your official medical council certificate.',
+      });
+    }
+
+    extractedCertMeta = {
+      certExtractedData: certAnalysis.extractedData || null,
+      licenseExpiryDate: certAnalysis.extractedData?.expiryDate || null,
+      verificationStatus: certAnalysis.success ? 'verified' : 'pending',
+    };
   }
 
   try {
@@ -619,6 +647,7 @@ router.post('/profile', authenticateToken, async (req, res) => {
     const savedUser = await createOrUpdateUser({
       ...userToUpdate,
       ...profileDetails,
+      ...extractedCertMeta,
       email: emailToUse,
       role: targetRole || userToUpdate?.role || 'patient',
       hasSelectedRole: true,
@@ -626,6 +655,7 @@ router.post('/profile', authenticateToken, async (req, res) => {
 
     return res.json({
       message: 'User profile updated successfully',
+      extractedCertificateData: extractedCertMeta.certExtractedData || null,
       user: savedUser,
     });
   } catch (error) {

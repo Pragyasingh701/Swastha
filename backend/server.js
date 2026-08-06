@@ -5,6 +5,7 @@ import authRoutes from './routes/auth.js';
 import familyRoutes from './routes/family.js';
 
 import fs from 'fs';
+import path from 'path';
 
 if (fs.existsSync('./backend/.env')) {
   dotenv.config({ path: './backend/.env' });
@@ -17,7 +18,8 @@ const PORT = process.env.PORT || 5001;
 
 app.use(cors());
 app.use(express.json());
-app.use('/uploads', express.static('uploads'));
+app.use('/uploads', express.static(path.resolve('uploads')));
+app.use('/uploads', express.static(path.resolve('backend/uploads')));
 
 // Routes
 app.use('/api/auth', authRoutes);

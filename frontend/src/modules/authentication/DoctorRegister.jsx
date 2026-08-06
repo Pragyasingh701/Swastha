@@ -4,7 +4,7 @@ import { useAuth } from "../../context/AuthContext";
 
 export default function DoctorRegister() {
   const navigate = useNavigate();
-  const { user, register, updateProfile, uploadDocument, setUserRole } = useAuth();
+  const { user, updateProfile, uploadDocument, setUserRole } = useAuth();
 
   useEffect(() => {
     // Check if user has already completed registration
@@ -27,6 +27,7 @@ export default function DoctorRegister() {
     fullName: user?.fullName || user?.name || "",
     email: user?.email || "",
     mobile: user?.phone || user?.mobile || "",
+    dob: user?.dob || "",
     password: "",
     regNumber: "",
     council: "",
@@ -38,13 +39,11 @@ export default function DoctorRegister() {
   });
   const [files, setFiles] = useState({
     regCertificate: null,
-    idProof: null,
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
 
   const regCertInputRef = useRef(null);
-  const idProofInputRef = useRef(null);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -66,12 +65,13 @@ export default function DoctorRegister() {
       return;
     }
 
-    if (!files.regCertificate) {
-      setErrorMessage("Medical Registration Certificate is required. Please upload your document.");
+    if (!form.dob) {
+      setErrorMessage("Date of Birth is required.");
       return;
     }
-    if (!files.idProof) {
-      setErrorMessage("Identity Proof (Aadhaar/PAN/Passport) is required. Please upload your document.");
+
+    if (!files.regCertificate) {
+      setErrorMessage("Medical Registration Certificate is required. Please upload your document.");
       return;
     }
 
@@ -80,7 +80,6 @@ export default function DoctorRegister() {
 
     try {
       let regCertificateUrl = null;
-      let idProofUrl = null;
 
       if (files.regCertificate && uploadDocument) {
         try {
@@ -91,21 +90,13 @@ export default function DoctorRegister() {
         }
       }
 
-      if (files.idProof && uploadDocument) {
-        try {
-          const res = await uploadDocument(files.idProof);
-          idProofUrl = res.url;
-        } catch (fErr) {
-          console.warn("ID proof upload notice:", fErr.message);
-        }
-      }
-
       if (updateProfile) {
         await updateProfile({
           fullName: form.fullName,
           email: form.email,
           phone: form.mobile,
           mobile: form.mobile,
+          dob: form.dob,
           regNumber: form.regNumber,
           licenseNumber: form.regNumber,
           council: form.council,
@@ -116,7 +107,6 @@ export default function DoctorRegister() {
           hospitalName: form.hospitalName,
           address: form.address,
           regCertificateUrl,
-          idProofUrl,
           role: "doctor",
           hasSelectedRole: true,
         });
@@ -235,7 +225,7 @@ export default function DoctorRegister() {
                     </div>
                   </div>
 
-                  <div className="space-y-2 md:col-span-2">
+                  <div className="space-y-2">
                     <div className="flex items-center justify-between ml-1">
                       <label className="font-label-md text-label-md text-on-surface-variant">Mobile Number</label>
                       {user?.phone || user?.mobile ? (
@@ -243,7 +233,7 @@ export default function DoctorRegister() {
                           <span className="material-symbols-outlined text-[13px]">lock</span> Account Phone
                         </span>
                       ) : (
-                        <span className="text-[11px] text-primary font-medium">Please enter your 10-digit mobile number</span>
+                        <span className="text-[11px] text-primary font-medium">10-digit mobile number</span>
                       )}
                     </div>
                     <div className="relative">
@@ -262,6 +252,26 @@ export default function DoctorRegister() {
                         type="tel"
                         name="mobile"
                         value={form.mobile}
+                        onChange={handleChange}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between ml-1">
+                      <label className="font-label-md text-label-md text-on-surface-variant">Date of Birth</label>
+                      <span className="text-[11px] text-primary font-medium">Mandatory</span>
+                    </div>
+                    <div className="relative">
+                      <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-outline-variant">
+                        calendar_today
+                      </span>
+                      <input
+                        className="w-full h-11 pl-10 pr-4 bg-surface rounded-xl border border-outline-variant focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all font-body-md text-on-surface"
+                        required
+                        type="date"
+                        name="dob"
+                        value={form.dob}
                         onChange={handleChange}
                       />
                     </div>
@@ -395,10 +405,9 @@ export default function DoctorRegister() {
                     </span>
                   </div>
                   <div>
-                    <h4 className="font-label-md text-label-md text-primary font-bold mb-1">AI Verification Sync</h4>
+                    <h4 className="font-label-md text-label-md text-primary font-bold mb-1">Vision AI Verification Sync</h4>
                     <p className="font-body-sm text-body-sm text-on-surface-variant leading-relaxed">
-                      Our system will automatically attempt to verify your credentials with the National Health
-                      Authority database.
+                      Our Google Gemini Vision AI automatically scans your uploaded Medical Certificate to verify your registration number and validity.
                     </p>
                   </div>
                 </div>
@@ -461,62 +470,32 @@ export default function DoctorRegister() {
                   <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center text-primary">
                     <span className="material-symbols-outlined">upload_file</span>
                   </div>
-                  <h2 className="font-headline-md text-headline-md text-on-surface">Document Upload</h2>
+                  <h2 className="font-headline-md text-headline-md text-on-surface">Medical Certificate Upload</h2>
                 </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                  {/* Upload 1: Registration Certificate */}
+                <div>
                   <div className="space-y-4">
                     <label className="font-label-md text-label-md text-on-surface-variant block ml-1">
-                      Medical Registration Certificate
+                      Official Medical Registration Certificate
                     </label>
                     <div
-                      className="border-2 border-dashed border-outline-variant/50 rounded-2xl p-8 text-center hover:border-primary/50 hover:bg-primary/5 transition-all cursor-pointer group"
+                      className="border-2 border-dashed border-outline-variant/50 rounded-2xl p-10 text-center hover:border-primary/50 hover:bg-primary/5 transition-all cursor-pointer group"
                       onClick={() => regCertInputRef.current?.click()}
                     >
                       <span
                         className="material-symbols-outlined text-outline-variant group-hover:text-primary mb-4 block"
-                        style={{ fontSize: "48px" }}
+                        style={{ fontSize: "56px" }}
                       >
                         cloud_upload
                       </span>
-                      <p className="font-label-md text-label-md text-on-surface-variant mb-1">
-                        {files.regCertificate ? files.regCertificate.name : "Click or drag to upload"}
+                      <p className="font-headline-sm text-headline-sm text-on-surface mb-1 font-semibold">
+                        {files.regCertificate ? files.regCertificate.name : "Click or drag to upload Medical Registration Certificate"}
                       </p>
-                      <p className="font-body-sm text-body-sm text-outline-variant">PDF, PNG, JPG (Max 5MB)</p>
+                      <p className="font-body-sm text-body-sm text-outline-variant">Supports PDF, PNG, JPG (Max 5MB)</p>
                       <input
                         className="hidden"
                         type="file"
                         ref={regCertInputRef}
                         onChange={handleFileChange("regCertificate")}
-                        accept=".pdf,.png,.jpg,.jpeg"
-                      />
-                    </div>
-                  </div>
-
-                  {/* Upload 2: Identity Proof */}
-                  <div className="space-y-4">
-                    <label className="font-label-md text-label-md text-on-surface-variant block ml-1">
-                      Identity Proof (Aadhar/PAN/Passport)
-                    </label>
-                    <div
-                      className="border-2 border-dashed border-outline-variant/50 rounded-2xl p-8 text-center hover:border-primary/50 hover:bg-primary/5 transition-all cursor-pointer group"
-                      onClick={() => idProofInputRef.current?.click()}
-                    >
-                      <span
-                        className="material-symbols-outlined text-outline-variant group-hover:text-primary mb-4 block"
-                        style={{ fontSize: "48px" }}
-                      >
-                        assignment_ind
-                      </span>
-                      <p className="font-label-md text-label-md text-on-surface-variant mb-1">
-                        {files.idProof ? files.idProof.name : "Click or drag to upload"}
-                      </p>
-                      <p className="font-body-sm text-body-sm text-outline-variant">PDF, PNG, JPG (Max 5MB)</p>
-                      <input
-                        className="hidden"
-                        type="file"
-                        ref={idProofInputRef}
-                        onChange={handleFileChange("idProof")}
                         accept=".pdf,.png,.jpg,.jpeg"
                       />
                     </div>
@@ -535,7 +514,7 @@ export default function DoctorRegister() {
                 {isSubmitting ? (
                   <>
                     <span className="material-symbols-outlined animate-spin">progress_activity</span>
-                    Processing...
+                    Scanning & Verifying Credentials...
                   </>
                 ) : (
                   <>
@@ -557,28 +536,6 @@ export default function DoctorRegister() {
               </p>
             </div>
           </form>
-
-          {/* Trust Badges */}
-          <div className="mt-16 flex flex-wrap justify-center gap-12 opacity-60">
-            <div className="flex items-center gap-2">
-              <span className="material-symbols-outlined text-outline">verified_user</span>
-              <span className="font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider">
-                HIPAA Compliant
-              </span>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="material-symbols-outlined text-outline">security</span>
-              <span className="font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider">
-                AES-256 Encryption
-              </span>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="material-symbols-outlined text-outline">gpp_maybe</span>
-              <span className="font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider">
-                ABHA Integrated
-              </span>
-            </div>
-          </div>
         </div>
       </main>
 
@@ -603,17 +560,20 @@ export default function DoctorRegister() {
           <div className="flex flex-col gap-3">
             <span className="font-label-sm text-label-sm text-on-surface font-bold">Resources</span>
             <a className="font-body-sm text-body-sm text-on-surface-variant hover:text-primary transition-colors" href="#">
-              Security Architecture
+              Documentation
             </a>
             <a className="font-body-sm text-body-sm text-on-surface-variant hover:text-primary transition-colors" href="#">
-              Contact Support
+              API Access
             </a>
           </div>
           <div className="flex flex-col gap-3">
-            <span className="font-label-sm text-label-sm text-on-surface font-bold">Compliance</span>
-            <p className="font-body-sm text-body-sm text-on-surface-variant italic">
-              © 2024 Swastha Healthcare SaaS. HIPAA &amp; ABHA Compliant.
-            </p>
+            <span className="font-label-sm text-label-sm text-on-surface font-bold">Connect</span>
+            <a className="font-body-sm text-body-sm text-on-surface-variant hover:text-primary transition-colors" href="#">
+              Support
+            </a>
+            <a className="font-body-sm text-body-sm text-on-surface-variant hover:text-primary transition-colors" href="#">
+              Contact Us
+            </a>
           </div>
         </div>
       </footer>
