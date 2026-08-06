@@ -610,7 +610,7 @@ router.post('/profile', authenticateToken, async (req, res) => {
     }
 
     // Process & Extract Medical Data from Uploaded Certificate
-    const certAnalysis = await processMedicalCertificate(regCertificateUrl, {
+    const certAnalysis = await processMedicalCertificate(certUrl, {
       fullName: nameVal,
       regNumber: licVal,
       council,
