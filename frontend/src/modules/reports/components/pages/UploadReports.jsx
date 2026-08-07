@@ -55,58 +55,49 @@ export default function UploadReports({ onClose, onSubmit }) {
   };
 
   const handleSubmit = () => {
+    if (activeTab === 'upload' && !formData.file) {
+      alert('Please upload your prescription or report file.');
+      return;
+    }
 
-    // If user has prescription, only file is required
-    if (hasPrescription) {
+    if (!formData.title.trim()) {
+      alert('Please enter Report Title.');
+      return;
+    }
 
-        if (!formData.file) {
-            alert("Please upload your prescription.");
-            return;
-        }
+    if (!formData.doctor.trim()) {
+      alert('Please enter Doctor Name.');
+      return;
+    }
 
-    } else {
+    if (!formData.hospital.trim()) {
+      alert('Please enter Hospital Name.');
+      return;
+    }
 
-        // Manual entry validation
+    if (!formData.date) {
+      alert('Please select Visit Date.');
+      return;
+    }
 
-        if (!formData.title.trim()) {
-            alert("Please enter Report Title.");
-            return;
-        }
+    if (!formData.category) {
+      alert('Please select Report Category.');
+      return;
+    }
 
-        if (!formData.doctor.trim()) {
-            alert("Please enter Doctor Name.");
-            return;
-        }
+    if (!formData.diagnosis.trim()) {
+      alert('Please enter Diagnosis.');
+      return;
+    }
 
-        if (!formData.hospital.trim()) {
-            alert("Please enter Hospital Name.");
-            return;
-        }
-
-        if (!formData.date) {
-            alert("Please select Visit Date.");
-            return;
-        }
-
-        if (!formData.category) {
-            alert("Please select Report Category.");
-            return;
-        }
-
-        if (!formData.diagnosis.trim()) {
-            alert("Please enter Diagnosis.");
-            return;
-        }
-
-        if (!formData.medicines.trim()) {
-            alert("Please enter Medicines.");
-            return;
-        }
+    if (!formData.medicines.trim()) {
+      alert('Please enter Medicines.');
+      return;
     }
 
     onSubmit({
-        id: Date.now(),
-        ...formData,
+      id: `temp-${Date.now()}`,
+      ...formData,
     });
 
     onClose();
@@ -166,79 +157,62 @@ export default function UploadReports({ onClose, onSubmit }) {
           {/* Upload */}
 
           {activeTab === "upload" && (
+            <>
+              <div className="border-2 border-dashed rounded-xl p-8 text-center">
+                <UploadCloud className="mx-auto w-12 h-12 text-blue-600 mb-3" />
 
-            <div className="border-2 border-dashed rounded-xl p-8 text-center">
+                <h3 className="font-semibold text-lg">Upload Prescription</h3>
 
-              <UploadCloud className="mx-auto w-12 h-12 text-blue-600 mb-3" />
+                <p className="text-gray-500 text-sm mb-4">Upload PDF / JPG / PNG</p>
 
-              <h3 className="font-semibold text-lg">
-                Upload Prescription
-              </h3>
+                <input
+                  type="file"
+                  name="file"
+                  accept=".pdf,.png,.jpg,.jpeg"
+                  onChange={handleChange}
+                />
 
-              <p className="text-gray-500 text-sm mb-4">
-                Upload PDF / JPG / PNG
-              </p>
+                <p className="text-xs text-gray-500 mt-2">Maximum upload size: 10 MB</p>
+                {formData.file && (
+                  <p className="mt-3 text-green-600 text-sm font-medium">✓ {formData.file.name}</p>
+                )}
 
-              <input
-                type="file"
-                name="file"
-                accept=".pdf,.png,.jpg,.jpeg"
-                onChange={handleChange}
-              />
-              <p className="text-xs text-gray-500 mt-2">
-  
-</p>
-
-<p className="text-xs text-gray-500">
-  Maximum upload size: 10 MB
-</p>
-{formData.file && (
-  <p className="mt-3 text-green-600 text-sm font-medium">
-    ✓ {formData.file.name}
-  </p>
-)}
-
-              <div className="bg-blue-50 mt-5 rounded-lg p-4 text-left">
-
-                <p className="font-semibold text-blue-700">
-                  🤖 AI Extraction (Coming Soon)
-                </p>
-
-                <p className="text-sm text-gray-600">
-                  Doctor, medicines, diagnosis and hospital will be detected automatically.
-                </p>
-
+                <div className="bg-blue-50 mt-5 rounded-lg p-4 text-left">
+                  <p className="font-semibold text-blue-700">🤖 AI Extraction (Coming Soon)</p>
+                  <p className="text-sm text-gray-600">
+                    Doctor, medicines, diagnosis and hospital will be detected automatically.
+                  </p>
+                </div>
               </div>
-
-            </div>
-
+            </>
           )}
 
           {/* Manual Form */}
 
           {activeTab === "manual" && (
             <div className="grid grid-cols-2 gap-5">
-                <div className="col-span-2">
-  <label className="font-medium">
-    Report Title <span className="text-red-500">*</span>
-  </label>
+              <div className="col-span-2">
+                <label className="font-medium">
+                  Report Title <span className="text-red-500">*</span>
+                </label>
 
-  <input
-    type="text"
-    name="title"
-    placeholder="e.g. Diabetes Follow-up"
-    value={formData.title}
-    onChange={handleChange}
-    className="w-full border rounded-lg p-3 mt-1"
-  />
-</div>
+                <input
+                  type="text"
+                  name="title"
+                  placeholder="e.g. Diabetes Follow-up"
+                  value={formData.title}
+                  onChange={handleChange}
+                  className="w-full border rounded-lg p-3 mt-1"
+                />
+              </div>
 
               <div>
-               <label className="font-medium">
-    Doctor Name <span className="text-red-500">*</span>
-</label>
+                <label className="font-medium">
+                  Doctor Name <span className="text-red-500">*</span>
+                </label>
                 <input
                   name="doctor"
+                  value={formData.doctor}
                   onChange={handleChange}
                   className="w-full border rounded-lg p-3 mt-1"
                 />
@@ -246,10 +220,11 @@ export default function UploadReports({ onClose, onSubmit }) {
 
               <div>
                 <label className="font-medium">
-    Hospital <span className="text-red-500">*</span>
-</label>
+                  Hospital <span className="text-red-500">*</span>
+                </label>
                 <input
                   name="hospital"
+                  value={formData.hospital}
                   onChange={handleChange}
                   className="w-full border rounded-lg p-3 mt-1"
                 />
@@ -257,11 +232,12 @@ export default function UploadReports({ onClose, onSubmit }) {
 
               <div>
                 <label className="font-medium">
-    Visit Date <span className="text-red-500">*</span>
-</label>
+                  Visit Date <span className="text-red-500">*</span>
+                </label>
                 <input
                   type="date"
                   name="date"
+                  value={formData.date}
                   onChange={handleChange}
                   className="w-full border rounded-lg p-3 mt-1"
                 />
@@ -269,11 +245,12 @@ export default function UploadReports({ onClose, onSubmit }) {
 
               <div>
                 <label className="font-medium">
-    Category <span className="text-red-500">*</span>
-</label>
+                  Category <span className="text-red-500">*</span>
+                </label>
 
                 <select
                   name="category"
+                  value={formData.category}
                   onChange={handleChange}
                   className="w-full border rounded-lg p-3 mt-1"
                 >
@@ -287,34 +264,32 @@ export default function UploadReports({ onClose, onSubmit }) {
               </div>
 
               <div>
+                <label className="font-medium">
+                  Diagnosis <span className="text-red-500">*</span>
+                </label>
 
-<label className="font-medium">
-Diagnosis <span className="text-red-500">*</span>
-</label>
+                <textarea
+                  rows={3}
+                  name="diagnosis"
+                  value={formData.diagnosis}
+                  onChange={handleChange}
+                  className="w-full border rounded-lg p-3 mt-1"
+                />
+              </div>
 
-<textarea
-rows={3}
-name="diagnosis"
-onChange={handleChange}
-className="w-full border rounded-lg p-3 mt-1"
-/>
+              <div>
+                <label className="font-medium">
+                  Medicines <span className="text-red-500">*</span>
+                </label>
 
-</div>
-
-<div>
-
-<label className="font-medium">
-Medicines <span className="text-red-500">*</span>
-</label>
-
-<textarea
-rows={3}
-name="medicines"
-onChange={handleChange}
-className="w-full border rounded-lg p-3 mt-1"
-/>
-
-</div>
+                <textarea
+                  rows={3}
+                  name="medicines"
+                  value={formData.medicines}
+                  onChange={handleChange}
+                  className="w-full border rounded-lg p-3 mt-1"
+                />
+              </div>
 
               <div className="col-span-2">
                 <label className="font-medium">Notes</label>
@@ -322,13 +297,13 @@ className="w-full border rounded-lg p-3 mt-1"
                 <textarea
                   rows={3}
                   name="notes"
+                  value={formData.notes}
                   onChange={handleChange}
                   className="w-full border rounded-lg p-3 mt-1"
                 />
               </div>
 
             </div>
-
           )}
 
           {/* Buttons */}
