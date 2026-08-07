@@ -16,7 +16,7 @@ if (fs.existsSync('./backend/.env')) {
 async function fileToBase64Payload(fileInput) {
   if (!fileInput) return null;
 
-  if (typeof fileInput === 'string' && fileInput.startsWith('data:image/')) {
+  if (typeof fileInput === 'string' && fileInput.startsWith('data:') && fileInput.includes(';base64,')) {
     const parts = fileInput.split(';base64,');
     const mime = parts[0].replace('data:', '');
     const data = parts[1];
@@ -119,7 +119,11 @@ Respond strictly in JSON format. Example:
     }
   }
 
-  return null;
+  if (lastError) {
+    console.warn('Gemini Vision AI processing warning/failure:', lastError);
+  }
+
+  return lastError ? { error: lastError } : null;
 }
 
 /**
@@ -207,7 +211,7 @@ export async function processMedicalCertificate(fileInput, doctorData = {}) {
 
   // 1. Process via Gemini 2.0 Flash Vision AI
   const aiResult = await parseCertificateWithGeminiAI(payload, doctorData);
-  if (aiResult) {
+  if (aiResult && !aiResult.error) {
     return aiResult;
   }
 
@@ -216,6 +220,8 @@ export async function processMedicalCertificate(fileInput, doctorData = {}) {
     success: false,
     engine: 'Vision AI Status Check',
     isMedicalCertificate: false,
-    validationError: 'Vision AI service is currently busy or rate-limited. Please retry in a few seconds.',
+    validationError: aiResult?.error
+      ? `Vision AI extraction failed: ${aiResult.error}`
+      : 'Vision AI service is currently busy or rate-limited. Please retry in a few seconds.',
   };
 }
