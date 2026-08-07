@@ -81,7 +81,8 @@ export const createOrUpdateUser = async (userData) => {
 
   const certExtractedData = userData.certExtractedData || userData.cert_extracted_data || existingUser?.cert_extracted_data || null;
   const licenseExpiryDate = userData.licenseExpiryDate || userData.license_expiry_date || existingUser?.license_expiry_date || null;
-  const verificationStatus = userData.verificationStatus || userData.verification_status || existingUser?.verification_status || 'pending';
+  const defaultVerificationStatus = role === 'doctor' ? 'pending' : 'verified';
+  const verificationStatus = userData.verificationStatus || userData.verification_status || existingUser?.verification_status || defaultVerificationStatus;
 
   let savedUser = {
     id: userId,
@@ -148,6 +149,7 @@ export const createOrUpdateUser = async (userData) => {
         hospital_name: hospitalName,
         address,
         reg_certificate_url: regCertificateUrl,
+        id_proof_url: idProofUrl,
         cert_extracted_data: certExtractedData,
         license_expiry_date: licenseExpiryDate,
         verification_status: verificationStatus,

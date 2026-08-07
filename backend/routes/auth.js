@@ -260,8 +260,8 @@ router.post('/login', async (req, res) => {
     return res.status(404).json({ message: 'No account found with this email address. Please create an account first.' });
   }
 
-  // Check if account was registered via Google Sign-In
-  if (user.auth_provider === 'google' || !user.password_hash) {
+  // Check if account was registered strictly via Google Sign-In (no password created)
+  if (!user.password_hash) {
     return res.status(400).json({
       message: 'This account was registered using Google Sign-In. Please click "Continue with Google" to log in.',
       isGoogleUser: true,
@@ -378,14 +378,6 @@ router.post('/google-login', async (req, res) => {
         hasSelectedRole: false,
         authProvider: 'google',
       });
-    } else {
-      // Reject Google Login if account was created via Email & Password
-      if (existingUser.auth_provider === 'email' || (existingUser.password_hash && existingUser.auth_provider !== 'google')) {
-        return res.status(400).json({
-          isEmailUser: true,
-          message: 'This account was registered using Email & Password. Please sign in with your email address and password.',
-        });
-      }
     }
 
     // Generate 6-digit OTP code for Google Verification
@@ -434,13 +426,6 @@ router.post('/google-register', async (req, res) => {
         hasSelectedRole: false,
         authProvider: 'google',
       });
-    } else {
-      if (existingUser.auth_provider === 'email' || (existingUser.password_hash && existingUser.auth_provider !== 'google')) {
-        return res.status(400).json({
-          isEmailUser: true,
-          message: 'This account was registered using Email & Password. Please sign in with your email address and password.',
-        });
-      }
     }
 
     // Generate 6-digit OTP code for Google Verification
@@ -469,12 +454,7 @@ router.post('/google', async (req, res) => {
   const normalizedEmail = (email || 'google_user@swastha.app').toLowerCase().trim();
   const existingUser = await findUserByEmail(normalizedEmail);
 
-  if (existingUser && (existingUser.auth_provider === 'email' || (existingUser.password_hash && existingUser.auth_provider !== 'google'))) {
-    return res.status(400).json({
-      isEmailUser: true,
-      message: 'This account was registered using Email & Password. Please sign in with your email address and password.',
-    });
-  }
+  // Allow Google login for existing accounts (whether created via email/password or Google)
 
   const user = await createOrUpdateUser({
     id: existingUser ? existingUser.id : ('usr_g_' + (sub || Date.now())),
@@ -742,8 +722,8 @@ router.post('/forgot-password', async (req, res) => {
     });
   }
 
-  // 2. Check if account provider is email (Google accounts do not use passwords)
-  if (existingUser.auth_provider === 'google' || (!existingUser.password_hash && existingUser.auth_provider !== 'email')) {
+  // 2. Check if account has a password created (Google-only accounts do not use passwords)
+  if (!existingUser.password_hash) {
     return res.status(400).json({
       message: 'This account was registered using Google Sign-In and does not have a password. Please log in using "Continue with Google".',
     });
