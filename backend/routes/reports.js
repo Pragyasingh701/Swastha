@@ -1,6 +1,8 @@
 import express from 'express';
 import jwt from 'jsonwebtoken';
 import { listTimelineReports, createTimelineReport, deleteTimelineReport } from '../db/reports.js';
+import { findUserByEmail } from '../db/users.js';
+import { validateTimelineReportPayload } from '../utils/timelineValidation.js';
 
 const router = express.Router();
 const JWT_SECRET = process.env.JWT_SECRET || 'swastha_dev_secret_key_2026';
@@ -26,7 +28,18 @@ router.get('/', async (req, res) => {
       return res.status(401).json({ message: 'Authentication required to load timeline reports.' });
     }
 
-    const reports = await listTimelineReports(user.userId);
+    const requestedEmail = String(req.query.email || '').trim();
+    let targetUserId = user.userId;
+
+    if (requestedEmail) {
+      const targetUser = await findUserByEmail(requestedEmail);
+      if (!targetUser?.id) {
+        return res.status(404).json({ message: 'No account found for that email.' });
+      }
+      targetUserId = targetUser.id;
+    }
+
+    const reports = await listTimelineReports(targetUserId);
     return res.json({ reports });
   } catch (error) {
     console.error('Timeline reports load error:', error);
@@ -41,22 +54,23 @@ router.post('/', async (req, res) => {
       return res.status(401).json({ message: 'Authentication required to save timeline reports.' });
     }
 
-    const { title, doctor, hospital, reportDate, category, diagnosis, medicines, notes, fileUrl } = req.body;
-    if (!title || !doctor || !hospital || !reportDate || !category || !diagnosis || !medicines) {
-      return res.status(400).json({ message: 'Missing required report fields.' });
+    const validation = validateTimelineReportPayload(req.body);
+    if (!validation.valid) {
+      return res.status(400).json({ message: validation.message });
     }
 
+    const { sanitized } = validation;
     const report = await createTimelineReport({
       userId: user.userId,
-      title: title.trim(),
-      doctor: doctor.trim(),
-      hospital: hospital.trim(),
-      reportDate,
-      category: category.trim(),
-      diagnosis: diagnosis.trim(),
-      medicines: medicines.trim(),
-      notes: (notes || '').trim(),
-      fileUrl: fileUrl || null,
+      title: sanitized.title,
+      doctor: sanitized.doctor,
+      hospital: sanitized.hospital,
+      reportDate: sanitized.reportDate,
+      category: sanitized.category,
+      diagnosis: sanitized.diagnosis,
+      medicines: sanitized.medicines,
+      notes: sanitized.notes,
+      fileUrl: req.body?.fileUrl || null,
       source: 'manual',
     });
 

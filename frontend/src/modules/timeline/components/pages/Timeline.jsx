@@ -125,7 +125,9 @@ const dotStyles = {
 
 export default function Timeline() {
   const { profileId } = useParams();
+  const location = useLocation();
   const { token, isAuthenticated } = useAuth();
+  const targetEmail = location.state?.memberEmail || new URLSearchParams(location.search).get('email') || '';
   const [activeFilter, setActiveFilter] = useState("All Members");
   const [events, setEvents] = useState([]);
   const [showUploadModal, setShowUploadModal] = useState(false);
@@ -213,7 +215,7 @@ export default function Timeline() {
 
     setLoading(true);
     try {
-      const response = await reportService.getTimelineReports(token);
+      const response = await reportService.getTimelineReports(token, targetEmail);
       const mapped = (response.reports || []).map(mapReportToEvent);
       setEvents(sortEvents(mapped));
     } catch (err) {
@@ -226,7 +228,7 @@ export default function Timeline() {
 
   useEffect(() => {
     loadTimelineEvents();
-  }, [profileId, isAuthenticated, token]);
+  }, [profileId, isAuthenticated, token, targetEmail]);
 
   async function handleAddEvent(newEvent) {
     const { file, ...rest } = newEvent;
@@ -255,7 +257,7 @@ export default function Timeline() {
 
   async function handleDeleteEvent(reportId) {
     try {
-      await reportService.deleteTimelineReport(reportId);
+      await reportService.deleteTimelineReport(reportId, token);
       setEvents((prev) => prev.filter((event) => String(event.id) !== String(reportId)));
       setSelectedEvent(null);
     } catch (error) {
@@ -274,7 +276,7 @@ export default function Timeline() {
               Health Timeline
             </h1>
             <p className="text-slate-500 mt-1">
-              Comprehensive history of your medical journey
+              {targetEmail ? `Comprehensive history for ${targetEmail}` : 'Comprehensive history of your medical journey'}
               {profileId ? (
                 <span className="text-slate-400"> · profile {profileId}</span>
               ) : null}

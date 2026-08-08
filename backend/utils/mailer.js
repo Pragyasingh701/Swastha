@@ -97,3 +97,4 @@ export const sendFamilyMemberAuthorizationEmail = async (email, inviterEmail, me
 
   return await sendEmailViaBrevo(email, subject, html);
 };
+
