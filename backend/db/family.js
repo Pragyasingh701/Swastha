@@ -9,6 +9,21 @@ function escapeRegExp(value) {
   return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
+function calculateAgeFromDob(dobValue) {
+  if (!dobValue) return null;
+  const dateValue = new Date(dobValue);
+  if (Number.isNaN(dateValue.getTime())) return null;
+
+  const today = new Date();
+  let age = today.getFullYear() - dateValue.getFullYear();
+  const monthDiff = today.getMonth() - dateValue.getMonth();
+  if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < dateValue.getDate())) {
+    age -= 1;
+  }
+
+  return age >= 0 && age <= 150 ? age : null;
+}
+
 function isPendingAuthorizationMember(member) {
   return member?.authorizationStatus === 'pending' || Boolean(member?.notes && /\[PendingAuthorization:[^\]]+\]/.test(member.notes));
 }
@@ -23,6 +38,7 @@ function normalizeMember(row) {
     vaultId: row.vault_id,
     name: row.name,
     age: row.age,
+    dob: row.dob || row.date_of_birth || null,
     relationship: row.relationship,
     relationshipTag: row.relationship_tag,
     healthOverview: row.health_overview,
@@ -52,10 +68,13 @@ function applyUserScope(query, { userId }) {
 
 function buildMemberPayload(memberData = {}) {
   const now = new Date().toISOString();
+  const normalizedDob = memberData.dob || memberData.date_of_birth || null;
+  const computedAge = calculateAgeFromDob(normalizedDob);
 
   return {
     name: memberData.name?.trim() || null,
-    age: memberData.age ?? null,
+    dob: normalizedDob,
+    age: computedAge ?? memberData.age ?? null,
     relationship: memberData.relationship?.trim() || null,
     relationship_tag: memberData.relationshipTag?.trim() || memberData.relationship_tag || null,
     health_overview: memberData.healthOverview?.trim() || memberData.health_overview || null,
@@ -83,7 +102,14 @@ function buildMemberUpdatePayload(memberData = {}) {
   const has = (key) => Object.prototype.hasOwnProperty.call(memberData, key);
 
   if (has('name')) payload.name = memberData.name?.trim() || null;
-  if (has('age')) payload.age = memberData.age ?? null;
+  if (has('dob') || has('date_of_birth')) {
+    payload.dob = memberData.dob || memberData.date_of_birth || null;
+    const computedAge = calculateAgeFromDob(payload.dob);
+    if (computedAge !== null) {
+      payload.age = computedAge;
+    }
+  }
+  if (has('age') && !has('dob') && !has('date_of_birth')) payload.age = memberData.age ?? null;
   if (has('relationship')) payload.relationship = memberData.relationship?.trim() || null;
   if (has('relationshipTag') || has('relationship_tag')) payload.relationship_tag = memberData.relationshipTag?.trim() || memberData.relationship_tag || null;
   if (has('healthOverview') || has('health_overview')) payload.health_overview = memberData.healthOverview?.trim() || memberData.health_overview || null;

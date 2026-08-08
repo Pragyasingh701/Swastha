@@ -31,7 +31,19 @@ function parseAgeFromMember(member) {
   if (member?.age !== null && member?.age !== undefined && member?.age !== '') {
     return member.age;
   }
-
+  const dobValue = member?.dob || member?.date_of_birth || '';
+  if (dobValue) {
+    const dateValue = new Date(dobValue);
+    if (!Number.isNaN(dateValue.getTime())) {
+      const today = new Date();
+      let age = today.getFullYear() - dateValue.getFullYear();
+      const monthDiff = today.getMonth() - dateValue.getMonth();
+      if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < dateValue.getDate())) {
+        age -= 1;
+      }
+      return age >= 0 && age <= 150 ? age : 'Not set';
+    }
+  }
   const healthOverview = member?.healthOverview || member?.health_overview || '';
   const notes = member?.notes || '';
   const textToSearch = `${healthOverview}\n${notes}`;
@@ -50,8 +62,15 @@ export default function FamilyMember({ member, onEdit, onDelete }) {
 
   const relationshipTag = member.relationshipTag || member.relationship_tag || 'No tag added';
   const relationship = member.relationship || 'Relationship not set';
+  const isSelfRelationship = [relationship, relationshipTag, member.relationship_tag, member.relationshipTag]
+    .some((value) => String(value || '').trim().toLowerCase() === 'self');
   const age = parseAgeFromMember(member);
   const healthOverview = member.healthOverview || member.health_overview || 'No health overview added yet.';
+  const dateOfBirth = age && age !== 'Not set' ? (() => {
+    const dob = new Date();
+    dob.setFullYear(dob.getFullYear() - Number(age));
+    return dob.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+  })() : 'Not set';
   
   const { notes: cleanedNotes, email } = parseMemberNotesAndEmail(member.notes || '');
   const notesText = cleanedNotes || 'No extra notes stored.';
@@ -85,7 +104,7 @@ export default function FamilyMember({ member, onEdit, onDelete }) {
         <div className="flex flex-wrap gap-2">
           <button
             type="button"
-            onClick={() => navigate('/timeline')}
+            onClick={() => navigate('/timeline', { state: { memberEmail: email || '' } })}
             className="inline-flex items-center gap-1.5 rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-sm font-medium text-blue-700 transition-colors hover:bg-blue-100"
           >
             <CalendarDays size={16} />
@@ -107,14 +126,16 @@ export default function FamilyMember({ member, onEdit, onDelete }) {
             <Edit3 size={16} />
             Edit
           </button>
-          <button
-            type="button"
-            onClick={() => onDelete(member)}
-            className="inline-flex items-center gap-1.5 rounded-xl border border-rose-200 px-3 py-2 text-sm font-medium text-rose-600 transition-colors hover:bg-rose-50"
-          >
-            <Trash2 size={16} />
-            Remove
-          </button>
+          {!isSelfRelationship ? (
+            <button
+              type="button"
+              onClick={() => onDelete(member)}
+              className="inline-flex items-center gap-1.5 rounded-xl border border-rose-200 px-3 py-2 text-sm font-medium text-rose-600 transition-colors hover:bg-rose-50"
+            >
+              <Trash2 size={16} />
+              Remove
+            </button>
+          ) : null}
         </div>
       </div>
 
@@ -157,6 +178,10 @@ export default function FamilyMember({ member, onEdit, onDelete }) {
           <div className="rounded-xl bg-white p-3 shadow-sm">
             <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Age</p>
             <p className="mt-2 text-sm font-medium text-slate-700">{age}</p>
+          </div>
+          <div className="rounded-xl bg-white p-3 shadow-sm">
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Date of Birth</p>
+            <p className="mt-2 text-sm font-medium text-slate-700">{dateOfBirth}</p>
           </div>
           {email ? (
             <div className="rounded-xl bg-white p-3 shadow-sm">

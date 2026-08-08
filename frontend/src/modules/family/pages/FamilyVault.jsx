@@ -31,7 +31,7 @@ import FamilyMember, { parseMemberNotesAndEmail } from './FamilyMember';
 
 const emptyForm = {
   name: '',
-  age: '',
+  dob: '',
   relationship: '',
   relationshipTag: '',
   healthOverview: '',
@@ -40,6 +40,59 @@ const emptyForm = {
   nextCheckupDate: '',
   email: '',
 };
+
+const relationshipOptions = [
+  'Mother',
+  'Father',
+  'Spouse',
+  'Child',
+  'Sibling',
+  'Grandparent',
+  'Grandchild',
+  'Cousin',
+  'Aunt/Uncle',
+  'Niece/Nephew',
+  'Caregiver',
+  'Guardian',
+  'Other',
+];
+
+const relationshipTagOptions = [
+  'Immediate Family',
+  'Extended Family',
+  'Dependent',
+  'Care Team',
+  'Primary Contact',
+  'Emergency Contact',
+  'Other',
+];
+
+function calculateDateOfBirthFromAge(age) {
+  const ageNumber = Number(age);
+  if (!Number.isInteger(ageNumber) || ageNumber < 0 || ageNumber > 150) {
+    return '';
+  }
+
+  const dob = new Date();
+  dob.setFullYear(dob.getFullYear() - ageNumber);
+  return dob.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+}
+
+function calculateAgeFromDob(dobValue) {
+  const dateValue = new Date(dobValue);
+  if (!dobValue || Number.isNaN(dateValue.getTime())) {
+    return null;
+  }
+
+  const today = new Date();
+  let age = today.getFullYear() - dateValue.getFullYear();
+  const monthDiff = today.getMonth() - dateValue.getMonth();
+  if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < dateValue.getDate())) {
+    age -= 1;
+  }
+
+  return age >= 0 && age <= 150 ? age : null;
+}
 
 function validateForm(form, isEditing = false, addMethod = 'manual') {
   const errors = {};
@@ -58,46 +111,56 @@ function validateForm(form, isEditing = false, addMethod = 'manual') {
     errors.name = 'Name must be 80 characters or less';
   }
 
-  if (addMethod === 'email' || email) {
-    if (addMethod === 'email' && !email) {
-      errors.email = 'Email address is required in Email mode';
-    } else if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      errors.email = 'Please enter a valid email address';
+  if (!email && !isEditing) {
+    errors.email = 'Email address is required';
+  } else if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    errors.email = 'Please enter a valid email address';
+  }
+
+  if (!form.dob) {
+    errors.dob = 'Date of birth is required';
+  } else {
+    const age = calculateAgeFromDob(form.dob);
+    if (age === null) {
+      errors.dob = 'Please enter a valid date of birth';
     }
   }
 
-  if (form.age !== '' && form.age !== null && form.age !== undefined) {
-    const age = Number(form.age);
-    if (!Number.isInteger(age) || age < 0 || age > 150) {
-      errors.age = 'Age must be an integer between 0 and 150';
-    }
-  }
-
-  if (relationship && (relationship.length < 2 || relationship.length > 50)) {
+  if (!relationship) {
+    errors.relationship = 'Relationship is required';
+  } else if (relationship.length < 2 || relationship.length > 50) {
     errors.relationship = 'Relationship must be 2 to 50 characters';
   }
 
-  if (relationshipTag && (relationshipTag.length < 2 || relationshipTag.length > 50)) {
+  if (!relationshipTag) {
+    errors.relationshipTag = 'Relationship tag is required';
+  } else if (relationshipTag.length < 2 || relationshipTag.length > 50) {
     errors.relationshipTag = 'Relationship tag must be 2 to 50 characters';
   }
 
-  if (healthOverview.length > 500) {
+  if (!healthOverview) {
+    errors.healthOverview = 'Health overview is required';
+  } else if (healthOverview.length > 500) {
     errors.healthOverview = 'Health overview must be 500 characters or less';
   }
 
-  if (notes.length > 1000) {
+  if (notes && notes.length > 1000) {
     errors.notes = 'Notes must be 1000 characters or less';
   }
 
-  if (form.lastVisitDate && Number.isNaN(new Date(form.lastVisitDate).getTime())) {
+  if (!form.lastVisitDate) {
+    errors.lastVisitDate = 'Last visit date is required';
+  } else if (Number.isNaN(new Date(form.lastVisitDate).getTime())) {
     errors.lastVisitDate = 'Last visit date must be valid';
   }
 
-  if (form.nextCheckupDate && Number.isNaN(new Date(form.nextCheckupDate).getTime())) {
+  if (!form.nextCheckupDate) {
+    errors.nextCheckupDate = 'Next checkup date is required';
+  } else if (Number.isNaN(new Date(form.nextCheckupDate).getTime())) {
     errors.nextCheckupDate = 'Next checkup date must be valid';
   }
 
-  if (isEditing && Object.keys(errors).length === 0 && !name && !relationship && !relationshipTag && !healthOverview && !notes && !form.age && !form.lastVisitDate && !form.nextCheckupDate && !email) {
+  if (isEditing && Object.keys(errors).length === 0 && !name && !relationship && !relationshipTag && !healthOverview && !notes && !form.dob && !form.lastVisitDate && !form.nextCheckupDate && !email) {
     errors.form = 'At least one field is required to update a member';
   }
 
@@ -383,7 +446,11 @@ export default function FamilyVault() {
     setServerErrorMeta(null);
     setForm({
       name: member.name || '',
-      age: member.age ?? '',
+      dob: member.dob || member.date_of_birth || (member.age != null ? (() => {
+        const dob = new Date();
+        dob.setFullYear(dob.getFullYear() - Number(member.age));
+        return dob.toISOString().slice(0, 10);
+      })() : ''),
       relationship: member.relationship || '',
       relationshipTag: member.relationshipTag || member.relationship_tag || '',
       healthOverview: member.healthOverview || member.health_overview || '',
@@ -433,7 +500,8 @@ export default function FamilyVault() {
 
     const payload = {
       name: form.name.trim(),
-      age: form.age === '' ? null : Number(form.age),
+      dob: form.dob,
+      age: calculateAgeFromDob(form.dob),
       relationship: form.relationship.trim(),
       relationshipTag: form.relationshipTag.trim(),
       healthOverview: form.healthOverview.trim(),
@@ -444,7 +512,10 @@ export default function FamilyVault() {
     };
 
     try {
-      if (form.email?.trim()) {
+      if (editingMemberId) {
+        await updateFamilyMember(editingMemberId, payload);
+        setNotice('Family member updated successfully.');
+      } else if (form.email?.trim()) {
         await sendFamilyMemberAuthorization({
           name: form.name.trim(),
           email: form.email.trim(),
@@ -459,13 +530,8 @@ export default function FamilyVault() {
         });
         setNotice('Authorization request sent. The member will be added after they approve it.');
       } else {
-        if (editingMemberId) {
-          await updateFamilyMember(editingMemberId, payload);
-          setNotice('Family member updated successfully.');
-        } else {
-          await createFamilyMember(payload);
-          setNotice('Family member added successfully.');
-        }
+        await createFamilyMember(payload);
+        setNotice('Family member added successfully.');
       }
 
       resetForm();
@@ -484,6 +550,15 @@ export default function FamilyVault() {
   }
 
   async function handleDelete(member) {
+    const relationship = String(member?.relationship || '').trim().toLowerCase();
+    const relationshipTag = String(member?.relationshipTag || member?.relationship_tag || '').trim().toLowerCase();
+
+    if (relationship === 'self' || relationshipTag === 'self') {
+      setError('The self profile cannot be removed.');
+      setNotice('');
+      return;
+    }
+
     const confirmDelete = window.confirm(`Remove ${member.name} from Family Vault?`);
     if (!confirmDelete) return;
 
@@ -693,7 +768,7 @@ export default function FamilyVault() {
                 <form className={`mt-5 space-y-4 ${!canManageMembers ? 'pointer-events-none opacity-70' : ''}`} onSubmit={handleSubmit}>
                   <div className="grid gap-4 sm:grid-cols-2">
                     <label className="space-y-2">
-                      <span className="text-sm font-medium text-slate-700">Name</span>
+                      <span className="text-sm font-medium text-slate-700">Name <span className="text-rose-500">*</span></span>
                       <input
                         value={form.name}
                         onChange={(event) => setForm({ ...form, name: event.target.value })}
@@ -706,60 +781,70 @@ export default function FamilyVault() {
                     </label>
 
                     <label className="space-y-2">
-                      <span className="text-sm font-medium text-slate-700">Age</span>
+                      <span className="text-sm font-medium text-slate-700">Date of Birth <span className="text-rose-500">*</span></span>
                       <input
-                        type="number"
-                        min="0"
-                        max="150"
-                        value={form.age}
-                        onChange={(event) => setForm({ ...form, age: event.target.value })}
+                        type="date"
+                        value={form.dob}
+                        onChange={(event) => setForm({ ...form, dob: event.target.value })}
                         className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 outline-none transition-colors focus:border-blue-400 focus:bg-white"
-                        placeholder="e.g. 42"
+                        required
                       />
-                      {fieldErrors.age ? <p className="text-sm text-rose-600">{fieldErrors.age}</p> : null}
+                      {form.dob && !fieldErrors.dob ? (
+                        <p className="text-xs text-slate-500">Calculated age: {calculateAgeFromDob(form.dob)} years</p>
+                      ) : null}
+                      {fieldErrors.dob ? <p className="text-sm text-rose-600">{fieldErrors.dob}</p> : null}
                     </label>
                   </div>
 
                   <div className="grid gap-4 sm:grid-cols-2">
                     <label className="space-y-2">
-                      <span className="text-sm font-medium text-slate-700">Relationship</span>
-                      <input
+                      <span className="text-sm font-medium text-slate-700">Relationship <span className="text-rose-500">*</span></span>
+                      <select
                         value={form.relationship}
                         onChange={(event) => setForm({ ...form, relationship: event.target.value })}
-                        maxLength={50}
                         className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 outline-none transition-colors focus:border-blue-400 focus:bg-white"
-                        placeholder="e.g. Mother"
-                      />
+                        required
+                      >
+                        <option value="">Select relationship</option>
+                        {relationshipOptions.map((option) => (
+                          <option key={option} value={option}>{option}</option>
+                        ))}
+                      </select>
                       {fieldErrors.relationship ? <p className="text-sm text-rose-600">{fieldErrors.relationship}</p> : null}
                     </label>
 
                     <label className="space-y-2">
-                      <span className="text-sm font-medium text-slate-700">Relationship Tag</span>
-                      <input
+                      <span className="text-sm font-medium text-slate-700">Relationship Tag <span className="text-rose-500">*</span></span>
+                      <select
                         value={form.relationshipTag}
                         onChange={(event) => setForm({ ...form, relationshipTag: event.target.value })}
-                        maxLength={50}
                         className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 outline-none transition-colors focus:border-blue-400 focus:bg-white"
-                        placeholder="e.g. Immediate Family"
-                      />
+                        required
+                      >
+                        <option value="">Select tag</option>
+                        {relationshipTagOptions.map((option) => (
+                          <option key={option} value={option}>{option}</option>
+                        ))}
+                      </select>
                       {fieldErrors.relationshipTag ? <p className="text-sm text-rose-600">{fieldErrors.relationshipTag}</p> : null}
                     </label>
                   </div>
 
                   <label className="space-y-2 block">
-                    <span className="text-sm font-medium text-slate-700">Recipient email</span>
+                    <span className="text-sm font-medium text-slate-700">Recipient email <span className="text-rose-500">*</span></span>
                     <input
                       type="email"
                       value={form.email}
                       onChange={(event) => setForm({ ...form, email: event.target.value })}
                       className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 outline-none transition-colors focus:border-blue-400 focus:bg-white"
                       placeholder="person@example.com"
+                      required
                     />
                     {fieldErrors.email ? <p className="text-sm text-rose-600">{fieldErrors.email}</p> : null}
                   </label>
 
                   <label className="space-y-2 block">
-                    <span className="text-sm font-medium text-slate-700">Health Overview</span>
+                    <span className="text-sm font-medium text-slate-700">Health Overview <span className="text-rose-500">*</span></span>
                     <textarea
                       rows="3"
                       value={form.healthOverview}
@@ -767,6 +852,7 @@ export default function FamilyVault() {
                       maxLength={500}
                       className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 outline-none transition-colors focus:border-blue-400 focus:bg-white"
                       placeholder="e.g. Hypertension monitoring, stable labs, monthly follow-up"
+                      required
                     />
                     {fieldErrors.healthOverview ? <p className="text-sm text-rose-600">{fieldErrors.healthOverview}</p> : null}
                   </label>
@@ -779,30 +865,33 @@ export default function FamilyVault() {
                       onChange={(event) => setForm({ ...form, notes: event.target.value })}
                       maxLength={1000}
                       className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 outline-none transition-colors focus:border-blue-400 focus:bg-white"
-                      placeholder="Optional notes for reminders, allergies, doctors, etc."
+                      placeholder="Notes for reminders, allergies, doctors, etc."
+                      required
                     />
                     {fieldErrors.notes ? <p className="text-sm text-rose-600">{fieldErrors.notes}</p> : null}
                   </label>
 
                   <div className="grid gap-4 sm:grid-cols-2">
                     <label className="space-y-2">
-                      <span className="text-sm font-medium text-slate-700">Last Visit Date</span>
+                      <span className="text-sm font-medium text-slate-700">Last Visit Date <span className="text-rose-500">*</span></span>
                       <input
                         type="date"
                         value={form.lastVisitDate}
                         onChange={(event) => setForm({ ...form, lastVisitDate: event.target.value })}
                         className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 outline-none transition-colors focus:border-blue-400 focus:bg-white"
+                        required
                       />
                       {fieldErrors.lastVisitDate ? <p className="text-sm text-rose-600">{fieldErrors.lastVisitDate}</p> : null}
                     </label>
 
                     <label className="space-y-2">
-                      <span className="text-sm font-medium text-slate-700">Next Checkup Date</span>
+                      <span className="text-sm font-medium text-slate-700">Next Checkup Date <span className="text-rose-500">*</span></span>
                       <input
                         type="date"
                         value={form.nextCheckupDate}
                         onChange={(event) => setForm({ ...form, nextCheckupDate: event.target.value })}
                         className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 outline-none transition-colors focus:border-blue-400 focus:bg-white"
+                        required
                       />
                       {fieldErrors.nextCheckupDate ? <p className="text-sm text-rose-600">{fieldErrors.nextCheckupDate}</p> : null}
                     </label>

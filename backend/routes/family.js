@@ -33,6 +33,119 @@ function getAuthUser(req) {
   }
 }
 
+const NAME_REGEX = /^[a-zA-Z\s.'-]{1,80}$/;
+
+function isValidEmail(email) {
+  if (!email || typeof email !== 'string') return false;
+  const normalizedEmail = email.trim();
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  return emailRegex.test(normalizedEmail) && normalizedEmail.length <= 254;
+}
+
+function isValidName(value) {
+  if (!value || typeof value !== 'string') return false;
+  return NAME_REGEX.test(value.trim());
+}
+
+function isValidDateValue(value) {
+  if (!value) return false;
+  const date = new Date(value);
+  return !Number.isNaN(date.getTime());
+}
+
+function normalizeText(value) {
+  return typeof value === 'string' ? value.trim() : '';
+}
+
+function validateFamilyMemberPayload(payload = {}, options = {}) {
+  const { requireName = true, requireEmail = false } = options;
+  const errors = {};
+  const name = normalizeText(payload.name);
+  const relationship = normalizeText(payload.relationship);
+  const relationshipTag = normalizeText(payload.relationshipTag);
+  const healthOverview = normalizeText(payload.healthOverview);
+  const notes = normalizeText(payload.notes);
+  const email = normalizeText(payload.email);
+
+  if (requireName && !name) {
+    errors.name = 'Member name is required.';
+  } else if (name && !isValidName(name)) {
+    errors.name = 'Member name contains invalid characters.';
+  }
+
+  if (payload.age != null && payload.age !== '') {
+    const age = Number(payload.age);
+    if (Number.isNaN(age) || !Number.isInteger(age) || age < 0 || age > 150) {
+      errors.age = 'Age must be a whole number between 0 and 150.';
+    }
+  }
+
+  if (relationship && relationship.length > 50) {
+    errors.relationship = 'Relationship cannot exceed 50 characters.';
+  }
+
+  if (relationshipTag && relationshipTag.length > 50) {
+    errors.relationshipTag = 'Relationship tag cannot exceed 50 characters.';
+  }
+
+  if (healthOverview && healthOverview.length > 500) {
+    errors.healthOverview = 'Health overview cannot exceed 500 characters.';
+  }
+
+  if (notes && notes.length > 1000) {
+    errors.notes = 'Notes cannot exceed 1000 characters.';
+  }
+
+  if (payload.lastVisitDate) {
+    if (!isValidDateValue(payload.lastVisitDate)) {
+      errors.lastVisitDate = 'Last visit date must be a valid date.';
+    } else if (new Date(payload.lastVisitDate) > new Date()) {
+      errors.lastVisitDate = 'Last visit date cannot be in the future.';
+    }
+  }
+
+  if (payload.nextCheckupDate) {
+    if (!isValidDateValue(payload.nextCheckupDate)) {
+      errors.nextCheckupDate = 'Next checkup date must be a valid date.';
+    } else if (payload.lastVisitDate && isValidDateValue(payload.lastVisitDate)) {
+      const lastVisit = new Date(payload.lastVisitDate);
+      const nextCheckup = new Date(payload.nextCheckupDate);
+      if (nextCheckup < lastVisit) {
+        errors.nextCheckupDate = 'Next checkup date cannot be earlier than last visit date.';
+      }
+    }
+  }
+
+  if (requireEmail && !email) {
+    errors.email = 'Recipient email is required.';
+  }
+
+  if (email && !isValidEmail(email)) {
+    errors.email = 'Recipient email is not valid.';
+  }
+
+  return errors;
+}
+
+async function validateDuplicateFamilyMember(userId, payload) {
+  const members = await listFamilyMembers({ userId });
+  const normalizedName = normalizeText(payload.name).toLowerCase();
+  const normalizedRelationship = normalizeText(payload.relationship).toLowerCase();
+
+  if (normalizedName && normalizedRelationship) {
+    const existing = members.find((member) =>
+      normalizeText(member.name).toLowerCase() === normalizedName &&
+      normalizeText(member.relationship).toLowerCase() === normalizedRelationship
+    );
+
+    if (existing) {
+      return 'A family member with the same name and relationship already exists.';
+    }
+  }
+
+  return null;
+}
+
 router.get('/vault', async (req, res) => {
   try {
     const user = getAuthUser(req);
@@ -53,6 +166,15 @@ router.post('/vault', async (req, res) => {
     const user = getAuthUser(req);
     if (!user?.userId) {
       return res.status(401).json({ message: 'Authentication required for Family Vault requests.' });
+    }
+
+    const existingVault = await getFamilyVaultForUser(user.userId);
+    if (existingVault) {
+      return res.status(200).json({
+        message: 'Family vault already exists.',
+        vault: existingVault,
+        alreadyExists: true,
+      });
     }
 
     const vault = await createOrGetFamilyVaultForUser(user.userId);
@@ -150,14 +272,41 @@ async function createMemberHandler(req, res) {
       return res.status(403).json({ message: 'Create a family vault before adding family members.' });
     }
 
+    const payload = {
+      name: req.body?.name,
+      dob: req.body?.dob,
+      age: req.body?.age,
+      relationship: req.body?.relationship,
+      relationshipTag: req.body?.relationshipTag,
+      healthOverview: req.body?.healthOverview,
+      notes: req.body?.notes,
+      email: req.body?.email,
+      lastVisitDate: req.body?.lastVisitDate,
+      nextCheckupDate: req.body?.nextCheckupDate,
+      authorizationMethod: req.body?.authorizationMethod || 'mail',
+    };
+
+    const fieldErrors = validateFamilyMemberPayload(payload, { requireName: true, requireEmail: false });
+    if (Object.keys(fieldErrors).length > 0) {
+      return res.status(400).json({ message: 'Validation failed', fieldErrors });
+    }
+
+    const duplicateError = await validateDuplicateFamilyMember(user.userId, payload);
+    if (duplicateError) {
+      return res.status(409).json({ message: duplicateError });
+    }
+
     const member = await createFamilyMember({
-      ...req.body,
+      ...payload,
       userId: user.userId,
     });
 
     return res.status(201).json(member);
   } catch (error) {
     console.error('Add family member error:', error);
+    if (error.message?.includes('Family members table is not available')) {
+      return res.status(503).json({ message: error.message });
+    }
     return res.status(500).json({ message: 'Failed to add family member', error: error.message });
   }
 }
@@ -171,16 +320,41 @@ router.post('/members/authorize', async (req, res) => {
       return res.status(401).json({ message: 'Authentication required for Family Vault requests.' });
     }
 
-    const recipientEmail = req.body?.email?.trim();
-    if (!recipientEmail) {
-      return res.status(400).json({ message: 'Recipient email is required.' });
+    const payload = {
+      name: req.body?.name,
+      dob: req.body?.dob,
+      age: req.body?.age,
+      relationship: req.body?.relationship,
+      relationshipTag: req.body?.relationshipTag,
+      healthOverview: req.body?.healthOverview,
+      notes: req.body?.notes,
+      email: req.body?.email,
+      lastVisitDate: req.body?.lastVisitDate,
+      nextCheckupDate: req.body?.nextCheckupDate,
+      inviterEmail: req.body?.inviterEmail,
+    };
+
+    const fieldErrors = validateFamilyMemberPayload(payload, { requireName: true, requireEmail: true });
+    if (Object.keys(fieldErrors).length > 0) {
+      return res.status(400).json({ message: 'Validation failed', fieldErrors });
     }
 
-    const inviterEmail = req.body?.inviterEmail?.trim() || user?.email || null;
-    const memberName = req.body?.name?.trim() || null;
+    const existingVault = await getFamilyVaultForUser(user.userId);
+    if (!existingVault) {
+      return res.status(403).json({ message: 'Create a family vault before requesting authorization.' });
+    }
+
+    const duplicateError = await validateDuplicateFamilyMember(user.userId, payload);
+    if (duplicateError) {
+      return res.status(409).json({ message: duplicateError });
+    }
+
+    const recipientEmail = normalizeText(payload.email);
+    const inviterEmail = normalizeText(payload.inviterEmail) || user?.email || null;
+    const memberName = normalizeText(payload.name);
 
     const { member, authorizationToken } = await createPendingFamilyMemberAuthorizationRequest({
-      ...req.body,
+      ...payload,
       userId: user.userId,
       requestedByEmail: inviterEmail,
     });
@@ -302,10 +476,22 @@ async function updateMemberHandler(req, res) {
       return res.status(403).json({ message: 'Create a family vault before updating family members.' });
     }
 
-    const member = await updateFamilyMember(req.params.id, {
+    const payload = {
       ...req.body,
       userId: user.userId,
-    });
+    };
+
+    const fieldErrors = validateFamilyMemberPayload(payload, { requireName: false, requireEmail: false });
+    if (Object.keys(fieldErrors).length > 0) {
+      return res.status(400).json({ message: 'Validation failed', fieldErrors });
+    }
+
+    const duplicateError = await validateDuplicateFamilyMember(user.userId, payload);
+    if (duplicateError) {
+      return res.status(409).json({ message: duplicateError });
+    }
+
+    const member = await updateFamilyMember(req.params.id, payload);
 
     return res.json(member);
   } catch (error) {

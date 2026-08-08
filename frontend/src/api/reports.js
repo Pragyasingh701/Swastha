@@ -1,4 +1,4 @@
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5001/api';
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || `${window.location.origin}/api`;
 
 function getStoredToken() {
   try {
@@ -8,15 +8,15 @@ function getStoredToken() {
   }
 }
 
-async function request(path, options = {}) {
-  const token = getStoredToken();
+async function request(path, options = {}, token) {
+  const authToken = token || getStoredToken();
   const headers = {
     'Content-Type': 'application/json',
     ...(options.headers || {}),
   };
 
-  if (token) {
-    headers.Authorization = `Bearer ${token}`;
+  if (authToken) {
+    headers.Authorization = `Bearer ${authToken}`;
   }
 
   const response = await fetch(`${API_BASE_URL}/reports${path}`, {
@@ -34,21 +34,22 @@ async function request(path, options = {}) {
   return data;
 }
 
-export async function getTimelineReports() {
-  return request('/');
+export async function getTimelineReports(token, memberEmail) {
+  const query = memberEmail ? `?email=${encodeURIComponent(memberEmail)}` : '';
+  return request(query || '/', {}, token);
 }
 
-export async function createTimelineReport(reportData) {
+export async function createTimelineReport(reportData, token) {
   return request('/', {
     method: 'POST',
     body: JSON.stringify(reportData),
-  });
+  }, token);
 }
 
-export async function deleteTimelineReport(reportId) {
+export async function deleteTimelineReport(reportId, token) {
   return request(`/${encodeURIComponent(reportId)}`, {
     method: 'DELETE',
-  });
+  }, token);
 }
 
 export default {
