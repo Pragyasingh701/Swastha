@@ -173,25 +173,36 @@ function Sidebar() {
 function Header({ profile }) {
   const { logout } = useAuth();
   const navigate = useNavigate();
+  const [headerQuery, setHeaderQuery] = useState('');
 
   const handleLogout = () => {
     logout();
     navigate('/login', { replace: true });
   };
 
+  const handleHeaderSearch = (e) => {
+    e.preventDefault();
+    const trimmed = headerQuery.trim();
+    if (!trimmed) return;
+    // AI Search owns the actual search UI/logic — this just hands the query off.
+    navigate(`/search?q=${encodeURIComponent(trimmed)}`);
+  };
+
   return (
     <header className="flex items-center gap-4 px-6 lg:px-8 py-5 border-b border-slate-200 bg-white">
-      <div className="flex-1 relative max-w-xl">
+      <form onSubmit={handleHeaderSearch} className="flex-1 relative max-w-xl">
         <Search
           size={16}
           className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
         />
         <input
           type="text"
+          value={headerQuery}
+          onChange={(e) => setHeaderQuery(e.target.value)}
           placeholder="Search medical history, labs, or insights..."
           className="w-full bg-slate-50 border border-slate-200 rounded-lg pl-9 pr-4 py-2.5 text-sm text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-200"
         />
-      </div>
+      </form>
 
       <button className="relative p-2 rounded-lg hover:bg-slate-100">
         <Bell size={20} className="text-slate-600" />
