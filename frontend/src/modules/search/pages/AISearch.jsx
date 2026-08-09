@@ -1,8 +1,306 @@
-export default function AISearch() {
+import React, { useEffect, useRef, useState } from "react";
+import { useNavigate, useLocation } from "react-router-dom";
+import { useAuth } from "../../../context/AuthContext";
+import { searchReports } from "../../../api/search";
+import {
+  LayoutGrid,
+  TrendingUp,
+  Folder,
+  Users,
+  ClipboardList,
+  Settings,
+  HelpCircle,
+  UploadCloud,
+  Sparkles,
+  Send,
+  FileText,
+  Loader2,
+} from "lucide-react";
+
+// Same nav list as Dashboard.jsx / Timeline.jsx, with nothing else active
+// (AI Search doesn't have its own top-level nav entry yet — reached via /search).
+const navItems = [
+  { label: "Dashboard", icon: LayoutGrid, route: "/dashboard" },
+  { label: "Health Timeline", icon: TrendingUp, route: "/timeline" },
+  { label: "Medical Vault", icon: Folder, route: "/vault" },
+  { label: "Family Records", icon: Users, route: "/family-vault" },
+  { label: "Lab Insights", icon: TrendingUp, route: "/lab-trends" },
+];
+
+const EXAMPLE_QUESTIONS = [
+  "What medications was I prescribed for hypertension?",
+  "When was my last blood test and what were the results?",
+  "Summarize my vaccination history.",
+];
+
+function Sidebar() {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const pathname = location.pathname;
+
   return (
-    <div style={{ padding: "2rem" }}>
-      <h1>AI Search</h1>
-      <p>AI Search page is under development.</p>
+    <aside className="hidden lg:flex lg:flex-col w-64 shrink-0 bg-slate-50 border-r border-slate-200 min-h-screen px-4 py-6">
+      <div className="px-2 mb-8">
+        <h1 className="text-xl font-bold text-blue-700 leading-tight">Swastha AI</h1>
+        <p className="text-[10px] tracking-widest text-slate-400 font-medium mt-0.5">
+          CLINICAL INTELLIGENCE
+        </p>
+      </div>
+
+      <nav className="flex-1 space-y-1">
+        {navItems.map(({ label, icon: Icon, route }) => {
+          const isActive = Boolean(route && (pathname === route || pathname.startsWith(`${route}/`)));
+          return (
+            <button
+              key={label}
+              type="button"
+              onClick={() => route && navigate(route)}
+              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                isActive ? "bg-blue-100 text-blue-700" : "text-slate-600 hover:bg-slate-100"
+              }`}
+            >
+              <Icon size={18} />
+              {label}
+            </button>
+          );
+        })}
+
+        <button
+          type="button"
+          className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium bg-blue-100 text-blue-700"
+        >
+          <Sparkles size={18} />
+          AI Search
+        </button>
+      </nav>
+
+      <div className="space-y-3 pt-4">
+        <button
+          type="button"
+          onClick={() => navigate("/timeline")}
+          className="w-full flex items-center justify-center gap-2 bg-blue-700 hover:bg-blue-800 transition-all duration-200 hover:shadow-md hover:-translate-y-0.5 text-white text-sm font-semibold py-2.5 rounded-lg"
+        >
+          <UploadCloud size={18} />
+          Upload New Report
+        </button>
+
+        <div className="space-y-1 pt-2">
+          <button className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-100">
+            <Settings size={18} />
+            Settings
+          </button>
+          <button className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-100">
+            <HelpCircle size={18} />
+            Support
+          </button>
+        </div>
+      </div>
+    </aside>
+  );
+}
+
+function formatDate(value) {
+  if (!value) return null;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  return date.toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" });
+}
+
+export default function AISearch() {
+  const { isAuthenticated } = useAuth();
+  const [query, setQuery] = useState("");
+  const [messages, setMessages] = useState([]); // { role: 'user'|'assistant', text, sources?, noResultsFound? }
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+
+  async function runSearch(trimmed) {
+    if (!trimmed || loading) return;
+
+    setError(null);
+    setMessages((prev) => [...prev, { role: "user", text: trimmed }]);
+    setQuery("");
+    setLoading(true);
+
+    try {
+      const result = await searchReports(trimmed);
+      setMessages((prev) => [
+        ...prev,
+        {
+          role: "assistant",
+          text: result.answer,
+          sources: result.sources || [],
+          noResultsFound: result.noResultsFound,
+        },
+      ]);
+    } catch (err) {
+      setError(err.message || "Search failed. Please try again.");
+      setMessages((prev) => [
+        ...prev,
+        { role: "assistant", text: "Something went wrong answering that. Please try again.", sources: [], isError: true },
+      ]);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function handleSubmit(e) {
+    e.preventDefault();
+    runSearch(query.trim());
+  }
+
+  // Auto-run a query handed off from elsewhere in the app, e.g. the
+  // Dashboard header search box navigating to /search?q=... Only fires
+  // once per incoming query, and only once auth state is known.
+  const location = useLocation();
+  const ranInitialQuery = useRef(false);
+  useEffect(() => {
+    if (ranInitialQuery.current || !isAuthenticated) return;
+    const params = new URLSearchParams(location.search);
+    const initialQuery = params.get("q")?.trim();
+    if (initialQuery) {
+      ranInitialQuery.current = true;
+      runSearch(initialQuery);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAuthenticated, location.search]);
+
+  return (
+    <div className="min-h-screen bg-slate-50 flex">
+      <Sidebar />
+
+      <main className="flex-1 px-10 py-8 flex flex-col max-w-4xl mx-auto w-full">
+        <header className="mb-6">
+          <h1 className="text-2xl font-semibold text-slate-900 flex items-center gap-2">
+            <Sparkles className="text-blue-600" size={24} />
+            AI Search
+          </h1>
+          <p className="text-slate-500 mt-1">
+            Ask a question about your health records in plain language — answers are grounded
+            only in your saved reports.
+          </p>
+        </header>
+
+        {!isAuthenticated ? (
+          <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6 text-slate-500">
+            Please log in to search your health records.
+          </div>
+        ) : (
+          <>
+            <div className="flex-1 bg-white rounded-2xl border border-slate-100 shadow-sm p-6 mb-4 overflow-y-auto min-h-[320px] max-h-[60vh]">
+              {messages.length === 0 ? (
+                <div className="h-full flex flex-col items-center justify-center text-center py-12">
+                  <div className="w-12 h-12 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center mb-4">
+                    <Sparkles size={22} />
+                  </div>
+                  <p className="text-slate-600 font-medium mb-1">Ask anything about your records</p>
+                  <p className="text-slate-400 text-sm mb-5">Try one of these:</p>
+                  <div className="flex flex-col gap-2 w-full max-w-md">
+                    {EXAMPLE_QUESTIONS.map((q) => (
+                      <button
+                        key={q}
+                        type="button"
+                        onClick={() => setQuery(q)}
+                        className="text-left text-sm px-4 py-2.5 rounded-xl border border-slate-200 text-slate-600 hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700 transition-colors"
+                      >
+                        {q}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {messages.map((m, i) => (
+                    <ChatBubble key={i} message={m} />
+                  ))}
+                  {loading && (
+                    <div className="flex items-center gap-2 text-slate-400 text-sm">
+                      <Loader2 size={16} className="animate-spin" />
+                      Searching your records...
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {error && (
+              <div className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2 mb-3">
+                {error}
+              </div>
+            )}
+
+            <form onSubmit={handleSubmit} className="flex items-center gap-3">
+              <input
+                type="text"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="e.g. What was my blood sugar level in my last report?"
+                className="flex-1 rounded-xl border border-slate-200 px-4 py-3 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-200 focus:border-blue-400"
+                disabled={loading}
+              />
+              <button
+                type="submit"
+                disabled={loading || !query.trim()}
+                className="flex items-center justify-center gap-2 bg-blue-700 hover:bg-blue-800 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-semibold px-5 py-3 rounded-xl transition-colors"
+              >
+                <Send size={16} />
+                Ask
+              </button>
+            </form>
+          </>
+        )}
+      </main>
+    </div>
+  );
+}
+
+function ChatBubble({ message }) {
+  const isUser = message.role === "user";
+
+  if (isUser) {
+    return (
+      <div className="flex justify-end">
+        <div className="bg-blue-700 text-white text-sm rounded-2xl rounded-br-sm px-4 py-2.5 max-w-[80%]">
+          {message.text}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex justify-start">
+      <div
+        className={`text-sm rounded-2xl rounded-bl-sm px-4 py-3 max-w-[85%] ${
+          message.isError
+            ? "bg-red-50 text-red-700 border border-red-100"
+            : "bg-slate-50 text-slate-700 border border-slate-100"
+        }`}
+      >
+        <p className="whitespace-pre-wrap">{message.text}</p>
+
+        {message.sources && message.sources.length > 0 && (
+          <div className="mt-3 pt-3 border-t border-slate-200 space-y-1.5">
+            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide">Sources</p>
+            {message.sources.map((s) => (
+              <div key={s.report_id} className="flex items-center gap-2 text-xs text-slate-500">
+                <FileText size={13} className="shrink-0 text-slate-400" />
+                <span className="font-medium text-slate-600">{s.title || "Untitled report"}</span>
+                {s.category && <span className="text-slate-400">· {s.category}</span>}
+                {formatDate(s.report_date) && <span className="text-slate-400">· {formatDate(s.report_date)}</span>}
+                {s.file_url && (
+                  <a
+                    href={s.file_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-blue-600 hover:underline ml-1"
+                  >
+                    View
+                  </a>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

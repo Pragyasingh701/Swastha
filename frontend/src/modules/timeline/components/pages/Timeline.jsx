@@ -302,6 +302,13 @@ export default function Timeline() {
         const response = await reportService.createTimelineReport(mapped, token);
         const event = mapReportToEvent(response.report);
         setEvents((prev) => sortEvents([event, ...prev]));
+
+        // Best-effort: make the report searchable. The report itself is
+        // already saved above regardless of whether this succeeds.
+        indexReport(response.report).catch((err) => {
+          console.error('Failed to index report for AI search:', err);
+        });
+
         return event;
       } catch (error) {
         console.error('Failed to save manual timeline report:', error);
@@ -318,6 +325,11 @@ export default function Timeline() {
       await reportService.deleteTimelineReport(reportId, token);
       setEvents((prev) => prev.filter((event) => String(event.id) !== String(reportId)));
       setSelectedEvent(null);
+
+      // Best-effort: drop it from the search index too.
+      removeReportFromIndex(reportId).catch((err) => {
+        console.error('Failed to remove report from AI search index:', err);
+      });
     } catch (error) {
       console.error('Failed to delete timeline report:', error);
     }
