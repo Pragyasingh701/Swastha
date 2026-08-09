@@ -353,6 +353,17 @@ export default function FamilyVault() {
     }
   }
 
+  function notifyFamilyMembersUpdated() {
+    if (typeof window === 'undefined') return;
+
+    try {
+      window.dispatchEvent(new Event('familyMembersUpdated'));
+      localStorage.setItem('familyMembersUpdate', Date.now().toString());
+    } catch (err) {
+      console.warn('Failed to notify family member update:', err);
+    }
+  }
+
   async function loadVaultStatus() {
     if (!isAuthenticated || !token) {
       setFamilyVault(null);
@@ -512,6 +523,8 @@ export default function FamilyVault() {
     };
 
     try {
+      const shouldNotify = Boolean(editingMemberId || !form.email?.trim());
+
       if (editingMemberId) {
         await updateFamilyMember(editingMemberId, payload);
         setNotice('Family member updated successfully.');
@@ -536,6 +549,9 @@ export default function FamilyVault() {
 
       resetForm();
       await loadFamilyVault();
+      if (shouldNotify) {
+        notifyFamilyMembersUpdated();
+      }
     } catch (submitError) {
       setFieldErrors(submitError?.fieldErrors || {});
       setError(submitError.message || 'Failed to save family member');
@@ -573,6 +589,7 @@ export default function FamilyVault() {
       }
       setNotice('Family member removed successfully.');
       await loadFamilyVault();
+      notifyFamilyMembersUpdated();
     } catch (deleteError) {
       setError(deleteError.message || 'Failed to remove family member');
     } finally {

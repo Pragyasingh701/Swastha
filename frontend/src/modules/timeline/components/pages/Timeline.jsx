@@ -1,8 +1,10 @@
 import React, { useEffect, useState } from "react";
 import { useParams, useLocation, useNavigate } from "react-router-dom";
 import UploadReports from "../../../reports/components/pages/UploadReports";
+import { parseMemberNotesAndEmail } from "../../../family/pages/FamilyMember";
 import { useAuth } from "../../../../context/AuthContext";
 import * as reportService from "../../../../api/reports";
+import * as familyService from "../../../../api/family";
 import {
   LayoutGrid,
   TrendingUp,
@@ -42,7 +44,7 @@ const navItems = [
   { label: "Lab Insights", icon: TrendingUp, route: "/lab-trends" },
 ];
 
-const FILTERS = ["All Members", "Lab Reports", "Prescriptions", "MRI/Scans"];
+const FILTERS = ["All Members"];
 
 // Categories a user can pick when uploading a new report manually.
 const UPLOAD_CATEGORIES = [
@@ -126,13 +128,32 @@ const dotStyles = {
 export default function Timeline() {
   const { profileId } = useParams();
   const location = useLocation();
+  const navigate = useNavigate();
   const { token, isAuthenticated } = useAuth();
   const targetEmail = location.state?.memberEmail || new URLSearchParams(location.search).get('email') || '';
   const [activeFilter, setActiveFilter] = useState("All Members");
   const [events, setEvents] = useState([]);
+  const [familyMembers, setFamilyMembers] = useState([]);
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [selectedEvent, setSelectedEvent] = useState(null);
   const [loading, setLoading] = useState(false);
+
+  const manualCategoryFilters = [
+    ...new Set(
+      events
+        .filter((event) => event.source === 'manual')
+        .map((event) => event.category)
+        .filter(Boolean)
+    ),
+  ];
+
+  const availableFilters = ["All Members", ...manualCategoryFilters];
+
+  useEffect(() => {
+    if (activeFilter !== "All Members" && !availableFilters.includes(activeFilter)) {
+      setActiveFilter("All Members");
+    }
+  }, [activeFilter, availableFilters]);
 
   const sortEvents = (list) => {
     return [...list].sort((a, b) => {
@@ -204,6 +225,7 @@ export default function Timeline() {
       rightSub: `${report.medicines ? report.medicines : report.diagnosis || ''}`,
       stat: report.diagnosis ? { label: report.diagnosis, sub: report.medicines || '' } : undefined,
       reportDate: normalizedDate,
+      source: report.source || 'api',
     };
   };
 
@@ -226,9 +248,45 @@ export default function Timeline() {
     }
   };
 
+  const loadFamilyMembers = async () => {
+    if (!isAuthenticated || !token) {
+      setFamilyMembers([]);
+      return;
+    }
+
+    try {
+      const response = await familyService.getFamilyMembers();
+      setFamilyMembers(Array.isArray(response) ? response : []);
+    } catch (err) {
+      console.error('Failed to load family members:', err);
+      setFamilyMembers([]);
+    }
+  };
+
   useEffect(() => {
     loadTimelineEvents();
+    loadFamilyMembers();
   }, [profileId, isAuthenticated, token, targetEmail]);
+
+  useEffect(() => {
+    const handleFamilyMembersUpdated = () => {
+      loadFamilyMembers();
+    };
+
+    const handleStorageEvent = (event) => {
+      if (event.key === 'familyMembersUpdate') {
+        loadFamilyMembers();
+      }
+    };
+
+    window.addEventListener('familyMembersUpdated', handleFamilyMembersUpdated);
+    window.addEventListener('storage', handleStorageEvent);
+
+    return () => {
+      window.removeEventListener('familyMembersUpdated', handleFamilyMembersUpdated);
+      window.removeEventListener('storage', handleStorageEvent);
+    };
+  }, [isAuthenticated, token]);
 
   async function handleAddEvent(newEvent) {
     const { file, ...rest } = newEvent;
@@ -285,10 +343,56 @@ export default function Timeline() {
 
           <div className="flex items-center gap-3">
             <div className="flex -space-x-2">
-              <div className="w-9 h-9 rounded-full bg-gradient-to-br from-pink-300 to-orange-300 ring-2 ring-white transition-transform duration-200 hover:scale-110 hover:z-10" />
-              <div className="w-9 h-9 rounded-full bg-blue-600 text-white text-xs font-medium flex items-center justify-center ring-2 ring-white transition-transform duration-200 hover:scale-110">
-                +2
-              </div>
+              {familyMembers.slice(0, 3).map((member, index) => {
+                const initials = member.name
+                  ? member.name
+                      .split(' ')
+                      .map((part) => part[0])
+                      .slice(0, 2)
+                      .join('')
+                      .toUpperCase()
+                  : '?';
+                const { email: parsedEmail } = parseMemberNotesAndEmail(member.notes || '');
+                const memberEmail = member.email || parsedEmail || '';
+
+                return (
+                  <button
+                    key={member.id || `member-${index}`}
+                    type="button"
+                    onClick={() => {
+                      if (memberEmail) {
+                        navigate(`/timeline?email=${encodeURIComponent(memberEmail)}`);
+                      } else {
+                        navigate('/timeline');
+                      }
+                    }}
+                    className="group"
+                    title={member.name || 'Family member'}
+                  >
+                    <div
+                      className="flex h-9 min-w-[36px] items-center justify-center overflow-hidden rounded-full bg-blue-600 px-0 text-center text-xs font-medium text-white ring-2 ring-white transition-all duration-200 group-hover:min-w-[140px] group-hover:px-4"
+                      aria-label={member.name || 'Family member'}
+                    >
+                      <span className="flex items-center justify-center transition-opacity duration-200 group-hover:opacity-0">
+                        {initials}
+                      </span>
+                      <span className="hidden whitespace-nowrap text-sm font-semibold transition-all duration-200 group-hover:inline-flex">
+                        {member.name || 'Family member'}
+                      </span>
+                    </div>
+                  </button>
+                );
+              })}
+              {familyMembers.length > 3 && (
+                <div className="relative group">
+                  <div
+                    className="w-9 h-9 rounded-full bg-slate-100 text-slate-600 text-xs font-medium flex items-center justify-center ring-2 ring-white transition-transform duration-200 hover:scale-110"
+                    aria-label={`${familyMembers.length - 3} more family members`}
+                  >
+                    +{familyMembers.length - 3}
+                  </div>
+                </div>
+              )}
             </div>
             <button className="w-10 h-10 rounded-full bg-white border border-slate-200 flex items-center justify-center text-slate-500 transition-all duration-200 hover:border-blue-300 hover:text-blue-600 hover:shadow-sm">
               <Bell size={18} />
@@ -296,7 +400,7 @@ export default function Timeline() {
           </div>
         </header>
 
-        <FilterBar activeFilter={activeFilter} setActiveFilter={setActiveFilter} />
+        <FilterBar activeFilter={activeFilter} setActiveFilter={setActiveFilter} filters={availableFilters} />
 
         <TimelineList activeFilter={activeFilter} events={events} loading={loading} onSelectEvent={setSelectedEvent} />
       </main>
@@ -387,7 +491,7 @@ className="w-full flex items-center justify-center gap-2 bg-blue-700 hover:bg-bl
 
 /* --------------------------- Filter bar --------------------------- */
 
-function FilterBar({ activeFilter, setActiveFilter }) {
+function FilterBar({ activeFilter, setActiveFilter, filters = ["All Members"] }) {
   return (
     <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4 mb-8 flex items-center justify-between flex-wrap gap-3">
       <div className="flex items-center gap-3 flex-wrap">
@@ -398,7 +502,7 @@ function FilterBar({ activeFilter, setActiveFilter }) {
 
         <div className="w-px h-5 bg-slate-200" />
 
-        {FILTERS.map((filter) => {
+        {filters.map((filter) => {
           const isActive = filter === activeFilter;
           return (
             <button
@@ -412,7 +516,7 @@ function FilterBar({ activeFilter, setActiveFilter }) {
                 }`}
             >
               {filter}
-              {isActive && (
+              {isActive && filter !== "All Members" && (
                 <X
                   size={13}
                   className="opacity-60 hover:opacity-100"
