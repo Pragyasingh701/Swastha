@@ -37,6 +37,7 @@ const navItems = [
   { label: "Medical Vault", icon: Folder, active: true, route: "/vault" },
   { label: "Family Records", icon: Users, route: "/family-vault" },
   { label: "Lab Insights", icon: TrendingUp, route: "/lab-trends" },
+  { label: "Ask Swastha", icon: Sparkles, route: "/search" },
 ];
 
 const summaryCards = [

@@ -17,14 +17,14 @@ import {
   Loader2,
 } from "lucide-react";
 
-// Same nav list as Dashboard.jsx / Timeline.jsx, with nothing else active
-// (AI Search doesn't have its own top-level nav entry yet — reached via /search).
+// Same nav list as Dashboard.jsx / Timeline.jsx / etc.
 const navItems = [
   { label: "Dashboard", icon: LayoutGrid, route: "/dashboard" },
   { label: "Health Timeline", icon: TrendingUp, route: "/timeline" },
   { label: "Medical Vault", icon: Folder, route: "/vault" },
   { label: "Family Records", icon: Users, route: "/family-vault" },
   { label: "Lab Insights", icon: TrendingUp, route: "/lab-trends" },
+  { label: "Ask Swastha", icon: Sparkles, route: "/search" },
 ];
 
 const EXAMPLE_QUESTIONS = [
@@ -64,14 +64,6 @@ function Sidebar() {
             </button>
           );
         })}
-
-        <button
-          type="button"
-          className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium bg-blue-100 text-blue-700"
-        >
-          <Sparkles size={18} />
-          AI Search
-        </button>
       </nav>
 
       <div className="space-y-3 pt-4">
@@ -172,7 +164,7 @@ export default function AISearch() {
         <header className="mb-6">
           <h1 className="text-2xl font-semibold text-slate-900 flex items-center gap-2">
             <Sparkles className="text-blue-600" size={24} />
-            AI Search
+            Ask Swastha
           </h1>
           <p className="text-slate-500 mt-1">
             Ask a question about your health records in plain language — answers are grounded

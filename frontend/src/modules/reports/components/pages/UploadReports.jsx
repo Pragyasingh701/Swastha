@@ -8,11 +8,21 @@ import {
   Building2,
   Pill,
   FileHeart,
+  Sparkles,
+  Loader2,
 } from "lucide-react";
+import { extractReportFromFile } from "../../../../api/search";
+
+// Gemini Vision extraction only accepts rasterized images — PDFs aren't
+// supported there yet, see rag/src/routes/extract.js.
+const EXTRACTABLE_TYPES = ["image/jpeg", "image/png", "image/webp"];
 
 export default function UploadReports({ onClose, onSubmit }) {
   const [hasPrescription, setHasPrescription] = useState(true);
   const [activeTab, setActiveTab] = useState("upload");
+  const [extracting, setExtracting] = useState(false);
+  const [extractError, setExtractError] = useState(null);
+  const [extracted, setExtracted] = useState(false);
 
   const [formData, setFormData] = useState({
   title: "",
@@ -46,6 +56,13 @@ export default function UploadReports({ onClose, onSubmit }) {
       ...prev,
       [name]: file,
     }));
+
+    setExtracted(false);
+    setExtractError(null);
+
+    if (file && EXTRACTABLE_TYPES.includes(file.type)) {
+      runExtraction(file);
+    }
   } else {
     setFormData((prev) => ({
       ...prev,
@@ -53,6 +70,34 @@ export default function UploadReports({ onClose, onSubmit }) {
     }));
   }
   };
+
+  async function runExtraction(file) {
+    setExtracting(true);
+    setExtractError(null);
+    try {
+      const { fields } = await extractReportFromFile(file);
+      setFormData((prev) => ({
+        ...prev,
+        title: fields.title || prev.title,
+        doctor: fields.doctor || prev.doctor,
+        hospital: fields.hospital || prev.hospital,
+        date: fields.reportDate || prev.date,
+        category: fields.category || prev.category,
+        diagnosis: fields.diagnosis || prev.diagnosis,
+        medicines: fields.medicines || prev.medicines,
+        notes: fields.notes || prev.notes,
+      }));
+      setExtracted(true);
+      // Hand off to Manual Entry so the user reviews/corrects AI-extracted
+      // fields before saving — never save Vision output unreviewed, it can
+      // misread handwriting, dosages, or dates.
+      setActiveTab("manual");
+    } catch (err) {
+      setExtractError(err.message || "Could not read this file automatically. Please fill the form manually.");
+    } finally {
+      setExtracting(false);
+    }
+  }
 
   const handleSubmit = () => {
     if (activeTab === 'upload' && !formData.file) {
@@ -177,12 +222,47 @@ export default function UploadReports({ onClose, onSubmit }) {
                   <p className="mt-3 text-green-600 text-sm font-medium">✓ {formData.file.name}</p>
                 )}
 
-                <div className="bg-blue-50 mt-5 rounded-lg p-4 text-left">
-                  <p className="font-semibold text-blue-700">🤖 AI Extraction (Coming Soon)</p>
-                  <p className="text-sm text-gray-600">
-                    Doctor, medicines, diagnosis and hospital will be detected automatically.
-                  </p>
-                </div>
+                {formData.file && !EXTRACTABLE_TYPES.includes(formData.file.type) && (
+                  <div className="bg-amber-50 mt-5 rounded-lg p-4 text-left">
+                    <p className="font-semibold text-amber-700">PDF uploaded</p>
+                    <p className="text-sm text-gray-600">
+                      AI extraction currently works on JPG/PNG images only. Please fill in the
+                      details manually under the Manual Entry tab.
+                    </p>
+                  </div>
+                )}
+
+                {extracting && (
+                  <div className="bg-blue-50 mt-5 rounded-lg p-4 text-left flex items-center gap-3">
+                    <Loader2 className="w-5 h-5 text-blue-600 animate-spin shrink-0" />
+                    <div>
+                      <p className="font-semibold text-blue-700">Reading your report with AI...</p>
+                      <p className="text-sm text-gray-600">
+                        Detecting doctor, medicines, diagnosis and hospital automatically.
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                {!extracting && extracted && (
+                  <div className="bg-green-50 mt-5 rounded-lg p-4 text-left flex items-center gap-3">
+                    <Sparkles className="w-5 h-5 text-green-600 shrink-0" />
+                    <div>
+                      <p className="font-semibold text-green-700">Details extracted</p>
+                      <p className="text-sm text-gray-600">
+                        Review the auto-filled fields under Manual Entry before saving — AI can
+                        misread handwriting or numbers.
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                {!extracting && extractError && (
+                  <div className="bg-red-50 mt-5 rounded-lg p-4 text-left">
+                    <p className="font-semibold text-red-700">Couldn't auto-read this file</p>
+                    <p className="text-sm text-gray-600">{extractError}</p>
+                  </div>
+                )}
               </div>
             </>
           )}

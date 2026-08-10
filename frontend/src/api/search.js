@@ -65,4 +65,31 @@ export async function removeReportFromIndex(reportId) {
   });
 }
 
-export default { searchReports, indexReport, removeReportFromIndex };
+/**
+ * Upload a medical report image and get back AI-extracted fields
+ * (title, doctor, hospital, diagnosis, medicines, notes, ...) for the user
+ * to review/edit before saving. Does not save anything itself — the file
+ * upload for the saved report's fileUrl still goes through
+ * backend/api/auth/upload as before, this is extraction-only.
+ * Returns { fields }.
+ */
+export async function extractReportFromFile(file) {
+  const token = getStoredToken();
+  const form = new FormData();
+  form.append('file', file);
+
+  const response = await fetch(`${RAG_BASE_URL}/extract`, {
+    method: 'POST',
+    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+    body: form, // no Content-Type header — browser sets the multipart boundary itself
+  });
+  const data = await response.json();
+  if (!response.ok) {
+    const error = new Error(data.error || data.message || 'Extraction request failed');
+    error.details = data;
+    throw error;
+  }
+  return data;
+}
+
+export default { searchReports, indexReport, removeReportFromIndex, extractReportFromFile };

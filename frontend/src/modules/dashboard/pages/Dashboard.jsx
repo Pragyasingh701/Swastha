@@ -8,7 +8,6 @@ import {
   Folder,
   Users,
   ClipboardList,
-  Search,
   Bell,
   Settings,
   HelpCircle,
@@ -43,8 +42,8 @@ const navItems = [
   { label: "Health Timeline", icon: TrendingUp, route: "/timeline" },
   { label: "Medical Vault", icon: Folder, route: "/vault" },
   { label: "Family Records", icon: Users, route: "/family-vault" },
-  
   { label: "Lab Insights", icon: TrendingUp, route: "/lab-trends" },
+  { label: "Ask Swastha", icon: Sparkles, route: "/search" },
 ];
 
 const recentUploads = [
@@ -173,36 +172,22 @@ function Sidebar() {
 function Header({ profile }) {
   const { logout } = useAuth();
   const navigate = useNavigate();
-  const [headerQuery, setHeaderQuery] = useState('');
 
   const handleLogout = () => {
     logout();
     navigate('/login', { replace: true });
   };
 
-  const handleHeaderSearch = (e) => {
-    e.preventDefault();
-    const trimmed = headerQuery.trim();
-    if (!trimmed) return;
-    // AI Search owns the actual search UI/logic — this just hands the query off.
-    navigate(`/search?q=${encodeURIComponent(trimmed)}`);
-  };
-
   return (
     <header className="flex items-center gap-4 px-6 lg:px-8 py-5 border-b border-slate-200 bg-white">
-      <form onSubmit={handleHeaderSearch} className="flex-1 relative max-w-xl">
-        <Search
-          size={16}
-          className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
-        />
-        <input
-          type="text"
-          value={headerQuery}
-          onChange={(e) => setHeaderQuery(e.target.value)}
-          placeholder="Search medical history, labs, or insights..."
-          className="w-full bg-slate-50 border border-slate-200 rounded-lg pl-9 pr-4 py-2.5 text-sm text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-200"
-        />
-      </form>
+      <button
+        type="button"
+        onClick={() => navigate('/search')}
+        className="flex-1 max-w-xl flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-lg px-4 py-2.5 text-sm text-slate-400 transition-colors hover:border-blue-300 hover:text-blue-600"
+      >
+        <Sparkles size={16} />
+        Ask Swastha about your health records...
+      </button>
 
       <button className="relative p-2 rounded-lg hover:bg-slate-100">
         <Bell size={20} className="text-slate-600" />
