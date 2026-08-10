@@ -19,6 +19,7 @@ function normalizeReport(row) {
     medicines: row.medicines,
     notes: row.notes,
     fileUrl: row.file_url || null,
+    unclearFields: Array.isArray(row.unclear_fields) ? row.unclear_fields : [],
     source: row.source || 'manual',
     createdAt: row.created_at || null,
     updatedAt: row.updated_at || null,
@@ -76,6 +77,7 @@ export const createTimelineReport = async (reportData) => {
     medicines: String(reportData.medicines || '').trim(),
     notes: String(reportData.notes || '').trim() || null,
     file_url: reportData.fileUrl || null,
+    unclear_fields: Array.isArray(reportData.unclearFields) ? reportData.unclearFields : [],
     source: reportData.source || 'manual',
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
@@ -95,6 +97,58 @@ export const createTimelineReport = async (reportData) => {
     return normalizeReport(data);
   } catch (err) {
     console.error('Supabase create timeline report error:', err.message || err);
+    throw err;
+  }
+};
+
+export const updateTimelineReport = async (userId, reportId, reportData) => {
+  const normalizedUserId = String(userId || '').trim();
+  const normalizedReportId = String(reportId || '').trim();
+  const reportDateValue = reportData?.reportDate || reportData?.date || null;
+
+  if (!normalizedUserId || !normalizedReportId || !isValidDateValue(reportDateValue) || !supabase) {
+    throw new Error('Missing userId, reportId, database client, or invalid report data.');
+  }
+
+  const payload = {
+    title: String(reportData.title || '').trim(),
+    doctor: String(reportData.doctor || '').trim(),
+    hospital: String(reportData.hospital || '').trim(),
+    category: String(reportData.category || '').trim(),
+    report_date: toISODate(reportDateValue),
+    diagnosis: String(reportData.diagnosis || '').trim(),
+    medicines: String(reportData.medicines || '').trim(),
+    notes: String(reportData.notes || '').trim() || null,
+    file_url: reportData.fileUrl || null,
+    unclear_fields: Array.isArray(reportData.unclearFields) ? reportData.unclearFields : [],
+    updated_at: new Date().toISOString(),
+  };
+
+  try {
+    const { data, error } = await supabase
+      .from(REPORTS_TABLE)
+      .update(payload)
+      // Scoped by user_id, same as delete — a user can only ever edit
+      // their own reports, never someone else's by guessing an id.
+      .eq(REPORTS_USER_ID_COLUMN, normalizedUserId)
+      .eq('id', normalizedReportId)
+      .select('*')
+      .single();
+
+    if (error) {
+      // PGRST116 = .single() matched zero rows — either the id doesn't
+      // exist, or it belongs to a different user. Treat both as "not
+      // found" rather than a server error, and don't distinguish between
+      // them in the response (that would leak which ids exist).
+      if (error.code === 'PGRST116') {
+        return null;
+      }
+      throw error;
+    }
+
+    return normalizeReport(data);
+  } catch (err) {
+    console.error('Supabase update timeline report error:', err.message || err);
     throw err;
   }
 };

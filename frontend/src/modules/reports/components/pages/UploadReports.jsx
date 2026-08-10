@@ -10,31 +10,78 @@ import {
   FileHeart,
   Sparkles,
   Loader2,
+  CheckCircle2,
 } from "lucide-react";
 import { extractReportFromFile } from "../../../../api/search";
+import { authService } from "../../../../services/auth";
 
 // Gemini Vision extraction only accepts rasterized images — PDFs aren't
 // supported there yet, see rag/src/routes/extract.js.
 const EXTRACTABLE_TYPES = ["image/jpeg", "image/png", "image/webp"];
 
-export default function UploadReports({ onClose, onSubmit }) {
+// event.reportDate from Timeline is an ISO timestamp (e.g.
+// "2026-08-10T00:00:00+00:00") — the date <input> needs a bare YYYY-MM-DD.
+function toDateInputValue(value) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toISOString().slice(0, 10);
+}
+
+function emptyFormData() {
+  return {
+    title: "",
+    doctor: "",
+    hospital: "",
+    date: "",
+    diagnosis: "",
+    medicines: "",
+    notes: "",
+    category: "Prescription",
+    file: null,
+    fileUrl: null,
+  };
+}
+
+// Pre-fills the form from an existing timeline event when editing, instead
+// of starting blank.
+function formDataFromEvent(event) {
+  if (!event) return emptyFormData();
+  return {
+    title: event.title || "",
+    doctor: event.doctor || "",
+    hospital: event.hospital || "",
+    date: toDateInputValue(event.reportDate),
+    diagnosis: event.diagnosis || "",
+    medicines: event.medicines || "",
+    notes: event.notes || "",
+    category: event.category || "Prescription",
+    file: null,
+    fileUrl: event.fileUrl || null,
+  };
+}
+
+export default function UploadReports({ onClose, onSubmit, token, initialEvent }) {
+  const isEditing = Boolean(initialEvent);
   const [hasPrescription, setHasPrescription] = useState(true);
-  const [activeTab, setActiveTab] = useState("upload");
+  // Editing an existing report goes straight to Manual Entry — there's no
+  // new file to upload/extract from in that flow, just the saved fields.
+  const [activeTab, setActiveTab] = useState(isEditing ? "manual" : "upload");
   const [extracting, setExtracting] = useState(false);
   const [extractError, setExtractError] = useState(null);
   const [extracted, setExtracted] = useState(false);
+  const [uploadingFile, setUploadingFile] = useState(false);
+  const [fileUploadError, setFileUploadError] = useState(null);
+  // Field keys AI extraction couldn't confidently read (e.g. illegible
+  // handwriting) — highlighted in the form so the patient knows to fill
+  // them in if they know the answer, or leave blank for a doctor to check
+  // the original document later. Maps rag's field names (reportDate) to
+  // this form's field names (date) where they differ.
+  const [unclearFields, setUnclearFields] = useState(
+    () => new Set(isEditing ? initialEvent.unclearFields || [] : [])
+  );
 
-  const [formData, setFormData] = useState({
-  title: "",
-  doctor: "",
-  hospital: "",
-  date: "",
-  diagnosis: "",
-  medicines: "",
-  notes: "",
-  category: "Prescription",
-  file: null,
-});
+  const [formData, setFormData] = useState(() => formDataFromEvent(initialEvent));
 
   const handleChange = (e) => {
   const { name, value, files } = e.target;
@@ -55,27 +102,65 @@ export default function UploadReports({ onClose, onSubmit }) {
     setFormData((prev) => ({
       ...prev,
       [name]: file,
+      fileUrl: null,
     }));
 
     setExtracted(false);
     setExtractError(null);
+    setFileUploadError(null);
+    setUnclearFields(new Set());
 
-    if (file && EXTRACTABLE_TYPES.includes(file.type)) {
-      runExtraction(file);
+    if (file) {
+      runFileUpload(file);
+      if (EXTRACTABLE_TYPES.includes(file.type)) {
+        runExtraction(file);
+      }
     }
   } else {
     setFormData((prev) => ({
       ...prev,
       [name]: value,
     }));
+    // The patient has now either filled in what AI couldn't read, or
+    // deliberately left it — either way it's no longer "AI couldn't read
+    // this", so stop flagging it as unclear.
+    setUnclearFields((prev) => {
+      if (!prev.has(name)) return prev;
+      const next = new Set(prev);
+      next.delete(name);
+      return next;
+    });
   }
   };
+
+  async function runFileUpload(file) {
+    setUploadingFile(true);
+    setFileUploadError(null);
+    try {
+      const result = await authService.uploadDocument(file, token);
+      // Use the absolute URL, not relativeUrl — this is opened directly
+      // from the browser (e.g. Timeline's "View original document" link),
+      // which would otherwise resolve a relative /uploads/... path against
+      // the frontend's own origin instead of the backend's.
+      setFormData((prev) => ({
+        ...prev,
+        fileUrl: result.url || null,
+      }));
+    } catch (err) {
+      // Not fatal — the report can still be saved without an attached
+      // file, the timeline card just won't have a "View original
+      // document" link for it.
+      setFileUploadError(err.message || "Could not upload the file. The report can still be saved without it.");
+    } finally {
+      setUploadingFile(false);
+    }
+  }
 
   async function runExtraction(file) {
     setExtracting(true);
     setExtractError(null);
     try {
-      const { fields } = await extractReportFromFile(file);
+      const { fields, unclear = [] } = await extractReportFromFile(file);
       setFormData((prev) => ({
         ...prev,
         title: fields.title || prev.title,
@@ -87,6 +172,8 @@ export default function UploadReports({ onClose, onSubmit }) {
         medicines: fields.medicines || prev.medicines,
         notes: fields.notes || prev.notes,
       }));
+      // rag's field name is "reportDate", this form's is "date" — map it.
+      setUnclearFields(new Set(unclear.map((key) => (key === 'reportDate' ? 'date' : key))));
       setExtracted(true);
       // Hand off to Manual Entry so the user reviews/corrects AI-extracted
       // fields before saving — never save Vision output unreviewed, it can
@@ -105,18 +192,19 @@ export default function UploadReports({ onClose, onSubmit }) {
       return;
     }
 
+    if (uploadingFile) {
+      alert('Your file is still uploading — please wait a moment and try again.');
+      return;
+    }
+
+    // Only Title, Visit Date, and Category are hard requirements (matches
+    // backend/utils/timelineValidation.js). Doctor/Hospital/Diagnosis/
+    // Medicines are allowed blank — a field AI couldn't read from illegible
+    // handwriting and the patient doesn't know either gets saved blank and
+    // flagged, rather than forced to a fake value, so a clinician reviewing
+    // it later knows to check the original document instead of trusting it.
     if (!formData.title.trim()) {
       alert('Please enter Report Title.');
-      return;
-    }
-
-    if (!formData.doctor.trim()) {
-      alert('Please enter Doctor Name.');
-      return;
-    }
-
-    if (!formData.hospital.trim()) {
-      alert('Please enter Hospital Name.');
       return;
     }
 
@@ -130,19 +218,13 @@ export default function UploadReports({ onClose, onSubmit }) {
       return;
     }
 
-    if (!formData.diagnosis.trim()) {
-      alert('Please enter Diagnosis.');
-      return;
-    }
-
-    if (!formData.medicines.trim()) {
-      alert('Please enter Medicines.');
-      return;
-    }
-
     onSubmit({
       id: `temp-${Date.now()}`,
       ...formData,
+      // Field names still unclear/unfilled at save time — surfaced on the
+      // saved report so a doctor viewing it later knows to check the
+      // original document rather than trust an empty field as "nothing".
+      unclearFields: Array.from(unclearFields).filter((key) => !String(formData[key] || '').trim()),
     });
 
     onClose();
@@ -158,7 +240,7 @@ export default function UploadReports({ onClose, onSubmit }) {
         <div className="flex justify-between items-center border-b p-6">
 
           <h2 className="text-2xl font-semibold">
-            Upload New Medical Report
+            {isEditing ? "Edit Medical Report" : "Upload New Medical Report"}
           </h2>
 
           <button onClick={onClose}>
@@ -168,6 +250,7 @@ export default function UploadReports({ onClose, onSubmit }) {
         </div>
 
         <div className="p-6 space-y-6">
+{!isEditing && (
 <div className="flex bg-gray-100 rounded-xl p-1">
 
     <button
@@ -199,9 +282,10 @@ export default function UploadReports({ onClose, onSubmit }) {
     </button>
 
 </div>
+)}
           {/* Upload */}
 
-          {activeTab === "upload" && (
+          {!isEditing && activeTab === "upload" && (
             <>
               <div className="border-2 border-dashed rounded-xl p-8 text-center">
                 <UploadCloud className="mx-auto w-12 h-12 text-blue-600 mb-3" />
@@ -219,7 +303,25 @@ export default function UploadReports({ onClose, onSubmit }) {
 
                 <p className="text-xs text-gray-500 mt-2">Maximum upload size: 10 MB</p>
                 {formData.file && (
-                  <p className="mt-3 text-green-600 text-sm font-medium">✓ {formData.file.name}</p>
+                  <p className="mt-3 text-green-600 text-sm font-medium flex items-center justify-center gap-1.5">
+                    {uploadingFile ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        Uploading {formData.file.name}...
+                      </>
+                    ) : formData.fileUrl ? (
+                      <>
+                        <CheckCircle2 className="w-4 h-4" />
+                        {formData.file.name} attached
+                      </>
+                    ) : (
+                      <>✓ {formData.file.name}</>
+                    )}
+                  </p>
+                )}
+
+                {!uploadingFile && fileUploadError && (
+                  <p className="mt-2 text-xs text-amber-600">{fileUploadError}</p>
                 )}
 
                 {formData.file && !EXTRACTABLE_TYPES.includes(formData.file.type) && (
@@ -270,7 +372,25 @@ export default function UploadReports({ onClose, onSubmit }) {
           {/* Manual Form */}
 
           {activeTab === "manual" && (
-            <div className="grid grid-cols-2 gap-5">
+            <div className="space-y-5">
+              {unclearFields.size > 0 && (
+                <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 flex items-start gap-3">
+                  <span className="text-amber-600 text-lg leading-none mt-0.5">⚠</span>
+                  <div>
+                    <p className="font-semibold text-amber-700">
+                      AI couldn't confidently read {unclearFields.size === 1 ? "one field" : `${unclearFields.size} fields`}
+                    </p>
+                    <p className="text-sm text-gray-600 mt-1">
+                      Fields marked <span className="font-medium text-amber-700">"AI unsure"</span> below are
+                      blank or low-confidence — usually from illegible handwriting. Fill them in if you know
+                      the answer, or leave them blank: the saved report will flag them so a doctor can check
+                      the original document later instead of trusting a guess.
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              <div className="grid grid-cols-2 gap-5">
               <div className="col-span-2">
                 <label className="font-medium">
                   Report Title <span className="text-red-500">*</span>
@@ -286,29 +406,21 @@ export default function UploadReports({ onClose, onSubmit }) {
                 />
               </div>
 
-              <div>
-                <label className="font-medium">
-                  Doctor Name <span className="text-red-500">*</span>
-                </label>
-                <input
-                  name="doctor"
-                  value={formData.doctor}
-                  onChange={handleChange}
-                  className="w-full border rounded-lg p-3 mt-1"
-                />
-              </div>
+              <FormField
+                label="Doctor Name"
+                name="doctor"
+                value={formData.doctor}
+                onChange={handleChange}
+                unclear={unclearFields.has('doctor')}
+              />
 
-              <div>
-                <label className="font-medium">
-                  Hospital <span className="text-red-500">*</span>
-                </label>
-                <input
-                  name="hospital"
-                  value={formData.hospital}
-                  onChange={handleChange}
-                  className="w-full border rounded-lg p-3 mt-1"
-                />
-              </div>
+              <FormField
+                label="Hospital"
+                name="hospital"
+                value={formData.hospital}
+                onChange={handleChange}
+                unclear={unclearFields.has('hospital')}
+              />
 
               <div>
                 <label className="font-medium">
@@ -319,7 +431,7 @@ export default function UploadReports({ onClose, onSubmit }) {
                   name="date"
                   value={formData.date}
                   onChange={handleChange}
-                  className="w-full border rounded-lg p-3 mt-1"
+                  className={`w-full border rounded-lg p-3 mt-1 ${unclearFields.has('date') ? 'border-amber-400 bg-amber-50' : ''}`}
                 />
               </div>
 
@@ -343,46 +455,36 @@ export default function UploadReports({ onClose, onSubmit }) {
 
               </div>
 
-              <div>
-                <label className="font-medium">
-                  Diagnosis <span className="text-red-500">*</span>
-                </label>
+              <FormField
+                label="Diagnosis"
+                name="diagnosis"
+                value={formData.diagnosis}
+                onChange={handleChange}
+                unclear={unclearFields.has('diagnosis')}
+                textarea
+              />
 
-                <textarea
-                  rows={3}
-                  name="diagnosis"
-                  value={formData.diagnosis}
-                  onChange={handleChange}
-                  className="w-full border rounded-lg p-3 mt-1"
-                />
-              </div>
-
-              <div>
-                <label className="font-medium">
-                  Medicines <span className="text-red-500">*</span>
-                </label>
-
-                <textarea
-                  rows={3}
-                  name="medicines"
-                  value={formData.medicines}
-                  onChange={handleChange}
-                  className="w-full border rounded-lg p-3 mt-1"
-                />
-              </div>
+              <FormField
+                label="Medicines"
+                name="medicines"
+                value={formData.medicines}
+                onChange={handleChange}
+                unclear={unclearFields.has('medicines')}
+                textarea
+              />
 
               <div className="col-span-2">
-                <label className="font-medium">Notes</label>
-
-                <textarea
-                  rows={3}
+                <FormField
+                  label="Notes"
                   name="notes"
                   value={formData.notes}
                   onChange={handleChange}
-                  className="w-full border rounded-lg p-3 mt-1"
+                  unclear={unclearFields.has('notes')}
+                  textarea
                 />
               </div>
 
+              </div>
             </div>
           )}
 
@@ -401,7 +503,7 @@ export default function UploadReports({ onClose, onSubmit }) {
               onClick={handleSubmit}
               className="bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700"
             >
-              Save Report
+              {isEditing ? "Save Changes" : "Save Report"}
             </button>
 
           </div>
@@ -410,6 +512,30 @@ export default function UploadReports({ onClose, onSubmit }) {
 
       </div>
 
+    </div>
+  );
+}
+
+function FormField({ label, name, value, onChange, unclear, textarea }) {
+  const Tag = textarea ? "textarea" : "input";
+  return (
+    <div>
+      <label className="font-medium flex items-center gap-2">
+        {label}
+        {unclear && (
+          <span className="text-xs font-semibold text-amber-600 bg-amber-100 px-2 py-0.5 rounded-full">
+            AI unsure
+          </span>
+        )}
+      </label>
+      <Tag
+        {...(textarea ? { rows: 3 } : {})}
+        name={name}
+        value={value}
+        onChange={onChange}
+        placeholder={unclear ? "Fill in if you know it, or leave blank" : undefined}
+        className={`w-full border rounded-lg p-3 mt-1 ${unclear ? 'border-amber-400 bg-amber-50' : ''}`}
+      />
     </div>
   );
 }

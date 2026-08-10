@@ -99,34 +99,55 @@ export async function embedTexts(texts, opts) {
   return results;
 }
 
+// Fields the model is allowed to report as "unclear" — matches the keys
+// returned in `fields` below (minus `category`, which always gets a
+// best-guess default rather than being left blank).
+const EXTRACTABLE_FIELD_KEYS = ['title', 'doctor', 'hospital', 'reportDate', 'diagnosis', 'medicines', 'notes'];
+
 /**
  * Extract structured medical report fields from an uploaded image/PDF using
  * Gemini Vision — same pattern as backend's certificateParserService.js,
  * but for report content (title/doctor/hospital/diagnosis/medicines/notes)
  * instead of certificate verification.
  *
+ * Handwritten prescriptions are the primary real-world case this is used
+ * for (patients frequently have no printed/soft copy). No vision model
+ * reliably reads bad handwriting, so this is intentionally conservative:
+ * the prompt instructs Gemini to leave a field blank rather than guess
+ * when it's genuinely illegible, and `unclear` reports back which fields
+ * it couldn't read so the UI can flag them for the patient to fill in
+ * manually — or, if the patient doesn't know either, flag them for a
+ * doctor to check the original file later rather than silently guessing.
+ *
  * @param {{ data: string, mime: string }} payload - base64 file data + mime type
- * @returns {object} extracted fields — caller must treat every field as
- *   possibly empty/wrong and let the user review before saving.
+ * @returns {{ fields: object, unclear: string[] }} extracted fields plus
+ *   the list of field keys Gemini flagged as illegible/uncertain. Caller
+ *   must still treat every field as possibly wrong, even ones not flagged.
  */
 export async function extractReportFromImage(payload) {
   if (!payload?.data || !payload?.mime) {
     throw new Error('extractReportFromImage: payload with data and mime is required');
   }
 
-  const promptText = `Analyze this uploaded medical document image (prescription, lab report, scan, or similar). Extract the following fields as best you can from what's visible:
+  const promptText = `Analyze this uploaded medical document image (prescription, lab report, scan, or similar). This is very often a HANDWRITTEN doctor's prescription — handwriting can be genuinely illegible, and that is expected and fine.
+
+Extract the following fields:
 
 1. title (string: a short descriptive title, e.g. "Diabetes Follow-up" or "CBC Lab Report")
-2. doctor (string: doctor's name if present, else "")
-3. hospital (string: hospital/clinic/lab name if present, else "")
-4. reportDate (string: YYYY-MM-DD if a date is visible, else null)
-5. category (string: one of "Prescription", "Lab Report", "Imaging", "Vaccination", "Consultation" — pick the closest match)
-6. diagnosis (string: diagnosis/findings mentioned, else "")
-7. medicines (string: medicines/dosages mentioned, comma-separated, else "")
-8. notes (string: a plain-text transcription of all other clinically relevant text on the document — test values, instructions, observations. This is the most important field, used for search later, so be thorough.)
+2. doctor (string: doctor's name if legible)
+3. hospital (string: hospital/clinic/lab name if legible)
+4. reportDate (string: YYYY-MM-DD if a date is legible)
+5. category (string: one of "Prescription", "Lab Report", "Imaging", "Vaccination", "Consultation" — always pick your best-guess closest match, this field should never be left blank)
+6. diagnosis (string: diagnosis/findings if legible)
+7. medicines (string: medicines/dosages if legible, comma-separated)
+8. notes (string: plain-text transcription of all other clinically relevant text that IS legible — test values, instructions, observations)
+
+CRITICAL RULE: for fields 2, 3, 4, 6, 7, 8 — if the relevant handwriting or text is genuinely illegible, ambiguous, or absent, return an empty string "" (or null for reportDate) for that field. Do NOT guess, do NOT invent a plausible-sounding value, do NOT fill in what a typical prescription "probably" says. A blank field the patient can fill in themselves is far better than a confident-looking wrong answer on a medical document — getting a medicine name or dosage wrong could be dangerous. Only report what you can actually read.
+
+Also return an "unclear" array listing exactly which of these field names (from: doctor, hospital, reportDate, diagnosis, medicines, notes) you left blank or are genuinely unsure about, even if you provided a low-confidence guess for it anyway. If everything was clearly legible, return an empty array.
 
 Respond strictly in JSON format with exactly these keys. Example:
-{"title": "Diabetes Follow-up", "doctor": "Dr. Ananya Sharma", "hospital": "Apollo Hospitals", "reportDate": "2026-08-09", "category": "Prescription", "diagnosis": "Type 2 Diabetes Mellitus", "medicines": "Metformin 500mg twice daily", "notes": "Fasting blood glucose 162 mg/dL, HbA1c 7.8%. BP 138/88. Advised low-carb diet."}`;
+{"title": "Diabetes Follow-up", "doctor": "Dr. Ananya Sharma", "hospital": "", "reportDate": "2026-08-09", "category": "Prescription", "diagnosis": "Type 2 Diabetes Mellitus", "medicines": "Metformin 500mg twice daily", "notes": "Fasting blood glucose 162 mg/dL, HbA1c 7.8%. BP 138/88.", "unclear": ["hospital"]}`;
 
   const json = await callGemini(`${VISION_MODEL}:generateContent`, {
     contents: [
@@ -157,7 +178,7 @@ Respond strictly in JSON format with exactly these keys. Example:
     throw new Error(`Gemini Vision returned non-JSON extraction result: ${jsonText.slice(0, 300)}`);
   }
 
-  return {
+  const fields = {
     title: parsed.title || '',
     doctor: parsed.doctor || '',
     hospital: parsed.hospital || '',
@@ -167,6 +188,17 @@ Respond strictly in JSON format with exactly these keys. Example:
     medicines: parsed.medicines || '',
     notes: parsed.notes || '',
   };
+
+  // Trust the model's own "unclear" list, but also independently flag any
+  // extractable field that came back empty — defends against the model
+  // leaving a field blank without remembering to list it as unclear.
+  const modelFlagged = Array.isArray(parsed.unclear)
+    ? parsed.unclear.filter((key) => EXTRACTABLE_FIELD_KEYS.includes(key))
+    : [];
+  const emptyFields = EXTRACTABLE_FIELD_KEYS.filter((key) => !fields[key]);
+  const unclear = [...new Set([...modelFlagged, ...emptyFields])];
+
+  return { fields, unclear };
 }
 
 export { EMBEDDING_DIMENSIONS, EMBEDDING_MODEL, VISION_MODEL };

@@ -1,10 +1,11 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useParams, useLocation, useNavigate } from "react-router-dom";
 import UploadReports from "../../../reports/components/pages/UploadReports";
 import { parseMemberNotesAndEmail } from "../../../family/pages/FamilyMember";
 import { useAuth } from "../../../../context/AuthContext";
 import * as reportService from "../../../../api/reports";
 import * as familyService from "../../../../api/family";
+import { indexReport, removeReportFromIndex } from "../../../../api/search";
 import {
   LayoutGrid,
   TrendingUp,
@@ -16,22 +17,20 @@ import {
   UploadCloud,
   SlidersHorizontal,
   ChevronDown,
+  ChevronRight,
   X,
   Bell,
-  Paperclip,
-  MessageSquare,
-  Download,
+  ExternalLink,
   Sparkles,
   FlaskConical,
   ScanLine,
   Syringe,
   FileText,
-  CheckCircle2,
+  AlertTriangle,
 } from "lucide-react";
 
 /* -----------------------------------------------------------
-   Static nav + timeline data.
-   Swap `timelineEvents` for real data fetched by profileId.
+   Nav + category config.
 ------------------------------------------------------------ */
 
 // Same nav list as Dashboard.jsx / LabTrends.jsx, with Health Timeline active
@@ -44,8 +43,6 @@ const navItems = [
   { label: "Ask Swastha", icon: Sparkles, route: "/search" },
 ];
 
-const FILTERS = ["All Members"];
-
 // Categories a user can pick when uploading a new report manually.
 const UPLOAD_CATEGORIES = [
   { value: "Lab Reports", icon: FlaskConical, kind: "upload" },
@@ -54,76 +51,45 @@ const UPLOAD_CATEGORIES = [
   { value: "Immunizations", icon: Syringe, kind: "upload" },
 ];
 
-const timelineEvents = [
-  {
-    id: "evt-1",
-    category: "Lab Reports",
-    kind: "alert",
-    icon: FlaskConical,
-    tag: "ACTION REQUIRED",
-    tagTone: "danger",
-    title: "Blood Test (Apollo Hospitals)",
-    meta: "Aug 14, 2024 · Diagnostic Panel #402",
-    accent: true,
-    stat: { label: "HbA1c: 6.8%", sub: "Above target range (4.0 - 5.6%)" },
-    footer: [
-      { icon: Paperclip, text: "2 PDF Files" },
-      { icon: MessageSquare, text: "AI Summary Ready" },
-    ],
-  },
-  {
-    id: "evt-2",
-    category: "Prescriptions",
-    kind: "medication",
-    icon: ClipboardList,
-    tag: "ACTIVE MEDICATION",
-    tagTone: "info",
-    title: "Prescription (Dr. Mehta)",
-    meta: "Jul 20, 2024 · Endocrine Specialist",
-    rightTitle: "Metformin 500mg",
-    rightSub: "Twice Daily (Post Meals)",
-  },
-  {
-    id: "evt-3",
-    category: "MRI/Scans",
-    kind: "imaging",
-    icon: ScanLine,
-    tag: "IMAGING",
-    tagTone: "neutral",
-    title: "MRI Scan (Radiology Plus)",
-    meta: "Jun 15, 2024 · Knee Assessment (Right)",
-    image: true,
-    chips: ["Bone Health", "Soft Tissue"],
-    aiNote:
-      "Your HbA1c is showing a rising trend over the last 3 months. Shall I prepare a summary for Dr. Mehta?",
-  },
-  {
-    id: "evt-4",
-    category: "Immunizations",
-    kind: "immunization",
-    icon: Syringe,
-    tag: "IMMUNIZATION",
-    tagTone: "danger",
-    title: "Vaccination – Flu Shot",
-    meta: "May 02, 2024 · Family Physician",
-    rightBadge: "Valid",
-  },
-];
+const CATEGORY_META = {
+  Prescription: { kind: "medication", icon: ClipboardList },
+  Prescriptions: { kind: "medication", icon: ClipboardList },
+  "Lab Report": { kind: "lab", icon: FlaskConical },
+  "Lab Reports": { kind: "lab", icon: FlaskConical },
+  Imaging: { kind: "imaging", icon: ScanLine },
+  "MRI/Scans": { kind: "imaging", icon: ScanLine },
+  Vaccination: { kind: "immunization", icon: Syringe },
+  Immunizations: { kind: "immunization", icon: Syringe },
+  Consultation: { kind: "consultation", icon: FileText },
+};
+
+// Established app-wide "alert/warning" tone — same orange used by the
+// SafetyAlert card on Dashboard.jsx, not an invented severity color.
+// Category-based heuristic: lab results and anything with a diagnosis on
+// record are flagged notable; routine visit types stay neutral.
+const NOTABLE_KINDS = new Set(["lab"]);
+
+// Dot ring color per event kind — neutral slate by default, orange only
+// for the notable/flagged kinds above (matches Dashboard's SafetyAlert).
+const dotStyles = {
+  lab: "bg-orange-50 text-orange-600 ring-orange-100",
+  medication: "bg-blue-50 text-blue-600 ring-blue-100",
+  imaging: "bg-slate-100 text-slate-600 ring-slate-200",
+  immunization: "bg-slate-100 text-slate-600 ring-slate-200",
+  consultation: "bg-slate-100 text-slate-600 ring-slate-200",
+};
 
 const tagStyles = {
-  danger: "text-red-600",
-  info: "text-blue-600",
-  neutral: "text-slate-700",
-  upload: "text-indigo-600",
+  lab: "text-orange-600",
+  medication: "text-blue-600",
+  imaging: "text-slate-600",
+  immunization: "text-slate-600",
+  consultation: "text-slate-600",
 };
 
-const dotStyles = {
-  alert: "bg-red-50 text-red-500 ring-red-100",
-  medication: "bg-blue-50 text-blue-500 ring-blue-100",
-  imaging: "bg-slate-100 text-slate-600 ring-slate-200",
-  immunization: "bg-red-50 text-red-500 ring-red-100",
-  upload: "bg-indigo-50 text-indigo-500 ring-indigo-100",
-};
+function isNotable(event) {
+  return NOTABLE_KINDS.has(event.kind) || Boolean(event.diagnosis);
+}
 
 export default function Timeline() {
   const { profileId } = useParams();
@@ -131,29 +97,30 @@ export default function Timeline() {
   const navigate = useNavigate();
   const { token, isAuthenticated } = useAuth();
   const targetEmail = location.state?.memberEmail || new URLSearchParams(location.search).get('email') || '';
-  const [activeFilter, setActiveFilter] = useState("All Members");
   const [events, setEvents] = useState([]);
   const [familyMembers, setFamilyMembers] = useState([]);
   const [showUploadModal, setShowUploadModal] = useState(false);
+  // When set, the Upload/Manual Entry modal opens pre-filled for this
+  // event and submits an update (PUT) instead of creating a new report.
+  const [editingEvent, setEditingEvent] = useState(null);
   const [selectedEvent, setSelectedEvent] = useState(null);
   const [loading, setLoading] = useState(false);
 
-  const manualCategoryFilters = [
-    ...new Set(
-      events
-        .filter((event) => event.source === 'manual')
-        .map((event) => event.category)
-        .filter(Boolean)
-    ),
-  ];
+  const [categoryFilter, setCategoryFilter] = useState("All Categories");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+  const [collapsedYears, setCollapsedYears] = useState(() => new Set());
 
-  const availableFilters = ["All Members", ...manualCategoryFilters];
+  const availableCategories = useMemo(
+    () => ["All Categories", ...new Set(events.map((e) => e.category).filter(Boolean))],
+    [events]
+  );
 
   useEffect(() => {
-    if (activeFilter !== "All Members" && !availableFilters.includes(activeFilter)) {
-      setActiveFilter("All Members");
+    if (categoryFilter !== "All Categories" && !availableCategories.includes(categoryFilter)) {
+      setCategoryFilter("All Categories");
     }
-  }, [activeFilter, availableFilters]);
+  }, [categoryFilter, availableCategories]);
 
   const sortEvents = (list) => {
     return [...list].sort((a, b) => {
@@ -166,65 +133,34 @@ export default function Timeline() {
   const mapReportToEvent = (report) => {
     const normalizedDate = report.reportDate || report.date || report.createdAt || report.created_at;
     const displayDate = normalizedDate ? new Date(normalizedDate).toLocaleDateString('en-US', {
-      year: 'numeric',
       month: 'short',
       day: 'numeric',
-    }) : 'Unknown date';
+    }) : 'Undated';
 
     const category = report.category || 'Consultation';
-    const kindMap = {
-      'Prescription': 'medication',
-      'Prescriptions': 'medication',
-      'Lab Report': 'alert',
-      'Lab Reports': 'alert',
-      'Imaging': 'imaging',
-      'MRI/Scans': 'imaging',
-      'Vaccination': 'immunization',
-      'Immunizations': 'immunization',
-    };
-
-    const iconMap = {
-      'Prescription': ClipboardList,
-      'Prescriptions': ClipboardList,
-      'Lab Report': FlaskConical,
-      'Lab Reports': FlaskConical,
-      'Imaging': ScanLine,
-      'MRI/Scans': ScanLine,
-      'Vaccination': Syringe,
-      'Immunizations': Syringe,
-      'Consultation': FileText,
-    };
-
-    const tagTone = {
-      medication: 'info',
-      alert: 'danger',
-      imaging: 'neutral',
-      immunization: 'neutral',
-      upload: 'info',
-    }[kindMap[category] || 'info'];
-
-    const icon = iconMap[category] || FileText;
-    const kind = kindMap[category] || 'upload';
+    const meta = CATEGORY_META[category] || CATEGORY_META.Consultation;
 
     return {
       id: report.id || `${report.userId}-${normalizedDate}-${Math.random()}`,
       category,
-      kind,
-      icon,
-      tag: category.toUpperCase(),
-      tagTone,
+      kind: meta.kind,
+      icon: meta.icon,
       title: report.title || `${category} Report`,
-      meta: `${displayDate} · ${report.hospital || 'Medical Record'}`,
+      displayDate,
       hospital: report.hospital || '',
       doctor: report.doctor || '',
       diagnosis: report.diagnosis || '',
       medicines: report.medicines || '',
       notes: report.notes,
+      fileUrl: report.fileUrl || null,
       fileName: report.fileUrl ? report.fileUrl.split('/').pop() : report.fileName || report.file?.name || '',
-      rightTitle: report.doctor || '',
-      rightSub: `${report.medicines ? report.medicines : report.diagnosis || ''}`,
-      stat: report.diagnosis ? { label: report.diagnosis, sub: report.medicines || '' } : undefined,
+      // Field names AI extraction couldn't confidently read (illegible
+      // handwriting) that the patient also left blank — flagged so a
+      // doctor viewing this later knows to check the original document.
+      unclearFields: Array.isArray(report.unclearFields) ? report.unclearFields : [],
       reportDate: normalizedDate,
+      createdAt: report.createdAt || report.created_at || null,
+      updatedAt: report.updatedAt || report.updated_at || null,
       source: report.source || 'api',
     };
   };
@@ -294,7 +230,10 @@ export default function Timeline() {
       ...rest,
       reportDate: newEvent.date || newEvent.reportDate || new Date().toISOString(),
       category: newEvent.category || 'Consultation',
-      fileUrl: file?.name || newEvent.fileUrl || null,
+      // Prefer the real uploaded-file URL (set by UploadReports after it
+      // persists the file via backend/api/auth/upload). Only fall back to
+      // the raw filename when nothing was actually uploaded/stored.
+      fileUrl: newEvent.fileUrl || file?.name || null,
     };
 
     if (!newEvent?.id || newEvent.id.toString().startsWith('temp-')) {
@@ -320,6 +259,33 @@ export default function Timeline() {
     return mapped;
   }
 
+  async function handleEditEvent(eventId, updatedFields) {
+    const { file, ...rest } = updatedFields;
+    const mapped = {
+      ...rest,
+      reportDate: updatedFields.date || updatedFields.reportDate || new Date().toISOString(),
+      category: updatedFields.category || 'Consultation',
+      fileUrl: updatedFields.fileUrl || file?.name || null,
+    };
+
+    try {
+      const response = await reportService.updateTimelineReport(eventId, mapped, token);
+      const event = mapReportToEvent(response.report);
+      setEvents((prev) => sortEvents(prev.map((e) => (String(e.id) === String(eventId) ? event : e))));
+      setSelectedEvent((prev) => (prev && String(prev.id) === String(eventId) ? event : prev));
+
+      // Best-effort: re-index so search reflects the edited content.
+      indexReport(response.report).catch((err) => {
+        console.error('Failed to re-index edited report for AI search:', err);
+      });
+
+      return event;
+    } catch (error) {
+      console.error('Failed to update timeline report:', error);
+      throw error;
+    }
+  }
+
   async function handleDeleteEvent(reportId) {
     try {
       await reportService.deleteTimelineReport(reportId, token);
@@ -335,12 +301,30 @@ export default function Timeline() {
     }
   }
 
+  function toggleYearCollapsed(year) {
+    setCollapsedYears((prev) => {
+      const next = new Set(prev);
+      if (next.has(year)) next.delete(year);
+      else next.add(year);
+      return next;
+    });
+  }
+
+  const filteredEvents = useMemo(() => {
+    return events.filter((event) => {
+      if (categoryFilter !== "All Categories" && event.category !== categoryFilter) return false;
+      if (dateFrom && event.reportDate && new Date(event.reportDate) < new Date(dateFrom)) return false;
+      if (dateTo && event.reportDate && new Date(event.reportDate) > new Date(dateTo)) return false;
+      return true;
+    });
+  }, [events, categoryFilter, dateFrom, dateTo]);
+
   return (
     <div className="min-h-screen bg-slate-50 flex">
       <Sidebar onUploadClick={() => setShowUploadModal(true)} />
 
-      <main className="flex-1 px-10 py-8">
-        <header className="flex items-start justify-between mb-6">
+      <main className="flex-1 px-6 sm:px-10 py-8">
+        <header className="flex flex-wrap items-start justify-between gap-4 mb-6">
           <div>
             <h1 className="text-2xl font-semibold text-slate-900">
               Health Timeline
@@ -355,6 +339,16 @@ export default function Timeline() {
 
           <div className="flex items-center gap-3">
             <div className="flex -space-x-2">
+              <button
+                type="button"
+                onClick={() => navigate('/timeline')}
+                className={`w-9 h-9 rounded-full flex items-center justify-center text-xs font-semibold ring-2 ring-white transition-transform duration-200 hover:scale-110 ${
+                  !targetEmail ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-500"
+                }`}
+                title="Me"
+              >
+                Me
+              </button>
               {familyMembers.slice(0, 3).map((member, index) => {
                 const initials = member.name
                   ? member.name
@@ -366,6 +360,7 @@ export default function Timeline() {
                   : '?';
                 const { email: parsedEmail } = parseMemberNotesAndEmail(member.notes || '');
                 const memberEmail = member.email || parsedEmail || '';
+                const isActive = memberEmail && memberEmail === targetEmail;
 
                 return (
                   <button
@@ -382,7 +377,9 @@ export default function Timeline() {
                     title={member.name || 'Family member'}
                   >
                     <div
-                      className="flex h-9 min-w-[36px] items-center justify-center overflow-hidden rounded-full bg-blue-600 px-0 text-center text-xs font-medium text-white ring-2 ring-white transition-all duration-200 group-hover:min-w-[140px] group-hover:px-4"
+                      className={`flex h-9 min-w-[36px] items-center justify-center overflow-hidden rounded-full px-0 text-center text-xs font-medium text-white ring-2 ring-white transition-all duration-200 group-hover:min-w-[140px] group-hover:px-4 ${
+                        isActive ? "bg-blue-600" : "bg-slate-400"
+                      }`}
                       aria-label={member.name || 'Family member'}
                     >
                       <span className="flex items-center justify-center transition-opacity duration-200 group-hover:opacity-0">
@@ -412,15 +409,38 @@ export default function Timeline() {
           </div>
         </header>
 
-        <FilterBar activeFilter={activeFilter} setActiveFilter={setActiveFilter} filters={availableFilters} />
+        <FilterBar
+          categoryFilter={categoryFilter}
+          setCategoryFilter={setCategoryFilter}
+          categories={availableCategories}
+          dateFrom={dateFrom}
+          dateTo={dateTo}
+          setDateFrom={setDateFrom}
+          setDateTo={setDateTo}
+        />
 
-        <TimelineList activeFilter={activeFilter} events={events} loading={loading} onSelectEvent={setSelectedEvent} />
+        <TimelineInfographic
+          events={filteredEvents}
+          loading={loading}
+          onSelectEvent={setSelectedEvent}
+          collapsedYears={collapsedYears}
+          onToggleYear={toggleYearCollapsed}
+        />
       </main>
 
-      {showUploadModal && (
+      {(showUploadModal || editingEvent) && (
         <UploadReports
-          onClose={() => setShowUploadModal(false)}
-          onSubmit={handleAddEvent}
+          onClose={() => {
+            setShowUploadModal(false);
+            setEditingEvent(null);
+          }}
+          onSubmit={
+            editingEvent
+              ? (fields) => handleEditEvent(editingEvent.id, fields)
+              : handleAddEvent
+          }
+          initialEvent={editingEvent}
+          token={token}
         />
       )}
 
@@ -428,6 +448,10 @@ export default function Timeline() {
         <EventDetails
           event={selectedEvent}
           onClose={() => setSelectedEvent(null)}
+          onEdit={() => {
+            setEditingEvent(selectedEvent);
+            setSelectedEvent(null);
+          }}
           onDelete={() => handleDeleteEvent(selectedEvent.id)}
         />
       )}
@@ -479,8 +503,8 @@ function Sidebar({ onUploadClick }) {
       <div className="space-y-3 pt-4">
         <button
           type="button"
-onClick={onUploadClick}
-className="w-full flex items-center justify-center gap-2 bg-blue-700 hover:bg-blue-800 transition-all duration-200 hover:shadow-md hover:-translate-y-0.5 text-white text-sm font-semibold py-2.5 rounded-lg"
+          onClick={onUploadClick}
+          className="w-full flex items-center justify-center gap-2 bg-blue-700 hover:bg-blue-800 transition-all duration-200 hover:shadow-md hover:-translate-y-0.5 text-white text-sm font-semibold py-2.5 rounded-lg"
         >
           <UploadCloud size={18} />
           Upload New Report
@@ -503,23 +527,73 @@ className="w-full flex items-center justify-center gap-2 bg-blue-700 hover:bg-bl
 
 /* --------------------------- Filter bar --------------------------- */
 
-function FilterBar({ activeFilter, setActiveFilter, filters = ["All Members"] }) {
+function FilterBar({ categoryFilter, setCategoryFilter, categories, dateFrom, dateTo, setDateFrom, setDateTo }) {
+  const [showDateRange, setShowDateRange] = useState(false);
+  const hasDateRange = Boolean(dateFrom || dateTo);
+
   return (
     <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4 mb-8 flex items-center justify-between flex-wrap gap-3">
       <div className="flex items-center gap-3 flex-wrap">
-        <button className="flex items-center gap-2 text-sm text-slate-600 bg-slate-50 px-3 py-2 rounded-xl transition-all duration-200 hover:bg-slate-100">
-          <span>Aug 2023 - Aug 2024</span>
-          <ChevronDown size={14} />
-        </button>
+        <div className="relative">
+          <button
+            type="button"
+            onClick={() => setShowDateRange((v) => !v)}
+            className={`flex items-center gap-2 text-sm px-3 py-2 rounded-xl transition-all duration-200 ${
+              hasDateRange ? "bg-blue-50 text-blue-600 font-medium" : "text-slate-600 bg-slate-50 hover:bg-slate-100"
+            }`}
+          >
+            <span>
+              {hasDateRange
+                ? `${dateFrom || '...'} → ${dateTo || '...'}`
+                : "All dates"}
+            </span>
+            <ChevronDown size={14} />
+          </button>
+
+          {showDateRange && (
+            <div className="absolute z-20 top-full left-0 mt-2 bg-white border border-slate-200 rounded-xl shadow-lg p-4 flex flex-col gap-3 w-64">
+              <label className="text-xs font-medium text-slate-500">
+                From
+                <input
+                  type="date"
+                  value={dateFrom}
+                  onChange={(e) => setDateFrom(e.target.value)}
+                  className="mt-1 w-full border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-700"
+                />
+              </label>
+              <label className="text-xs font-medium text-slate-500">
+                To
+                <input
+                  type="date"
+                  value={dateTo}
+                  onChange={(e) => setDateTo(e.target.value)}
+                  className="mt-1 w-full border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-700"
+                />
+              </label>
+              {hasDateRange && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDateFrom("");
+                    setDateTo("");
+                  }}
+                  className="text-xs text-slate-500 hover:text-blue-600 self-start"
+                >
+                  Clear dates
+                </button>
+              )}
+            </div>
+          )}
+        </div>
 
         <div className="w-px h-5 bg-slate-200" />
 
-        {filters.map((filter) => {
-          const isActive = filter === activeFilter;
+        {categories.map((category) => {
+          const isActive = category === categoryFilter;
           return (
             <button
-              key={filter}
-              onClick={() => setActiveFilter(filter)}
+              key={category}
+              onClick={() => setCategoryFilter(category)}
               className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm transition-all duration-200
                 ${
                   isActive
@@ -527,14 +601,14 @@ function FilterBar({ activeFilter, setActiveFilter, filters = ["All Members"] })
                     : "text-slate-500 hover:bg-slate-50 hover:text-slate-800"
                 }`}
             >
-              {filter}
-              {isActive && filter !== "All Members" && (
+              {category}
+              {isActive && category !== "All Categories" && (
                 <X
                   size={13}
                   className="opacity-60 hover:opacity-100"
                   onClick={(e) => {
                     e.stopPropagation();
-                    setActiveFilter("All Members");
+                    setCategoryFilter("All Categories");
                   }}
                 />
               )}
@@ -552,177 +626,206 @@ function FilterBar({ activeFilter, setActiveFilter, filters = ["All Members"] })
   );
 }
 
-/* -------------------------- Timeline list -------------------------- */
+/* ----------------------- Timeline infographic ----------------------- */
 
-function TimelineList({ activeFilter, events, loading, onSelectEvent }) {
-  const filteredEvents =
-    !activeFilter || activeFilter === "All Members"
-      ? events
-      : events.filter((event) => event.category === activeFilter);
+function groupEventsByYear(events) {
+  const groups = new Map();
+  for (const event of events) {
+    const year = event.reportDate ? new Date(event.reportDate).getFullYear() : "Undated";
+    if (!groups.has(year)) groups.set(year, []);
+    groups.get(year).push(event);
+  }
+  // Map preserves insertion order; events arrive pre-sorted newest first,
+  // so years come out newest first too.
+  return Array.from(groups.entries());
+}
+
+// Groups same-day events together so the date label shows once instead of
+// repeating per card, and those cards render as one tighter cluster.
+function groupEventsByDate(events) {
+  const groups = new Map();
+  for (const event of events) {
+    const key = event.reportDate ? new Date(event.reportDate).toDateString() : `undated-${event.id}`;
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(event);
+  }
+  return Array.from(groups.values());
+}
+
+function TimelineInfographic({ events, loading, onSelectEvent, collapsedYears, onToggleYear }) {
+  if (loading) {
+    return <p className="text-slate-400 text-sm py-10 text-center">Loading timeline...</p>;
+  }
+
+  if (events.length === 0) {
+    return (
+      <p className="text-slate-400 text-sm py-10 text-center">
+        No entries match this filter yet.
+      </p>
+    );
+  }
+
+  const yearGroups = groupEventsByYear(events);
 
   return (
     <div className="relative pl-4">
-      <div className="absolute left-[27px] top-2 bottom-2 border-l-2 border-dashed border-slate-200" />
+      {/* Bold vertical spine connecting every entry top to bottom. */}
+      <div className="absolute left-[27px] top-2 bottom-2 w-0.5 bg-slate-200" />
 
-      {loading ? (
-        <p className="text-slate-400 text-sm py-10 text-center">Loading timeline...</p>
-      ) : filteredEvents.length === 0 ? (
-        <p className="text-slate-400 text-sm py-10 text-center">
-          No entries match this filter yet.
-        </p>
-      ) : (
-        <div className="flex flex-col gap-8">
-          {filteredEvents.map((event) => (
-            <TimelineRow key={event.id} event={event} onSelect={() => onSelectEvent(event)} />
-          ))}
-        </div>
-      )}
+      <div className="flex flex-col gap-6">
+        {yearGroups.map(([year, yearEvents]) => {
+          const collapsed = collapsedYears.has(year);
+          return (
+            <div key={year} className="flex flex-col gap-6">
+              <YearBadge
+                year={year}
+                count={yearEvents.length}
+                collapsed={collapsed}
+                onToggle={() => onToggleYear(year)}
+              />
+
+              {!collapsed && (
+                <div className="flex flex-col gap-8">
+                  {groupEventsByDate(yearEvents).map((dayEvents) => (
+                    <DayGroup key={dayEvents[0].id} events={dayEvents} onSelectEvent={onSelectEvent} />
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
 
-function TimelineRow({ event, onSelect }) {
-  const Icon = event.icon;
-
+function YearBadge({ year, count, collapsed, onToggle }) {
   return (
-    <div className="relative flex gap-5">
-      {/* dot */}
-      <div
-        className={`relative z-10 w-11 h-11 shrink-0 rounded-full flex items-center justify-center ring-8 ring-slate-50 ${dotStyles[event.kind]}
-          transition-transform duration-300 hover:scale-110 ${
-            event.kind === "alert" ? "animate-[pulse_2.5s_ease-in-out_infinite]" : ""
-          }`}
+    <div className="relative flex items-center gap-5">
+      <button
+        type="button"
+        onClick={onToggle}
+        className="relative z-10 flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-blue-700 text-white ring-8 ring-slate-50 transition-transform duration-200 hover:scale-110"
+        title={collapsed ? `Expand ${year}` : `Collapse ${year}`}
       >
-        <Icon size={18} />
-      </div>
+        {collapsed ? <ChevronRight size={18} /> : <ChevronDown size={18} />}
+      </button>
 
-      <button type="button" className="w-full text-left" onClick={onSelect}>
-        <EventCard event={event} />
+      <button
+        type="button"
+        onClick={onToggle}
+        className="flex items-center gap-3 rounded-2xl bg-blue-700 px-5 py-2.5 text-white shadow-sm transition-all duration-200 hover:bg-blue-800 hover:shadow-md"
+      >
+        <span className="text-xl font-bold tracking-tight">{year}</span>
+        <span className="text-xs font-medium text-blue-100">
+          {count} {count === 1 ? "entry" : "entries"}
+        </span>
       </button>
     </div>
   );
 }
 
-function EventCard({ event }) {
-  const isAccent = event.accent;
+// One or more events sharing the same exact date. The date label is shown
+// once for the whole cluster instead of repeating per card, and cards sit
+// closer together than cards from different days — reads as one grouped
+// "sub-timeline" for that day on the main line. Single icon column keeps
+// every dot centered on the vertical spine, same as a single-event day.
+function DayGroup({ events, onSelectEvent }) {
+  const isCluster = events.length > 1;
 
+  return (
+    <div className="relative flex gap-5">
+      <div className="flex flex-col items-center shrink-0 w-11 gap-3">
+        {events.map((event, index) => {
+          const Icon = event.icon;
+          const notable = isNotable(event);
+          return (
+            <div key={event.id} className="flex flex-col items-center">
+              <div
+                className={`relative z-10 w-11 h-11 shrink-0 rounded-full flex items-center justify-center ring-8 ring-slate-50 ${dotStyles[event.kind]}
+                  transition-transform duration-300 hover:scale-110 ${
+                    notable ? "animate-[pulse_2.5s_ease-in-out_infinite]" : ""
+                  }`}
+              >
+                <Icon size={18} />
+              </div>
+              {/* Shared date label under the first dot only — the rest of
+                  the cluster's dots stay unlabeled since they're the same day. */}
+              {index === 0 && (
+                <span className="mt-2 text-xs font-semibold text-slate-500 text-center leading-tight">
+                  {event.displayDate}
+                  {isCluster && (
+                    <span className="block text-[10px] font-medium text-slate-400 mt-0.5">
+                      {events.length} entries
+                    </span>
+                  )}
+                </span>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      <div className={`flex-1 flex flex-col ${isCluster ? "gap-3" : ""}`}>
+        {events.map((event) => (
+          <button key={event.id} type="button" className="w-full text-left" onClick={() => onSelectEvent(event)}>
+            <EventCard event={event} notable={isNotable(event)} />
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function EventCard({ event, notable }) {
   return (
     <div
       className={`group relative flex-1 bg-white rounded-2xl border border-slate-100 shadow-sm p-6
         transition-all duration-300 ease-out
         hover:shadow-lg hover:-translate-y-1
-        ${isAccent ? "border-l-4 border-l-red-500" : "hover:border-blue-100"}`}
+        ${notable ? "border-l-4 border-l-orange-500" : "hover:border-blue-100"}`}
     >
-      <div className="flex items-start justify-between gap-6">
+      <div className="flex items-start justify-between gap-4 flex-wrap">
         <div className="min-w-0">
-          <p
-            className={`text-xs font-semibold tracking-wide mb-1.5 ${tagStyles[event.tagTone]}`}
-          >
-            {event.tag}
-          </p>
+          {notable && (
+            <p className={`flex items-center gap-1.5 text-xs font-semibold tracking-wide mb-1.5 ${tagStyles[event.kind]}`}>
+              <AlertTriangle size={12} />
+              NEEDS ATTENTION
+            </p>
+          )}
           <h3 className="font-semibold text-slate-900 transition-colors duration-200 group-hover:text-blue-700">
             {event.title}
           </h3>
-          <p className="text-sm text-slate-400 mt-1">{event.meta}</p>
+          <p className="text-sm text-slate-500 mt-1">
+            {event.doctor || 'Unknown doctor'}
+            {event.hospital ? ` · ${event.hospital}` : ''}
+          </p>
 
-          {event.chips && (
-            <div className="flex gap-2 mt-3">
-              {event.chips.map((chip) => (
-                <span
-                  key={chip}
-                  className="text-xs px-3 py-1 rounded-full bg-slate-100 text-slate-600 transition-colors duration-200 hover:bg-blue-50 hover:text-blue-600"
-                >
-                  {chip}
-                </span>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* details section */}
-      </div>
-
-      <div className="mt-4 flex flex-wrap gap-2 items-center">
-        {event.category && (
-          <span className="inline-flex items-center rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold uppercase tracking-[0.24em] text-slate-600">
-            {event.category}
-          </span>
-        )}
-        {event.fileName && (
-          <span className="inline-flex items-center rounded-full bg-slate-50 border border-slate-200 px-3 py-1 text-xs text-slate-500">
-            {event.fileName}
-          </span>
-        )}
-      </div>
-
-      <div className="mt-4 grid gap-3 sm:grid-cols-2">
-        <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
-          <p className="text-xs text-slate-500 uppercase tracking-[0.24em]">Doctor</p>
-          <p className="mt-2 text-sm font-semibold text-slate-900">{event.doctor || 'Unknown'}</p>
-          {event.hospital && (
-            <p className="mt-1 text-xs text-slate-500">{event.hospital}</p>
-          )}
-        </div>
-
-        <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
-          <p className="text-xs text-slate-500 uppercase tracking-[0.24em]">Summary</p>
+          {/* one-line AI summary, sourced from diagnosis for now */}
           {event.diagnosis ? (
-            <>
-              <p className="mt-2 text-sm font-semibold text-slate-900">{event.diagnosis}</p>
-              {event.medicines && (
-                <p className="mt-1 text-xs text-slate-500">{event.medicines}</p>
-              )}
-            </>
-          ) : (
-            <p className="mt-2 text-sm text-slate-500">No additional summary available.</p>
+            <p className="text-sm text-slate-500 mt-2 flex items-start gap-1.5">
+              <Sparkles size={13} className="text-blue-500 shrink-0 mt-0.5" />
+              <span className="line-clamp-1">{event.diagnosis}</span>
+            </p>
+          ) : null}
+
+          {event.unclearFields && event.unclearFields.length > 0 && (
+            <p className="flex items-center gap-1.5 text-xs font-medium text-amber-600 mt-2">
+              <span className="leading-none">⚠</span>
+              {event.unclearFields.length === 1 ? "1 field" : `${event.unclearFields.length} fields`} unverified — check original document
+            </p>
           )}
         </div>
+
+        <span className="inline-flex items-center rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-slate-600 shrink-0">
+          {event.category}
+        </span>
       </div>
-
-      {event.notes && (
-        <p className="mt-4 text-sm leading-6 text-slate-500 line-clamp-2">
-          {event.notes}
-        </p>
-      )}
-
-      {event.image && (
-        <div className="mt-4 relative">
-          <div className="w-full h-40 rounded-xl bg-gradient-to-br from-slate-200 to-slate-300 overflow-hidden flex items-center justify-center transition-transform duration-300 group-hover:scale-[1.01]">
-            <ScanLine size={40} className="text-slate-400" />
-          </div>
-
-          {event.aiNote && (
-            <div className="absolute -bottom-6 right-4 max-w-xs bg-white border border-blue-100 rounded-2xl shadow-md p-4 transition-all duration-300 group-hover:shadow-lg group-hover:-translate-y-1">
-              <p className="flex items-center gap-1.5 text-blue-600 text-xs font-semibold mb-1.5">
-                <Sparkles size={13} />
-                Swastha Intelligence
-              </p>
-              <p className="text-sm text-slate-600 leading-snug">
-                {event.aiNote}
-              </p>
-            </div>
-          )}
-        </div>
-      )}
-
-      {event.footer && (
-        <div className="flex items-center gap-5 mt-4 pt-4 border-t border-slate-50">
-          {event.footer.map(({ icon: Icon, text }) => (
-            <span
-              key={text}
-              className="flex items-center gap-1.5 text-sm text-slate-400 transition-colors duration-200 hover:text-blue-600"
-            >
-              <Icon size={14} />
-              {text}
-            </span>
-          ))}
-        </div>
-      )}
     </div>
   );
 }
 
-function EventDetails({ event, onClose, onDelete }) {
+function EventDetails({ event, onClose, onEdit, onDelete }) {
   const formattedDate = event.reportDate
     ? new Date(event.reportDate).toLocaleDateString('en-US', {
         year: 'numeric',
@@ -731,13 +834,31 @@ function EventDetails({ event, onClose, onDelete }) {
       })
     : 'Unknown date';
 
+  // Both createdAt and updatedAt get set on creation too, so only show
+  // "Last edited" once updatedAt is meaningfully after createdAt — i.e.
+  // the report was actually edited at least once, not just saved.
+  const wasEdited =
+    event.updatedAt &&
+    event.createdAt &&
+    new Date(event.updatedAt).getTime() - new Date(event.createdAt).getTime() > 1000;
+
+  const formattedEditedAt = wasEdited
+    ? new Date(event.updatedAt).toLocaleString('en-US', {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+        hour: 'numeric',
+        minute: '2-digit',
+      })
+    : null;
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 px-4 py-6">
-      <div className="w-full max-w-2xl rounded-3xl bg-white p-6 shadow-2xl">
+      <div className="w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-3xl bg-white p-6 shadow-2xl">
         <div className="flex items-start justify-between gap-4">
           <div>
             <p className="text-sm font-semibold uppercase tracking-[0.24em] text-blue-600">
-              {event.category || event.tag}
+              {event.category}
             </p>
             <h2 className="mt-3 text-2xl font-semibold text-slate-900">
               {event.title}
@@ -745,6 +866,11 @@ function EventDetails({ event, onClose, onDelete }) {
             <p className="mt-2 text-sm text-slate-500">
               {formattedDate} · {event.hospital || 'Medical Record'}
             </p>
+            {formattedEditedAt && (
+              <p className="mt-1 text-xs text-slate-400">
+                Last edited {formattedEditedAt}
+              </p>
+            )}
           </div>
           <button
             type="button"
@@ -754,6 +880,22 @@ function EventDetails({ event, onClose, onDelete }) {
             <X size={18} />
           </button>
         </div>
+
+        {event.unclearFields && event.unclearFields.length > 0 && (
+          <div className="mt-6 rounded-2xl border border-amber-200 bg-amber-50 p-4 flex items-start gap-3">
+            <span className="text-amber-600 text-lg leading-none mt-0.5">⚠</span>
+            <div>
+              <p className="font-semibold text-amber-700">
+                {event.unclearFields.length === 1 ? "One field" : `${event.unclearFields.length} fields`} unverified
+              </p>
+              <p className="text-sm text-gray-600 mt-1">
+                AI couldn't confidently read <span className="font-medium">{event.unclearFields.join(', ')}</span> from
+                the uploaded document (usually illegible handwriting), and it wasn't filled in manually either.
+                {event.fileUrl ? " Check the original document below." : " No original document is attached to verify against."}
+              </p>
+            </div>
+          </div>
+        )}
 
         <div className="mt-6 grid gap-4 sm:grid-cols-2">
           {event.doctor && (
@@ -785,13 +927,6 @@ function EventDetails({ event, onClose, onDelete }) {
           )}
         </div>
 
-        {event.fileName ? (
-          <div className="mt-6 rounded-2xl border border-slate-100 bg-slate-50 p-4">
-            <p className="text-sm text-slate-500">Attached File</p>
-            <p className="mt-2 text-sm font-semibold text-slate-900 break-all">{event.fileName}</p>
-          </div>
-        ) : null}
-
         {event.notes ? (
           <div className="mt-6 rounded-2xl border border-slate-100 bg-slate-50 p-4">
             <p className="text-sm text-slate-500">Notes</p>
@@ -799,7 +934,35 @@ function EventDetails({ event, onClose, onDelete }) {
           </div>
         ) : null}
 
+        {event.fileUrl ? (
+          <a
+            href={event.fileUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="mt-6 flex items-center justify-between rounded-2xl border border-blue-100 bg-blue-50 p-4 text-blue-700 transition-colors hover:bg-blue-100"
+          >
+            <span className="flex items-center gap-2 text-sm font-semibold">
+              <FileText size={16} />
+              View original document
+            </span>
+            <ExternalLink size={16} />
+          </a>
+        ) : event.fileName ? (
+          <div className="mt-6 rounded-2xl border border-slate-100 bg-slate-50 p-4">
+            <p className="text-sm text-slate-500">Attached file</p>
+            <p className="mt-2 text-sm font-semibold text-slate-900 break-all">{event.fileName}</p>
+            <p className="mt-1 text-xs text-slate-400">Original document not stored yet — filename only.</p>
+          </div>
+        ) : null}
+
         <div className="mt-8 flex flex-wrap gap-3">
+          <button
+            type="button"
+            onClick={onEdit}
+            className="inline-flex items-center justify-center rounded-2xl bg-blue-700 px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-blue-800"
+          >
+            Edit Event
+          </button>
           <button
             type="button"
             onClick={onDelete}
@@ -819,4 +982,3 @@ function EventDetails({ event, onClose, onDelete }) {
     </div>
   );
 }
-
