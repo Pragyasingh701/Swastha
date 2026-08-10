@@ -65,8 +65,9 @@ const CATEGORY_META = {
 
 // Established app-wide "alert/warning" tone — same orange used by the
 // SafetyAlert card on Dashboard.jsx, not an invented severity color.
-// Category-based heuristic: lab results and anything with a diagnosis on
-// record are flagged notable; routine visit types stay neutral.
+// Category-based heuristic: only Lab Report entries are flagged notable —
+// a diagnosis alone isn't a signal of severity (nearly every prescription
+// has one), so that used to over-flag almost the whole timeline.
 const NOTABLE_KINDS = new Set(["lab"]);
 
 // Dot ring color per event kind — neutral slate by default, orange only
@@ -88,7 +89,7 @@ const tagStyles = {
 };
 
 function isNotable(event) {
-  return NOTABLE_KINDS.has(event.kind) || Boolean(event.diagnosis);
+  return NOTABLE_KINDS.has(event.kind);
 }
 
 export default function Timeline() {
@@ -722,54 +723,67 @@ function YearBadge({ year, count, collapsed, onToggle }) {
   );
 }
 
-// One or more events sharing the same exact date. The date label is shown
-// once for the whole cluster instead of repeating per card, and cards sit
-// closer together than cards from different days — reads as one grouped
-// "sub-timeline" for that day on the main line. Single icon column keeps
-// every dot centered on the vertical spine, same as a single-event day.
+// One or more events sharing the same exact date. The date label sits
+// beside the FIRST card's top edge (not centered against the whole
+// cluster), and every event still gets its own icon+card row so the icon
+// for row N stays aligned with card N's vertical center regardless of how
+// tall each card is — icons and cards can't be laid out as two
+// independently-spaced columns, since card heights vary with content
+// (diagnosis line, unclear-fields warning, etc.) while icons don't.
 function DayGroup({ events, onSelectEvent }) {
   const isCluster = events.length > 1;
 
   return (
-    <div className="relative flex gap-5">
-      <div className="flex flex-col items-center shrink-0 w-11 gap-3">
-        {events.map((event, index) => {
-          const Icon = event.icon;
-          const notable = isNotable(event);
-          return (
-            <div key={event.id} className="flex flex-col items-center">
+    <div className="flex flex-col gap-4">
+      {events.map((event, index) => {
+        const Icon = event.icon;
+        const notable = isNotable(event);
+        // Same-day cluster: smaller icons hanging off a sub-timeline
+        // border so each entry reads as "part of this day" rather than a
+        // full top-level entry. Single-day: full-size icon, matching
+        // every other row on the page.
+        const iconSize = isCluster ? "w-8 h-8 ring-4" : "w-11 h-11 ring-8";
+
+        return (
+          <div key={event.id} className="flex gap-5">
+            {/* Date label column — only rendered once, on the first row,
+                and top-aligned so it lines up with the top of the FIRST
+                card specifically, not centered against the whole group. */}
+            <div className="flex flex-col items-center shrink-0 w-11">
+              {index === 0 ? (
+                <>
+                  <span className="text-xs font-semibold text-slate-500 text-center leading-tight">
+                    {event.displayDate}
+                  </span>
+                  {isCluster && (
+                    <span className="mt-0.5 text-[10px] font-medium text-slate-400 bg-slate-100 rounded-full px-2 py-0.5">
+                      {events.length} entries
+                    </span>
+                  )}
+                </>
+              ) : (
+                // Empty spacer keeps every row's left column the same
+                // width so the sub-timeline border below stays straight.
+                <div aria-hidden="true" />
+              )}
+            </div>
+
+            <div className={`flex-1 min-w-0 flex items-center gap-4 ${isCluster ? "pl-5 border-l-2 border-slate-100" : ""}`}>
               <div
-                className={`relative z-10 w-11 h-11 shrink-0 rounded-full flex items-center justify-center ring-8 ring-slate-50 ${dotStyles[event.kind]}
+                className={`relative z-10 ${iconSize} shrink-0 rounded-full flex items-center justify-center ring-slate-50 ${dotStyles[event.kind]}
                   transition-transform duration-300 hover:scale-110 ${
                     notable ? "animate-[pulse_2.5s_ease-in-out_infinite]" : ""
                   }`}
               >
-                <Icon size={18} />
+                <Icon size={isCluster ? 14 : 18} />
               </div>
-              {/* Shared date label under the first dot only — the rest of
-                  the cluster's dots stay unlabeled since they're the same day. */}
-              {index === 0 && (
-                <span className="mt-2 text-xs font-semibold text-slate-500 text-center leading-tight">
-                  {event.displayDate}
-                  {isCluster && (
-                    <span className="block text-[10px] font-medium text-slate-400 mt-0.5">
-                      {events.length} entries
-                    </span>
-                  )}
-                </span>
-              )}
+              <button type="button" className="flex-1 min-w-0 text-left" onClick={() => onSelectEvent(event)}>
+                <EventCard event={event} notable={notable} />
+              </button>
             </div>
-          );
-        })}
-      </div>
-
-      <div className={`flex-1 flex flex-col ${isCluster ? "gap-3" : ""}`}>
-        {events.map((event) => (
-          <button key={event.id} type="button" className="w-full text-left" onClick={() => onSelectEvent(event)}>
-            <EventCard event={event} notable={isNotable(event)} />
-          </button>
-        ))}
-      </div>
+          </div>
+        );
+      })}
     </div>
   );
 }
