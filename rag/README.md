@@ -8,9 +8,9 @@ storage + similarity search. No LangChain/LangGraph/Python.
 
 It does not own report storage — `backend/` still owns the `reports` table
 via `backend/routes/reports.js` / `backend/db/reports.js`. This service only
-owns `report_embeddings` and the `/api/search` + `/api/reports/index`
-endpoints. The frontend calls both services independently (see "How it's
-wired" below).
+owns `report_embeddings` and the `/api/search`, `/api/reports/index`, and
+`/api/extract` endpoints. The frontend calls both services independently
+(see "How it's wired" below).
 
 ## Setup
 
@@ -67,8 +67,9 @@ body.
 - `migrations/002_match_report_embeddings_function.sql` — `match_report_embeddings`
   SQL function used for the similarity search query (the JS client can't
   express the `<=>` operator directly).
-- `src/config/gemini.js` — plain `fetch` wrapper around the Gemini REST API,
-  embeddings only (`gemini-embedding-001`).
+- `src/config/gemini.js` — plain `fetch` wrapper around the Gemini REST API:
+  embeddings (`gemini-embedding-001`) and Vision-based report field
+  extraction from uploaded images (`gemini-flash-latest`).
 - `src/config/openrouter.js` — plain `fetch` wrapper around OpenRouter's
   chat-completions endpoint, used for grounded answer generation
   (`openai/gpt-oss-20b:free` by default).
@@ -85,6 +86,38 @@ body.
 - `src/routes/reports.js` — `POST /api/reports/index` and
   `DELETE /api/reports/index/:id`, the indexing trigger endpoints.
 - `src/routes/search.js` — `POST /api/search`.
+- `src/routes/extract.js` — `POST /api/extract`, AI field extraction from an
+  uploaded report image (multer memory storage — the file is only used
+  transiently for the Gemini Vision call, never persisted here).
+
+## POST /api/extract
+
+Headers: `Authorization: Bearer <jwt>`
+
+Request: `multipart/form-data` with a single `file` field (JPEG/PNG/WEBP
+only — PDFs aren't supported by this endpoint, Gemini's inline-image input
+expects a rasterized image).
+
+Response:
+```json
+{
+  "fields": {
+    "title": "Diabetes Follow-up",
+    "doctor": "Dr. Ananya Sharma",
+    "hospital": "Apollo Hospitals",
+    "reportDate": "2026-08-09",
+    "category": "Prescription",
+    "diagnosis": "Type 2 Diabetes Mellitus",
+    "medicines": "Metformin 500mg twice daily",
+    "notes": "Fasting blood glucose 162 mg/dL, HbA1c 7.8%. BP 138/88."
+  }
+}
+```
+
+Best-effort only — the frontend always routes extracted fields into the
+manual-entry form for the user to review/correct before saving, never
+saves them unreviewed. This endpoint does not save a report and does not
+persist the uploaded file; it's read-only extraction.
 
 ## POST /api/reports/index
 

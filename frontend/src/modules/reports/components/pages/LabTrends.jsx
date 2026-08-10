@@ -16,7 +16,6 @@ import {
   Folder,
   Users,
   ClipboardList,
-  Search,
   Bell,
   Settings,
   HelpCircle,
@@ -28,6 +27,7 @@ import {
   ArrowDown,
   ArrowUp,
   Minus,
+  Sparkles,
   FlaskConical,
   Syringe,
   Lock,
@@ -43,6 +43,7 @@ const navItems = [
   { label: "Medical Vault", icon: Folder, route: "/vault" },
   { label: "Family Records", icon: Users, route: "/family-vault" },
   { label: "Lab Insights", icon: TrendingUp, active: true, route: "/lab-trends" },
+  { label: "Ask Swastha", icon: Sparkles, route: "/search" },
 ];
 
 /* -----------------------------------------------------------
@@ -230,6 +231,8 @@ function Sidebar() {
 /* ------------------------------ Header ------------------------------ */
 
 function PageHeader() {
+  const navigate = useNavigate();
+
   return (
     <header className="flex items-start justify-between mb-8">
       <h1 className="text-3xl font-semibold text-slate-900 leading-snug">
@@ -239,8 +242,13 @@ function PageHeader() {
       </h1>
 
       <div className="flex items-center gap-4">
-        <button className="w-10 h-10 rounded-full flex items-center justify-center text-slate-400 transition-all duration-200 hover:bg-white hover:text-blue-600 hover:shadow-sm">
-          <Search size={18} />
+        <button
+          type="button"
+          onClick={() => navigate('/search')}
+          title="Ask Swastha"
+          className="w-10 h-10 rounded-full flex items-center justify-center text-slate-400 transition-all duration-200 hover:bg-white hover:text-blue-600 hover:shadow-sm"
+        >
+          <Sparkles size={18} />
         </button>
         <button className="w-10 h-10 rounded-full flex items-center justify-center text-slate-400 transition-all duration-200 hover:bg-white hover:text-blue-600 hover:shadow-sm">
           <Bell size={18} />

@@ -9,7 +9,6 @@ import {
   LayoutGrid,
   Mail,
   PlusCircle,
-  Search,
   Settings,
   ShieldCheck,
   Sparkles,
@@ -173,6 +172,7 @@ const navItems = [
   { label: 'Medical Vault', icon: Folder, route: '/vault' },
   { label: 'Family Records', icon: Users, route: '/family-vault' },
   { label: 'Lab Insights', icon: TrendingUp, route: '/lab-trends' },
+  { label: 'Ask Swastha', icon: Sparkles, route: '/search' },
 ];
 
 const VAULT_PROMPT_STORAGE_KEY = 'swastha.familyVaultPromptShown';
@@ -261,14 +261,14 @@ function Header({ userName, userEmail }) {
 
   return (
     <header className="flex items-center gap-4 border-b border-slate-200 bg-white px-6 py-5 lg:px-8">
-      <div className="flex-1 relative max-w-xl">
-        <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-        <input
-          type="text"
-          placeholder="Search medical history, labs, or insights..."
-          className="w-full rounded-lg border border-slate-200 bg-slate-50 py-2.5 pl-9 pr-4 text-sm text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-200"
-        />
-      </div>
+      <button
+        type="button"
+        onClick={() => navigate('/search')}
+        className="flex-1 max-w-xl flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-lg px-4 py-2.5 text-sm text-slate-400 transition-colors hover:border-blue-300 hover:text-blue-600"
+      >
+        <Sparkles size={16} />
+        Ask Swastha about your health records...
+      </button>
 
       <button type="button" className="relative rounded-lg p-2 hover:bg-slate-100">
         <Bell size={20} className="text-slate-600" />

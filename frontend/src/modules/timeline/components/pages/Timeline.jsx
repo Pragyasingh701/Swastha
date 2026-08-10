@@ -14,7 +14,6 @@ import {
   Settings,
   HelpCircle,
   UploadCloud,
-  Search,
   SlidersHorizontal,
   ChevronDown,
   X,
@@ -42,6 +41,7 @@ const navItems = [
   { label: "Medical Vault", icon: Folder, route: "/vault" },
   { label: "Family Records", icon: Users, route: "/family-vault" },
   { label: "Lab Insights", icon: TrendingUp, route: "/lab-trends" },
+  { label: "Ask Swastha", icon: Sparkles, route: "/search" },
 ];
 
 const FILTERS = ["All Members"];
@@ -544,9 +544,6 @@ function FilterBar({ activeFilter, setActiveFilter, filters = ["All Members"] })
       </div>
 
       <div className="flex items-center gap-2">
-        <button className="w-9 h-9 rounded-xl flex items-center justify-center text-slate-400 transition-all duration-200 hover:bg-slate-50 hover:text-blue-600">
-          <Search size={17} />
-        </button>
         <button className="w-9 h-9 rounded-xl flex items-center justify-center text-slate-400 transition-all duration-200 hover:bg-slate-50 hover:text-blue-600">
           <SlidersHorizontal size={17} />
         </button>
