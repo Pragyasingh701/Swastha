@@ -46,6 +46,13 @@ export async function createTimelineReport(reportData, token) {
   }, token);
 }
 
+export async function updateTimelineReport(reportId, reportData, token) {
+  return request(`/${encodeURIComponent(reportId)}`, {
+    method: 'PUT',
+    body: JSON.stringify(reportData),
+  }, token);
+}
+
 export async function deleteTimelineReport(reportId, token) {
   return request(`/${encodeURIComponent(reportId)}`, {
     method: 'DELETE',
@@ -55,5 +62,6 @@ export async function deleteTimelineReport(reportId, token) {
 export default {
   getTimelineReports,
   createTimelineReport,
+  updateTimelineReport,
   deleteTimelineReport,
 };

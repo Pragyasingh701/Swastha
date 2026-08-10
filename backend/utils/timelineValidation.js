@@ -41,10 +41,17 @@ export function validateTimelineReportPayload(payload) {
   const medicines = normalizeText(payload?.medicines);
   const notes = normalizeText(payload?.notes || '');
 
-  if (!title || !doctor || !hospital || !diagnosis || !medicines) {
+  // Only title/date/category are hard requirements. Doctor, hospital,
+  // diagnosis, and medicines are allowed blank — the AI-extraction upload
+  // flow (see rag/src/config/gemini.js extractReportFromImage) deliberately
+  // leaves a field empty rather than guess when handwriting on a scanned
+  // prescription is illegible, and the patient reviewing it may not know
+  // the answer either. A blank field a clinician can check against the
+  // original document is safer than a forced placeholder value.
+  if (!title) {
     return {
       valid: false,
-      message: 'Title, doctor, hospital, diagnosis, and medicines are required.',
+      message: 'Title is required.',
     };
   }
 

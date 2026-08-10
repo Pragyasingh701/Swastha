@@ -15,6 +15,8 @@ frontend/.env
 # Local data & temporary fallback files
 backend/data/
 *.json.bak
+uploads/
+backend/uploads/
 
 # Build outputs
 dist/

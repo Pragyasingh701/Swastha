@@ -29,8 +29,10 @@ const upload = multer({
 /**
  * POST /api/extract
  * multipart/form-data, field name "file" — an image of a medical report.
- * Returns best-effort extracted fields for the user to review/edit before
- * saving via backend/api/reports. Never saves anything itself.
+ * Returns { fields, unclear } — best-effort extracted fields plus the list
+ * of field keys Gemini couldn't confidently read (e.g. illegible
+ * handwriting), for the user to review/fill in before saving via
+ * backend/api/reports. Never saves anything itself.
  */
 router.post('/', requireAuth, (req, res) => {
   upload.single('file')(req, res, async (err) => {
@@ -42,11 +44,11 @@ router.post('/', requireAuth, (req, res) => {
     }
 
     try {
-      const fields = await extractReportFromImage({
+      const { fields, unclear } = await extractReportFromImage({
         data: req.file.buffer.toString('base64'),
         mime: req.file.mimetype,
       });
-      return res.status(200).json({ fields });
+      return res.status(200).json({ fields, unclear });
     } catch (extractErr) {
       console.error(`[POST /api/extract] failed for user ${req.user.userId}:`, extractErr);
       return res.status(500).json({
