@@ -115,6 +115,9 @@ export default function Login() {
       console.error("Google Login Error:", errorResponse);
       setErrorMessage("Google Sign-In popup failed or was closed.");
     },
+    onNonOAuthError: () => {
+      setIsGoogleLoading(false);
+    },
   });
 
   return (

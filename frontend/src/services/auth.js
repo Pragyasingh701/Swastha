@@ -94,16 +94,14 @@ export const authService = {
    * Update User Role in Backend
    */
   async updateRole(userId, role) {
-    try {
-      const response = await fetch(`${API_BASE_URL}/auth/role`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId, role }),
-      });
-      return await response.json();
-    } catch (err) {
-      return { success: true, role };
-    }
+    const response = await fetch(`${API_BASE_URL}/auth/role`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId, role }),
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.message || 'Failed to update role');
+    return data;
   },
 
   /**

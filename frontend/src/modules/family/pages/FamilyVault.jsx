@@ -17,6 +17,7 @@ import {
   LogOut,
 } from 'lucide-react';
 import { useAuth } from '../../../context/AuthContext';
+import ProfileDropdown from '../../settings/components/ProfileDropdown';
 import {
   createFamilyMember,
   createFamilyVault,
@@ -227,7 +228,13 @@ function Sidebar() {
         </button>
 
         <div className="space-y-1 pt-2">
-          <button type="button" className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-100" title="Settings" aria-label="Settings">
+          <button
+            type="button"
+            onClick={() => navigate('/settings')}
+            className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-100"
+            title="Settings"
+            aria-label="Settings"
+          >
             <Settings size={18} />
             Settings
           </button>
@@ -252,13 +259,7 @@ function StatCard({ label, value, detail }) {
 }
 
 function Header({ userName, userEmail }) {
-  const { logout } = useAuth();
   const navigate = useNavigate();
-
-  const handleLogout = () => {
-    logout();
-    navigate('/login', { replace: true });
-  };
 
   return (
     <header className="flex items-center gap-4 border-b border-slate-200 bg-white px-6 py-5 lg:px-8">
@@ -276,23 +277,7 @@ function Header({ userName, userEmail }) {
         <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-red-500" />
       </button>
 
-      <div className="flex items-center gap-3 border-l border-slate-200 pl-3">
-        <div className="hidden text-right sm:block">
-          <p className="text-sm font-semibold text-slate-800">{userName || 'Loading user...'}</p>
-          <p className="text-xs text-slate-400">{userEmail || 'Fetching profile...'}</p>
-        </div>
-        <div className="flex h-9 w-9 items-center justify-center rounded-full bg-blue-100 font-semibold text-blue-700">
-          {(userName || 'U').charAt(0).toUpperCase()}
-        </div>
-        <button
-          type="button"
-          onClick={handleLogout}
-          title="Log out"
-          className="p-2 text-slate-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors flex items-center justify-center ml-1"
-        >
-          <LogOut size={20} />
-        </button>
-      </div>
+      <ProfileDropdown />
     </header>
   );
 }

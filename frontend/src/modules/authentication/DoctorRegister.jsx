@@ -4,7 +4,7 @@ import { useAuth } from "../../context/AuthContext";
 
 export default function DoctorRegister() {
   const navigate = useNavigate();
-  const { user, updateProfile, uploadDocument, setUserRole } = useAuth();
+  const { user, updateProfile, uploadDocument, setUserRole, logout } = useAuth();
 
   useEffect(() => {
     // Check if user has already completed registration
@@ -19,7 +19,7 @@ export default function DoctorRegister() {
     // Check if user is not authenticated
     const hasToken = localStorage.getItem('swastha_token');
     if (!activeUser && !hasToken) {
-      navigate("/register", { replace: true });
+      navigate("/login", { replace: true });
     }
   }, [user, navigate]);
 
@@ -136,18 +136,17 @@ export default function DoctorRegister() {
             </div>
           </div>
           <div className="flex items-center gap-4">
-            <Link
-              className="text-on-surface-variant font-label-md text-label-md px-4 py-2 hover:bg-surface-container-high/50 rounded-xl transition-all"
-              to="/login"
+            <button
+              type="button"
+              onClick={() => {
+                logout();
+                navigate('/login', { replace: true });
+              }}
+              className="font-label-md text-label-md text-primary font-bold hover:underline transition-all flex items-center gap-1.5"
             >
-              Login
-            </Link>
-            <Link
-              className="bg-primary text-on-primary font-label-md text-label-md px-5 py-2.5 rounded-xl shadow-lg hover:scale-[0.98] transition-transform"
-              to="/register"
-            >
-              Get Started
-            </Link>
+              <span className="material-symbols-outlined text-[18px]">account_circle</span>
+              Login using another account
+            </button>
           </div>
         </div>
       </nav>

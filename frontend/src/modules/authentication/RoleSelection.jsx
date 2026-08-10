@@ -4,14 +4,19 @@ import { useAuth } from "../../context/AuthContext";
 
 export default function RoleSelection({ onSelectRole }) {
   const navigate = useNavigate();
-  const { user, setUserRole } = useAuth();
+  const { user, isAuthenticated, logout } = useAuth();
 
   useEffect(() => {
+    if (!isAuthenticated) {
+      navigate('/login', { replace: true });
+      return;
+    }
+
     // Only redirect to dashboard if user has completely finished role-specific registration
     if (user?.hasSelectedRole) {
       navigate('/dashboard', { replace: true });
     }
-  }, [user, navigate]);
+  }, [user, isAuthenticated, navigate]);
 
   const handleSelect = (role) => {
     if (onSelectRole) {
@@ -23,6 +28,11 @@ export default function RoleSelection({ onSelectRole }) {
     } else {
       navigate("/patient-register");
     }
+  };
+
+  const handleLogoutAndSwitch = () => {
+    logout();
+    navigate('/login', { replace: true });
   };
 
   return (
@@ -42,28 +52,25 @@ export default function RoleSelection({ onSelectRole }) {
               Select Experience
             </span>
           </div>
-          <div className="hidden md:flex gap-6 items-center">
-            <a
-              className="font-label-md text-label-md text-on-surface-variant hover:text-primary transition-colors"
-              href="#"
+
+          <div className="flex items-center gap-4">
+            <button
+              type="button"
+              onClick={handleLogoutAndSwitch}
+              className="font-label-md text-label-md text-primary hover:text-primary/80 font-bold transition-all flex items-center gap-1.5"
             >
-              Privacy Policy
-            </a>
-            <a
-              className="font-label-md text-label-md text-on-surface-variant hover:text-primary transition-colors"
-              href="#"
-            >
-              Support
-            </a>
+              <span className="material-symbols-outlined text-[18px]">account_circle</span>
+              Login using another account
+            </button>
           </div>
         </div>
       </header>
 
       {/* Main Content Canvas */}
-      <main className="flex-grow flex items-center justify-center pt-24 pb-12 px-6 z-10">
+      <main className="flex-grow flex items-center justify-center pt-28 pb-12 px-6 z-10">
         <div className="max-w-5xl w-full flex flex-col items-center">
           {/* Header Section */}
-          <div className="text-center mb-16 space-y-4">
+          <div className="text-center mb-12 space-y-4">
             <span className="inline-flex items-center px-4 py-1 rounded-full bg-primary-fixed text-on-primary-fixed-variant font-label-sm text-label-sm mb-2">
               Healthcare SaaS Platform
             </span>
@@ -149,8 +156,20 @@ export default function RoleSelection({ onSelectRole }) {
             </div>
           </div>
 
+          {/* Option to login using another account */}
+          <div className="mt-10 text-center">
+            <button
+              type="button"
+              onClick={handleLogoutAndSwitch}
+              className="font-label-md text-label-md text-primary font-bold hover:underline transition-all inline-flex items-center gap-2"
+            >
+              <span className="material-symbols-outlined text-[20px]">account_circle</span>
+              Login using another account
+            </button>
+          </div>
+
           {/* Secondary Info */}
-          <div className="mt-16 flex flex-wrap justify-center gap-12 opacity-60">
+          <div className="mt-12 flex flex-wrap justify-center gap-12 opacity-60">
             <div className="flex items-center gap-2">
               <span className="material-symbols-outlined text-[20px]">
                 verified_user

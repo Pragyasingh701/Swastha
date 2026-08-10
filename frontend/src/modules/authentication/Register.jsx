@@ -136,6 +136,9 @@ export default function Register() {
       console.error("Google Register Error:", errorResponse);
       setErrorMessage("Google Sign-Up popup failed or was closed.");
     },
+    onNonOAuthError: () => {
+      setIsGoogleLoading(false);
+    },
   });
 
   return (

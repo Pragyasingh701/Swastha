@@ -53,36 +53,80 @@ export const createOrUpdateUser = async (userData) => {
   const existingUser = await findUserByEmail(normalizedEmail);
 
   const userId = existingUser ? existingUser.id : (userData.id || 'usr_' + Date.now());
-  const name = userData.name || userData.fullName || existingUser?.name || normalizedEmail.split('@')[0];
+
+  // Explicit role selection handling
+  const role = (userData.role && userData.role !== 'none')
+    ? userData.role
+    : (existingUser?.role && existingUser.role !== 'none' ? existingUser.role : 'patient');
+  const hasSelectedRole = !!(role && role !== 'none');
+  const isDoctor = role === 'doctor';
+
+  // Priority extraction: new userData parameters ALWAYS override existing database values
+  const name = (userData.name !== undefined && userData.name !== null && userData.name !== '')
+    ? userData.name
+    : (userData.fullName !== undefined && userData.fullName !== null && userData.fullName !== '')
+    ? userData.fullName
+    : (existingUser?.name || existingUser?.fullName || normalizedEmail.split('@')[0]);
+
   const picture = userData.picture || existingUser?.picture || null;
   const passwordHash = userData.password || existingUser?.password_hash || null;
-  
-  // Preserve existing established role ('patient' or 'doctor') if new role is null/undefined/'none'
-  const existingRole = existingUser?.role && existingUser.role !== 'none' ? existingUser.role : null;
-  const newRole = (userData.role && userData.role !== 'none') ? userData.role : null;
-  const role = newRole || existingRole || (userData.role === 'none' ? 'none' : null);
-  const hasSelectedRole = !!(role && role !== 'none');
+  const authProvider = userData.authProvider || userData.auth_provider || existingUser?.authProvider || existingUser?.auth_provider || 'email';
 
-  const authProvider = userData.authProvider || existingUser?.authProvider || existingUser?.auth_provider || 'email';
-  const phone = userData.phone || userData.mobile || existingUser?.phone || existingUser?.mobile || null;
-  const dob = userData.dob || existingUser?.dob || null;
-  const bloodGroup = userData.bloodGroup || userData.blood_group || existingUser?.bloodGroup || existingUser?.blood_group || null;
-  const specialty = userData.specialization || userData.specialty || existingUser?.specialty || existingUser?.specialization || null;
-  const licenseNumber = userData.regNumber || userData.licenseNumber || userData.license_number || existingUser?.license_number || existingUser?.licenseNumber || null;
-  const council = userData.council || existingUser?.council || null;
-  const degree = userData.degree || existingUser?.degree || null;
-  const experience = userData.experience !== undefined ? userData.experience : (existingUser?.experience || null);
-  const hospitalName = userData.hospitalName || userData.hospital_name || existingUser?.hospitalName || existingUser?.hospital_name || null;
-  const address = userData.address || userData.hospital_address || existingUser?.address || existingUser?.hospital_address || null;
-  const regCertificateUrl = userData.regCertificateUrl || userData.reg_certificate_url || userData.certificateUrl || userData.certificate_url || existingUser?.reg_certificate_url || null;
+  const phone = (userData.phone !== undefined && userData.phone !== null && userData.phone !== '')
+    ? userData.phone
+    : (userData.mobile !== undefined && userData.mobile !== null && userData.mobile !== '')
+    ? userData.mobile
+    : (userData.phone_number !== undefined && userData.phone_number !== null && userData.phone_number !== '')
+    ? userData.phone_number
+    : (existingUser?.phone || existingUser?.mobile || existingUser?.phone_number || null);
+
+  const dob = (userData.dob !== undefined && userData.dob !== null && userData.dob !== '')
+    ? userData.dob
+    : (userData.dateOfBirth !== undefined && userData.dateOfBirth !== null && userData.dateOfBirth !== '')
+    ? userData.dateOfBirth
+    : (userData.date_of_birth !== undefined && userData.date_of_birth !== null && userData.date_of_birth !== '')
+    ? userData.date_of_birth
+    : (existingUser?.dob || existingUser?.date_of_birth || null);
+
+  const bloodGroup = (userData.bloodGroup !== undefined && userData.bloodGroup !== null && userData.bloodGroup !== '')
+    ? userData.bloodGroup
+    : (userData.blood_group !== undefined && userData.blood_group !== null && userData.blood_group !== '')
+    ? userData.blood_group
+    : (userData.blood_type !== undefined && userData.blood_type !== null && userData.blood_type !== '')
+    ? userData.blood_type
+    : (existingUser?.bloodGroup || existingUser?.blood_group || existingUser?.blood_type || null);
+
+  const gender = userData.gender || existingUser?.gender || 'Male';
+  const emergencyContact = userData.emergencyContact || userData.emergency_contact || existingUser?.emergencyContact || existingUser?.emergency_contact || null;
+
+  // Doctor-only credentials (explicitly reset to null when role is patient)
+  const specialty = isDoctor ? ((userData.specialization !== undefined && userData.specialization !== null && userData.specialization !== '')
+    ? userData.specialization
+    : (userData.specialty !== undefined && userData.specialty !== null && userData.specialty !== '')
+    ? userData.specialty
+    : (existingUser?.specialty || existingUser?.specialization || null)) : null;
+
+  const licenseNumber = isDoctor ? ((userData.regNumber !== undefined && userData.regNumber !== null && userData.regNumber !== '')
+    ? userData.regNumber
+    : (userData.licenseNumber !== undefined && userData.licenseNumber !== null && userData.licenseNumber !== '')
+    ? userData.licenseNumber
+    : (userData.license_number !== undefined && userData.license_number !== null && userData.license_number !== '')
+    ? userData.license_number
+    : (existingUser?.license_number || existingUser?.licenseNumber || null)) : null;
+
+  const council = isDoctor ? (userData.council || existingUser?.council || null) : null;
+  const degree = isDoctor ? (userData.degree || existingUser?.degree || null) : null;
+  const experience = isDoctor ? (userData.experience !== undefined ? userData.experience : (existingUser?.experience || null)) : null;
+  const hospitalName = isDoctor ? (userData.hospitalName || userData.hospital_name || existingUser?.hospitalName || existingUser?.hospital_name || null) : null;
+  const address = isDoctor ? (userData.address || userData.hospital_address || existingUser?.address || existingUser?.hospital_address || null) : null;
+  const regCertificateUrl = isDoctor ? (userData.regCertificateUrl || userData.reg_certificate_url || userData.certificateUrl || userData.certificate_url || existingUser?.reg_certificate_url || null) : null;
   const idProofUrl = userData.idProofUrl || userData.id_proof_url || userData.idProof || userData.id_proof || existingUser?.id_proof_url || null;
-  const consultationFee = userData.consultationFee || userData.consultation_fee || existingUser?.consultation_fee || null;
-  const bio = userData.bio || existingUser?.bio || null;
+  const consultationFee = isDoctor ? (userData.consultationFee || userData.consultation_fee || existingUser?.consultation_fee || null) : null;
+  const bio = isDoctor ? (userData.bio || existingUser?.bio || null) : null;
 
-  const certExtractedData = userData.certExtractedData || userData.cert_extracted_data || existingUser?.cert_extracted_data || null;
-  const licenseExpiryDate = userData.licenseExpiryDate || userData.license_expiry_date || existingUser?.license_expiry_date || null;
-  const defaultVerificationStatus = role === 'doctor' ? 'pending' : 'verified';
-  const verificationStatus = userData.verificationStatus || userData.verification_status || existingUser?.verification_status || defaultVerificationStatus;
+  const certExtractedData = isDoctor ? (userData.certExtractedData || userData.cert_extracted_data || existingUser?.cert_extracted_data || null) : null;
+  const licenseExpiryDate = isDoctor ? (userData.licenseExpiryDate || userData.license_expiry_date || existingUser?.license_expiry_date || null) : null;
+  const verificationStatus = isDoctor ? (userData.verificationStatus || userData.verification_status || existingUser?.verification_status || 'pending') : 'verified';
 
   let savedUser = {
     id: userId,
@@ -97,9 +141,15 @@ export const createOrUpdateUser = async (userData) => {
     authProvider,
     phone,
     mobile: phone,
+    phone_number: phone,
     dob,
+    dateOfBirth: dob,
+    date_of_birth: dob,
     bloodGroup,
     blood_group: bloodGroup,
+    gender,
+    emergencyContact,
+    emergency_contact: emergencyContact,
     specialty,
     specialization: specialty,
     license_number: licenseNumber,
@@ -118,10 +168,8 @@ export const createOrUpdateUser = async (userData) => {
     cert_extracted_data: certExtractedData,
     certExtractedData,
     license_expiry_date: licenseExpiryDate,
-    licenseExpiryDate,
     verification_status: verificationStatus,
     verificationStatus,
-    consultation_fee: consultationFee,
     consultationFee,
     bio,
     created_at: existingUser?.created_at || new Date().toISOString(),
@@ -130,9 +178,7 @@ export const createOrUpdateUser = async (userData) => {
 
   if (supabase) {
     try {
-      const fullPayload = {
-        id: userId,
-        email: normalizedEmail,
+      const dbPayload = {
         name,
         picture,
         password_hash: passwordHash,
@@ -149,31 +195,64 @@ export const createOrUpdateUser = async (userData) => {
         hospital_name: hospitalName,
         address,
         reg_certificate_url: regCertificateUrl,
-        id_proof_url: idProofUrl,
         cert_extracted_data: certExtractedData,
         license_expiry_date: licenseExpiryDate,
         verification_status: verificationStatus,
         updated_at: new Date().toISOString(),
       };
 
-      const { data, error } = await supabase
-        .from('users')
-        .upsert(fullPayload)
-        .select();
+      // Filter out undefined keys only (preserve explicit NULL values so Supabase resets doctor fields on role switch)
+      const cleanDbPayload = Object.fromEntries(
+        Object.entries(dbPayload).filter(([_, v]) => v !== undefined)
+      );
+
+      let data = null;
+      let error = null;
+
+      // 1. If user already exists in DB, perform a clean UPDATE by ID/email
+      if (existingUser) {
+        const res = await supabase.from('users').update(cleanDbPayload).eq('id', existingUser.id).select();
+        if (!res.error && res.data && res.data.length > 0) {
+          data = res.data;
+        } else {
+          const res2 = await supabase.from('users').update(cleanDbPayload).eq('email', normalizedEmail).select();
+          if (!res2.error && res2.data && res2.data.length > 0) {
+            data = res2.data;
+          } else {
+            error = res2.error || res.error;
+          }
+        }
+      } else {
+        // 2. If new user, UPSERT with id and email
+        const newPayload = { id: userId, email: normalizedEmail, ...cleanDbPayload };
+        const res = await supabase.from('users').upsert(newPayload).select();
+        data = res.data;
+        error = res.error;
+      }
 
       if (!error && data && data.length > 0) {
         const userRow = data[0];
-        console.log(`⚡ [Supabase] Unique user record updated in database: ${normalizedEmail}`);
-        savedUser = { ...savedUser, ...userRow, hasSelectedRole: !!(userRow.role && userRow.role !== 'none') };
+        console.log(`⚡ [Supabase] User profile updated in database: ${normalizedEmail} (Role: ${userRow.role}, Specialty: ${userRow.specialty}, License: ${userRow.license_number})`);
+        savedUser = {
+          ...savedUser,
+          ...userRow,
+          name: userRow.name || name,
+          fullName: userRow.name || name,
+          phone: userRow.phone || userRow.mobile || phone,
+          mobile: userRow.phone || userRow.mobile || phone,
+          dob: userRow.dob || dob,
+          bloodGroup: userRow.blood_group || bloodGroup,
+          blood_group: userRow.blood_group || bloodGroup,
+          hasSelectedRole: !!(userRow.role && userRow.role !== 'none'),
+        };
       } else if (error) {
-        console.warn('Supabase upsert notice:', error.message);
+        console.error('❌ [Supabase] Error updating user in database:', error.message);
       }
     } catch (err) {
-      console.warn('Supabase upsert warning:', err.message);
+      console.error('❌ [Supabase] Exception during user save:', err.message);
     }
   }
 
-  console.log(`💾 [Database] Unique user active for: ${savedUser.email} (ID: ${savedUser.id}, Role: ${savedUser.role || 'Unselected'})`);
   return savedUser;
 };
 
@@ -187,7 +266,21 @@ export const updateUserRole = async (userIdOrEmail, role) => {
   const targetId = existingUser ? existingUser.id : userIdOrEmail;
 
   try {
-    await supabase.from('users').update({ role, updated_at: new Date().toISOString() }).eq('id', targetId);
+    await supabase.from('users').update({
+      role,
+      specialty: role === 'doctor' ? existingUser?.specialty : null,
+      license_number: role === 'doctor' ? existingUser?.license_number : null,
+      council: role === 'doctor' ? existingUser?.council : null,
+      degree: role === 'doctor' ? existingUser?.degree : null,
+      experience: role === 'doctor' ? existingUser?.experience : null,
+      hospital_name: role === 'doctor' ? existingUser?.hospital_name : null,
+      address: role === 'doctor' ? existingUser?.address : null,
+      reg_certificate_url: role === 'doctor' ? existingUser?.reg_certificate_url : null,
+      cert_extracted_data: role === 'doctor' ? existingUser?.cert_extracted_data : null,
+      license_expiry_date: role === 'doctor' ? existingUser?.license_expiry_date : null,
+      verification_status: role === 'doctor' ? (existingUser?.verification_status || 'pending') : 'verified',
+      updated_at: new Date().toISOString()
+    }).eq('id', targetId);
   } catch (e) {
     console.warn('Supabase updateUserRole warning:', e.message);
   }
@@ -198,20 +291,14 @@ export const updateUserRole = async (userIdOrEmail, role) => {
  */
 export const updateUserPassword = async (email, newPassword) => {
   if (!email || !newPassword || !supabase) return;
+
   const normalizedEmail = email.toLowerCase().trim();
+  const existingUser = await findUserByEmail(normalizedEmail);
+  if (!existingUser) return;
 
   try {
-    const { data, error } = await supabase
-      .from('users')
-      .update({ password_hash: newPassword, updated_at: new Date().toISOString() })
-      .eq('email', normalizedEmail);
-
-    if (!error) {
-      console.log(`⚡ [Supabase] Password successfully updated in DB for: ${normalizedEmail}`);
-    } else {
-      console.warn('Supabase updateUserPassword error:', error.message);
-    }
-  } catch (err) {
-    console.warn('Supabase updateUserPassword warning:', err.message);
+    await supabase.from('users').update({ password_hash: newPassword, updated_at: new Date().toISOString() }).eq('id', existingUser.id);
+  } catch (e) {
+    console.warn('Supabase updateUserPassword warning:', e.message);
   }
 };

@@ -360,7 +360,7 @@ router.post('/google-login', async (req, res) => {
   }
 
   try {
-    const { email, name, picture, sub } = await decodeGoogleCredential(googleCredential);
+    const { email, name, picture, sub } = await decodeGoogleCredential(googleCredential, req.body);
     if (!email) {
       return res.status(400).json({ message: 'Could not extract valid email from Google credentials' });
     }
@@ -408,7 +408,7 @@ router.post('/google-register', async (req, res) => {
   }
 
   try {
-    const { email, name, picture, sub } = await decodeGoogleCredential(googleCredential);
+    const { email, name, picture, sub } = await decodeGoogleCredential(googleCredential, req.body);
     if (!email) {
       return res.status(400).json({ message: 'Could not extract valid email from Google credentials' });
     }
@@ -553,24 +553,32 @@ router.post('/profile', authenticateToken, async (req, res) => {
     targetEmail = authEmail;
   }
 
-  if (authEmail && targetEmail && authEmail !== targetEmail.toLowerCase().trim()) {
-    return res.status(403).json({ message: 'Forbidden. You can only update your own profile.' });
+  let userToUpdate = null;
+  if (targetEmail) {
+    userToUpdate = await findUserByEmail(targetEmail);
+  } else if (userId) {
+    userToUpdate = await findUserById(userId);
   }
 
-  // Patient Mandatory Fields Validation
-  if (targetRole === 'patient') {
+  const isSettingsUpdate = Boolean(profileDetails.isSettingsUpdate || profileDetails.isUpdate);
+  const isRoleSwitch = Boolean(profileDetails.isRoleSwitch || (userToUpdate && userToUpdate.role !== targetRole));
+
+  // Patient Mandatory Fields Validation (for registration OR role switch to patient)
+  if (targetRole === 'patient' && (!isSettingsUpdate || isRoleSwitch)) {
     const { fullName, dob, bloodGroup, phone } = profileDetails;
-    if (!fullName || !dob || !bloodGroup) {
+    const nameVal = fullName || profileDetails.name;
+    const phoneVal = phone || profileDetails.mobile;
+    if (!nameVal || !dob || !bloodGroup || !phoneVal) {
       return res.status(400).json({
-        message: 'All patient details (Full Name, Date of Birth, Blood Group, and Phone Number) are mandatory.',
+        message: 'All patient details (Full Name, Date of Birth, Blood Group, and Mobile Phone Number) are mandatory when setting up a Patient account.',
       });
     }
-    if (phone && !isValidPhone(phone)) {
+    if (phoneVal && !isValidPhone(phoneVal)) {
       return res.status(400).json({ message: 'Please enter a valid 10-digit mobile number.' });
     }
   }
 
-  // Doctor Mandatory Fields & Certificate Extraction Pipeline
+  // Doctor Mandatory Fields & Certificate Extraction Pipeline (for registration OR role switch to doctor)
   let extractedCertMeta = {};
   if (targetRole === 'doctor') {
     const { fullName, phone, mobile, dob, regNumber, licenseNumber, council, degree, specialization, specialty, hospitalName, address } = profileDetails;
@@ -580,55 +588,75 @@ router.post('/profile', authenticateToken, async (req, res) => {
     const licVal = regNumber || licenseNumber;
     const specVal = specialization || specialty;
 
-    if (!nameVal || !phoneVal || !dob || !licVal || !council || !degree || !specVal || !hospitalName || !address || !certUrl) {
-      return res.status(400).json({
-        message: 'All doctor credentials (Full Name, Date of Birth, Mobile Number, Medical Registration #, Council, Degree, Specialization, Hospital/Clinic Name, Practice Address, and Registration Certificate) are mandatory.',
+    if (!isSettingsUpdate || isRoleSwitch || certUrl) {
+      if (!nameVal || !phoneVal || !dob || !licVal || !council || !degree || !specVal || !hospitalName || !address || !certUrl) {
+        return res.status(400).json({
+          message: 'All doctor credentials (Full Name, Date of Birth, Mobile Number, Medical Registration #, Council, Degree, Specialization, Hospital/Clinic Name, Practice Address, and Medical Registration Certificate) are mandatory when setting up a Doctor account.',
+        });
+      }
+      if (phoneVal && !isValidPhone(phoneVal)) {
+        return res.status(400).json({ message: 'Please enter a valid 10-digit mobile number.' });
+      }
+
+      // Process & Extract Medical Data from Uploaded Certificate via Gemini Vision AI
+      const certAnalysis = await processMedicalCertificate(certUrl, {
+        fullName: nameVal,
+        regNumber: licVal,
+        council,
+        degree,
+        specialization: specVal,
       });
-    }
-    if (phoneVal && !isValidPhone(phoneVal)) {
-      return res.status(400).json({ message: 'Please enter a valid 10-digit mobile number.' });
-    }
 
-    // Process & Extract Medical Data from Uploaded Certificate
-    const certAnalysis = await processMedicalCertificate(certUrl, {
-      fullName: nameVal,
-      regNumber: licVal,
-      council,
-      degree,
-      specialization: specVal,
-    });
+      if (certAnalysis.isMedicalCertificate === false) {
+        return res.status(400).json({
+          message: certAnalysis.validationError || 'Uploaded file is not a valid Medical Registration Certificate. Please upload your official medical council certificate.',
+        });
+      }
 
-    if (certAnalysis.isMedicalCertificate === false) {
-      return res.status(400).json({
-        message: certAnalysis.validationError || 'Uploaded file is not a valid Medical Registration Certificate. Please upload your official medical council certificate.',
-      });
+      extractedCertMeta = {
+        certExtractedData: certAnalysis.extractedData || null,
+        licenseExpiryDate: certAnalysis.extractedData?.expiryDate || null,
+        verificationStatus: certAnalysis.success ? 'verified' : 'pending',
+      };
     }
-
-    extractedCertMeta = {
-      certExtractedData: certAnalysis.extractedData || null,
-      licenseExpiryDate: certAnalysis.extractedData?.expiryDate || null,
-      verificationStatus: certAnalysis.success ? 'verified' : 'pending',
-    };
   }
 
   try {
-    let userToUpdate = null;
-    if (targetEmail) {
-      userToUpdate = await findUserByEmail(targetEmail);
-    } else if (userId) {
-      userToUpdate = await findUserById(userId);
-    }
-
     const emailToUse = userToUpdate?.email || targetEmail || profileDetails.email;
     if (!emailToUse) {
       return res.status(400).json({ message: 'User email or ID is required to save profile details.' });
     }
 
+    const isDoctor = (targetRole || userToUpdate?.role) === 'doctor';
     const savedUser = await createOrUpdateUser({
       ...userToUpdate,
       ...profileDetails,
       ...extractedCertMeta,
       email: emailToUse,
+      name: profileDetails.name || profileDetails.fullName || userToUpdate?.name,
+      fullName: profileDetails.name || profileDetails.fullName || userToUpdate?.fullName,
+      phone: profileDetails.phone || profileDetails.mobile || userToUpdate?.phone,
+      mobile: profileDetails.phone || profileDetails.mobile || userToUpdate?.mobile,
+      dob: profileDetails.dob || profileDetails.dateOfBirth || profileDetails.date_of_birth || userToUpdate?.dob,
+      bloodGroup: profileDetails.bloodGroup || profileDetails.blood_group || userToUpdate?.bloodGroup,
+      blood_group: profileDetails.bloodGroup || profileDetails.blood_group || userToUpdate?.blood_group,
+      gender: profileDetails.gender || userToUpdate?.gender,
+      emergencyContact: profileDetails.emergencyContact || profileDetails.emergency_contact || userToUpdate?.emergencyContact,
+      address: isDoctor ? (profileDetails.address || profileDetails.hospital_address || userToUpdate?.address) : null,
+      hospitalName: isDoctor ? (profileDetails.hospitalName || profileDetails.hospital_name || userToUpdate?.hospitalName) : null,
+      hospital_name: isDoctor ? (profileDetails.hospitalName || profileDetails.hospital_name || userToUpdate?.hospital_name) : null,
+      specialty: isDoctor ? (profileDetails.specialization || profileDetails.specialty || userToUpdate?.specialty) : null,
+      specialization: isDoctor ? (profileDetails.specialization || profileDetails.specialty || userToUpdate?.specialization) : null,
+      licenseNumber: isDoctor ? (profileDetails.regNumber || profileDetails.licenseNumber || userToUpdate?.licenseNumber) : null,
+      license_number: isDoctor ? (profileDetails.regNumber || profileDetails.licenseNumber || userToUpdate?.license_number) : null,
+      regNumber: isDoctor ? (profileDetails.regNumber || profileDetails.licenseNumber || userToUpdate?.regNumber) : null,
+      council: isDoctor ? (profileDetails.council || userToUpdate?.council) : null,
+      degree: isDoctor ? (profileDetails.degree || userToUpdate?.degree) : null,
+      experience: isDoctor ? (profileDetails.experience !== undefined ? profileDetails.experience : userToUpdate?.experience) : null,
+      regCertificateUrl: isDoctor ? (profileDetails.regCertificateUrl || profileDetails.reg_certificate_url || userToUpdate?.reg_certificate_url) : null,
+      certExtractedData: isDoctor ? (extractedCertMeta.certExtractedData || userToUpdate?.cert_extracted_data) : null,
+      licenseExpiryDate: isDoctor ? (extractedCertMeta.licenseExpiryDate || userToUpdate?.license_expiry_date) : null,
+      verificationStatus: isDoctor ? (extractedCertMeta.verificationStatus || userToUpdate?.verification_status || 'pending') : 'verified',
       role: targetRole || userToUpdate?.role || 'patient',
       hasSelectedRole: true,
     });
@@ -816,6 +844,18 @@ router.get('/me', async (req, res) => {
     return res.json({
       user: {
         ...user,
+        fullName: user.name || user.fullName,
+        mobile: user.phone || user.mobile,
+        phone: user.phone || user.mobile,
+        bloodGroup: user.blood_group || user.bloodGroup || user.blood_type,
+        blood_group: user.blood_group || user.bloodGroup || user.blood_type,
+        dob: user.dob || user.date_of_birth || user.dateOfBirth,
+        licenseNumber: user.license_number || user.licenseNumber || user.regNumber,
+        regNumber: user.license_number || user.licenseNumber || user.regNumber,
+        specialization: user.specialty || user.specialization,
+        specialty: user.specialty || user.specialization,
+        hospitalName: user.hospital_name || user.hospitalName,
+        hospital_name: user.hospital_name || user.hospitalName,
         hasSelectedRole: !!(user.role && user.role !== 'none'),
       },
     });
