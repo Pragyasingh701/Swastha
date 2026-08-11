@@ -13,15 +13,13 @@ const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 10 * 1024 * 1024 }, // 10MB, matches backend's upload limit
   fileFilter: (req, file, cb) => {
-    const allowed = ['image/jpeg', 'image/png', 'image/webp'];
-    if (allowed.includes(file.mimetype)) {
+    const allowed = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'];
+    const isPdfByName = (file.originalname || '').toLowerCase().endsWith('.pdf');
+
+    if (allowed.includes(file.mimetype) || isPdfByName) {
       cb(null, true);
     } else {
-      // PDFs aren't accepted here — Gemini's inlineData image path expects
-      // a rasterized image, not a PDF. If PDF upload support is needed
-      // later, convert to an image first rather than passing the PDF mime
-      // straight through (untested against this prompt/response shape).
-      cb(new Error('Only JPEG, PNG, or WEBP images are supported for AI extraction.'));
+      cb(new Error('Only PDF, JPEG, PNG, or WEBP files are supported for AI extraction.'));
     }
   },
 });

@@ -69,7 +69,7 @@ function Sidebar() {
       <div className="space-y-3 pt-4">
         <button
           type="button"
-          onClick={() => navigate("/timeline")}
+          onClick={() => navigate("/timeline?upload=true")}
           className="w-full flex items-center justify-center gap-2 bg-blue-700 hover:bg-blue-800 transition-all duration-200 hover:shadow-md hover:-translate-y-0.5 text-white text-sm font-semibold py-2.5 rounded-lg"
         >
           <UploadCloud size={18} />

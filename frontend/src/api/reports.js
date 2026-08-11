@@ -11,7 +11,6 @@ function getStoredToken() {
 async function request(path, options = {}, token) {
   const authToken = token || getStoredToken();
   const headers = {
-    'Content-Type': 'application/json',
     ...(options.headers || {}),
   };
 
@@ -34,22 +33,59 @@ async function request(path, options = {}, token) {
   return data;
 }
 
+function preparePayload(reportData, file) {
+  const targetFile = file || (reportData?.file instanceof File ? reportData.file : null);
+  if (!targetFile) {
+    const { file: _ignored, ...cleanData } = reportData || {};
+    return {
+      body: JSON.stringify(cleanData),
+      headers: { 'Content-Type': 'application/json' },
+    };
+  }
+
+  const formData = new FormData();
+  formData.append('file', targetFile);
+
+  if (reportData) {
+    Object.keys(reportData).forEach((key) => {
+      if (key === 'file') return;
+      const value = reportData[key];
+      if (value !== undefined && value !== null) {
+        if (typeof value === 'object') {
+          formData.append(key, JSON.stringify(value));
+        } else {
+          formData.append(key, String(value));
+        }
+      }
+    });
+  }
+
+  return {
+    body: formData,
+    headers: {},
+  };
+}
+
 export async function getTimelineReports(token, memberEmail) {
   const query = memberEmail ? `?email=${encodeURIComponent(memberEmail)}` : '';
   return request(query || '/', {}, token);
 }
 
-export async function createTimelineReport(reportData, token) {
+export async function createTimelineReport(reportData, token, file) {
+  const { body, headers } = preparePayload(reportData, file);
   return request('/', {
     method: 'POST',
-    body: JSON.stringify(reportData),
+    headers,
+    body,
   }, token);
 }
 
-export async function updateTimelineReport(reportId, reportData, token) {
+export async function updateTimelineReport(reportId, reportData, token, file) {
+  const { body, headers } = preparePayload(reportData, file);
   return request(`/${encodeURIComponent(reportId)}`, {
     method: 'PUT',
-    body: JSON.stringify(reportData),
+    headers,
+    body,
   }, token);
 }
 

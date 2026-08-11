@@ -3,9 +3,44 @@ import supabase from '../config/supabase.js';
 const REPORTS_TABLE = process.env.REPORTS_TABLE_NAME || 'reports';
 const REPORTS_USER_ID_COLUMN = process.env.REPORTS_USER_ID_COLUMN || 'user_id';
 
+function normalizeText(value) {
+  return typeof value === 'string' ? value.trim() : '';
+}
+
+function splitStoredNotes(value) {
+  const raw = normalizeText(value);
+  if (!raw) {
+    return { notes: '', analysis: '' };
+  }
+
+  const marker = '\n\n[AI Analysis]\n';
+  const markerIndex = raw.indexOf(marker);
+
+  if (markerIndex === -1) {
+    return { notes: raw, analysis: '' };
+  }
+
+  return {
+    notes: raw.slice(0, markerIndex).trim(),
+    analysis: raw.slice(markerIndex + marker.length).trim(),
+  };
+}
+
+function buildStoredNotes(notes, analysis) {
+  const baseNotes = normalizeText(notes);
+  const analysisText = normalizeText(analysis);
+
+  if (!analysisText) {
+    return baseNotes || null;
+  }
+
+  return [baseNotes, `[AI Analysis]\n${analysisText}`].filter(Boolean).join('\n\n');
+}
+
 function normalizeReport(row) {
   if (!row) return null;
   const userIdFromRow = row[REPORTS_USER_ID_COLUMN] ?? row.user_id ?? row.userId ?? null;
+  const { notes, analysis } = splitStoredNotes(row.notes);
 
   return {
     id: row.id,
@@ -17,7 +52,8 @@ function normalizeReport(row) {
     reportDate: row.report_date,
     diagnosis: row.diagnosis,
     medicines: row.medicines,
-    notes: row.notes,
+    notes,
+    analysis,
     fileUrl: row.file_url || null,
     unclearFields: Array.isArray(row.unclear_fields) ? row.unclear_fields : [],
     source: row.source || 'manual',
@@ -75,7 +111,7 @@ export const createTimelineReport = async (reportData) => {
     report_date: toISODate(reportDateValue),
     diagnosis: String(reportData.diagnosis || '').trim(),
     medicines: String(reportData.medicines || '').trim(),
-    notes: String(reportData.notes || '').trim() || null,
+    notes: buildStoredNotes(reportData.notes, reportData.analysis),
     file_url: reportData.fileUrl || null,
     unclear_fields: Array.isArray(reportData.unclearFields) ? reportData.unclearFields : [],
     source: reportData.source || 'manual',
@@ -118,7 +154,7 @@ export const updateTimelineReport = async (userId, reportId, reportData) => {
     report_date: toISODate(reportDateValue),
     diagnosis: String(reportData.diagnosis || '').trim(),
     medicines: String(reportData.medicines || '').trim(),
-    notes: String(reportData.notes || '').trim() || null,
+    notes: buildStoredNotes(reportData.notes, reportData.analysis),
     file_url: reportData.fileUrl || null,
     unclear_fields: Array.isArray(reportData.unclearFields) ? reportData.unclearFields : [],
     updated_at: new Date().toISOString(),

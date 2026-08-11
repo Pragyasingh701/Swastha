@@ -3,6 +3,10 @@ import jwt from 'jsonwebtoken';
 import { listTimelineReports, createTimelineReport, updateTimelineReport, deleteTimelineReport } from '../db/reports.js';
 import { findUserByEmail } from '../db/users.js';
 import { validateTimelineReportPayload } from '../utils/timelineValidation.js';
+import { uploadMemory } from '../config/supabaseStorage.js';
+import { uploadImageToCloudinary } from '../config/cloudinary.js';
+import { uploadFileToSupabase } from '../config/supabaseStorage.js';
+import supabase from '../config/supabase.js';
 
 const router = express.Router();
 const JWT_SECRET = process.env.JWT_SECRET || 'swastha_dev_secret_key_2026';
@@ -21,13 +25,86 @@ function getAuthUser(req) {
   }
 }
 
+// Multer middleware wrapper with error handling
+function handleReportFileUpload(req, res, next) {
+  const contentType = String(req.headers['content-type'] || '');
+  if (!contentType.startsWith('multipart/form-data')) {
+    return next();
+  }
+
+  uploadMemory.single('file')(req, res, (err) => {
+    if (err) {
+      console.error('Report file upload error:', err);
+      return res.status(400).json({ message: err.message || 'File upload failed.' });
+    }
+    next();
+  });
+}
+
 // Field names AI extraction (rag/) couldn't confidently read from an
 // uploaded prescription image and the patient left blank — allow-list
 // against known field names, this is not free-form user input.
 const KNOWN_UNCLEAR_FIELDS = ['doctor', 'hospital', 'date', 'diagnosis', 'medicines', 'notes'];
 function sanitizeUnclearFields(value) {
-  return Array.isArray(value) ? value.filter((f) => KNOWN_UNCLEAR_FIELDS.includes(f)) : [];
+  let fields = value;
+  if (typeof fields === 'string') {
+    try {
+      fields = JSON.parse(fields);
+    } catch {
+      fields = [];
+    }
+  }
+  return Array.isArray(fields) ? fields.filter((f) => KNOWN_UNCLEAR_FIELDS.includes(f)) : [];
 }
+
+router.get('/file', async (req, res) => {
+  const fileUrl = String(req.query.url || '').trim();
+
+  if (!fileUrl) {
+    return res.status(400).json({ message: 'A file URL is required.' });
+  }
+
+  try {
+    const upstreamResponse = await fetch(fileUrl);
+    if (!upstreamResponse.ok) {
+      return res.status(upstreamResponse.status).send('Unable to load the requested file.');
+    }
+
+    const contentType = upstreamResponse.headers.get('content-type') || 'application/octet-stream';
+    const buffer = Buffer.from(await upstreamResponse.arrayBuffer());
+
+    res.setHeader('Content-Type', contentType);
+    res.setHeader('Cache-Control', 'private, max-age=0, no-store');
+    res.setHeader('Content-Disposition', 'inline; filename="report-file"');
+    return res.send(buffer);
+  } catch (error) {
+    console.error('File preview proxy error:', error);
+    return res.status(502).json({ message: 'Unable to load the requested file.' });
+  }
+});
+
+// Return a short-lived signed URL for a storage object path (private buckets)
+router.get('/signed-url', async (req, res) => {
+  const path = String(req.query.path || '').trim();
+  if (!path) {
+    return res.status(400).json({ message: 'A storage path is required (e.g. reports/123.pdf).' });
+  }
+
+  try {
+    const bucket = process.env.SUPABASE_REPORTS_BUCKET || 'reports';
+    const expiresIn = Number(req.query.expiresIn) || 60; // seconds
+    const { data, error } = await supabase.storage.from(bucket).createSignedUrl(path, expiresIn);
+    if (error) {
+      console.error('Signed URL generation error:', error.message || error);
+      return res.status(502).json({ message: error.message || 'Failed to generate signed URL.' });
+    }
+
+    return res.json({ url: data.signedUrl });
+  } catch (err) {
+    console.error('Signed URL endpoint error:', err);
+    return res.status(500).json({ message: 'Unable to generate signed URL.' });
+  }
+});
 
 router.get('/', async (req, res) => {
   try {
@@ -55,7 +132,7 @@ router.get('/', async (req, res) => {
   }
 });
 
-router.post('/', async (req, res) => {
+router.post('/', handleReportFileUpload, async (req, res) => {
   try {
     const user = getAuthUser(req);
     if (!user?.userId) {
@@ -68,6 +145,11 @@ router.post('/', async (req, res) => {
     }
 
     const { sanitized } = validation;
+    const uploadedFileUrl = req.file
+      ? (req.file.mimetype && req.file.mimetype.startsWith('image/')
+          ? await uploadImageToCloudinary(req.file)
+          : await uploadFileToSupabase(req.file))
+      : String(req.body?.fileUrl || '').trim() || null;
 
     const report = await createTimelineReport({
       userId: user.userId,
@@ -79,7 +161,8 @@ router.post('/', async (req, res) => {
       diagnosis: sanitized.diagnosis,
       medicines: sanitized.medicines,
       notes: sanitized.notes,
-      fileUrl: req.body?.fileUrl || null,
+      analysis: req.body?.analysis || null,
+      fileUrl: uploadedFileUrl,
       unclearFields: sanitizeUnclearFields(req.body?.unclearFields),
       source: 'manual',
     });
@@ -91,7 +174,7 @@ router.post('/', async (req, res) => {
   }
 });
 
-router.put('/:id', async (req, res) => {
+router.put('/:id', handleReportFileUpload, async (req, res) => {
   try {
     const user = getAuthUser(req);
     if (!user?.userId) {
@@ -109,6 +192,11 @@ router.put('/:id', async (req, res) => {
     }
 
     const { sanitized } = validation;
+    const uploadedFileUrl = req.file
+      ? (req.file.mimetype && req.file.mimetype.startsWith('image/')
+          ? await uploadImageToCloudinary(req.file)
+          : await uploadFileToSupabase(req.file))
+      : String(req.body?.fileUrl || '').trim() || null;
 
     const report = await updateTimelineReport(user.userId, reportId, {
       title: sanitized.title,
@@ -119,7 +207,8 @@ router.put('/:id', async (req, res) => {
       diagnosis: sanitized.diagnosis,
       medicines: sanitized.medicines,
       notes: sanitized.notes,
-      fileUrl: req.body?.fileUrl || null,
+      analysis: req.body?.analysis || null,
+      fileUrl: uploadedFileUrl,
       unclearFields: sanitizeUnclearFields(req.body?.unclearFields),
     });
 

@@ -15,7 +15,10 @@ if (fs.existsSync('./backend/.env')) {
 }
 
 const app = express();
-const PORT = process.env.PORT || 5001;
+const DEFAULT_PORT = 5001;
+const requestedPort = Number(process.env.PORT) || DEFAULT_PORT;
+const tryFallbackPort = process.env.PORT ? null : DEFAULT_PORT + 1;
+let currentPort = requestedPort;
 
 // Set Security & Cross-Origin-Opener-Policy Headers for Google OAuth
 app.use((req, res, next) => {
@@ -38,15 +41,27 @@ app.get('/', (req, res) => res.status(200).send('OK'));
 app.get('/health', (req, res) => res.status(200).send('OK'));
 app.get('/api/health', (req, res) => res.status(200).send('OK'));
 
-const server = app.listen(PORT, () => {
-  console.log(`Server is running on port ${PORT}`);
-});
+function listenOnPort(port) {
+  const server = app.listen(port, () => {
+    console.log(`Server is running on port ${port}`);
+  });
 
-server.on('error', (error) => {
-  if (error.code === 'EADDRINUSE') {
-    console.error(`Port ${PORT} is already in use. Please stop the other process or set a different PORT in .env.`);
+  server.on('error', (error) => {
+    if (error.code === 'EADDRINUSE') {
+      if (tryFallbackPort && port === requestedPort) {
+        console.warn(
+          `Port ${port} is already in use. Falling back to port ${tryFallbackPort} since PORT was not explicitly set.`
+        );
+        currentPort = tryFallbackPort;
+        listenOnPort(tryFallbackPort);
+        return;
+      }
+      console.error(`Port ${port} is already in use. Please stop the other process or set a different PORT in .env.`);
+      process.exit(1);
+    }
+    console.error('Server error:', error);
     process.exit(1);
-  }
-  console.error('Server error:', error);
-  process.exit(1);
-});
+  });
+}
+
+listenOnPort(currentPort);

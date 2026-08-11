@@ -13,11 +13,18 @@ import {
   CheckCircle2,
 } from "lucide-react";
 import { extractReportFromFile } from "../../../../api/search";
-import { authService } from "../../../../services/auth";
 
-// Gemini Vision extraction only accepts rasterized images — PDFs aren't
-// supported there yet, see rag/src/routes/extract.js.
-const EXTRACTABLE_TYPES = ["image/jpeg", "image/png", "image/webp"];
+// PDFs and common image formats can be sent to the RAG extraction endpoint.
+const EXTRACTABLE_TYPES = ["image/jpeg", "image/png", "image/webp", "application/pdf"];
+
+function isExtractableFile(file) {
+  if (!file) return false;
+
+  if (EXTRACTABLE_TYPES.includes(file.type)) return true;
+
+  const fileName = (file.name || "").toLowerCase();
+  return [".pdf", ".png", ".jpg", ".jpeg", ".webp"].some((ext) => fileName.endsWith(ext));
+}
 
 // event.reportDate from Timeline is an ISO timestamp (e.g.
 // "2026-08-10T00:00:00+00:00") — the date <input> needs a bare YYYY-MM-DD.
@@ -26,6 +33,31 @@ function toDateInputValue(value) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "";
   return date.toISOString().slice(0, 10);
+}
+
+function buildAnalysisText(fields = {}, unclear = []) {
+  const lines = [];
+
+  const appendField = (label, value) => {
+    if (value) {
+      lines.push(`${label}: ${String(value).trim()}`);
+    }
+  };
+
+  appendField("Title", fields.title);
+  appendField("Doctor", fields.doctor);
+  appendField("Hospital", fields.hospital);
+  appendField("Date", fields.reportDate);
+  appendField("Category", fields.category);
+  appendField("Diagnosis", fields.diagnosis);
+  appendField("Medicines", fields.medicines);
+  appendField("Notes", fields.notes);
+
+  if (unclear.length > 0) {
+    lines.push(`Unclear fields: ${unclear.join(", ")}`);
+  }
+
+  return lines.join("\n");
 }
 
 function emptyFormData() {
@@ -37,6 +69,7 @@ function emptyFormData() {
     diagnosis: "",
     medicines: "",
     notes: "",
+    analysis: "",
     category: "Prescription",
     file: null,
     fileUrl: null,
@@ -55,6 +88,7 @@ function formDataFromEvent(event) {
     diagnosis: event.diagnosis || "",
     medicines: event.medicines || "",
     notes: event.notes || "",
+    analysis: event.analysis || "",
     category: event.category || "Prescription",
     file: null,
     fileUrl: event.fileUrl || null,
@@ -70,8 +104,6 @@ export default function UploadReports({ onClose, onSubmit, token, initialEvent }
   const [extracting, setExtracting] = useState(false);
   const [extractError, setExtractError] = useState(null);
   const [extracted, setExtracted] = useState(false);
-  const [uploadingFile, setUploadingFile] = useState(false);
-  const [fileUploadError, setFileUploadError] = useState(null);
   // Field keys AI extraction couldn't confidently read (e.g. illegible
   // handwriting) — highlighted in the form so the patient knows to fill
   // them in if they know the answer, or leave blank for a doctor to check
@@ -84,77 +116,50 @@ export default function UploadReports({ onClose, onSubmit, token, initialEvent }
   const [formData, setFormData] = useState(() => formDataFromEvent(initialEvent));
 
   const handleChange = (e) => {
-  const { name, value, files } = e.target;
+    const { name, value, files } = e.target;
 
-  if (files) {
-    const file = files[0];
+    if (files) {
+      const file = files[0];
 
-    if (file) {
-      const maxSize = 10 * 1024 * 1024; // 10 MB
+      if (file) {
+        const maxSize = 10 * 1024 * 1024; // 10 MB
 
-      if (file.size > maxSize) {
-        alert("File size must be less than or equal to 10 MB.");
-        e.target.value = "";
-        return;
+        if (file.size > maxSize) {
+          alert("File size must be less than or equal to 10 MB.");
+          e.target.value = "";
+          return;
+        }
       }
-    }
 
-    setFormData((prev) => ({
-      ...prev,
-      [name]: file,
-      fileUrl: null,
-    }));
-
-    setExtracted(false);
-    setExtractError(null);
-    setFileUploadError(null);
-    setUnclearFields(new Set());
-
-    if (file) {
-      runFileUpload(file);
-      if (EXTRACTABLE_TYPES.includes(file.type)) {
-        runExtraction(file);
-      }
-    }
-  } else {
-    setFormData((prev) => ({
-      ...prev,
-      [name]: value,
-    }));
-    // The patient has now either filled in what AI couldn't read, or
-    // deliberately left it — either way it's no longer "AI couldn't read
-    // this", so stop flagging it as unclear.
-    setUnclearFields((prev) => {
-      if (!prev.has(name)) return prev;
-      const next = new Set(prev);
-      next.delete(name);
-      return next;
-    });
-  }
-  };
-
-  async function runFileUpload(file) {
-    setUploadingFile(true);
-    setFileUploadError(null);
-    try {
-      const result = await authService.uploadDocument(file, token);
-      // Use the absolute URL, not relativeUrl — this is opened directly
-      // from the browser (e.g. Timeline's "View original document" link),
-      // which would otherwise resolve a relative /uploads/... path against
-      // the frontend's own origin instead of the backend's.
       setFormData((prev) => ({
         ...prev,
-        fileUrl: result.url || null,
+        [name]: file,
+        analysis: "",
       }));
-    } catch (err) {
-      // Not fatal — the report can still be saved without an attached
-      // file, the timeline card just won't have a "View original
-      // document" link for it.
-      setFileUploadError(err.message || "Could not upload the file. The report can still be saved without it.");
-    } finally {
-      setUploadingFile(false);
+
+      setExtracted(false);
+      setExtractError(null);
+      setUnclearFields(new Set());
+
+      if (file && isExtractableFile(file)) {
+        runExtraction(file);
+      }
+    } else {
+      setFormData((prev) => ({
+        ...prev,
+        [name]: value,
+      }));
+      // The patient has now either filled in what AI couldn't read, or
+      // deliberately left it — either way it's no longer "AI couldn't read
+      // this", so stop flagging it as unclear.
+      setUnclearFields((prev) => {
+        if (!prev.has(name)) return prev;
+        const next = new Set(prev);
+        next.delete(name);
+        return next;
+      });
     }
-  }
+  };
 
   async function runExtraction(file) {
     setExtracting(true);
@@ -171,6 +176,7 @@ export default function UploadReports({ onClose, onSubmit, token, initialEvent }
         diagnosis: fields.diagnosis || prev.diagnosis,
         medicines: fields.medicines || prev.medicines,
         notes: fields.notes || prev.notes,
+        analysis: buildAnalysisText(fields, unclear),
       }));
       // rag's field name is "reportDate", this form's is "date" — map it.
       setUnclearFields(new Set(unclear.map((key) => (key === 'reportDate' ? 'date' : key))));
@@ -187,13 +193,8 @@ export default function UploadReports({ onClose, onSubmit, token, initialEvent }
   }
 
   const handleSubmit = () => {
-    if (activeTab === 'upload' && !formData.file) {
+    if (activeTab === 'upload' && !formData.file && !formData.fileUrl) {
       alert('Please upload your prescription or report file.');
-      return;
-    }
-
-    if (uploadingFile) {
-      alert('Your file is still uploading — please wait a moment and try again.');
       return;
     }
 
@@ -219,7 +220,7 @@ export default function UploadReports({ onClose, onSubmit, token, initialEvent }
     }
 
     onSubmit({
-      id: `temp-${Date.now()}`,
+      id: isEditing ? initialEvent.id : `temp-${Date.now()}`,
       ...formData,
       // Field names still unclear/unfilled at save time — surfaced on the
       // saved report so a doctor viewing it later knows to check the
@@ -228,7 +229,8 @@ export default function UploadReports({ onClose, onSubmit, token, initialEvent }
     });
 
     onClose();
-};
+  };
+
 
   return (
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
@@ -297,39 +299,23 @@ export default function UploadReports({ onClose, onSubmit, token, initialEvent }
                 <input
                   type="file"
                   name="file"
-                  accept=".pdf,.png,.jpg,.jpeg"
+                  accept=".pdf,.png,.jpg,.jpeg,.webp,image/*,application/pdf"
                   onChange={handleChange}
                 />
 
                 <p className="text-xs text-gray-500 mt-2">Maximum upload size: 10 MB</p>
                 {formData.file && (
                   <p className="mt-3 text-green-600 text-sm font-medium flex items-center justify-center gap-1.5">
-                    {uploadingFile ? (
-                      <>
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                        Uploading {formData.file.name}...
-                      </>
-                    ) : formData.fileUrl ? (
-                      <>
-                        <CheckCircle2 className="w-4 h-4" />
-                        {formData.file.name} attached
-                      </>
-                    ) : (
-                      <>✓ {formData.file.name}</>
-                    )}
+                    <CheckCircle2 className="w-4 h-4" />
+                    {formData.file.name} selected
                   </p>
                 )}
 
-                {!uploadingFile && fileUploadError && (
-                  <p className="mt-2 text-xs text-amber-600">{fileUploadError}</p>
-                )}
-
-                {formData.file && !EXTRACTABLE_TYPES.includes(formData.file.type) && (
+                {formData.file && !isExtractableFile(formData.file) && (
                   <div className="bg-amber-50 mt-5 rounded-lg p-4 text-left">
-                    <p className="font-semibold text-amber-700">PDF uploaded</p>
+                    <p className="font-semibold text-amber-700">Unsupported file type</p>
                     <p className="text-sm text-gray-600">
-                      AI extraction currently works on JPG/PNG images only. Please fill in the
-                      details manually under the Manual Entry tab.
+                      Please upload a PDF or a common image file such as JPG, PNG, or WEBP.
                     </p>
                   </div>
                 )}

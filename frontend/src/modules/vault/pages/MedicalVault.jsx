@@ -163,7 +163,7 @@ function Sidebar() {
       <div className="space-y-3 pt-4">
         <button
           type="button"
-          onClick={() => navigate("/upload")}
+          onClick={() => navigate("/timeline?upload=true")}
           className="w-full flex items-center justify-center gap-2 bg-blue-700 hover:bg-blue-800 transition-colors text-white text-sm font-semibold py-2.5 rounded-lg"
         >
           <PlusCircle size={18} />
