@@ -70,9 +70,28 @@ function GuestRoute({ children }) {
 }
 
 // OnboardingRoute: Accessible during role setup & registration.
-// If user has ALREADY completed role selection -> redirect to /dashboard.
-// Otherwise -> render onboarding page (role selection, doctor/patient register, verify otp).
+// Unauthenticated users -> redirect to /login.
+// Authenticated users who ALREADY completed role selection -> redirect to /dashboard.
 function OnboardingRoute({ children }) {
+  const { isAuthenticated, user, authReady } = useAuth();
+
+  if (!authReady) {
+    return <LoadingSpinner />;
+  }
+
+  if (!isAuthenticated) {
+    return <Navigate to="/login" replace />;
+  }
+
+  if (hasCompletedRole(user)) {
+    return <Navigate to="/dashboard" replace />;
+  }
+
+  return children;
+}
+
+// OTPRoute: Accessible for users verifying OTP code during login or registration.
+function OTPRoute({ children }) {
   const { isAuthenticated, user, authReady } = useAuth();
 
   if (!authReady) {
@@ -136,7 +155,7 @@ export default function App() {
         <Route path="/reset-password" element={<GuestRoute><ResetPassword /></GuestRoute>} />
 
         {/* Onboarding & Verification Routes */}
-        <Route path="/verify-otp" element={<OnboardingRoute><VerifyOTP /></OnboardingRoute>} />
+        <Route path="/verify-otp" element={<OTPRoute><VerifyOTP /></OTPRoute>} />
         <Route path="/role-selection" element={<OnboardingRoute><RoleSelection /></OnboardingRoute>} />
         <Route path="/doctor-register" element={<OnboardingRoute><DoctorRegister /></OnboardingRoute>} />
         <Route path="/patient-register" element={<OnboardingRoute><PatientRegister /></OnboardingRoute>} />

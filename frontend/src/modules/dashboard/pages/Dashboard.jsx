@@ -2,6 +2,8 @@ import React, { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../../../context/AuthContext";
 import { authService } from "../../../services/auth";
+import ProfileDropdown from "../../settings/components/ProfileDropdown";
+import SettingsModal from "../../settings/components/SettingsModal";
 
 import {
   LayoutGrid,
@@ -109,7 +111,7 @@ const statCards = [
   },
 ];
 
-function Sidebar() {
+function Sidebar({ onOpenSettings }) {
   const navigate = useNavigate();
   const location = useLocation();
   const pathname = location.pathname;
@@ -153,7 +155,11 @@ function Sidebar() {
         </button>
 
         <div className="space-y-1 pt-2">
-          <button className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-100">
+          <button
+            type="button"
+            onClick={onOpenSettings}
+            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-100"
+          >
             <Settings size={18} />
             Settings
           </button>
@@ -168,13 +174,7 @@ function Sidebar() {
 }
 
 function Header({ profile }) {
-  const { logout } = useAuth();
   const navigate = useNavigate();
-
-  const handleLogout = () => {
-    logout();
-    navigate('/login', { replace: true });
-  };
 
   return (
     <header className="flex items-center gap-4 px-6 lg:px-8 py-5 border-b border-slate-200 bg-white">
@@ -192,34 +192,7 @@ function Header({ profile }) {
         <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full" />
       </button>
 
-      <div className="flex items-center gap-3 pl-3 border-l border-slate-200">
-        <img
-          src={profile?.picture || 'https://i.pravatar.cc/80?img=12'}
-          alt={profile?.name || 'User profile'}
-          referrerPolicy="no-referrer"
-          onError={(e) => {
-            e.currentTarget.onerror = null;
-            e.currentTarget.src = 'https://i.pravatar.cc/80?img=12';
-          }}
-          className="w-9 h-9 rounded-full object-cover bg-slate-100"
-        />
-        <div className="text-left hidden sm:block">
-          <p className="text-sm font-semibold text-slate-800">
-            {profile?.name || 'Loading user...'}
-          </p>
-          <p className="text-xs text-slate-400">
-            {profile?.email || 'Fetching profile from database...'}
-          </p>
-        </div>
-        <button
-          type="button"
-          onClick={handleLogout}
-          title="Log out"
-          className="p-2 text-slate-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors flex items-center justify-center ml-1"
-        >
-          <LogOut size={20} />
-        </button>
-      </div>
+      <ProfileDropdown customProfile={profile} />
     </header>
   );
 }
@@ -377,6 +350,7 @@ export default function Dashboard() {
   const { token, user: cachedUser, isAuthenticated } = useAuth();
   const [profile, setProfile] = useState(cachedUser);
   const [isProfileLoading, setIsProfileLoading] = useState(false);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
   useEffect(() => {
     let isMounted = true;
@@ -413,7 +387,7 @@ export default function Dashboard() {
 
   return (
     <div className="flex min-h-screen bg-slate-50 text-slate-900">
-      <Sidebar />
+      <Sidebar onOpenSettings={() => setIsSettingsOpen(true)} />
 
       <div className="flex-1 flex flex-col min-w-0">
         <Header profile={profile} />
@@ -467,6 +441,11 @@ export default function Dashboard() {
           </div>
         </main>
       </div>
+
+      <SettingsModal
+        isOpen={isSettingsOpen}
+        onClose={() => setIsSettingsOpen(false)}
+      />
     </div>
   );
 }

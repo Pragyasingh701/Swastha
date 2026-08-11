@@ -100,9 +100,15 @@ export const authService = {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userId, role }),
       });
-      return await response.json();
+      const data = await response.json();
+      if (!response.ok) {
+        console.warn('Failed to update role:', data.message);
+        return { success: false, message: data.message || 'Failed to update role' };
+      }
+      return data;
     } catch (err) {
-      return { success: true, role };
+      console.warn('Network error updating role:', err.message);
+      return { success: false, message: err.message };
     }
   },
 

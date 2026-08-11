@@ -4,7 +4,7 @@ import { useAuth } from "../../context/AuthContext";
 
 export default function PatientRegister() {
   const navigate = useNavigate();
-  const { user, register, updateProfile, setUserRole } = useAuth();
+  const { user, register, updateProfile, setUserRole, logout } = useAuth();
 
   useEffect(() => {
     // Check if user has already completed registration
@@ -19,7 +19,7 @@ export default function PatientRegister() {
     // Check if user is not authenticated
     const hasToken = localStorage.getItem('swastha_token');
     if (!activeUser && !hasToken) {
-      navigate("/register", { replace: true });
+      navigate("/login", { replace: true });
     }
   }, [user, navigate]);
 
@@ -66,6 +66,7 @@ export default function PatientRegister() {
           phone: formData.phone,
           dob: formData.dob,
           bloodGroup: formData.bloodGroup,
+          blood_group: formData.bloodGroup,
           role: "patient",
           hasSelectedRole: true,
         });
@@ -370,10 +371,17 @@ export default function PatientRegister() {
               {/* Login Link */}
               <div className="text-center pt-md">
                 <p className="font-body-md text-body-md text-on-surface-variant">
-                  Already have an account?{" "}
-                  <Link className="text-primary font-bold hover:underline ml-1" to="/login">
+                  Want to use another account?{" "}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      logout();
+                      navigate('/login', { replace: true });
+                    }}
+                    className="text-primary font-bold hover:underline ml-1 focus:outline-none"
+                  >
                     Login
-                  </Link>
+                  </button>
                 </p>
               </div>
             </div>
