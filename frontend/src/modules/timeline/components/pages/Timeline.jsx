@@ -96,7 +96,7 @@ export default function Timeline() {
   const { profileId } = useParams();
   const location = useLocation();
   const navigate = useNavigate();
-  const { token, isAuthenticated } = useAuth();
+  const { token, isAuthenticated, user } = useAuth();
   const targetEmail = location.state?.memberEmail || new URLSearchParams(location.search).get('email') || '';
   const [events, setEvents] = useState([]);
   const [familyMembers, setFamilyMembers] = useState([]);
@@ -122,6 +122,13 @@ export default function Timeline() {
       setCategoryFilter("All Categories");
     }
   }, [categoryFilter, availableCategories]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    if (location.state?.openUpload || params.get('upload') === 'true') {
+      setShowUploadModal(true);
+    }
+  }, [location.search, location.state]);
 
   const sortEvents = (list) => {
     return [...list].sort((a, b) => {
@@ -153,6 +160,7 @@ export default function Timeline() {
       diagnosis: report.diagnosis || '',
       medicines: report.medicines || '',
       notes: report.notes,
+      analysis: report.analysis || '',
       fileUrl: report.fileUrl || null,
       fileName: report.fileUrl ? report.fileUrl.split('/').pop() : report.fileName || report.file?.name || '',
       // Field names AI extraction couldn't confidently read (illegible
@@ -231,15 +239,12 @@ export default function Timeline() {
       ...rest,
       reportDate: newEvent.date || newEvent.reportDate || new Date().toISOString(),
       category: newEvent.category || 'Consultation',
-      // Prefer the real uploaded-file URL (set by UploadReports after it
-      // persists the file via backend/api/auth/upload). Only fall back to
-      // the raw filename when nothing was actually uploaded/stored.
-      fileUrl: newEvent.fileUrl || file?.name || null,
+      fileUrl: newEvent.fileUrl || null,
     };
 
     if (!newEvent?.id || newEvent.id.toString().startsWith('temp-')) {
       try {
-        const response = await reportService.createTimelineReport(mapped, token);
+        const response = await reportService.createTimelineReport(mapped, token, file);
         const event = mapReportToEvent(response.report);
         setEvents((prev) => sortEvents([event, ...prev]));
 
@@ -266,11 +271,11 @@ export default function Timeline() {
       ...rest,
       reportDate: updatedFields.date || updatedFields.reportDate || new Date().toISOString(),
       category: updatedFields.category || 'Consultation',
-      fileUrl: updatedFields.fileUrl || file?.name || null,
+      fileUrl: updatedFields.fileUrl || null,
     };
 
     try {
-      const response = await reportService.updateTimelineReport(eventId, mapped, token);
+      const response = await reportService.updateTimelineReport(eventId, mapped, token, file);
       const event = mapReportToEvent(response.report);
       setEvents((prev) => sortEvents(prev.map((e) => (String(e.id) === String(eventId) ? event : e))));
       setSelectedEvent((prev) => (prev && String(prev.id) === String(eventId) ? event : prev));
@@ -343,56 +348,70 @@ export default function Timeline() {
               <button
                 type="button"
                 onClick={() => navigate('/timeline')}
-                className={`w-9 h-9 rounded-full flex items-center justify-center text-xs font-semibold ring-2 ring-white transition-transform duration-200 hover:scale-110 ${
-                  !targetEmail ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-500"
+                className={`w-9 h-9 rounded-full flex items-center justify-center text-[10px] font-semibold ring-2 ring-white transition-transform duration-200 hover:scale-110 ${
+                  !targetEmail
+                    ? "bg-blue-600 ring-blue-200 text-white"
+                    : "bg-slate-100 ring-slate-200 text-slate-500"
                 }`}
-                title="Me"
+                title={!targetEmail ? "Viewing your timeline" : "Me"}
+                aria-label="Self timeline"
               >
                 Me
               </button>
-              {familyMembers.slice(0, 3).map((member, index) => {
-                const initials = member.name
-                  ? member.name
-                      .split(' ')
-                      .map((part) => part[0])
-                      .slice(0, 2)
-                      .join('')
-                      .toUpperCase()
-                  : '?';
-                const { email: parsedEmail } = parseMemberNotesAndEmail(member.notes || '');
-                const memberEmail = member.email || parsedEmail || '';
-                const isActive = memberEmail && memberEmail === targetEmail;
+              {familyMembers
+                .filter((member) => {
+                  const { email: parsedEmail } = parseMemberNotesAndEmail(member.notes || '');
+                  const memberEmail = member.email || parsedEmail || '';
+                  const relationship = String(member.relationship || member.relationshipTag || '').trim().toLowerCase();
+                  const name = String(member.name || '').trim().toLowerCase();
+                  const isSelfRelationship = relationship === 'self' || name === 'self';
+                  const isCurrentUser = user?.email ? memberEmail.toLowerCase() !== user.email.toLowerCase() : true;
+                  return !isSelfRelationship && isCurrentUser;
+                })
+                .slice(0, 3)
+                .map((member, index) => {
+                  const initials = member.name
+                    ? member.name
+                        .split(' ')
+                        .map((part) => part[0])
+                        .slice(0, 2)
+                        .join('')
+                        .toUpperCase()
+                    : '?';
+                  const { email: parsedEmail } = parseMemberNotesAndEmail(member.notes || '');
+                  const memberEmail = member.email || parsedEmail || '';
+                  const isActive = memberEmail && memberEmail === targetEmail;
 
-                return (
-                  <button
-                    key={member.id || `member-${index}`}
-                    type="button"
-                    onClick={() => {
-                      if (memberEmail) {
-                        navigate(`/timeline?email=${encodeURIComponent(memberEmail)}`);
-                      } else {
-                        navigate('/timeline');
-                      }
-                    }}
-                    className="group"
-                    title={member.name || 'Family member'}
-                  >
-                    <div
-                      className={`flex h-9 min-w-[36px] items-center justify-center overflow-hidden rounded-full px-0 text-center text-xs font-medium text-white ring-2 ring-white transition-all duration-200 group-hover:min-w-[140px] group-hover:px-4 ${
-                        isActive ? "bg-blue-600" : "bg-slate-400"
-                      }`}
-                      aria-label={member.name || 'Family member'}
+                  return (
+                    <button
+                      key={member.id || `member-${index}`}
+                      type="button"
+                      onClick={() => {
+                        if (memberEmail) {
+                          navigate(`/timeline?email=${encodeURIComponent(memberEmail)}`);
+                        } else {
+                          navigate('/timeline');
+                        }
+                      }}
+                      className="group"
+                      title={member.name || 'Family member'}
                     >
-                      <span className="flex items-center justify-center transition-opacity duration-200 group-hover:opacity-0">
-                        {initials}
-                      </span>
-                      <span className="hidden whitespace-nowrap text-sm font-semibold transition-all duration-200 group-hover:inline-flex">
-                        {member.name || 'Family member'}
-                      </span>
-                    </div>
-                  </button>
-                );
-              })}
+                      <div
+                        className={`flex h-9 min-w-[36px] items-center justify-center overflow-hidden rounded-full px-0 text-center text-xs font-medium text-white ring-2 ring-white transition-all duration-200 group-hover:min-w-[140px] group-hover:px-4 ${
+                          isActive ? "bg-blue-600" : "bg-slate-400"
+                        }`}
+                        aria-label={member.name || 'Family member'}
+                      >
+                        <span className="flex items-center justify-center transition-opacity duration-200 group-hover:opacity-0">
+                          {initials}
+                        </span>
+                        <span className="hidden whitespace-nowrap text-sm font-semibold transition-all duration-200 group-hover:inline-flex">
+                          {member.name || 'Family member'}
+                        </span>
+                      </div>
+                    </button>
+                  );
+                })}
               {familyMembers.length > 3 && (
                 <div className="relative group">
                   <div
@@ -820,6 +839,13 @@ function EventCard({ event, notable }) {
             </p>
           ) : null}
 
+          {event.analysis ? (
+            <p className="text-sm text-slate-500 mt-2 flex items-start gap-1.5">
+              <FileText size={13} className="text-blue-500 shrink-0 mt-0.5" />
+              <span className="line-clamp-2">{event.analysis}</span>
+            </p>
+          ) : null}
+
           {event.unclearFields && event.unclearFields.length > 0 && (
             <p className="flex items-center gap-1.5 text-xs font-medium text-amber-600 mt-2">
               <span className="leading-none">⚠</span>
@@ -834,6 +860,28 @@ function EventCard({ event, notable }) {
       </div>
     </div>
   );
+}
+
+function getPreviewType(fileUrl) {
+  if (!fileUrl) return null;
+  const lower = String(fileUrl).toLowerCase();
+  if (/\.pdf(\?|$)/.test(lower)) return 'pdf';
+  if (/\.(png|jpe?g|webp)(\?|$)/.test(lower)) return 'image';
+  return null;
+}
+
+function getPreviewUrl(fileUrl) {
+  if (!fileUrl) return null;
+  const apiBase = import.meta.env.VITE_API_BASE_URL || `${window.location.origin}/api`;
+
+  // If fileUrl is an absolute URL (starts with http/https), use it directly
+  try {
+    const parsed = new URL(fileUrl);
+    return fileUrl;
+  } catch (e) {
+    // Not a full URL — treat it as a Supabase storage path and request a signed URL
+    return `${apiBase}/reports/signed-url?path=${encodeURIComponent(fileUrl)}`;
+  }
 }
 
 function EventDetails({ event, onClose, onEdit, onDelete }) {
@@ -865,7 +913,7 @@ function EventDetails({ event, onClose, onEdit, onDelete }) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 px-4 py-6">
-      <div className="w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-3xl bg-white p-6 shadow-2xl">
+      <div className="w-full max-w-5xl max-h-[90vh] overflow-y-auto rounded-3xl bg-white p-6 shadow-2xl">
         <div className="flex items-start justify-between gap-4">
           <div>
             <p className="text-sm font-semibold uppercase tracking-[0.24em] text-blue-600">
@@ -892,79 +940,115 @@ function EventDetails({ event, onClose, onEdit, onDelete }) {
           </button>
         </div>
 
-        {event.unclearFields && event.unclearFields.length > 0 && (
-          <div className="mt-6 rounded-2xl border border-amber-200 bg-amber-50 p-4 flex items-start gap-3">
-            <span className="text-amber-600 text-lg leading-none mt-0.5">⚠</span>
-            <div>
-              <p className="font-semibold text-amber-700">
-                {event.unclearFields.length === 1 ? "One field" : `${event.unclearFields.length} fields`} unverified
-              </p>
-              <p className="text-sm text-gray-600 mt-1">
-                AI couldn't confidently read <span className="font-medium">{event.unclearFields.join(', ')}</span> from
-                the uploaded document (usually illegible handwriting), and it wasn't filled in manually either.
-                {event.fileUrl ? " Check the original document below." : " No original document is attached to verify against."}
-              </p>
+        <div className="mt-6 grid gap-6 md:grid-cols-2">
+          {/* Left: analysis and metadata */}
+          <div className="space-y-4">
+            {event.unclearFields && event.unclearFields.length > 0 && (
+              <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 flex items-start gap-3">
+                <span className="text-amber-600 text-lg leading-none mt-0.5">⚠</span>
+                <div>
+                  <p className="font-semibold text-amber-700">
+                    {event.unclearFields.length === 1 ? "One field" : `${event.unclearFields.length} fields`} unverified
+                  </p>
+                  <p className="text-sm text-gray-600 mt-1">
+                    AI couldn't confidently read <span className="font-medium">{event.unclearFields.join(', ')}</span> from
+                    the uploaded document (usually illegible handwriting), and it wasn't filled in manually either.
+                    {event.fileUrl ? " Check the original document below." : " No original document is attached to verify against."}
+                  </p>
+                </div>
+              </div>
+            )}
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              {event.doctor && (
+                <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
+                  <p className="text-sm text-slate-500">Doctor</p>
+                  <p className="mt-2 text-base font-semibold text-slate-900">{event.doctor}</p>
+                </div>
+              )}
+
+              {event.category && (
+                <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
+                  <p className="text-sm text-slate-500">Category</p>
+                  <p className="mt-2 text-base font-semibold text-slate-900">{event.category}</p>
+                </div>
+              )}
+
+              {event.diagnosis && (
+                <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
+                  <p className="text-sm text-slate-500">Diagnosis</p>
+                  <p className="mt-2 text-base font-semibold text-slate-900">{event.diagnosis}</p>
+                </div>
+              )}
+
+              {event.medicines && (
+                <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
+                  <p className="text-sm text-slate-500">Medicines</p>
+                  <p className="mt-2 text-base font-semibold text-slate-900">{event.medicines}</p>
+                </div>
+              )}
             </div>
+
+            {event.analysis ? (
+              <div className="rounded-2xl border border-blue-100 bg-blue-50 p-4">
+                <p className="text-sm text-blue-700">PDF / file analysis</p>
+                <p className="mt-2 text-sm text-slate-700 whitespace-pre-line">{event.analysis}</p>
+              </div>
+            ) : null}
+
+            {event.notes ? (
+              <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
+                <p className="text-sm text-slate-500">Notes</p>
+                <p className="mt-2 text-sm text-slate-600 whitespace-pre-line">{event.notes}</p>
+              </div>
+            ) : null}
           </div>
-        )}
 
-        <div className="mt-6 grid gap-4 sm:grid-cols-2">
-          {event.doctor && (
-            <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
-              <p className="text-sm text-slate-500">Doctor</p>
-              <p className="mt-2 text-base font-semibold text-slate-900">{event.doctor}</p>
-            </div>
-          )}
+          {/* Right: preview */}
+          <div className="space-y-4">
+            {event.fileUrl ? (
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3 h-full flex flex-col">
+                <p className="text-sm text-slate-500">Document preview</p>
+                {getPreviewType(event.fileUrl) === 'pdf' ? (
+                  <iframe
+                    src={getPreviewUrl(event.fileUrl)}
+                    title="PDF preview"
+                    className="mt-3 flex-1 w-full rounded-xl border border-slate-200"
+                    style={{ minHeight: 420 }}
+                  />
+                ) : getPreviewType(event.fileUrl) === 'image' ? (
+                  <img
+                    src={getPreviewUrl(event.fileUrl)}
+                    alt={event.title || 'Uploaded document'}
+                    className="mt-3 max-h-[520px] w-full rounded-xl object-contain"
+                  />
+                ) : (
+                  <p className="mt-3 text-sm text-slate-500">Preview not available for this file type.</p>
+                )}
 
-          {event.category && (
-            <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
-              <p className="text-sm text-slate-500">Category</p>
-              <p className="mt-2 text-base font-semibold text-slate-900">{event.category}</p>
-            </div>
-          )}
-
-          {event.diagnosis && (
-            <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
-              <p className="text-sm text-slate-500">Diagnosis</p>
-              <p className="mt-2 text-base font-semibold text-slate-900">{event.diagnosis}</p>
-            </div>
-          )}
-
-          {event.medicines && (
-            <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
-              <p className="text-sm text-slate-500">Medicines</p>
-              <p className="mt-2 text-base font-semibold text-slate-900">{event.medicines}</p>
-            </div>
-          )}
+                <a
+                  href={event.fileUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="mt-3 inline-flex items-center gap-2 rounded-2xl border border-blue-100 bg-blue-50 px-4 py-2 text-blue-700 text-sm font-semibold transition-colors hover:bg-blue-100"
+                >
+                  <FileText size={16} />
+                  View original document
+                </a>
+              </div>
+            ) : event.fileName ? (
+              <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
+                <p className="text-sm text-slate-500">Attached file</p>
+                <p className="mt-2 text-sm font-semibold text-slate-900 break-all">{event.fileName}</p>
+                <p className="mt-1 text-xs text-slate-400">Original document not stored yet — filename only.</p>
+              </div>
+            ) : (
+              <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
+                <p className="text-sm text-slate-500">No document attached</p>
+              </div>
+            )}
+          </div>
         </div>
-
-        {event.notes ? (
-          <div className="mt-6 rounded-2xl border border-slate-100 bg-slate-50 p-4">
-            <p className="text-sm text-slate-500">Notes</p>
-            <p className="mt-2 text-sm text-slate-600 whitespace-pre-line">{event.notes}</p>
-          </div>
-        ) : null}
-
-        {event.fileUrl ? (
-          <a
-            href={event.fileUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="mt-6 flex items-center justify-between rounded-2xl border border-blue-100 bg-blue-50 p-4 text-blue-700 transition-colors hover:bg-blue-100"
-          >
-            <span className="flex items-center gap-2 text-sm font-semibold">
-              <FileText size={16} />
-              View original document
-            </span>
-            <ExternalLink size={16} />
-          </a>
-        ) : event.fileName ? (
-          <div className="mt-6 rounded-2xl border border-slate-100 bg-slate-50 p-4">
-            <p className="text-sm text-slate-500">Attached file</p>
-            <p className="mt-2 text-sm font-semibold text-slate-900 break-all">{event.fileName}</p>
-            <p className="mt-1 text-xs text-slate-400">Original document not stored yet — filename only.</p>
-          </div>
-        ) : null}
 
         <div className="mt-8 flex flex-wrap gap-3">
           <button

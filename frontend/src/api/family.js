@@ -2,8 +2,13 @@ const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5001
 
 function getStoredAuth() {
   try {
-    const token = localStorage.getItem('swastha_token');
-    const user = JSON.parse(localStorage.getItem('swastha_user') || 'null');
+    const localToken = localStorage.getItem('swastha_token');
+    const localUser = localStorage.getItem('swastha_user');
+    const sessionToken = sessionStorage.getItem('swastha_token');
+    const sessionUser = sessionStorage.getItem('swastha_user');
+
+    const token = localToken || sessionToken;
+    const user = localUser ? JSON.parse(localUser) : sessionUser ? JSON.parse(sessionUser) : null;
     return { token, user };
   } catch {
     return { token: null, user: null };
