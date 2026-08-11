@@ -574,7 +574,7 @@ router.post('/profile', authenticateToken, async (req, res) => {
       });
     }
     if (phoneVal && !isValidPhone(phoneVal)) {
-      return res.status(400).json({ message: 'Please enter a valid 10-digit mobile number.' });
+      return res.status(400).json({ message: 'Please enter a valid mobile number (10–15 digits).' });
     }
   }
 
@@ -588,14 +588,15 @@ router.post('/profile', authenticateToken, async (req, res) => {
     const licVal = regNumber || licenseNumber;
     const specVal = specialization || specialty;
 
-    if (!isSettingsUpdate || isRoleSwitch || certUrl) {
+    const isNewCertProvided = Boolean(certUrl && certUrl !== userToUpdate?.reg_certificate_url);
+    if (!isSettingsUpdate || isRoleSwitch || isNewCertProvided) {
       if (!nameVal || !phoneVal || !dob || !licVal || !council || !degree || !specVal || !hospitalName || !address || !certUrl) {
         return res.status(400).json({
           message: 'All doctor credentials (Full Name, Date of Birth, Mobile Number, Medical Registration #, Council, Degree, Specialization, Hospital/Clinic Name, Practice Address, and Medical Registration Certificate) are mandatory when setting up a Doctor account.',
         });
       }
       if (phoneVal && !isValidPhone(phoneVal)) {
-        return res.status(400).json({ message: 'Please enter a valid 10-digit mobile number.' });
+        return res.status(400).json({ message: 'Please enter a valid mobile number (10–15 digits).' });
       }
 
       // Process & Extract Medical Data from Uploaded Certificate via Gemini Vision AI

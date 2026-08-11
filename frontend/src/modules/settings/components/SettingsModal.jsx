@@ -97,7 +97,7 @@ export default function SettingsModal({ isOpen, onClose }) {
     // Clean and validate phone number
     const cleanedPhone = formData.phone ? formData.phone.replace(/[\s\-\+\(\)]/g, '') : '';
     if (!/^\d{10,15}$/.test(cleanedPhone) || /^(\d)\1{9,}$/.test(cleanedPhone) || cleanedPhone === '1234567890') {
-      setMessage({ type: 'error', text: 'Please enter a valid 10-digit mobile number.' });
+      setMessage({ type: 'error', text: 'Please enter a valid mobile number (10–15 digits).' });
       setIsSaving(false);
       return;
     }
@@ -157,8 +157,8 @@ export default function SettingsModal({ isOpen, onClose }) {
         ...formData,
         name: formData.name,
         fullName: formData.name,
-        phone: formData.phone,
-        mobile: formData.phone,
+        phone: cleanedPhone,
+        mobile: cleanedPhone,
         dob: formData.dob,
         dateOfBirth: formData.dob,
         bloodGroup: formData.bloodGroup,
@@ -243,13 +243,12 @@ export default function SettingsModal({ isOpen, onClose }) {
         <form onSubmit={handleSave} className="p-6 space-y-6 max-h-[82vh] overflow-y-auto">
           {message && (
             <div
-              className={`p-3.5 rounded-xl flex items-center gap-2.5 text-xs font-semibold ${
-                message.type === 'success'
+              className={`p-3.5 rounded-xl flex items-center gap-2.5 text-xs font-semibold ${message.type === 'success'
                   ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
                   : message.type === 'info'
-                  ? 'bg-blue-50 text-blue-800 border border-blue-200'
-                  : 'bg-rose-50 text-rose-800 border border-rose-200'
-              }`}
+                    ? 'bg-blue-50 text-blue-800 border border-blue-200'
+                    : 'bg-rose-50 text-rose-800 border border-rose-200'
+                }`}
             >
               {message.type === 'success' ? (
                 <CheckCircle2 size={16} />
@@ -280,18 +279,16 @@ export default function SettingsModal({ isOpen, onClose }) {
               <button
                 type="button"
                 onClick={() => handleRoleSelect('patient')}
-                className={`flex items-center gap-3 p-4 rounded-2xl border transition-all text-left ${
-                  formData.role === 'patient'
+                className={`flex items-center gap-3 p-4 rounded-2xl border transition-all text-left ${formData.role === 'patient'
                     ? 'bg-emerald-50/80 border-emerald-500 text-emerald-950 ring-2 ring-emerald-500/20 shadow-sm'
                     : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'
-                }`}
+                  }`}
               >
                 <div
-                  className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
-                    formData.role === 'patient'
+                  className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${formData.role === 'patient'
                       ? 'bg-emerald-600 text-white shadow-md'
                       : 'bg-slate-200 text-slate-500'
-                  }`}
+                    }`}
                 >
                   <ShieldCheck size={22} />
                 </div>
@@ -305,18 +302,16 @@ export default function SettingsModal({ isOpen, onClose }) {
               <button
                 type="button"
                 onClick={() => handleRoleSelect('doctor')}
-                className={`flex items-center gap-3 p-4 rounded-2xl border transition-all text-left ${
-                  formData.role === 'doctor'
+                className={`flex items-center gap-3 p-4 rounded-2xl border transition-all text-left ${formData.role === 'doctor'
                     ? 'bg-indigo-50/80 border-indigo-500 text-indigo-950 ring-2 ring-indigo-500/20 shadow-sm'
                     : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'
-                }`}
+                  }`}
               >
                 <div
-                  className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
-                    formData.role === 'doctor'
+                  className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${formData.role === 'doctor'
                       ? 'bg-indigo-600 text-white shadow-md'
                       : 'bg-slate-200 text-slate-500'
-                  }`}
+                    }`}
                 >
                   <Stethoscope size={22} />
                 </div>

@@ -55,9 +55,9 @@ export const createOrUpdateUser = async (userData) => {
   const userId = existingUser ? existingUser.id : (userData.id || 'usr_' + Date.now());
 
   // Explicit role selection handling
-  const role = (userData.role && userData.role !== 'none')
+  const role = (userData.role !== undefined && userData.role !== null && userData.role !== '')
     ? userData.role
-    : (existingUser?.role && existingUser.role !== 'none' ? existingUser.role : 'patient');
+    : (existingUser?.role ?? 'none');
   const hasSelectedRole = !!(role && role !== 'none');
   const isDoctor = role === 'doctor';
 
@@ -120,7 +120,6 @@ export const createOrUpdateUser = async (userData) => {
   const hospitalName = isDoctor ? (userData.hospitalName || userData.hospital_name || existingUser?.hospitalName || existingUser?.hospital_name || null) : null;
   const address = isDoctor ? (userData.address || userData.hospital_address || existingUser?.address || existingUser?.hospital_address || null) : null;
   const regCertificateUrl = isDoctor ? (userData.regCertificateUrl || userData.reg_certificate_url || userData.certificateUrl || userData.certificate_url || existingUser?.reg_certificate_url || null) : null;
-  const idProofUrl = userData.idProofUrl || userData.id_proof_url || userData.idProof || userData.id_proof || existingUser?.id_proof_url || null;
   const consultationFee = isDoctor ? (userData.consultationFee || userData.consultation_fee || existingUser?.consultation_fee || null) : null;
   const bio = isDoctor ? (userData.bio || existingUser?.bio || null) : null;
 
@@ -163,8 +162,6 @@ export const createOrUpdateUser = async (userData) => {
     address,
     reg_certificate_url: regCertificateUrl,
     regCertificateUrl,
-    id_proof_url: idProofUrl,
-    idProofUrl,
     cert_extracted_data: certExtractedData,
     certExtractedData,
     license_expiry_date: licenseExpiryDate,
