@@ -91,6 +91,26 @@ function formatDate(value) {
   return date.toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" });
 }
 
+function getPreviewType(fileUrl) {
+  if (!fileUrl) return null;
+  const lower = String(fileUrl).toLowerCase();
+  if (/\.pdf(\?|$)/.test(lower)) return "pdf";
+  if (/\.(png|jpe?g|webp)(\?|$)/.test(lower)) return "image";
+  return null;
+}
+
+function getPreviewUrl(fileUrl) {
+  if (!fileUrl) return null;
+  const apiBase = import.meta.env.VITE_API_BASE_URL || `${window.location.origin}/api`;
+
+  try {
+    const parsed = new URL(fileUrl);
+    return fileUrl;
+  } catch (e) {
+    return `${apiBase}/reports/signed-url?path=${encodeURIComponent(fileUrl)}`;
+  }
+}
+
 export default function MedicalVault() {
   const { token, isAuthenticated } = useAuth();
   const navigate = useNavigate();
@@ -615,7 +635,7 @@ function ReportPreview({ report, onClose }) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 px-4 py-6">
-      <div className="w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-3xl bg-white p-6 shadow-2xl">
+      <div className="w-full max-w-5xl max-h-[90vh] overflow-y-auto rounded-3xl bg-white p-6 shadow-2xl">
         <div className="flex items-start justify-between gap-4">
           <div className="flex items-center gap-3 min-w-0">
             <div className={`w-11 h-11 rounded-xl flex items-center justify-center shrink-0 ${meta.tone}`}>
@@ -639,54 +659,88 @@ function ReportPreview({ report, onClose }) {
           </button>
         </div>
 
-        <div className="mt-5 grid gap-3 sm:grid-cols-2">
-          <div className="rounded-xl border border-slate-100 bg-slate-50 p-3">
-            <p className="text-xs text-slate-500">Date</p>
-            <p className="mt-1 text-sm font-semibold text-slate-900">{formatDate(report.reportDate)}</p>
+        <div className="mt-6 grid gap-6 md:grid-cols-2">
+          {/* Left: text, metadata and notes/analysis */}
+          <div className="space-y-4">
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="rounded-xl border border-slate-100 bg-slate-50 p-3">
+                <p className="text-xs text-slate-500">Date</p>
+                <p className="mt-1 text-sm font-semibold text-slate-900">{formatDate(report.reportDate)}</p>
+              </div>
+              {report.doctor && (
+                <div className="rounded-xl border border-slate-100 bg-slate-50 p-3">
+                  <p className="text-xs text-slate-500">Doctor</p>
+                  <p className="mt-1 text-sm font-semibold text-slate-900">{report.doctor}</p>
+                </div>
+              )}
+              {report.hospital && (
+                <div className="rounded-xl border border-slate-100 bg-slate-50 p-3">
+                  <p className="text-xs text-slate-500">Hospital</p>
+                  <p className="mt-1 text-sm font-semibold text-slate-900">{report.hospital}</p>
+                </div>
+              )}
+              {report.diagnosis && (
+                <div className="rounded-xl border border-slate-100 bg-slate-50 p-3">
+                  <p className="text-xs text-slate-500">Diagnosis</p>
+                  <p className="mt-1 text-sm font-semibold text-slate-900">{report.diagnosis}</p>
+                </div>
+              )}
+            </div>
+
+            {report.notes && (
+              <div className="rounded-xl border border-slate-100 bg-slate-50 p-3">
+                <p className="text-xs text-slate-500">Notes</p>
+                <p className="mt-1 text-sm text-slate-700 whitespace-pre-line">{report.notes}</p>
+              </div>
+            )}
+
+            {report.analysis && (
+              <div className="rounded-2xl border border-blue-100 bg-blue-50 p-4">
+                <p className="text-sm text-blue-700">Analysis / Summary</p>
+                <p className="mt-2 text-sm text-slate-700 whitespace-pre-line">{report.analysis}</p>
+              </div>
+            )}
           </div>
-          {report.doctor && (
-            <div className="rounded-xl border border-slate-100 bg-slate-50 p-3">
-              <p className="text-xs text-slate-500">Doctor</p>
-              <p className="mt-1 text-sm font-semibold text-slate-900">{report.doctor}</p>
+
+          {/* Right: document preview */}
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 h-full flex flex-col">
+            <p className="text-sm text-slate-500 mb-3">Document preview</p>
+            <div className="flex-1 overflow-hidden">
+              {report.fileUrl ? (
+                getPreviewType(report.fileUrl) === "pdf" ? (
+                  <iframe
+                    src={getPreviewUrl(report.fileUrl)}
+                    title="Report PDF preview"
+                    className="w-full h-full rounded-xl border border-slate-200"
+                    style={{ minHeight: 360 }}
+                  />
+                ) : getPreviewType(report.fileUrl) === "image" ? (
+                  <img
+                    src={getPreviewUrl(report.fileUrl)}
+                    alt={report.title || "Uploaded document"}
+                    className="w-full h-full rounded-xl object-contain"
+                  />
+                ) : (
+                  <p className="text-sm text-slate-500">Preview not available for this file type.</p>
+                )
+              ) : (
+                <p className="text-xs text-slate-400">No file attached to this report.</p>
+              )}
             </div>
-          )}
-          {report.hospital && (
-            <div className="rounded-xl border border-slate-100 bg-slate-50 p-3">
-              <p className="text-xs text-slate-500">Hospital</p>
-              <p className="mt-1 text-sm font-semibold text-slate-900">{report.hospital}</p>
-            </div>
-          )}
-          {report.diagnosis && (
-            <div className="rounded-xl border border-slate-100 bg-slate-50 p-3">
-              <p className="text-xs text-slate-500">Diagnosis</p>
-              <p className="mt-1 text-sm font-semibold text-slate-900">{report.diagnosis}</p>
-            </div>
-          )}
+
+            {report.fileUrl && (
+              <a
+                href={getPreviewUrl(report.fileUrl)}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mt-4 inline-flex items-center gap-2 rounded-2xl border border-blue-100 bg-blue-50 px-4 py-2 text-blue-700 text-sm font-semibold transition-colors hover:bg-blue-100"
+              >
+                <FileText size={16} />
+                Open document
+              </a>
+            )}
+          </div>
         </div>
-
-        {report.notes && (
-          <div className="mt-4 rounded-xl border border-slate-100 bg-slate-50 p-3">
-            <p className="text-xs text-slate-500">Notes</p>
-            <p className="mt-1 text-sm text-slate-700 whitespace-pre-line">{report.notes}</p>
-          </div>
-        )}
-
-        {report.fileUrl ? (
-          <a
-            href={report.fileUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="mt-5 flex items-center justify-between rounded-xl border border-blue-100 bg-blue-50 p-3 text-blue-700 transition-colors hover:bg-blue-100"
-          >
-            <span className="flex items-center gap-2 text-sm font-semibold">
-              <FileText size={16} />
-              View original document
-            </span>
-            <ExternalLink size={16} />
-          </a>
-        ) : (
-          <p className="mt-5 text-xs text-slate-400 text-center">No file attached to this report.</p>
-        )}
       </div>
     </div>
   );
@@ -721,8 +775,6 @@ function AISummaryView({ report: initialReport, token, onSummaryGenerated, onClo
     }
   }
 
-  // Generate automatically the moment this view opens, if there isn't
-  // already a summary — never require a second click just to kick it off.
   useEffect(() => {
     if (!report.analysis && !generating) {
       runGenerate();
@@ -741,9 +793,8 @@ function AISummaryView({ report: initialReport, token, onSummaryGenerated, onClo
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 px-4 py-6">
-      <div className="w-full max-w-xl max-h-[90vh] overflow-y-auto rounded-3xl bg-white shadow-2xl">
-        {/* Header banner — distinct visual identity from View Details so
-            the two never look like the same surface. */}
+      <div className="w-full max-w-5xl max-h-[90vh] overflow-y-auto rounded-3xl bg-white shadow-2xl">
+        {/* Header banner */}
         <div className="bg-gradient-to-br from-blue-600 to-blue-700 rounded-t-3xl p-6 text-white">
           <div className="flex items-start justify-between gap-4">
             <div className="flex items-center gap-3 min-w-0">
@@ -751,9 +802,7 @@ function AISummaryView({ report: initialReport, token, onSummaryGenerated, onClo
                 <Sparkles size={20} />
               </div>
               <div className="min-w-0">
-                <p className="text-xs font-semibold uppercase tracking-wide text-blue-100">
-                  AI Summary
-                </p>
+                <p className="text-xs font-semibold uppercase tracking-wide text-blue-100">AI Summary</p>
                 <h2 className="text-lg font-semibold truncate">{report.title || "Untitled report"}</h2>
               </div>
             </div>
@@ -786,82 +835,104 @@ function AISummaryView({ report: initialReport, token, onSummaryGenerated, onClo
           </div>
         </div>
 
-        <div className="p-6">
-          {generating ? (
-            <div className="flex flex-col items-center justify-center py-10 text-center">
-              <Loader2 className="w-7 h-7 text-blue-600 animate-spin mb-3" />
-              <p className="text-sm font-medium text-slate-700">Generating AI summary...</p>
-              <p className="text-xs text-slate-400 mt-1">Reading the full report to write a plain-language summary.</p>
-            </div>
-          ) : genError ? (
-            <div className="rounded-xl border border-red-100 bg-red-50 p-4 text-center">
-              <p className="text-sm font-semibold text-red-700">Couldn't generate a summary</p>
-              <p className="text-xs text-red-600 mt-1">{genError}</p>
-              <button
-                type="button"
-                onClick={runGenerate}
-                className="mt-3 inline-flex items-center gap-2 bg-red-600 hover:bg-red-700 transition-colors text-white text-xs font-semibold px-4 py-2 rounded-lg"
-              >
-                <RefreshCw size={13} />
-                Retry
-              </button>
-            </div>
-          ) : (
-            <>
-              {/* AI-written narrative */}
-              <div className="rounded-2xl border border-blue-100 bg-blue-50/60 p-4">
-                <p className="text-sm text-slate-800 leading-relaxed whitespace-pre-line">
-                  {report.analysis}
-                </p>
+        <div className="p-6 grid gap-6 md:grid-cols-2">
+          {/* Left: AI summary and highlights */}
+          <div>
+            {generating ? (
+              <div className="flex flex-col items-center justify-center py-10 text-center">
+                <Loader2 className="w-7 h-7 text-blue-600 animate-spin mb-3" />
+                <p className="text-sm font-medium text-slate-700">Generating AI summary...</p>
+                <p className="text-xs text-slate-400 mt-1">Reading the full report to write a plain-language summary.</p>
               </div>
-
-              {/* Structured highlight chips — the scannable version of the
-                  same facts, category-aware labels. */}
-              {highlights.length > 0 && (
-                <div className="grid gap-3 sm:grid-cols-2 mt-4">
-                  {highlights.map(({ label, value, icon: HighlightIcon }) => (
-                    <div key={label} className="rounded-xl border border-slate-100 bg-slate-50 p-3">
-                      <p className="flex items-center gap-1.5 text-xs text-slate-500">
-                        <HighlightIcon size={13} />
-                        {label}
-                      </p>
-                      <p className="mt-1 text-sm font-semibold text-slate-900">{value}</p>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              <div className="flex items-center gap-2 mt-4">
-                <span className={`inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full ${meta.tone}`}>
-                  <Icon size={12} />
-                  {report.category || "Consultation"}
-                </span>
+            ) : genError ? (
+              <div className="rounded-xl border border-red-100 bg-red-50 p-4 text-center">
+                <p className="text-sm font-semibold text-red-700">Couldn't generate a summary</p>
+                <p className="text-xs text-red-600 mt-1">{genError}</p>
                 <button
                   type="button"
                   onClick={runGenerate}
-                  className="ml-auto inline-flex items-center gap-1.5 text-xs font-medium text-blue-600 hover:text-blue-700"
+                  className="mt-3 inline-flex items-center gap-2 bg-red-600 hover:bg-red-700 transition-colors text-white text-xs font-semibold px-4 py-2 rounded-lg"
                 >
-                  <RefreshCw size={12} />
-                  Regenerate
+                  <RefreshCw size={13} />
+                  Retry
                 </button>
               </div>
-            </>
-          )}
+            ) : (
+              <>
+                <div className="rounded-2xl border border-blue-100 bg-blue-50/60 p-4">
+                  <p className="text-sm text-slate-800 leading-relaxed whitespace-pre-line">{report.analysis}</p>
+                </div>
 
-          {report.fileUrl && (
-            <a
-              href={report.fileUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="mt-5 flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 p-3 text-slate-700 transition-colors hover:bg-slate-100"
-            >
-              <span className="flex items-center gap-2 text-sm font-semibold">
+                {highlights.length > 0 && (
+                  <div className="grid gap-3 sm:grid-cols-2 mt-4">
+                    {highlights.map(({ label, value, icon: HighlightIcon }) => (
+                      <div key={label} className="rounded-xl border border-slate-100 bg-slate-50 p-3">
+                        <p className="flex items-center gap-1.5 text-xs text-slate-500">
+                          <HighlightIcon size={13} />
+                          {label}
+                        </p>
+                        <p className="mt-1 text-sm font-semibold text-slate-900">{value}</p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                <div className="flex items-center gap-2 mt-4">
+                  <span className={`inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full ${meta.tone}`}>
+                    <Icon size={12} />
+                    {report.category || "Consultation"}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={runGenerate}
+                    className="ml-auto inline-flex items-center gap-1.5 text-xs font-medium text-blue-600 hover:text-blue-700"
+                  >
+                    <RefreshCw size={12} />
+                    Regenerate
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+
+          {/* Right: preview */}
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 h-full flex flex-col">
+            <p className="text-sm text-slate-500 mb-3">Document preview</p>
+            <div className="flex-1 overflow-hidden">
+              {report.fileUrl ? (
+                getPreviewType(report.fileUrl) === "pdf" ? (
+                  <iframe
+                    src={getPreviewUrl(report.fileUrl)}
+                    title="Summary PDF preview"
+                    className="w-full h-full rounded-xl border border-slate-200"
+                    style={{ minHeight: 360 }}
+                  />
+                ) : getPreviewType(report.fileUrl) === "image" ? (
+                  <img
+                    src={getPreviewUrl(report.fileUrl)}
+                    alt={report.title || "Uploaded document"}
+                    className="w-full h-full rounded-xl object-contain"
+                  />
+                ) : (
+                  <p className="text-sm text-slate-500">Preview not available for this file type.</p>
+                )
+              ) : (
+                <p className="text-xs text-slate-400">No file attached to this report.</p>
+              )}
+            </div>
+
+            {report.fileUrl && (
+              <a
+                href={getPreviewUrl(report.fileUrl)}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mt-4 inline-flex items-center gap-2 rounded-2xl border border-blue-100 bg-blue-50 px-4 py-2 text-blue-700 text-sm font-semibold transition-colors hover:bg-blue-100"
+              >
                 <FileText size={16} />
-                View original document
-              </span>
-              <ExternalLink size={16} />
-            </a>
-          )}
+                Open document
+              </a>
+            )}
+          </div>
         </div>
       </div>
     </div>
