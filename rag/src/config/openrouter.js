@@ -5,17 +5,26 @@
 import { OPENROUTER_API_KEY } from './env.js';
 
 const API_URL = 'https://openrouter.ai/api/v1/chat/completions';
-// Free-tier model. OpenRouter's free lineup rotates — if this starts
-// 404ing, check https://openrouter.ai/models?max_price=0 for a current
-// replacement and swap it in here.
-const CHAT_MODEL = 'openai/gpt-oss-20b:free';
+// Ordered list of free-tier models to try. This is used for BOTH Ask
+// Swastha search and AI report summaries, so it hits OpenRouter's shared
+// free-tier rate limit more than a single feature would — falling back to
+// a different model on a 429 (vs. just failing) is what keeps both
+// features usable under that shared limit. OpenRouter's free lineup
+// rotates; if all of these start 404ing, check
+// https://openrouter.ai/models?max_price=0 for current replacements.
+const CHAT_MODELS = [
+  'openai/gpt-oss-20b:free',
+  'google/gemma-4-26b-a4b-it:free',
+  'nvidia/nemotron-nano-9b-v2:free',
+];
 
-/**
- * Ask the configured OpenRouter model a grounded question. Caller supplies
- * the full prompt (system instructions + excerpts + question already
- * composed) as a single user message.
- */
-export async function generateGroundedAnswer(prompt) {
+// Retryable with the next model: 429 (this model's shared free-tier quota
+// exhausted) and 503 (provider momentarily overloaded — same reasoning as
+// rag/src/config/gemini.js's multi-key retry). Anything else (400, 401,
+// malformed response) is a real error that switching models won't fix.
+const RETRYABLE_STATUSES = new Set([429, 503]);
+
+async function callOpenRouterWithModel(prompt, model) {
   let res;
   try {
     res = await fetch(API_URL, {
@@ -25,7 +34,7 @@ export async function generateGroundedAnswer(prompt) {
         Authorization: `Bearer ${OPENROUTER_API_KEY}`,
       },
       body: JSON.stringify({
-        model: CHAT_MODEL,
+        model,
         messages: [{ role: 'user', content: prompt }],
         temperature: 0, // deterministic, factual — not creative
       }),
@@ -44,19 +53,51 @@ export async function generateGroundedAnswer(prompt) {
 
   if (!res.ok) {
     const message = json?.error?.message || res.statusText || 'unknown error';
-    throw new Error(`OpenRouter API error (HTTP ${res.status}): ${message}`);
+    const error = new Error(`OpenRouter API error from ${model} (HTTP ${res.status}): ${message}`);
+    error.status = res.status;
+    throw error;
   }
 
   const choice = json?.choices?.[0];
   const answer = choice?.message?.content ?? '';
 
   if (!answer.trim()) {
-    throw new Error(
-      `OpenRouter returned no text (finish_reason: ${choice?.finish_reason || 'unknown'})`
+    const error = new Error(
+      `OpenRouter (${model}) returned no text (finish_reason: ${choice?.finish_reason || 'unknown'})`
     );
+    throw error;
   }
 
   return answer.trim();
 }
 
-export { CHAT_MODEL };
+/**
+ * Ask OpenRouter a grounded question, trying CHAT_MODELS in order and
+ * falling back to the next one on a 429/503 — the free-tier rate limit is
+ * shared across whichever model is used, so a different model has a real
+ * chance of being available even when the first is saturated. Caller
+ * supplies the full prompt (system instructions + excerpts + question
+ * already composed) as a single user message.
+ */
+export async function generateGroundedAnswer(prompt) {
+  let lastError;
+  for (let i = 0; i < CHAT_MODELS.length; i += 1) {
+    try {
+      // eslint-disable-next-line no-await-in-loop
+      return await callOpenRouterWithModel(prompt, CHAT_MODELS[i]);
+    } catch (err) {
+      lastError = err;
+      const isLastModel = i === CHAT_MODELS.length - 1;
+      if (RETRYABLE_STATUSES.has(err.status) && !isLastModel) {
+        console.warn(
+          `[openrouter] model ${i + 1}/${CHAT_MODELS.length} (${CHAT_MODELS[i]}) failed (HTTP ${err.status}), trying next model...`
+        );
+        continue;
+      }
+      throw err;
+    }
+  }
+  throw lastError;
+}
+
+export { CHAT_MODELS };

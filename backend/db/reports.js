@@ -94,6 +94,32 @@ export const listTimelineReports = async (userId) => {
   }
 };
 
+export const getTimelineReport = async (userId, reportId) => {
+  const normalizedUserId = String(userId || '').trim();
+  const normalizedReportId = String(reportId || '').trim();
+  if (!normalizedUserId || !normalizedReportId || !supabase) {
+    throw new Error('Missing userId, reportId, or database client.');
+  }
+
+  try {
+    const { data, error } = await supabase
+      .from(REPORTS_TABLE)
+      .select('*')
+      .eq(REPORTS_USER_ID_COLUMN, normalizedUserId)
+      .eq('id', normalizedReportId)
+      .maybeSingle();
+
+    if (error) {
+      throw error;
+    }
+
+    return normalizeReport(data);
+  } catch (err) {
+    console.error('Supabase get timeline report error:', err.message || err);
+    throw err;
+  }
+};
+
 export const createTimelineReport = async (reportData) => {
   const normalizedUserId = String(reportData?.userId || '').trim();
   const reportDateValue = reportData?.reportDate || reportData?.date || null;
