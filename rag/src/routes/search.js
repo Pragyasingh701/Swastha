@@ -22,6 +22,7 @@ router.post('/', requireAuth, async (req, res) => {
     const result = await searchReports(query, userId);
     return res.status(200).json({
       answer: result.answer,
+      structured: result.structured,
       sources: result.sources,
       noResultsFound: result.noResultsFound,
     });

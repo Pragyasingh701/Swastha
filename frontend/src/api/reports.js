@@ -105,10 +105,19 @@ export async function generateReportSummary(reportId, token) {
   }, token);
 }
 
+// Real Lab Insights: fetches the user's Lab Report entries and an
+// AI-generated {healthScore, series (extracted numeric trends),
+// physicianSummary, followUps} built from them. Returns
+// { insights: null, labReportCount: 0 } when there are no lab reports yet.
+export async function getLabInsights(token) {
+  return request('/lab-insights', {}, token);
+}
+
 export default {
   getTimelineReports,
   createTimelineReport,
   updateTimelineReport,
   deleteTimelineReport,
   generateReportSummary,
+  getLabInsights,
 };

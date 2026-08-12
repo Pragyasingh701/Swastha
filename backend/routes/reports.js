@@ -147,6 +147,60 @@ router.get('/signed-url', async (req, res) => {
   }
 });
 
+// Matches both "Lab Report" and "Lab Reports" (both appear in the wild —
+// see MedicalVault.jsx/Timeline.jsx's category configs), case-insensitively.
+function isLabReportCategory(category) {
+  const normalized = String(category || '').trim().toLowerCase();
+  return normalized === 'lab report' || normalized === 'lab reports';
+}
+
+router.get('/lab-insights', async (req, res) => {
+  try {
+    const user = getAuthUser(req);
+    if (!user?.userId) {
+      return res.status(401).json({ message: 'Authentication required to load lab insights.' });
+    }
+
+    const allReports = await listTimelineReports(user.userId);
+    const labReports = allReports.filter((r) => isLabReportCategory(r.category));
+
+    if (labReports.length === 0) {
+      return res.json({ insights: null, labReportCount: 0 });
+    }
+
+    const ragRes = await fetch(`${RAG_BASE_URL}/lab-insights`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: req.headers.authorization,
+      },
+      body: JSON.stringify({
+        reports: labReports.map((r) => ({
+          title: r.title,
+          doctor: r.doctor,
+          hospital: r.hospital,
+          reportDate: r.reportDate,
+          diagnosis: r.diagnosis,
+          medicines: r.medicines,
+          notes: r.notes,
+          analysis: r.analysis,
+        })),
+      }),
+    });
+
+    const data = await ragRes.json();
+    if (!ragRes.ok) {
+      console.error('Lab insights generation failed:', data?.error || ragRes.status);
+      return res.status(502).json({ message: data?.error || 'Could not generate lab insights.' });
+    }
+
+    return res.json({ insights: data.insights, labReportCount: labReports.length });
+  } catch (error) {
+    console.error('Lab insights endpoint error:', error);
+    return res.status(500).json({ message: 'Failed to load lab insights', error: error.message });
+  }
+});
+
 router.get('/', async (req, res) => {
   try {
     const user = getAuthUser(req);
