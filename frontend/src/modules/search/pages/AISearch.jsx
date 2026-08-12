@@ -15,6 +15,7 @@ import {
   Send,
   FileText,
   Loader2,
+  ExternalLink,
 } from "lucide-react";
 
 // Same nav list as Dashboard.jsx / Timeline.jsx / etc.
@@ -120,6 +121,7 @@ export default function AISearch() {
         {
           role: "assistant",
           text: result.answer,
+          structured: result.structured || null,
           sources: result.sources || [],
           noResultsFound: result.noResultsFound,
         },
@@ -258,6 +260,9 @@ function ChatBubble({ message }) {
     );
   }
 
+  const structured = message.structured;
+  const hasKeyFacts = structured?.keyFacts && structured.keyFacts.length > 0;
+
   return (
     <div className="flex justify-start">
       <div
@@ -267,32 +272,77 @@ function ChatBubble({ message }) {
             : "bg-slate-50 text-slate-700 border border-slate-100"
         }`}
       >
-        <p className="whitespace-pre-wrap">{message.text}</p>
+        {/* Headline — the direct one-line answer */}
+        <p className="whitespace-pre-wrap font-medium text-slate-800">
+          {structured?.headline || message.text}
+        </p>
+
+        {/* Key facts — structured supporting details, each traceable to a source */}
+        {hasKeyFacts && (
+          <ul className="mt-3 space-y-2">
+            {structured.keyFacts.map((fact, i) => (
+              <li key={i} className="flex gap-2 text-sm">
+                <span className="mt-1.5 w-1.5 h-1.5 rounded-full bg-blue-400 shrink-0" />
+                <span>
+                  {fact.label && (
+                    <span className="font-semibold text-slate-800">{fact.label}: </span>
+                  )}
+                  <span className="text-slate-600">{fact.detail}</span>
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+
+        {structured?.caveat && (
+          <p className="mt-3 text-xs text-slate-400 italic">{structured.caveat}</p>
+        )}
 
         {message.sources && message.sources.length > 0 && (
           <div className="mt-3 pt-3 border-t border-slate-200 space-y-1.5">
             <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide">Sources</p>
             {message.sources.map((s) => (
-              <div key={s.report_id} className="flex items-center gap-2 text-xs text-slate-500">
-                <FileText size={13} className="shrink-0 text-slate-400" />
-                <span className="font-medium text-slate-600">{s.title || "Untitled report"}</span>
-                {s.category && <span className="text-slate-400">· {s.category}</span>}
-                {formatDate(s.report_date) && <span className="text-slate-400">· {formatDate(s.report_date)}</span>}
-                {s.file_url && (
-                  <a
-                    href={s.file_url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-blue-600 hover:underline ml-1"
-                  >
-                    View
-                  </a>
-                )}
-              </div>
+              <SourceRow key={s.report_id} source={s} />
             ))}
           </div>
         )}
       </div>
     </div>
+  );
+}
+
+function SourceRow({ source }) {
+  const content = (
+    <>
+      <FileText size={13} className="shrink-0 text-slate-400" />
+      <span className="font-medium text-slate-600 truncate">{source.title || "Untitled report"}</span>
+      {source.category && <span className="text-slate-400 shrink-0">· {source.category}</span>}
+      {formatDate(source.report_date) && (
+        <span className="text-slate-400 shrink-0">· {formatDate(source.report_date)}</span>
+      )}
+    </>
+  );
+
+  if (!source.file_url) {
+    return (
+      <div className="flex items-center gap-2 text-xs text-slate-500 px-2 py-1.5">
+        {content}
+      </div>
+    );
+  }
+
+  return (
+    <a
+      href={source.file_url}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="flex items-center gap-2 text-xs text-slate-500 px-2 py-1.5 rounded-lg border border-transparent hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700 transition-colors"
+    >
+      {content}
+      <span className="ml-auto flex items-center gap-1 text-blue-600 font-medium shrink-0">
+        View
+        <ExternalLink size={12} />
+      </span>
+    </a>
   );
 }
