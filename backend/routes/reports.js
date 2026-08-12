@@ -3,9 +3,7 @@ import jwt from 'jsonwebtoken';
 import { listTimelineReports, getTimelineReport, createTimelineReport, updateTimelineReport, deleteTimelineReport } from '../db/reports.js';
 import { findUserByEmail } from '../db/users.js';
 import { validateTimelineReportPayload } from '../utils/timelineValidation.js';
-import { uploadMemory } from '../config/supabaseStorage.js';
-import { uploadImageToCloudinary } from '../config/cloudinary.js';
-import { uploadFileToSupabase } from '../config/supabaseStorage.js';
+import { uploadMemory, uploadFileToSupabase } from '../config/supabaseStorage.js';
 import supabase from '../config/supabase.js';
 
 const router = express.Router();
@@ -241,9 +239,7 @@ router.post('/', handleReportFileUpload, async (req, res) => {
 
     const { sanitized } = validation;
     const uploadedFileUrl = req.file
-      ? (req.file.mimetype && req.file.mimetype.startsWith('image/')
-          ? await uploadImageToCloudinary(req.file)
-          : await uploadFileToSupabase(req.file))
+      ? await uploadFileToSupabase(req.file)
       : String(req.body?.fileUrl || '').trim() || null;
 
     let report = await createTimelineReport({
@@ -297,9 +293,7 @@ router.put('/:id', handleReportFileUpload, async (req, res) => {
 
     const { sanitized } = validation;
     const uploadedFileUrl = req.file
-      ? (req.file.mimetype && req.file.mimetype.startsWith('image/')
-          ? await uploadImageToCloudinary(req.file)
-          : await uploadFileToSupabase(req.file))
+      ? await uploadFileToSupabase(req.file)
       : String(req.body?.fileUrl || '').trim() || null;
 
     let report = await updateTimelineReport(user.userId, reportId, {
