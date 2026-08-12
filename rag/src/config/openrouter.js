@@ -13,9 +13,11 @@ const API_URL = 'https://openrouter.ai/api/v1/chat/completions';
 // rotates; if all of these start 404ing, check
 // https://openrouter.ai/models?max_price=0 for current replacements.
 const CHAT_MODELS = [
-  'openai/gpt-oss-20b:free',
-  'google/gemma-4-26b-a4b-it:free',
-  'nvidia/nemotron-nano-9b-v2:free',
+  'openrouter/free', // Auto-route to any available free model (recommended)
+  'google/gemma-2-9b-it:free',
+  'meta-llama/llama-3-8b-instruct:free',
+  'qwen/qwen-2-7b-instruct:free',
+  'mistralai/mistral-7b-instruct:free'
 ];
 
 // Retryable with the next model: 429 (this model's shared free-tier quota
