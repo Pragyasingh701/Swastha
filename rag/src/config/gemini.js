@@ -6,7 +6,7 @@
 // for this key, so answer generation was moved to OpenRouter (routes to
 // a free model) while embeddings (a different, non-chat endpoint) stayed
 // here since gemini-embedding-001 has no OpenRouter equivalent.
-import { GEMINI_API_KEY } from './env.js';
+import { GEMINI_API_KEYS } from './env.js';
 
 const API_BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
 const EMBEDDING_MODEL = 'gemini-embedding-001';
@@ -15,7 +15,7 @@ const EMBEDDING_DIMENSIONS = 768;
 // sync manually since this is a separate service on purpose (see README).
 const VISION_MODEL = 'gemini-flash-latest';
 
-async function callGemini(path, body) {
+async function callGeminiWithKey(path, body, apiKey) {
   const url = `${API_BASE}/${path}`;
   let res;
   try {
@@ -23,7 +23,7 @@ async function callGemini(path, body) {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'x-goog-api-key': GEMINI_API_KEY,
+        'x-goog-api-key': apiKey,
       },
       body: JSON.stringify(body),
     });
@@ -42,10 +42,54 @@ async function callGemini(path, body) {
 
   if (!res.ok) {
     const message = json?.error?.message || res.statusText || 'unknown error';
-    throw new Error(`Gemini API error from ${path} (HTTP ${res.status}): ${message}`);
+    const error = new Error(`Gemini API error from ${path} (HTTP ${res.status}): ${message}`);
+    error.status = res.status;
+    throw error;
   }
 
   return json;
+}
+
+// Transient failures worth retrying with the next key: 429 (this key's
+// quota exhausted — a different key has its own separate quota) and 503
+// (Google's servers momentarily overloaded — not key-specific, but a
+// retry, especially against a different key, has a real chance of landing
+// on a healthy backend). Anything else (400, 401, malformed response, ...)
+// is a real error that switching keys won't fix.
+const RETRYABLE_STATUSES = new Set([429, 503]);
+
+/**
+ * Calls Gemini with the first configured key; on a retryable failure (429
+ * rate-limit or 503 transient overload), automatically retries the same
+ * request with the next key in GEMINI_API_KEYS, and so on. Each free-tier
+ * key has its own daily quota, so this multiplies effective capacity
+ * without needing paid billing, and also gives a 503 extra attempts to
+ * clear up. Any other error (bad request, network failure, etc.) fails
+ * immediately without trying other keys.
+ */
+async function callGemini(path, body) {
+  if (GEMINI_API_KEYS.length === 0) {
+    throw new Error('callGemini: no Gemini API keys configured (set GEMINI_API_KEYS or GEMINI_API_KEY)');
+  }
+
+  let lastError;
+  for (let i = 0; i < GEMINI_API_KEYS.length; i += 1) {
+    try {
+      // eslint-disable-next-line no-await-in-loop
+      return await callGeminiWithKey(path, body, GEMINI_API_KEYS[i]);
+    } catch (err) {
+      lastError = err;
+      const isLastKey = i === GEMINI_API_KEYS.length - 1;
+      if (RETRYABLE_STATUSES.has(err.status) && !isLastKey) {
+        console.warn(
+          `[gemini] key ${i + 1}/${GEMINI_API_KEYS.length} failed (HTTP ${err.status}), trying next key...`
+        );
+        continue;
+      }
+      throw err;
+    }
+  }
+  throw lastError;
 }
 
 /**
@@ -138,9 +182,21 @@ Extract the following fields:
 3. hospital (string: hospital/clinic/lab name if legible)
 4. reportDate (string: YYYY-MM-DD if a date is legible)
 5. category (string: one of "Prescription", "Lab Report", "Imaging", "Vaccination", "Consultation" — always pick your best-guess closest match, this field should never be left blank)
-6. diagnosis (string: diagnosis/findings if legible)
-7. medicines (string: medicines/dosages if legible, comma-separated)
-8. notes (string: plain-text transcription of all other clinically relevant text that IS legible — test values, instructions, observations)
+6. diagnosis (string: what goes here depends on the category you picked above —
+   - Prescription: the diagnosis/condition being treated
+   - Lab Report: the test or panel name (e.g. "Complete Blood Count")
+   - Imaging: the findings/impression (e.g. "No acute abnormality")
+   - Vaccination: the vaccine name (e.g. "Influenza Vaccine")
+   - Consultation: the reason for the visit
+   Leave blank if not legible.)
+7. medicines (string: what goes here also depends on category —
+   - Prescription: medicines/dosages, comma-separated
+   - Lab Report: key result values (e.g. "Hemoglobin 13.2 g/dL, WBC 7,200/µL")
+   - Imaging: the body part / scan type (e.g. "MRI Lumbar Spine")
+   - Vaccination: dose number / batch info (e.g. "Dose 2 of 2, Batch #A1234")
+   - Consultation: leave blank, usually not applicable
+   Leave blank if not legible.)
+8. notes (string: plain-text transcription of all other clinically relevant text that IS legible — additional values, instructions, observations not captured above)
 
 CRITICAL RULE: for fields 2, 3, 4, 6, 7, 8 — if the relevant handwriting or text is genuinely illegible, ambiguous, or absent, return an empty string "" (or null for reportDate) for that field. Do NOT guess, do NOT invent a plausible-sounding value, do NOT fill in what a typical prescription "probably" says. A blank field the patient can fill in themselves is far better than a confident-looking wrong answer on a medical document — getting a medicine name or dosage wrong could be dangerous. Only report what you can actually read.
 

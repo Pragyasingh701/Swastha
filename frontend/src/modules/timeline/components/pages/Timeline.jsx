@@ -63,15 +63,9 @@ const CATEGORY_META = {
   Consultation: { kind: "consultation", icon: FileText },
 };
 
-// Established app-wide "alert/warning" tone — same orange used by the
-// SafetyAlert card on Dashboard.jsx, not an invented severity color.
-// Category-based heuristic: only Lab Report entries are flagged notable —
-// a diagnosis alone isn't a signal of severity (nearly every prescription
-// has one), so that used to over-flag almost the whole timeline.
-const NOTABLE_KINDS = new Set(["lab"]);
-
-// Dot ring color per event kind — neutral slate by default, orange only
-// for the notable/flagged kinds above (matches Dashboard's SafetyAlert).
+// Dot ring color per event kind — lab reports get their own orange tone
+// as a permanent category color (matches Dashboard's SafetyAlert palette),
+// independent of whether anything on the report actually needs attention.
 const dotStyles = {
   lab: "bg-orange-50 text-orange-600 ring-orange-100",
   medication: "bg-blue-50 text-blue-600 ring-blue-100",
@@ -88,8 +82,14 @@ const tagStyles = {
   consultation: "text-slate-600",
 };
 
+// "NEEDS ATTENTION" only means one concrete thing: this report has fields
+// AI extraction couldn't confidently read that are still blank — matches
+// exactly what the detail view's amber "unverified fields" callout shows,
+// so opening a flagged report always has something to act on. Being a Lab
+// Report on its own is not a reason to flag it — that used to mark every
+// lab report as needing attention even when nothing was actually unclear.
 function isNotable(event) {
-  return NOTABLE_KINDS.has(event.kind);
+  return Boolean(event.unclearFields && event.unclearFields.length > 0);
 }
 
 export default function Timeline() {
@@ -686,9 +686,6 @@ function TimelineInfographic({ events, loading, onSelectEvent, collapsedYears, o
 
   return (
     <div className="relative pl-4">
-      {/* Bold vertical spine connecting every entry top to bottom. */}
-      <div className="absolute left-[27px] top-2 bottom-2 w-0.5 bg-slate-200" />
-
       <div className="flex flex-col gap-6">
         {yearGroups.map(([year, yearEvents]) => {
           const collapsed = collapsedYears.has(year);
@@ -742,52 +739,35 @@ function YearBadge({ year, count, collapsed, onToggle }) {
   );
 }
 
-// One or more events sharing the same exact date. The date label sits
-// beside the FIRST card's top edge (not centered against the whole
-// cluster), and every event still gets its own icon+card row so the icon
-// for row N stays aligned with card N's vertical center regardless of how
-// tall each card is — icons and cards can't be laid out as two
-// independently-spaced columns, since card heights vary with content
-// (diagnosis line, unclear-fields warning, etc.) while icons don't.
+// One or more events sharing the same exact date. The whole group — date
+// label plus every report for that date — sits inside one light-colored
+// bounding box, so it reads as a single visual unit on the timeline
+// (rather than the date floating loose next to disconnected cards),
+// whether it's one report or several sharing that day.
 function DayGroup({ events, onSelectEvent }) {
   const isCluster = events.length > 1;
 
   return (
-    <div className="flex flex-col gap-4">
-      {events.map((event, index) => {
-        const Icon = event.icon;
-        const notable = isNotable(event);
-        // Same-day cluster: smaller icons hanging off a sub-timeline
-        // border so each entry reads as "part of this day" rather than a
-        // full top-level entry. Single-day: full-size icon, matching
-        // every other row on the page.
-        const iconSize = isCluster ? "w-8 h-8 ring-4" : "w-11 h-11 ring-8";
+    <div className="relative z-10 rounded-2xl bg-slate-50 border border-slate-200 p-4">
+      <div className="flex items-baseline gap-2 mb-3">
+        <span className="text-sm font-bold text-slate-700">{events[0].displayDate}</span>
+        {isCluster && (
+          <span className="text-[10px] font-semibold text-slate-500 bg-white border border-slate-200 rounded-full px-2 py-0.5">
+            {events.length} entries
+          </span>
+        )}
+      </div>
 
-        return (
-          <div key={event.id} className="flex gap-5">
-            {/* Date label column — only rendered once, on the first row,
-                and top-aligned so it lines up with the top of the FIRST
-                card specifically, not centered against the whole group. */}
-            <div className="flex flex-col items-center shrink-0 w-11">
-              {index === 0 ? (
-                <>
-                  <span className="text-xs font-semibold text-slate-500 text-center leading-tight">
-                    {event.displayDate}
-                  </span>
-                  {isCluster && (
-                    <span className="mt-0.5 text-[10px] font-medium text-slate-400 bg-slate-100 rounded-full px-2 py-0.5">
-                      {events.length} entries
-                    </span>
-                  )}
-                </>
-              ) : (
-                // Empty spacer keeps every row's left column the same
-                // width so the sub-timeline border below stays straight.
-                <div aria-hidden="true" />
-              )}
-            </div>
+      <div className="flex flex-col gap-3">
+        {events.map((event) => {
+          const Icon = event.icon;
+          const notable = isNotable(event);
+          // Same-day cluster: smaller icons since multiple reports share
+          // the box. Single-day: full-size icon, matching every other row.
+          const iconSize = isCluster ? "w-8 h-8 ring-4" : "w-11 h-11 ring-8";
 
-            <div className={`flex-1 min-w-0 flex items-center gap-4 ${isCluster ? "pl-5 border-l-2 border-slate-100" : ""}`}>
+          return (
+            <div key={event.id} className="flex items-center gap-4">
               <div
                 className={`relative z-10 ${iconSize} shrink-0 rounded-full flex items-center justify-center ring-slate-50 ${dotStyles[event.kind]}
                   transition-transform duration-300 hover:scale-110 ${
@@ -800,9 +780,9 @@ function DayGroup({ events, onSelectEvent }) {
                 <EventCard event={event} notable={notable} />
               </button>
             </div>
-          </div>
-        );
-      })}
+          );
+        })}
+      </div>
     </div>
   );
 }

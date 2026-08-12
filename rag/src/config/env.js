@@ -8,12 +8,17 @@ dotenv.config();
 const required = [
   'SUPABASE_URL',
   'SUPABASE_SERVICE_ROLE_KEY',
-  'GEMINI_API_KEY', // embeddings only — see config/gemini.js
   'OPENROUTER_API_KEY', // grounded answer generation — see config/openrouter.js
   'JWT_SECRET',
 ];
 
 const missing = required.filter((key) => !process.env[key]);
+
+// GEMINI_API_KEYS (plural, comma-separated) or GEMINI_API_KEY (singular) —
+// at least one form is required, checked separately since either satisfies it.
+if (!process.env.GEMINI_API_KEYS && !process.env.GEMINI_API_KEY) {
+  missing.push('GEMINI_API_KEYS (or GEMINI_API_KEY)');
+}
 
 if (missing.length > 0) {
   // eslint-disable-next-line no-console
@@ -26,7 +31,15 @@ if (missing.length > 0) {
 
 export const SUPABASE_URL = process.env.SUPABASE_URL;
 export const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
-export const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+// Ordered list of Gemini API keys to try, in order, on rate-limit (429).
+// GEMINI_API_KEYS (comma-separated) takes priority; falls back to the
+// single GEMINI_API_KEY for backward compatibility.
+export const GEMINI_API_KEYS = (process.env.GEMINI_API_KEYS || process.env.GEMINI_API_KEY || '')
+  .split(',')
+  .map((k) => k.trim())
+  .filter(Boolean);
+// Kept for anything still importing the singular name directly.
+export const GEMINI_API_KEY = GEMINI_API_KEYS[0];
 export const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
 export const JWT_SECRET = process.env.JWT_SECRET;
 export const PORT = process.env.PORT || 3010;
