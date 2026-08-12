@@ -11,6 +11,7 @@ frontend/node_modules/
 .env.production.local
 backend/.env
 frontend/.env
+uploads
 
 # Local data & temporary fallback files
 backend/data/

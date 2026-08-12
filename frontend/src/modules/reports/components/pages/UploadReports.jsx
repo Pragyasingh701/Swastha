@@ -11,6 +11,7 @@ import {
   Sparkles,
   Loader2,
   CheckCircle2,
+  RefreshCw,
 } from "lucide-react";
 import { extractReportFromFile } from "../../../../api/search";
 
@@ -44,13 +45,15 @@ function buildAnalysisText(fields = {}, unclear = []) {
     }
   };
 
+  const categoryFields = getCategoryFieldConfig(fields.category);
+
   appendField("Title", fields.title);
   appendField("Doctor", fields.doctor);
   appendField("Hospital", fields.hospital);
   appendField("Date", fields.reportDate);
   appendField("Category", fields.category);
-  appendField("Diagnosis", fields.diagnosis);
-  appendField("Medicines", fields.medicines);
+  appendField(categoryFields.diagnosis?.label || "Diagnosis", fields.diagnosis);
+  appendField(categoryFields.medicines?.label || "Medicines", fields.medicines);
   appendField("Notes", fields.notes);
 
   if (unclear.length > 0) {
@@ -58,6 +61,39 @@ function buildAnalysisText(fields = {}, unclear = []) {
   }
 
   return lines.join("\n");
+}
+
+// Diagnosis/Medicines are stored under the same column names for every
+// category (no schema change), but what they actually MEAN differs a lot
+// by category — a lab report's "diagnosis" is really a test/panel name,
+// a vaccination's "medicines" is really a dose/batch number, etc. This
+// only changes the label/placeholder/visibility shown to the user; the
+// underlying formData keys and backend columns stay diagnosis/medicines.
+const CATEGORY_FIELD_CONFIG = {
+  Prescription: {
+    diagnosis: { label: "Diagnosis", placeholder: "e.g. Type 2 Diabetes Mellitus" },
+    medicines: { label: "Medicines", placeholder: "e.g. Metformin 500mg twice daily" },
+  },
+  "Lab Report": {
+    diagnosis: { label: "Test / Panel Name", placeholder: "e.g. Complete Blood Count (CBC)" },
+    medicines: { label: "Key Results / Values", placeholder: "e.g. Hemoglobin 13.2 g/dL, WBC 7,200/µL" },
+  },
+  Imaging: {
+    diagnosis: { label: "Findings", placeholder: "e.g. No acute abnormality, mild disc bulge at L4-L5" },
+    medicines: { label: "Body Part / Scan Type", placeholder: "e.g. MRI Lumbar Spine" },
+  },
+  Vaccination: {
+    diagnosis: { label: "Vaccine Name", placeholder: "e.g. Influenza (Flu) Vaccine" },
+    medicines: { label: "Dose / Batch Info", placeholder: "e.g. Dose 2 of 2, Batch #A1234" },
+  },
+  Consultation: {
+    diagnosis: { label: "Reason for Visit", placeholder: "e.g. Routine check-up, follow-up on BP" },
+    medicines: null, // often not applicable for a plain consultation — field is hidden
+  },
+};
+
+function getCategoryFieldConfig(category) {
+  return CATEGORY_FIELD_CONFIG[category] || CATEGORY_FIELD_CONFIG.Prescription;
 }
 
 function emptyFormData() {
@@ -114,6 +150,11 @@ export default function UploadReports({ onClose, onSubmit, token, initialEvent }
   );
 
   const [formData, setFormData] = useState(() => formDataFromEvent(initialEvent));
+
+  // Field labels/placeholders/visibility for the Diagnosis and Medicines
+  // slots change based on the selected category (e.g. a Lab Report needs
+  // "Test/Panel Name" + "Key Results", not "Diagnosis" + "Medicines").
+  const categoryFields = getCategoryFieldConfig(formData.category);
 
   const handleChange = (e) => {
     const { name, value, files } = e.target;
@@ -349,6 +390,17 @@ export default function UploadReports({ onClose, onSubmit, token, initialEvent }
                   <div className="bg-red-50 mt-5 rounded-lg p-4 text-left">
                     <p className="font-semibold text-red-700">Couldn't auto-read this file</p>
                     <p className="text-sm text-gray-600">{extractError}</p>
+                    <p className="text-xs text-gray-500 mt-1">
+                      This is often a temporary server issue — retrying usually works.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => runExtraction(formData.file)}
+                      className="mt-3 inline-flex items-center gap-2 bg-red-600 hover:bg-red-700 transition-colors text-white text-sm font-semibold px-4 py-2 rounded-lg"
+                    >
+                      <RefreshCw className="w-4 h-4" />
+                      Retry AI Scan
+                    </button>
                   </div>
                 )}
               </div>
@@ -441,23 +493,29 @@ export default function UploadReports({ onClose, onSubmit, token, initialEvent }
 
               </div>
 
-              <FormField
-                label="Diagnosis"
-                name="diagnosis"
-                value={formData.diagnosis}
-                onChange={handleChange}
-                unclear={unclearFields.has('diagnosis')}
-                textarea
-              />
+              {categoryFields.diagnosis && (
+                <FormField
+                  label={categoryFields.diagnosis.label}
+                  placeholder={categoryFields.diagnosis.placeholder}
+                  name="diagnosis"
+                  value={formData.diagnosis}
+                  onChange={handleChange}
+                  unclear={unclearFields.has('diagnosis')}
+                  textarea
+                />
+              )}
 
-              <FormField
-                label="Medicines"
-                name="medicines"
-                value={formData.medicines}
-                onChange={handleChange}
-                unclear={unclearFields.has('medicines')}
-                textarea
-              />
+              {categoryFields.medicines && (
+                <FormField
+                  label={categoryFields.medicines.label}
+                  placeholder={categoryFields.medicines.placeholder}
+                  name="medicines"
+                  value={formData.medicines}
+                  onChange={handleChange}
+                  unclear={unclearFields.has('medicines')}
+                  textarea
+                />
+              )}
 
               <div className="col-span-2">
                 <FormField
@@ -502,7 +560,7 @@ export default function UploadReports({ onClose, onSubmit, token, initialEvent }
   );
 }
 
-function FormField({ label, name, value, onChange, unclear, textarea }) {
+function FormField({ label, name, value, onChange, unclear, textarea, placeholder }) {
   const Tag = textarea ? "textarea" : "input";
   return (
     <div>
@@ -519,7 +577,7 @@ function FormField({ label, name, value, onChange, unclear, textarea }) {
         name={name}
         value={value}
         onChange={onChange}
-        placeholder={unclear ? "Fill in if you know it, or leave blank" : undefined}
+        placeholder={unclear ? "Fill in if you know it, or leave blank" : placeholder}
         className={`w-full border rounded-lg p-3 mt-1 ${unclear ? 'border-amber-400 bg-amber-50' : ''}`}
       />
     </div>
