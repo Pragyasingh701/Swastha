@@ -36,33 +36,6 @@ function toDateInputValue(value) {
   return date.toISOString().slice(0, 10);
 }
 
-function buildAnalysisText(fields = {}, unclear = []) {
-  const lines = [];
-
-  const appendField = (label, value) => {
-    if (value) {
-      lines.push(`${label}: ${String(value).trim()}`);
-    }
-  };
-
-  const categoryFields = getCategoryFieldConfig(fields.category);
-
-  appendField("Title", fields.title);
-  appendField("Doctor", fields.doctor);
-  appendField("Hospital", fields.hospital);
-  appendField("Date", fields.reportDate);
-  appendField("Category", fields.category);
-  appendField(categoryFields.diagnosis?.label || "Diagnosis", fields.diagnosis);
-  appendField(categoryFields.medicines?.label || "Medicines", fields.medicines);
-  appendField("Notes", fields.notes);
-
-  if (unclear.length > 0) {
-    lines.push(`Unclear fields: ${unclear.join(", ")}`);
-  }
-
-  return lines.join("\n");
-}
-
 // Diagnosis/Medicines are stored under the same column names for every
 // category (no schema change), but what they actually MEAN differs a lot
 // by category — a lab report's "diagnosis" is really a test/panel name,
@@ -217,7 +190,6 @@ export default function UploadReports({ onClose, onSubmit, token, initialEvent }
         diagnosis: fields.diagnosis || prev.diagnosis,
         medicines: fields.medicines || prev.medicines,
         notes: fields.notes || prev.notes,
-        analysis: buildAnalysisText(fields, unclear),
       }));
       // rag's field name is "reportDate", this form's is "date" — map it.
       setUnclearFields(new Set(unclear.map((key) => (key === 'reportDate' ? 'date' : key))));

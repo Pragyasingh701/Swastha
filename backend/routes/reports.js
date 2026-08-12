@@ -1,6 +1,6 @@
 import express from 'express';
 import jwt from 'jsonwebtoken';
-import { listTimelineReports, createTimelineReport, updateTimelineReport, deleteTimelineReport } from '../db/reports.js';
+import { listTimelineReports, getTimelineReport, createTimelineReport, updateTimelineReport, deleteTimelineReport } from '../db/reports.js';
 import { findUserByEmail } from '../db/users.js';
 import { validateTimelineReportPayload } from '../utils/timelineValidation.js';
 import { uploadMemory } from '../config/supabaseStorage.js';
@@ -10,6 +10,47 @@ import supabase from '../config/supabase.js';
 
 const router = express.Router();
 const JWT_SECRET = process.env.JWT_SECRET || 'swastha_dev_secret_key_2026';
+const RAG_BASE_URL = process.env.RAG_BASE_URL || 'http://localhost:3010/api';
+
+// Generates an AI summary for a report via rag/'s /api/summarize (see
+// rag/src/services/summaryService.js) — forwards the same user JWT this
+// request already carried, since this is a server-to-server call standing
+// in for the original user, not a separate identity.
+//
+// Called synchronously right after create/update, before responding, so
+// the summary is guaranteed to already exist by the time anyone clicks
+// "AI Summary" — never generated on click. Failure here does NOT fail the
+// report save — the report is still valid without a summary, same
+// graceful-degradation pattern as AI extraction elsewhere in this app.
+async function generateSummary(authHeader, report) {
+  try {
+    const res = await fetch(`${RAG_BASE_URL}/summarize`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: authHeader,
+      },
+      body: JSON.stringify({
+        title: report.title,
+        doctor: report.doctor,
+        hospital: report.hospital,
+        category: report.category,
+        reportDate: report.reportDate,
+        diagnosis: report.diagnosis,
+        medicines: report.medicines,
+        notes: report.notes,
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data?.error || `rag summarize returned HTTP ${res.status}`);
+    }
+    return data.summary || null;
+  } catch (err) {
+    console.error(`AI summary generation failed for report ${report.id}:`, err.message || err);
+    return null;
+  }
+}
 
 function getAuthUser(req) {
   const authHeader = req.headers.authorization || '';
@@ -151,7 +192,7 @@ router.post('/', handleReportFileUpload, async (req, res) => {
           : await uploadFileToSupabase(req.file))
       : String(req.body?.fileUrl || '').trim() || null;
 
-    const report = await createTimelineReport({
+    let report = await createTimelineReport({
       userId: user.userId,
       title: sanitized.title,
       doctor: sanitized.doctor,
@@ -161,11 +202,20 @@ router.post('/', handleReportFileUpload, async (req, res) => {
       diagnosis: sanitized.diagnosis,
       medicines: sanitized.medicines,
       notes: sanitized.notes,
-      analysis: req.body?.analysis || null,
+      analysis: null, // filled in below once AI summarization finishes
       fileUrl: uploadedFileUrl,
       unclearFields: sanitizeUnclearFields(req.body?.unclearFields),
       source: 'manual',
     });
+
+    // Summarize now, before responding, so "AI Summary" is instant on
+    // click later — never generated on demand. A failure here doesn't
+    // fail the save; the report just has no summary yet.
+    const summary = await generateSummary(req.headers.authorization, report);
+    if (summary) {
+      const updated = await updateTimelineReport(user.userId, report.id, { ...report, analysis: summary });
+      if (updated) report = updated;
+    }
 
     return res.status(201).json({ report });
   } catch (error) {
@@ -198,7 +248,7 @@ router.put('/:id', handleReportFileUpload, async (req, res) => {
           : await uploadFileToSupabase(req.file))
       : String(req.body?.fileUrl || '').trim() || null;
 
-    const report = await updateTimelineReport(user.userId, reportId, {
+    let report = await updateTimelineReport(user.userId, reportId, {
       title: sanitized.title,
       doctor: sanitized.doctor,
       hospital: sanitized.hospital,
@@ -207,7 +257,7 @@ router.put('/:id', handleReportFileUpload, async (req, res) => {
       diagnosis: sanitized.diagnosis,
       medicines: sanitized.medicines,
       notes: sanitized.notes,
-      analysis: req.body?.analysis || null,
+      analysis: null, // regenerated below — edited content needs a fresh summary
       fileUrl: uploadedFileUrl,
       unclearFields: sanitizeUnclearFields(req.body?.unclearFields),
     });
@@ -216,10 +266,62 @@ router.put('/:id', handleReportFileUpload, async (req, res) => {
       return res.status(404).json({ message: 'Report not found, or you do not have permission to edit it.' });
     }
 
+    // Content may have changed — regenerate the summary before responding,
+    // same as on create, so it's instant on click and never stale.
+    const summary = await generateSummary(req.headers.authorization, report);
+    if (summary) {
+      const updated = await updateTimelineReport(user.userId, report.id, { ...report, analysis: summary });
+      if (updated) report = updated;
+    }
+
     return res.json({ report });
   } catch (error) {
     console.error('Timeline report update error:', error);
     return res.status(500).json({ message: 'Failed to update timeline report', error: error.message });
+  }
+});
+
+// On-demand summary generation — hit when the user clicks "AI Summary" on
+// a report that doesn't have one yet (e.g. saved before this feature
+// existed, or generation failed at save time). Normally the summary
+// already exists by save time (see generateSummary() above, called from
+// POST/PUT); this is the fallback path for whenever it doesn't.
+router.post('/:id/summarize', async (req, res) => {
+  try {
+    const user = getAuthUser(req);
+    if (!user?.userId) {
+      return res.status(401).json({ message: 'Authentication required to generate a summary.' });
+    }
+
+    const reportId = req.params.id?.trim();
+    if (!reportId) {
+      return res.status(400).json({ message: 'Report ID is required.' });
+    }
+
+    const existing = await getTimelineReport(user.userId, reportId);
+    if (!existing) {
+      return res.status(404).json({ message: 'Report not found, or you do not have permission to view it.' });
+    }
+
+    if (existing.analysis) {
+      // Already has one — nothing to regenerate, just hand it back.
+      return res.json({ report: existing });
+    }
+
+    const summary = await generateSummary(req.headers.authorization, existing);
+    if (!summary) {
+      return res.status(502).json({ message: 'Could not generate an AI summary for this report. Please try again.' });
+    }
+
+    const updated = await updateTimelineReport(user.userId, reportId, { ...existing, analysis: summary });
+    if (!updated) {
+      return res.status(404).json({ message: 'Report not found, or you do not have permission to edit it.' });
+    }
+
+    return res.json({ report: updated });
+  } catch (error) {
+    console.error('On-demand summary generation error:', error);
+    return res.status(500).json({ message: 'Failed to generate summary', error: error.message });
   }
 });
 

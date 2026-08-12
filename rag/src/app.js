@@ -6,6 +6,7 @@ import { CORS_ORIGIN } from './config/env.js';
 import reportsRouter from './routes/reports.js';
 import searchRouter from './routes/search.js';
 import extractRouter from './routes/extract.js';
+import summarizeRouter from './routes/summarize.js';
 
 const app = express();
 
@@ -17,6 +18,7 @@ app.get('/health', (req, res) => res.json({ ok: true, service: 'swastha-rag' }))
 app.use('/api/reports', reportsRouter);
 app.use('/api/search', searchRouter);
 app.use('/api/extract', extractRouter);
+app.use('/api/summarize', summarizeRouter);
 
 // Central error handler as a last resort net — routes already catch and
 // respond themselves, but this guards against anything unhandled.

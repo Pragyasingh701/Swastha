@@ -95,9 +95,20 @@ export async function deleteTimelineReport(reportId, token) {
   }, token);
 }
 
+// On-demand AI summary generation for a report that doesn't have one yet.
+// Normally the summary is already generated at save time; this is the
+// fallback path for reports saved before that existed, or where
+// generation failed. Returns { report } with `analysis` now populated.
+export async function generateReportSummary(reportId, token) {
+  return request(`/${encodeURIComponent(reportId)}/summarize`, {
+    method: 'POST',
+  }, token);
+}
+
 export default {
   getTimelineReports,
   createTimelineReport,
   updateTimelineReport,
   deleteTimelineReport,
+  generateReportSummary,
 };
