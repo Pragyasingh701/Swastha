@@ -15,6 +15,13 @@ import VerifyOTP from "./modules/authentication/VerifyOTP";
 import ForgotPassword from "./modules/authentication/ForgotPassword";
 import ResetPassword from "./modules/authentication/ResetPassword";
 import DoctorDashboard from "./modules/doctor/pages/DoctorDashboard";
+import DoctorPatients from "./modules/doctor/pages/DoctorPatients";
+import ClinicalIntelligence from "./modules/doctor/pages/ClinicalIntelligence";
+import ClinicalAnalytics from "./modules/doctor/pages/ClinicalAnalytics";
+import ModernHealthDashboard from "./modules/doctor/pages/ModernHealthDashboard";
+import DoctorReports from "./modules/doctor/pages/DoctorReports";
+import DoctorMessages from "./modules/doctor/pages/DoctorMessages";
+import DoctorSettings from "./modules/doctor/pages/DoctorSettings";
 
 // Dashboard
 import Dashboard from "./modules/dashboard/pages/Dashboard";
@@ -230,6 +237,68 @@ export default function App() {
   }
 />
 
+        <Route
+          path="/doctor/patients"
+          element={
+            <DoctorRoute>
+              <DoctorPatients />
+            </DoctorRoute>
+          }
+        />
+
+        <Route
+          path="/doctor/clinical-intelligence"
+          element={
+            <DoctorRoute>
+              <ClinicalIntelligence />
+            </DoctorRoute>
+          }
+        />
+
+        <Route
+          path="/doctor/clinical-analytics"
+          element={
+            <DoctorRoute>
+              <ClinicalAnalytics />
+            </DoctorRoute>
+          }
+        />
+
+        <Route
+          path="/doctor/modern-dashboard"
+          element={
+            <DoctorRoute>
+              <ModernHealthDashboard />
+            </DoctorRoute>
+          }
+        />
+
+        <Route
+          path="/doctor/reports"
+          element={
+            <DoctorRoute>
+              <DoctorReports />
+            </DoctorRoute>
+          }
+        />
+
+        <Route
+          path="/doctor/messages"
+          element={
+            <DoctorRoute>
+              <DoctorMessages />
+            </DoctorRoute>
+          }
+        />
+
+        <Route
+          path="/doctor/settings"
+          element={
+            <DoctorRoute>
+              <DoctorSettings />
+            </DoctorRoute>
+          }
+        />
 
         <Route
           path="/lab-trends"

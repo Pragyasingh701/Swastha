@@ -33,7 +33,7 @@ export default function DoctorLogin() {
       }
 
       if (result?.user?.hasSelectedRole || (result?.user?.role && result?.user?.role !== 'none')) {
-        navigate("/dashboard", { replace: true });
+        navigate(result?.user?.role === 'doctor' ? "/doctor-dashboard" : "/dashboard", { replace: true });
       } else {
         navigate("/doctor-register", { replace: true });
       }
