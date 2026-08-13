@@ -12,7 +12,7 @@ export default function DoctorRegister() {
     const activeUser = user || storedUser;
 
     if (activeUser?.hasSelectedRole || (activeUser?.role && activeUser?.role !== 'none')) {
-      navigate("/dashboard", { replace: true });
+      navigate(activeUser?.role === 'doctor' ? "/doctor-dashboard" : "/dashboard", { replace: true });
       return;
     }
 
@@ -114,7 +114,7 @@ export default function DoctorRegister() {
         setUserRole("doctor");
       }
       setIsSubmitting(false);
-      navigate("/dashboard", { replace: true });
+      navigate("/doctor-dashboard", { replace: true });
     } catch (err) {
       setIsSubmitting(false);
       setErrorMessage(err.message || "Failed to complete registration. Please check your credentials and try again.");

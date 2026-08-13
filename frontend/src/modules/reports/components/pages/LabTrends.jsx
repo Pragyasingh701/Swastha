@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useEffect } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
+import logo from "../../../../assets/swastha-logo.png";
 import {
   AreaChart,
   Area,
@@ -200,7 +201,10 @@ function Sidebar() {
   return (
     <aside className="hidden lg:flex lg:flex-col w-64 shrink-0 bg-slate-50 border-r border-slate-200 min-h-screen px-4 py-6">
       <div className="px-2 mb-8">
-        <h1 className="text-xl font-bold text-blue-700 leading-tight">Swastha AI</h1>
+        <div className="flex items-center gap-3 mb-2">
+          <img src={logo} alt="Swastha" className="h-10 w-auto" />
+          <h1 className="text-xl font-bold text-blue-700 leading-tight">Swastha AI</h1>
+        </div>
         <p className="text-[10px] tracking-widest text-slate-400 font-medium mt-0.5">
           CLINICAL INTELLIGENCE
         </p>

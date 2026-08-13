@@ -1,6 +1,7 @@
 import React from "react";
 import logo from "../../../assets/swastha-logo.png";
 import { useNavigate } from "react-router-dom";
+import DoctorSidebar from "../components/DoctorSidebar";
 import {
   ShieldPlus,
   LayoutGrid,
@@ -33,15 +34,6 @@ import {
    real data once wired to the backend.
 ------------------------------------------------------------ */
 
-const navItems = [
-  { label: "Dashboard", icon: LayoutGrid, active: true, route: "/doctor-dashboard" },
-  { label: "Patients", icon: Users, route: "/doctor/patients" },
-  { label: "Medical Records", icon: ClipboardList, route: "/doctor/records" },
-  { label: "Prescriptions", icon: FileText, route: "/doctor/prescriptions" },
-  { label: "Reports", icon: BarChart3, route: "/doctor/reports" },
-  { label: "Messages", icon: Mail, route: "/doctor/messages" },
-  { label: "Analytics", icon: TrendingUp, route: "/doctor/analytics" },
-];
 
 const doctorProfile = {
   name: "Dr. Sarah Jenkins",
@@ -148,53 +140,7 @@ export default function DoctorDashboard() {
 /* ---------------------------- Sidebar ---------------------------- */
 
 function Sidebar() {
-  const navigate = useNavigate();
-
-  return (
-    <aside className="hidden lg:flex lg:flex-col w-64 shrink-0 bg-white border-r border-slate-200 min-h-screen px-4 py-6">
-      <div className="flex items-center gap-2.5 px-2 mb-8">
-  <img
-    src={logo}
-    alt="Swastha"
-    className="h-10 w-auto transition-transform duration-300 hover:scale-105"
-  />
-</div>
-
-      <nav className="flex-1 space-y-1">
-        {navItems.map(({ label, icon: Icon, active, route }) => (
-          <button
-            key={label}
-            type="button"
-            onClick={() => route && navigate(route)}
-            className={`group w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 ${
-              active
-                ? "bg-blue-50 text-blue-700 font-semibold border-r-4 border-blue-600"
-                : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
-            }`}
-          >
-            <Icon
-              size={18}
-              className={`transition-transform duration-200 ${
-                active ? "" : "group-hover:scale-110"
-              }`}
-            />
-            {label}
-          </button>
-        ))}
-      </nav>
-
-      <div className="space-y-1 pt-4 border-t border-slate-100">
-        <button className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors duration-200">
-          <Bell size={18} />
-          Notifications
-        </button>
-        <button className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors duration-200">
-          <Settings size={18} />
-          Settings
-        </button>
-      </div>
-    </aside>
-  );
+  return <DoctorSidebar />;
 }
 
 /* ----------------------------- Top bar ----------------------------- */
