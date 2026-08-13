@@ -565,12 +565,13 @@ router.post('/profile', authenticateToken, async (req, res) => {
 
   // Patient Mandatory Fields Validation (for registration OR role switch to patient)
   if (targetRole === 'patient' && (!isSettingsUpdate || isRoleSwitch)) {
-    const { fullName, dob, bloodGroup, phone } = profileDetails;
+    const { fullName, dob, bloodGroup, phone, gender } = profileDetails;
     const nameVal = fullName || profileDetails.name;
     const phoneVal = phone || profileDetails.mobile;
-    if (!nameVal || !dob || !bloodGroup || !phoneVal) {
+    const genderVal = gender || profileDetails.gender;
+    if (!nameVal || !dob || !bloodGroup || !phoneVal || !genderVal) {
       return res.status(400).json({
-        message: 'All patient details (Full Name, Date of Birth, Blood Group, and Mobile Phone Number) are mandatory when setting up a Patient account.',
+        message: 'All patient details (Full Name, Date of Birth, Gender, Blood Group, and Mobile Phone Number) are mandatory when setting up a Patient account.',
       });
     }
     if (phoneVal && !isValidPhone(phoneVal)) {
