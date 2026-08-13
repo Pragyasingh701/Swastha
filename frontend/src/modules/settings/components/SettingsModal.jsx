@@ -104,10 +104,10 @@ export default function SettingsModal({ isOpen, onClose }) {
 
     // Role-specific mandatory field validations
     if (formData.role === 'patient') {
-      if (!formData.name || !formData.dob || !formData.bloodGroup) {
+      if (!formData.name || !formData.dob || !formData.bloodGroup || !formData.gender) {
         setMessage({
           type: 'error',
-          text: 'All patient credentials (Full Name, Date of Birth, Blood Group, and Mobile Phone) are mandatory.',
+          text: 'All patient credentials (Full Name, Date of Birth, Gender, Blood Group, and Mobile Phone) are mandatory.',
         });
         setIsSaving(false);
         return;

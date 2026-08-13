@@ -184,6 +184,7 @@ export const createOrUpdateUser = async (userData) => {
         phone,
         dob,
         blood_group: bloodGroup,
+        gender,
         specialty,
         license_number: licenseNumber,
         council,
@@ -240,6 +241,7 @@ export const createOrUpdateUser = async (userData) => {
           dob: userRow.dob || dob,
           bloodGroup: userRow.blood_group || bloodGroup,
           blood_group: userRow.blood_group || bloodGroup,
+          gender: userRow.gender || gender,
           hasSelectedRole: !!(userRow.role && userRow.role !== 'none'),
         };
       } else if (error) {

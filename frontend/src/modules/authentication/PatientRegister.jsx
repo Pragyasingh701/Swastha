@@ -29,6 +29,7 @@ export default function PatientRegister() {
     phone: user?.phone || user?.mobile || "",
     dob: "",
     bloodGroup: "",
+    gender: "",
     password: "",
     confirmPassword: "",
   });
@@ -56,6 +57,11 @@ export default function PatientRegister() {
       return;
     }
 
+    if (!formData.gender) {
+      setErrorMessage("Please select your gender before completing registration.");
+      return;
+    }
+
     setIsLoading(true);
 
     try {
@@ -67,6 +73,7 @@ export default function PatientRegister() {
           dob: formData.dob,
           bloodGroup: formData.bloodGroup,
           blood_group: formData.bloodGroup,
+          gender: formData.gender,
           role: "patient",
           hasSelectedRole: true,
         });
@@ -274,8 +281,8 @@ export default function PatientRegister() {
                   </div>
                 </div>
 
-                {/* Date of Birth & Blood Group */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-md">
+                {/* Date of Birth, Blood Group & Gender */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-md">
                   <div className="space-y-sm">
                     <label className="font-label-md text-label-md text-on-surface-variant block ml-1">
                       Date of Birth
@@ -320,6 +327,31 @@ export default function PatientRegister() {
                         <option value="O-">O-</option>
                         <option value="AB+">AB+</option>
                         <option value="AB-">AB-</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div className="space-y-sm">
+                    <label className="font-label-md text-label-md text-on-surface-variant block ml-1">
+                      Gender
+                    </label>
+                    <div className="relative">
+                      <span className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-outline text-[20px]">
+                        person
+                      </span>
+                      <select
+                        required
+                        className="w-full h-[48px] pl-12 pr-4 bg-surface-container-low border border-outline-variant rounded-xl focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all font-body-md text-body-md appearance-none"
+                        name="gender"
+                        value={formData.gender}
+                        onChange={handleChange}
+                      >
+                        <option value="" disabled>
+                          Select Gender
+                        </option>
+                        <option value="Male">Male</option>
+                        <option value="Female">Female</option>
+                        <option value="Other">Other</option>
+                        <option value="Prefer not to say">Prefer not to say</option>
                       </select>
                     </div>
                   </div>
