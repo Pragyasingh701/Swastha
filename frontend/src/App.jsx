@@ -14,6 +14,7 @@ import DoctorLogin from "./modules/authentication/DoctorLogin";
 import VerifyOTP from "./modules/authentication/VerifyOTP";
 import ForgotPassword from "./modules/authentication/ForgotPassword";
 import ResetPassword from "./modules/authentication/ResetPassword";
+import DoctorDashboard from "./modules/doctor/pages/DoctorDashboard";
 
 // Dashboard
 import Dashboard from "./modules/dashboard/pages/Dashboard";
@@ -126,6 +127,30 @@ function ProtectedRoute({ children }) {
 
   return children;
 }
+// DoctorRoute: same as ProtectedRoute, but also requires role === "doctor".
+// Patients who are logged in and try to access this get bounced to /dashboard.
+function DoctorRoute({ children }) {
+  const { isAuthenticated, user, authReady } = useAuth();
+  const location = useLocation();
+
+  if (!authReady) {
+    return <LoadingSpinner />;
+  }
+
+  if (!isAuthenticated) {
+    return <Navigate to="/login" state={{ from: location }} replace />;
+  }
+
+  if (!hasCompletedRole(user)) {
+    return <Navigate to="/role-selection" replace />;
+  }
+
+  if (user.role !== "doctor") {
+    return <Navigate to="/dashboard" replace />;
+  }
+
+  return children;
+}
 
 // Fallback route redirect based on auth status
 function WildcardRedirect() {
@@ -196,6 +221,15 @@ export default function App() {
             </ProtectedRoute>
           }
         />
+        <Route
+  path="/doctor-dashboard"
+  element={
+    <DoctorRoute>
+      <DoctorDashboard />
+    </DoctorRoute>
+  }
+/>
+
 
         <Route
           path="/lab-trends"
