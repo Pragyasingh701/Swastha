@@ -5,8 +5,10 @@ import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
 import { sendOTPEmail, sendPasswordResetEmail } from '../utils/mailer.js';
-import { findUserByEmail, findUserById, createOrUpdateUser, updateUserRole, updateUserPassword } from '../db/users.js';
-import { getFamilyVaultForUser } from '../db/family.js';
+import { findUserByEmail, findUserById, findUserByPatientCode, createOrUpdateUser, updateUserRole, updateUserPassword, deleteUserById } from '../db/users.js';
+import { getFamilyVaultForUser, deleteFamilyVaultForUser } from '../db/family.js';
+import { deleteAllReportsForUser } from '../db/reports.js';
+import { listPatientProfiles, upsertPatientProfile, deletePatientProfileByUserId } from '../db/patientProfiles.js';
 import { processMedicalCertificate } from '../services/certificateParserService.js';
 
 const router = express.Router();
@@ -20,9 +22,13 @@ if (!global.__otpStore) {
 if (!global.__resetTokenStore) {
   global.__resetTokenStore = new Map();
 }
+if (!global.__passwordChangeTokenStore) {
+  global.__passwordChangeTokenStore = new Map();
+}
 
 const otpStore = global.__otpStore; // email => { code, expiresAt }
 const resetTokenStore = global.__resetTokenStore; // token => { email, expiresAt }
+const passwordChangeTokenStore = global.__passwordChangeTokenStore; // token => { email, expiresAt }
 
 // Periodic cleanup to prevent memory leaks from expired OTPs & Reset Tokens
 if (!global.__storeCleanupInterval) {
@@ -33,6 +39,9 @@ if (!global.__storeCleanupInterval) {
     }
     for (const [key, data] of resetTokenStore.entries()) {
       if (data.expiresAt < now) resetTokenStore.delete(key);
+    }
+    for (const [key, data] of passwordChangeTokenStore.entries()) {
+      if (data.expiresAt < now) passwordChangeTokenStore.delete(key);
     }
   }, 5 * 60 * 1000);
 }
@@ -539,6 +548,122 @@ router.post('/role', async (req, res) => {
   return res.json({ message: 'Role updated successfully', role });
 });
 
+router.get('/patients', authenticateToken, async (req, res) => {
+  try {
+    const patientProfiles = await listPatientProfiles();
+    return res.json({ patients: patientProfiles });
+  } catch (error) {
+    console.error('List patient profiles error:', error);
+    return res.status(500).json({ message: 'Failed to load patient profiles', error: error.message });
+  }
+});
+
+router.post('/patients', authenticateToken, async (req, res) => {
+  const { user_id, userId, patient_code, patientCode, full_name, fullName, name, dob, gender, blood_group, bloodGroup, phone, mobile, emergency_contact, emergencyContact, emergency_contact_phone, emergencyContactPhone, medical_notes, medicalNotes, allergies, chronic_conditions, chronicConditions, current_medications, currentMedications } = req.body;
+
+  const resolvedUserId = user_id || userId;
+  const resolvedPatientCode = patient_code || patientCode;
+  const resolvedFullName = full_name || fullName || name;
+
+  if (!resolvedUserId) {
+    return res.status(400).json({ message: 'User ID is required to create a patient profile.' });
+  }
+
+  try {
+    const profile = await upsertPatientProfile({
+      user_id: resolvedUserId,
+      patient_code: resolvedPatientCode,
+      full_name: resolvedFullName,
+      dob,
+      gender,
+      blood_group: blood_group || bloodGroup,
+      phone: phone || mobile,
+      emergency_contact: emergency_contact || emergencyContact,
+      emergency_contact_phone: emergency_contact_phone || emergencyContactPhone,
+      medical_notes: medical_notes || medicalNotes,
+      allergies: Array.isArray(allergies) ? allergies : [],
+      chronic_conditions: Array.isArray(chronic_conditions) ? chronic_conditions : (Array.isArray(chronicConditions) ? chronicConditions : []),
+      current_medications: Array.isArray(current_medications) ? current_medications : (Array.isArray(currentMedications) ? currentMedications : []),
+    });
+
+    if (!profile) {
+      return res.json({
+        message: 'Patient record was verified in the users table, but patient_profiles is not available or has incompatible columns yet.',
+        patient: {
+          user_id: resolvedUserId,
+          patient_code: resolvedPatientCode,
+          full_name: resolvedFullName,
+        },
+        warning: true,
+      });
+    }
+
+    return res.json({ message: 'Patient profile saved.', patient: profile });
+  } catch (error) {
+    console.error('Create patient profile error:', error);
+    return res.status(500).json({ message: 'Failed to save patient profile', error: error.message });
+  }
+});
+
+router.delete('/patients/:userId', authenticateToken, async (req, res) => {
+ const { userId } = req.params;
+
+ if (!userId) {
+   return res.status(400).json({ message: 'User ID is required to delete a patient.' });
+ }
+
+ try {
+   const patientUserId = String(userId).trim();
+
+   await deleteAllReportsForUser(patientUserId);
+   await deleteFamilyVaultForUser(patientUserId);
+   await deletePatientProfileByUserId(patientUserId);
+   const deleted = await deleteUserById(patientUserId);
+
+   if (!deleted) {
+     return res.status(500).json({ message: 'Failed to delete patient from the database.' });
+   }
+
+   return res.json({ message: 'Patient deleted successfully.' });
+ } catch (error) {
+   console.error('Delete patient error:', error);
+   return res.status(500).json({ message: 'Failed to delete patient', error: error.message });
+ }
+});
+
+/**
+ * GET /api/auth/patient-code/:patientCode
+ * Verifies whether a patient exists in the users table by patient_code.
+ */
+router.get('/patient-code/:patientCode', async (req, res) => {
+  const { patientCode } = req.params;
+
+  if (!patientCode || !String(patientCode).trim()) {
+    return res.status(400).json({ message: 'Patient code is required.' });
+  }
+
+  try {
+    const user = await findUserByPatientCode(patientCode);
+
+    if (!user) {
+      return res.status(404).json({ message: 'No patient found with this patient code.' });
+    }
+
+    if (user.role !== 'patient') {
+      return res.status(400).json({ message: 'This patient code belongs to a non-patient account.' });
+    }
+
+    return res.json({
+      message: 'Patient found.',
+      patient: user,
+      exists: true,
+    });
+  } catch (error) {
+    console.error('Patient lookup error:', error);
+    return res.status(500).json({ message: 'Failed to verify patient code', error: error.message });
+  }
+});
+
 /**
  * POST /api/auth/profile
  * Updates user profile details (Patient or Doctor registration forms)
@@ -663,6 +788,24 @@ router.post('/profile', authenticateToken, async (req, res) => {
       hasSelectedRole: true,
     });
 
+    if ((savedUser?.role || targetRole || userToUpdate?.role) === 'patient') {
+      const patientCode = savedUser?.patient_code || savedUser?.patientCode || userToUpdate?.patient_code || userToUpdate?.patientCode || null;
+      try {
+        await upsertPatientProfile({
+          user_id: savedUser?.id || userToUpdate?.id,
+          patient_code: patientCode,
+          full_name: savedUser?.name || savedUser?.fullName || profileDetails.name || profileDetails.fullName || userToUpdate?.name,
+          dob: savedUser?.dob || userToUpdate?.dob,
+          gender: savedUser?.gender || userToUpdate?.gender,
+          blood_group: savedUser?.blood_group || savedUser?.bloodGroup || userToUpdate?.blood_group || userToUpdate?.bloodGroup,
+          phone: savedUser?.phone || savedUser?.mobile || userToUpdate?.phone || userToUpdate?.mobile,
+          emergency_contact: savedUser?.emergencyContact || userToUpdate?.emergencyContact,
+        });
+      } catch (profileSaveError) {
+        console.warn('Non-fatal patient profile save warning:', profileSaveError.message);
+      }
+    }
+
     return res.json({
       message: 'User profile updated successfully',
       extractedCertificateData: extractedCertMeta.certExtractedData || null,
@@ -719,6 +862,9 @@ router.delete('/user', async (req, res) => {
       return res.status(400).json({ message: 'User ID missing from token.' });
     }
 
+    // Delete child records first (defensive — works whether or not DB-level
+    // ON DELETE CASCADE is configured on reports/vault_table/family_members).
+    await deleteAllReportsForUser(userId);
     await deleteFamilyVaultForUser(userId);
     const deleted = await deleteUserById(userId);
 
@@ -726,11 +872,102 @@ router.delete('/user', async (req, res) => {
       return res.status(500).json({ message: 'Failed to delete user account.' });
     }
 
-    return res.json({ message: 'Account and family vault data deleted successfully.' });
+    return res.json({ message: 'Account and all associated records deleted successfully.' });
   } catch (error) {
     console.error('Delete user account error:', error);
     return res.status(500).json({ message: 'Failed to delete account', error: error.message });
   }
+});
+
+/**
+ * POST /api/auth/change-password/send-otp
+ * Sends a 6-digit OTP to the authenticated user's own email to confirm
+ * identity before allowing them to change their password from Settings.
+ */
+router.post('/change-password/send-otp', authenticateToken, async (req, res) => {
+  try {
+    const email = (req.user.email || '').toLowerCase().trim();
+    const user = await findUserByEmail(email);
+
+    if (!user) {
+      return res.status(404).json({ message: 'Account not found.' });
+    }
+    if (!user.password_hash) {
+      return res.status(400).json({
+        message: 'This account was registered using Google Sign-In and does not have a password to change.',
+      });
+    }
+
+    const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
+    otpStore.set(`changepwd:${email}`, { code: otpCode, expiresAt: Date.now() + 10 * 60 * 1000 });
+
+    await sendOTPEmail(email, otpCode);
+
+    return res.json({ message: `Verification code sent to ${email}` });
+  } catch (error) {
+    console.error('Change-password send-otp error:', error);
+    return res.status(500).json({ message: 'Failed to send verification code', error: error.message });
+  }
+});
+
+/**
+ * POST /api/auth/change-password/verify-otp
+ * Verifies the OTP and issues a short-lived, single-use change token that
+ * authorizes the following /change-password/confirm call.
+ */
+router.post('/change-password/verify-otp', authenticateToken, async (req, res) => {
+  const { otpCode } = req.body;
+  if (!otpCode || otpCode.length !== 6) {
+    return res.status(400).json({ message: 'Valid 6-digit OTP code is required' });
+  }
+
+  const email = (req.user.email || '').toLowerCase().trim();
+  const key = `changepwd:${email}`;
+  const stored = otpStore.get(key);
+  const isValid = stored && stored.code === otpCode && stored.expiresAt > Date.now();
+
+  if (!isValid) {
+    return res.status(400).json({ message: 'Invalid or expired verification code.' });
+  }
+
+  otpStore.delete(key);
+
+  const changeToken = 'chg_' + Math.random().toString(36).substring(2) + Date.now().toString(36);
+  passwordChangeTokenStore.set(changeToken, { email, expiresAt: Date.now() + 10 * 60 * 1000 });
+
+  return res.json({ message: 'Verification successful', changeToken });
+});
+
+/**
+ * POST /api/auth/change-password/confirm
+ * Consumes the change token issued above and sets the new password.
+ */
+router.post('/change-password/confirm', authenticateToken, async (req, res) => {
+  const { changeToken, newPassword } = req.body;
+  if (!newPassword || newPassword.length < 8) {
+    return res.status(400).json({ message: 'New password must be at least 8 characters long.' });
+  }
+
+  const email = (req.user.email || '').toLowerCase().trim();
+  const data = changeToken ? passwordChangeTokenStore.get(changeToken) : null;
+
+  if (!data || data.email !== email) {
+    return res.status(400).json({ message: 'This verification session is invalid. Please verify the OTP again.' });
+  }
+  if (data.expiresAt <= Date.now()) {
+    passwordChangeTokenStore.delete(changeToken);
+    return res.status(400).json({ message: 'This verification session has expired. Please verify the OTP again.' });
+  }
+
+  const existingUser = await findUserByEmail(email);
+  if (existingUser && existingUser.password_hash && existingUser.password_hash === newPassword) {
+    return res.status(400).json({ message: 'This password is already being used. Please use a different password.' });
+  }
+
+  passwordChangeTokenStore.delete(changeToken); // Single-use consumption!
+
+  await updateUserPassword(email, newPassword);
+  return res.json({ message: 'Password updated successfully.' });
 });
 
 /**

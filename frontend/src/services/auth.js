@@ -33,6 +33,64 @@ export const authService = {
   },
 
   /**
+   * Find patient by generated patient_code stored in the users table.
+   */
+  async getPatientByCode(patientCode) {
+    const cleanedCode = String(patientCode || '').trim();
+    if (!cleanedCode) {
+      throw new Error('Patient code is required.');
+    }
+
+    const response = await fetch(`${API_BASE_URL}/auth/patient-code/${encodeURIComponent(cleanedCode)}`);
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.message || 'Patient lookup failed');
+    return data.patient || data.user || data;
+  },
+
+  async getPatients(token) {
+    const response = await fetch(`${API_BASE_URL}/auth/patients`, {
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.message || 'Failed to load patients');
+    return data.patients || [];
+  },
+
+  async createPatientProfile(profileData, token) {
+    const response = await fetch(`${API_BASE_URL}/auth/patients`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify(profileData),
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.message || 'Failed to save patient profile');
+    return data.patient || data;
+  },
+
+  async deletePatient(userId, token) {
+   if (!userId) {
+     throw new Error('Patient user ID is required.');
+   }
+
+   const response = await fetch(`${API_BASE_URL}/auth/patients/${encodeURIComponent(userId)}`, {
+     method: 'DELETE',
+     headers: {
+       'Content-Type': 'application/json',
+       ...(token ? { Authorization: `Bearer ${token}` } : {}),
+     },
+   });
+   const data = await response.json();
+   if (!response.ok) throw new Error(data.message || 'Failed to delete patient');
+   return data;
+  },
+
+  /**
    * Google Login (on Login page) -> verifies existing account
    */
   async loginWithGoogle(credential) {
@@ -186,6 +244,77 @@ export const authService = {
     });
     const data = await response.json();
     if (!response.ok) throw new Error(data.message || 'Password reset failed');
+    return data;
+  },
+
+  /**
+   * Send OTP to the logged-in user's own email to confirm identity before
+   * changing their password from Settings.
+   */
+  async sendChangePasswordOTP(token) {
+    const activeToken = token || localStorage.getItem('swastha_token') || sessionStorage.getItem('swastha_token');
+    const response = await fetch(`${API_BASE_URL}/auth/change-password/send-otp`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(activeToken ? { Authorization: `Bearer ${activeToken}` } : {}),
+      },
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.message || 'Failed to send verification code');
+    return data;
+  },
+
+  /**
+   * Verify the change-password OTP -> returns a short-lived changeToken
+   */
+  async verifyChangePasswordOTP(otpCode, token) {
+    const activeToken = token || localStorage.getItem('swastha_token') || sessionStorage.getItem('swastha_token');
+    const response = await fetch(`${API_BASE_URL}/auth/change-password/verify-otp`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(activeToken ? { Authorization: `Bearer ${activeToken}` } : {}),
+      },
+      body: JSON.stringify({ otpCode }),
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.message || 'OTP verification failed');
+    return data;
+  },
+
+  /**
+   * Confirm password change using the changeToken from verifyChangePasswordOTP
+   */
+  async confirmChangePassword(changeToken, newPassword, token) {
+    const activeToken = token || localStorage.getItem('swastha_token') || sessionStorage.getItem('swastha_token');
+    const response = await fetch(`${API_BASE_URL}/auth/change-password/confirm`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(activeToken ? { Authorization: `Bearer ${activeToken}` } : {}),
+      },
+      body: JSON.stringify({ changeToken, newPassword }),
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.message || 'Failed to update password');
+    return data;
+  },
+
+  /**
+   * Permanently delete the authenticated user's account and all their data
+   */
+  async deleteAccount(token) {
+    const activeToken = token || localStorage.getItem('swastha_token') || sessionStorage.getItem('swastha_token');
+    const response = await fetch(`${API_BASE_URL}/auth/user`, {
+      method: 'DELETE',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(activeToken ? { Authorization: `Bearer ${activeToken}` } : {}),
+      },
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.message || 'Failed to delete account');
     return data;
   },
 

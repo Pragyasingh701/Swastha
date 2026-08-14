@@ -1,5 +1,33 @@
 import supabase from '../config/supabase.js';
 
+function generatePatientCode() {
+  return String(100000 + Math.floor(Math.random() * 900000));
+}
+
+async function generateUniquePatientCode() {
+  if (!supabase) {
+    return generatePatientCode();
+  }
+
+  let attempts = 0;
+  while (attempts < 10) {
+    const candidate = generatePatientCode();
+    const { data, error } = await supabase
+      .from('users')
+      .select('id')
+      .eq('patient_code', candidate)
+      .maybeSingle();
+
+    if (!error && !data) {
+      return candidate;
+    }
+
+    attempts += 1;
+  }
+
+  return generatePatientCode();
+}
+
 /**
  * Find user by email from Supabase
  */
@@ -17,6 +45,28 @@ export const findUserByEmail = async (email) => {
     if (!error && data) return data;
   } catch (err) {
     console.warn('Supabase query notice:', err.message);
+  }
+
+  return null;
+};
+
+/**
+ * Find user by patient code from Supabase
+ */
+export const findUserByPatientCode = async (patientCode) => {
+  if (!patientCode || !supabase) return null;
+  const normalizedCode = String(patientCode).trim();
+
+  try {
+    const { data, error } = await supabase
+      .from('users')
+      .select('*')
+      .eq('patient_code', normalizedCode)
+      .maybeSingle();
+
+    if (!error && data) return data;
+  } catch (err) {
+    console.warn('Supabase patient code query notice:', err.message);
   }
 
   return null;
@@ -80,6 +130,18 @@ export const createOrUpdateUser = async (userData) => {
     ? userData.phone_number
     : (existingUser?.phone || existingUser?.mobile || existingUser?.phone_number || null);
 
+  const patientCode = (userData.patientCode !== undefined && userData.patientCode !== null && userData.patientCode !== '')
+    ? userData.patientCode
+    : (userData.patient_code !== undefined && userData.patient_code !== null && userData.patient_code !== '')
+    ? userData.patient_code
+    : (existingUser?.patientCode || existingUser?.patient_code || null);
+
+  const resolvedPatientCode = role === 'doctor'
+    ? null
+    : (role === 'patient' && !patientCode)
+      ? await generateUniquePatientCode()
+      : patientCode;
+
   const dob = (userData.dob !== undefined && userData.dob !== null && userData.dob !== '')
     ? userData.dob
     : (userData.dateOfBirth !== undefined && userData.dateOfBirth !== null && userData.dateOfBirth !== '')
@@ -141,6 +203,8 @@ export const createOrUpdateUser = async (userData) => {
     phone,
     mobile: phone,
     phone_number: phone,
+    patientCode: resolvedPatientCode,
+    patient_code: resolvedPatientCode,
     dob,
     dateOfBirth: dob,
     date_of_birth: dob,
@@ -182,6 +246,7 @@ export const createOrUpdateUser = async (userData) => {
         role,
         auth_provider: authProvider,
         phone,
+        patient_code: role === 'patient' ? resolvedPatientCode : null,
         dob,
         blood_group: bloodGroup,
         gender,
@@ -238,6 +303,8 @@ export const createOrUpdateUser = async (userData) => {
           fullName: userRow.name || name,
           phone: userRow.phone || userRow.mobile || phone,
           mobile: userRow.phone || userRow.mobile || phone,
+          patientCode: userRow.patient_code || userRow.patientCode || resolvedPatientCode,
+          patient_code: userRow.patient_code || userRow.patientCode || resolvedPatientCode,
           dob: userRow.dob || dob,
           bloodGroup: userRow.blood_group || bloodGroup,
           blood_group: userRow.blood_group || bloodGroup,
@@ -265,8 +332,15 @@ export const updateUserRole = async (userIdOrEmail, role) => {
   const targetId = existingUser ? existingUser.id : userIdOrEmail;
 
   try {
+    const nextPatientCode = role === 'doctor'
+      ? null
+      : (role === 'patient' && !existingUser?.patient_code)
+        ? await generateUniquePatientCode()
+        : existingUser?.patient_code || null;
+
     await supabase.from('users').update({
       role,
+      patient_code: nextPatientCode,
       specialty: role === 'doctor' ? existingUser?.specialty : null,
       license_number: role === 'doctor' ? existingUser?.license_number : null,
       council: role === 'doctor' ? existingUser?.council : null,
@@ -282,6 +356,24 @@ export const updateUserRole = async (userIdOrEmail, role) => {
     }).eq('id', targetId);
   } catch (e) {
     console.warn('Supabase updateUserRole warning:', e.message);
+  }
+};
+
+/**
+ * Delete a user row by ID from Supabase
+ */
+export const deleteUserById = async (id) => {
+  if (!id || !supabase) return false;
+
+  try {
+    const { error } = await supabase.from('users').delete().eq('id', id);
+    if (error) {
+      throw error;
+    }
+    return true;
+  } catch (e) {
+    console.warn('Supabase deleteUserById warning:', e.message);
+    return false;
   }
 };
 

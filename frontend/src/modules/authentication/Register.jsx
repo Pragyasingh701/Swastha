@@ -142,7 +142,7 @@ export default function Register() {
   });
 
   return (
-    <div className="bg-surface text-on-surface min-h-screen flex items-center justify-center overflow-x-hidden">
+    <div className="bg-surface dark:bg-slate-950 text-on-surface dark:text-slate-100 min-h-screen flex items-center justify-center overflow-x-hidden">
       {/* Ambient Background Element */}
       <div className="fixed inset-0 -z-10 overflow-hidden pointer-events-none">
         <div className="absolute top-[-10%] right-[-10%] w-[40%] h-[40%] bg-primary/5 rounded-full blur-[120px]"></div>
@@ -150,7 +150,7 @@ export default function Register() {
       </div>
 
       {/* Main Content Split Layout */}
-      <main className="w-full max-w-[1440px] min-h-[90vh] md:min-h-[80vh] flex flex-col md:flex-row shadow-2xl rounded-3xl overflow-hidden mx-4 md:mx-12 my-8 bg-surface-container-lowest">
+      <main className="w-full max-w-[1440px] min-h-[90vh] md:min-h-[80vh] flex flex-col md:flex-row shadow-2xl rounded-3xl overflow-hidden mx-4 md:mx-12 my-8 bg-surface-container-lowest dark:bg-slate-900">
         {/* Left Column: Visual/Atmospheric (Hidden on mobile) */}
         <section className="hidden lg:flex lg:w-1/2 relative bg-primary-container items-center justify-center p-16 overflow-hidden">
           <div className="absolute inset-0 z-0">
@@ -234,7 +234,7 @@ export default function Register() {
         </section>
 
         {/* Right Column: Registration Form */}
-        <section className="w-full lg:w-1/2 flex flex-col p-8 md:p-16 lg:p-20 bg-surface-container-lowest justify-center">
+        <section className="w-full lg:w-1/2 flex flex-col p-8 md:p-16 lg:p-20 bg-surface-container-lowest dark:bg-slate-900 justify-center">
           <div className="max-w-md mx-auto w-full">
             {/* Mobile Branding */}
             <div className="lg:hidden flex items-center gap-2 mb-10">
@@ -245,16 +245,16 @@ export default function Register() {
             </div>
 
             <div className="mb-10">
-              <h2 className="font-headline-lg text-headline-lg text-on-surface font-bold tracking-tight mb-2">
+              <h2 className="font-headline-lg text-headline-lg text-on-surface dark:text-slate-100 font-bold tracking-tight mb-2">
                 Create your account
               </h2>
-              <p className="font-body-md text-body-md text-on-surface-variant">
+              <p className="font-body-md text-body-md text-on-surface-variant dark:text-slate-400">
                 Start your journey to better health management today.
               </p>
             </div>
 
             {errorMessage && (
-              <div className="mb-6 p-4 rounded-xl bg-error-container text-on-error-container text-body-sm flex flex-col gap-2">
+              <div className="mb-6 p-4 rounded-xl bg-error-container dark:bg-rose-500/10 text-on-error-container dark:text-rose-300 text-body-sm flex flex-col gap-2">
                 <div className="flex items-center gap-3">
                   <span className="material-symbols-outlined text-[20px]">error</span>
                   <span>{errorMessage}</span>
@@ -273,16 +273,16 @@ export default function Register() {
             <form className="space-y-5" onSubmit={handleSubmit}>
               {/* Full Name */}
               <div>
-                <label className="block font-label-md text-label-md text-on-surface-variant mb-1.5 ml-1" htmlFor="fullname">
+                <label className="block font-label-md text-label-md text-on-surface-variant dark:text-slate-400 mb-1.5 ml-1" htmlFor="fullname">
                   Full Name
                 </label>
                 <div className="relative group">
-                  <span className="material-symbols-outlined absolute left-3.5 top-1/2 -translate-y-1/2 text-outline group-focus-within:text-primary transition-colors !text-[20px]">
+                  <span className="material-symbols-outlined absolute left-3.5 top-1/2 -translate-y-1/2 text-outline dark:text-slate-500 group-focus-within:text-primary transition-colors !text-[20px]">
                     person
                   </span>
                   <input
                     required
-                    className="w-full h-11 pl-11 bg-surface border border-outline-variant rounded-xl focus:ring-4 focus:ring-primary/10 focus:border-primary outline-none transition-all placeholder:text-outline-variant/60 font-body-md text-body-md"
+                    className="w-full h-11 pl-11 bg-surface dark:bg-slate-800 border border-outline-variant dark:border-slate-700 rounded-xl focus:ring-4 focus:ring-primary/10 focus:border-primary outline-none transition-all placeholder:text-outline-variant/60 dark:placeholder:text-slate-500 font-body-md text-body-md text-on-surface dark:text-slate-100"
                     id="fullname"
                     placeholder="Dr. Sarah Johnson"
                     type="text"
@@ -294,16 +294,16 @@ export default function Register() {
 
               {/* Email */}
               <div>
-                <label className="block font-label-md text-label-md text-on-surface-variant mb-1.5 ml-1" htmlFor="email">
+                <label className="block font-label-md text-label-md text-on-surface-variant dark:text-slate-400 mb-1.5 ml-1" htmlFor="email">
                   Email Address
                 </label>
                 <div className="relative group">
-                  <span className="material-symbols-outlined absolute left-3.5 top-1/2 -translate-y-1/2 text-outline group-focus-within:text-primary transition-colors !text-[20px]">
+                  <span className="material-symbols-outlined absolute left-3.5 top-1/2 -translate-y-1/2 text-outline dark:text-slate-500 group-focus-within:text-primary transition-colors !text-[20px]">
                     mail
                   </span>
                   <input
                     required
-                    className="w-full h-11 pl-11 bg-surface border border-outline-variant rounded-xl focus:ring-4 focus:ring-primary/10 focus:border-primary outline-none transition-all placeholder:text-outline-variant/60 font-body-md text-body-md"
+                    className="w-full h-11 pl-11 bg-surface dark:bg-slate-800 border border-outline-variant dark:border-slate-700 rounded-xl focus:ring-4 focus:ring-primary/10 focus:border-primary outline-none transition-all placeholder:text-outline-variant/60 dark:placeholder:text-slate-500 font-body-md text-body-md text-on-surface dark:text-slate-100"
                     id="email"
                     placeholder="sarah.j@healthcare.com"
                     type="email"
@@ -315,16 +315,16 @@ export default function Register() {
 
               {/* Phone Number */}
               <div>
-                <label className="block font-label-md text-label-md text-on-surface-variant mb-1.5 ml-1" htmlFor="phone">
+                <label className="block font-label-md text-label-md text-on-surface-variant dark:text-slate-400 mb-1.5 ml-1" htmlFor="phone">
                   Phone Number
                 </label>
                 <div className="relative group">
-                  <span className="material-symbols-outlined absolute left-3.5 top-1/2 -translate-y-1/2 text-outline group-focus-within:text-primary transition-colors !text-[20px]">
+                  <span className="material-symbols-outlined absolute left-3.5 top-1/2 -translate-y-1/2 text-outline dark:text-slate-500 group-focus-within:text-primary transition-colors !text-[20px]">
                     call
                   </span>
                   <input
                     required
-                    className="w-full h-11 pl-11 bg-surface border border-outline-variant rounded-xl focus:ring-4 focus:ring-primary/10 focus:border-primary outline-none transition-all placeholder:text-outline-variant/60 font-body-md text-body-md"
+                    className="w-full h-11 pl-11 bg-surface dark:bg-slate-800 border border-outline-variant dark:border-slate-700 rounded-xl focus:ring-4 focus:ring-primary/10 focus:border-primary outline-none transition-all placeholder:text-outline-variant/60 dark:placeholder:text-slate-500 font-body-md text-body-md text-on-surface dark:text-slate-100"
                     id="phone"
                     placeholder="+1 (555) 000-0000"
                     type="tel"
@@ -337,16 +337,16 @@ export default function Register() {
               {/* Password Grid */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <label className="block font-label-md text-label-md text-on-surface-variant mb-1.5 ml-1" htmlFor="password">
+                  <label className="block font-label-md text-label-md text-on-surface-variant dark:text-slate-400 mb-1.5 ml-1" htmlFor="password">
                     Password
                   </label>
                   <div className="relative group">
-                    <span className="material-symbols-outlined absolute left-3.5 top-1/2 -translate-y-1/2 text-outline group-focus-within:text-primary transition-colors !text-[20px]">
+                    <span className="material-symbols-outlined absolute left-3.5 top-1/2 -translate-y-1/2 text-outline dark:text-slate-500 group-focus-within:text-primary transition-colors !text-[20px]">
                       lock
                     </span>
                     <input
                       required
-                      className="w-full h-11 pl-11 bg-surface border border-outline-variant rounded-xl focus:ring-4 focus:ring-primary/10 focus:border-primary outline-none transition-all placeholder:text-outline-variant/60 font-body-md text-body-md"
+                      className="w-full h-11 pl-11 bg-surface dark:bg-slate-800 border border-outline-variant dark:border-slate-700 rounded-xl focus:ring-4 focus:ring-primary/10 focus:border-primary outline-none transition-all placeholder:text-outline-variant/60 dark:placeholder:text-slate-500 font-body-md text-body-md text-on-surface dark:text-slate-100"
                       id="password"
                       placeholder="••••••••"
                       type="password"
@@ -356,16 +356,16 @@ export default function Register() {
                   </div>
                 </div>
                 <div>
-                  <label className="block font-label-md text-label-md text-on-surface-variant mb-1.5 ml-1" htmlFor="confirmPassword">
+                  <label className="block font-label-md text-label-md text-on-surface-variant dark:text-slate-400 mb-1.5 ml-1" htmlFor="confirmPassword">
                     Confirm Password
                   </label>
                   <div className="relative group">
-                    <span className="material-symbols-outlined absolute left-3.5 top-1/2 -translate-y-1/2 text-outline group-focus-within:text-primary transition-colors !text-[20px]">
+                    <span className="material-symbols-outlined absolute left-3.5 top-1/2 -translate-y-1/2 text-outline dark:text-slate-500 group-focus-within:text-primary transition-colors !text-[20px]">
                       shield_lock
                     </span>
                     <input
                       required
-                      className="w-full h-11 pl-11 bg-surface border border-outline-variant rounded-xl focus:ring-4 focus:ring-primary/10 focus:border-primary outline-none transition-all placeholder:text-outline-variant/60 font-body-md text-body-md"
+                      className="w-full h-11 pl-11 bg-surface dark:bg-slate-800 border border-outline-variant dark:border-slate-700 rounded-xl focus:ring-4 focus:ring-primary/10 focus:border-primary outline-none transition-all placeholder:text-outline-variant/60 dark:placeholder:text-slate-500 font-body-md text-body-md text-on-surface dark:text-slate-100"
                       id="confirmPassword"
                       placeholder="••••••••"
                       type="password"
@@ -380,14 +380,14 @@ export default function Register() {
               <div className="flex items-start gap-3 py-2">
                 <div className="flex items-center h-5">
                   <input
-                    className="w-5 h-5 rounded border-outline-variant text-primary focus:ring-primary/20 transition-all cursor-pointer"
+                    className="w-5 h-5 rounded border-outline-variant dark:border-slate-700 dark:bg-slate-800 text-primary focus:ring-primary/20 transition-all cursor-pointer"
                     id="terms"
                     type="checkbox"
                     checked={agreedToTerms}
                     onChange={(e) => setAgreedToTerms(e.target.checked)}
                   />
                 </div>
-                <label className="font-body-sm text-body-sm text-on-surface-variant leading-tight" htmlFor="terms">
+                <label className="font-body-sm text-body-sm text-on-surface-variant dark:text-slate-400 leading-tight" htmlFor="terms">
                   I agree to the{" "}
                   <a className="text-primary hover:underline font-semibold" href="#">
                     Terms of Service
@@ -420,13 +420,13 @@ export default function Register() {
               </button>
 
               <div className="relative py-4 flex items-center gap-4">
-                <div className="h-px bg-outline-variant/50 flex-1"></div>
-                <span className="font-label-sm text-label-sm text-outline-variant">OR CONTINUE WITH</span>
-                <div className="h-px bg-outline-variant/50 flex-1"></div>
+                <div className="h-px bg-outline-variant/50 dark:bg-slate-700/50 flex-1"></div>
+                <span className="font-label-sm text-label-sm text-outline-variant dark:text-slate-500">OR CONTINUE WITH</span>
+                <div className="h-px bg-outline-variant/50 dark:bg-slate-700/50 flex-1"></div>
               </div>
 
               <button
-                className="w-full h-12 border border-outline-variant rounded-xl flex items-center justify-center gap-3 font-body-md text-body-md font-semibold text-on-surface hover:bg-surface-container-low transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+                className="w-full h-12 border border-outline-variant dark:border-slate-700 rounded-xl flex items-center justify-center gap-3 font-body-md text-body-md font-semibold text-on-surface dark:text-slate-100 hover:bg-surface-container-low dark:hover:bg-slate-800 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
                 type="button"
                 onClick={() => handleGoogleRegister()}
                 disabled={isGoogleLoading || isLoading}
@@ -454,7 +454,7 @@ export default function Register() {
             </form>
 
             <div className="mt-10 text-center">
-              <p className="font-body-md text-body-md text-on-surface-variant">
+              <p className="font-body-md text-body-md text-on-surface-variant dark:text-slate-400">
                 Already have an account?{" "}
                 <Link className="text-primary font-bold hover:underline" to="/login">
                   Login
@@ -465,23 +465,23 @@ export default function Register() {
             {/* Security Trust Badges */}
             <div className="mt-12 flex flex-col items-center gap-4">
               <div className="flex items-center gap-6 opacity-60">
-                <div className="flex items-center gap-1.5">
+                <div className="flex items-center gap-1.5 text-on-surface dark:text-slate-300">
                   <span className="material-symbols-outlined !text-[18px]">verified_user</span>
                   <span className="font-label-sm text-label-sm">Secure SSL Encryption</span>
                 </div>
-                <div className="flex items-center gap-1.5">
+                <div className="flex items-center gap-1.5 text-on-surface dark:text-slate-300">
                   <span className="material-symbols-outlined !text-[18px]">health_and_safety</span>
                   <span className="font-label-sm text-label-sm">HIPAA Compliant</span>
                 </div>
               </div>
-              <div className="flex items-center gap-1.5 px-3 py-1 bg-surface-container rounded-full opacity-70">
+              <div className="flex items-center gap-1.5 px-3 py-1 bg-surface-container dark:bg-slate-800 rounded-full opacity-70">
                 <span
                   className="material-symbols-outlined !text-[14px] text-primary"
                   style={{ fontVariationSettings: "'FILL' 1" }}
                 >
                   shield
                 </span>
-                <span className="font-label-sm text-[10px] uppercase tracking-widest font-bold">
+                <span className="font-label-sm text-[10px] uppercase tracking-widest font-bold text-on-surface dark:text-slate-300">
                   Encrypted &amp; Anonymous
                 </span>
               </div>
@@ -493,15 +493,15 @@ export default function Register() {
       {/* Footer Component (Minimal) */}
       <footer className="fixed bottom-0 left-0 right-0 p-4 flex justify-between items-center z-50 pointer-events-none">
         <div className="pointer-events-auto">
-          <span className="font-label-sm text-label-sm text-on-surface-variant/50">
+          <span className="font-label-sm text-label-sm text-on-surface-variant/50 dark:text-slate-500">
             © 2024 Swastha Healthcare SaaS. HIPAA &amp; ABHA Compliant.
           </span>
         </div>
         <div className="pointer-events-auto flex gap-6">
-          <a className="font-label-sm text-label-sm text-on-surface-variant/50 hover:text-primary transition-colors" href="#">
+          <a className="font-label-sm text-label-sm text-on-surface-variant/50 dark:text-slate-500 hover:text-primary transition-colors" href="#">
             Privacy
           </a>
-          <a className="font-label-sm text-label-sm text-on-surface-variant/50 hover:text-primary transition-colors" href="#">
+          <a className="font-label-sm text-label-sm text-on-surface-variant/50 dark:text-slate-500 hover:text-primary transition-colors" href="#">
             Terms
           </a>
         </div>
