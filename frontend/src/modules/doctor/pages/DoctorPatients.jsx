@@ -1,12 +1,19 @@
+<<<<<<< HEAD
 import React, { useEffect, useState } from "react";
+=======
+import React from "react";
+>>>>>>> 9e0438d175a09a596bd480534b0ea456a662dbda
 import { useNavigate } from "react-router-dom";
 import { Sparkles, Bell } from "lucide-react";
 import DoctorSidebar from "../components/DoctorSidebar";
 import ThemeToggle from "../../../components/Common/ThemeToggle";
 import ProfileDropdown from "../../settings/components/ProfileDropdown";
+<<<<<<< HEAD
 import { useAuth } from "../../../context/AuthContext";
 import * as reportService from "../../../api/reports";
 import { authService } from "../../../services/auth";
+=======
+>>>>>>> 9e0438d175a09a596bd480534b0ea456a662dbda
 
 const seedPatients = [
   {
@@ -55,6 +62,7 @@ const seedPatients = [
 
 export default function DoctorPatients() {
   const navigate = useNavigate();
+<<<<<<< HEAD
   const { token } = useAuth();
   const [patientCards, setPatientCards] = useState([]);
   const [selectedPatient, setSelectedPatient] = useState(null);
@@ -252,6 +260,8 @@ export default function DoctorPatients() {
       setSubmittingPatient(false);
     }
   };
+=======
+>>>>>>> 9e0438d175a09a596bd480534b0ea456a662dbda
 
   return (
     <div className="h-screen overflow-hidden bg-[#faf8ff] dark:bg-slate-950 text-[#191b23] dark:text-slate-100 antialiased flex">
@@ -281,6 +291,7 @@ export default function DoctorPatients() {
         <main className="flex-1 overflow-y-auto p-4 md:p-10 lg:px-12 py-8 space-y-8 overflow-x-hidden">
           <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
             <div>
+<<<<<<< HEAD
               <h2 className="text-5xl font-bold tracking-tight text-[#191b23] dark:text-slate-100">
                 {selectedPatient ? "Patient Timeline" : "Patients"}
               </h2>
@@ -484,6 +495,84 @@ export default function DoctorPatients() {
               </div>
             </section>
           )}
+=======
+              <h2 className="text-5xl font-bold tracking-tight text-[#191b23] dark:text-slate-100">Patients</h2>
+              <p className="mt-1 text-lg text-[#434655] dark:text-slate-300">Manage patient records and clinical history.</p>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-3">
+              <button
+                type="button"
+                className="h-11 px-6 rounded-lg border border-[#c3c6d7] dark:border-slate-700 text-[#191b23] dark:text-slate-100 hover:bg-[#f3f3fe] dark:hover:bg-slate-800 transition-colors flex items-center gap-2 bg-white dark:bg-slate-900 shadow-sm"
+              >
+                <span className="material-symbols-outlined text-[18px]">filter_list</span>
+                Filter
+              </button>
+              <button
+                type="button"
+                className="h-11 px-6 rounded-lg bg-[#004ac6] dark:bg-blue-600 text-white hover:opacity-90 transition-opacity flex items-center gap-2 shadow-sm border-t border-white/20"
+              >
+                <span className="material-symbols-outlined text-[18px]">add</span>
+                New Patient
+              </button>
+            </div>
+          </div>
+
+          <section>
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+              {patientCards.map((patient) => (
+                <div
+                  key={patient.id}
+                  className="bg-white dark:bg-slate-900 rounded-2xl p-6 shadow-[0_4px_12px_rgba(15,23,42,0.05)] dark:shadow-black/30 border border-[#c3c6d7]/20 dark:border-slate-800 hover:shadow-[0_8px_24px_rgba(15,23,42,0.08)] transition-all"
+                >
+                  <div className="flex justify-between items-start mb-4">
+                    <div className="flex items-center gap-4">
+                      <img
+                        alt="Patient Photo"
+                        className="w-14 h-14 rounded-full object-cover border border-[#c3c6d7]/30 dark:border-slate-700"
+                        src={patient.avatar}
+                      />
+                      <div>
+                        <h3 className="font-semibold text-lg text-[#191b23] dark:text-slate-100">{patient.name}</h3>
+                        <p className="text-sm text-[#434655] dark:text-slate-300">
+                          ID: {patient.id} • {patient.age} Y • {patient.gender}
+                        </p>
+                      </div>
+                    </div>
+                    <span className="material-symbols-outlined text-[#737686] dark:text-slate-400 cursor-pointer hover:text-[#004ac6] dark:hover:text-blue-400 transition-colors">more_vert</span>
+                  </div>
+
+                  <div className="space-y-2 mb-6">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm text-[#434655] dark:text-slate-300">Condition</span>
+                      <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${patient.conditionTone}`}>
+                        {patient.condition}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm text-[#434655] dark:text-slate-300">Last Visit</span>
+                      <span className="text-sm font-medium text-[#191b23] dark:text-slate-100">{patient.lastVisit}</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm text-[#434655] dark:text-slate-300">Status</span>
+                      <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${patient.statusTone}`}>
+                        {patient.status}
+                      </span>
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    className="w-full py-2.5 rounded-lg border border-[#c3c6d7]/60 dark:border-slate-700 text-[#434655] dark:text-slate-300 hover:bg-[#f3f3fe] dark:hover:bg-slate-800 hover:text-[#004ac6] dark:hover:text-blue-400 hover:border-[#004ac6]/30 dark:hover:border-blue-500/30 transition-all flex justify-center items-center gap-1"
+                  >
+                    View Profile
+                    <span className="material-symbols-outlined text-[16px]">arrow_forward</span>
+                  </button>
+                </div>
+              ))}
+            </div>
+          </section>
+>>>>>>> 9e0438d175a09a596bd480534b0ea456a662dbda
         </main>
       </div>
 

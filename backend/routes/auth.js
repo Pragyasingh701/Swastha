@@ -5,10 +5,16 @@ import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
 import { sendOTPEmail, sendPasswordResetEmail } from '../utils/mailer.js';
+<<<<<<< HEAD
 import { findUserByEmail, findUserById, findUserByPatientCode, createOrUpdateUser, updateUserRole, updateUserPassword, deleteUserById } from '../db/users.js';
 import { getFamilyVaultForUser, deleteFamilyVaultForUser } from '../db/family.js';
 import { deleteAllReportsForUser } from '../db/reports.js';
 import { listPatientProfiles, upsertPatientProfile, deletePatientProfileByUserId } from '../db/patientProfiles.js';
+=======
+import { findUserByEmail, findUserById, createOrUpdateUser, updateUserRole, updateUserPassword, deleteUserById } from '../db/users.js';
+import { getFamilyVaultForUser, deleteFamilyVaultForUser } from '../db/family.js';
+import { deleteAllReportsForUser } from '../db/reports.js';
+>>>>>>> 9e0438d175a09a596bd480534b0ea456a662dbda
 import { processMedicalCertificate } from '../services/certificateParserService.js';
 
 const router = express.Router();

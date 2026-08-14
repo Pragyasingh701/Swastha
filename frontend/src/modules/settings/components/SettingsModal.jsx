@@ -250,6 +250,7 @@ export default function SettingsModal({ isOpen, onClose }) {
             </div>
           )}
 
+<<<<<<< HEAD
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <div className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/70 p-3">
               <div className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500 dark:text-slate-400">Name</div>
@@ -261,6 +262,8 @@ export default function SettingsModal({ isOpen, onClose }) {
             </div>
           </div>
 
+=======
+>>>>>>> 9e0438d175a09a596bd480534b0ea456a662dbda
           {/* 1. Account Type Indicator (read-only — role is fixed at registration) */}
           <div>
             <label className="block text-[11px] font-extrabold uppercase tracking-wider text-slate-600 dark:text-slate-300 mb-2">
