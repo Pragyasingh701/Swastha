@@ -53,3 +53,6 @@ Thumbs.db
 
 # Documentation / Temporary artifacts
 docs/
+
+# Claude Code project instructions (local-only)
+CLAUDE.md
