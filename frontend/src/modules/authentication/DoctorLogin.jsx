@@ -44,21 +44,21 @@ export default function DoctorLogin() {
   };
 
   return (
-    <main className="min-h-screen w-full flex flex-col justify-center items-center p-6 bg-surface font-body-md text-on-surface selection:bg-primary-fixed">
+    <main className="min-h-screen w-full flex flex-col justify-center items-center p-6 bg-surface dark:bg-slate-950 font-body-md text-on-surface dark:text-slate-100 selection:bg-primary-fixed">
       <div className="w-full max-w-[440px]">
-        <div className="bg-white shadow-[0_8px_40px_-12px_rgba(15,23,42,0.08)] rounded-[20px] p-8 lg:p-10 border border-outline-variant/20">
+        <div className="bg-white dark:bg-slate-900 shadow-[0_8px_40px_-12px_rgba(15,23,42,0.08)] rounded-[20px] p-8 lg:p-10 border border-outline-variant/20 dark:border-slate-700">
           <div className="text-center mb-8">
             <div className="w-14 h-14 mx-auto mb-4 bg-primary/10 text-primary rounded-2xl flex items-center justify-center">
               <span className="material-symbols-outlined text-[30px]">stethoscope</span>
             </div>
-            <h2 className="font-headline-md text-headline-md text-on-surface">Doctor Clinical Portal</h2>
-            <p className="font-body-sm text-body-sm text-on-surface-variant mt-2">
+            <h2 className="font-headline-md text-headline-md text-on-surface dark:text-slate-100">Doctor Clinical Portal</h2>
+            <p className="font-body-sm text-body-sm text-on-surface-variant dark:text-slate-400 mt-2">
               Sign in with your verified practitioner credentials
             </p>
           </div>
 
           {errorMessage && (
-            <div className="mb-6 p-4 rounded-xl bg-error-container text-on-error-container text-body-sm flex items-center gap-3">
+            <div className="mb-6 p-4 rounded-xl bg-error-container dark:bg-rose-500/10 text-on-error-container dark:text-rose-300 text-body-sm flex items-center gap-3">
               <span className="material-symbols-outlined text-[20px]">error</span>
               <span>{errorMessage}</span>
             </div>
@@ -66,7 +66,7 @@ export default function DoctorLogin() {
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-1">
-              <label className="font-label-md text-label-md text-on-surface-variant ml-1" htmlFor="docEmail">
+              <label className="font-label-md text-label-md text-on-surface-variant dark:text-slate-400 ml-1" htmlFor="docEmail">
                 Professional Email
               </label>
               <input
@@ -77,12 +77,12 @@ export default function DoctorLogin() {
                 placeholder="dr.name@hospital.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="w-full px-4 py-3 bg-surface-container-lowest border border-outline-variant rounded-xl font-body-md text-on-surface focus:outline-none focus:border-primary"
+                className="w-full px-4 py-3 bg-surface-container-lowest dark:bg-slate-900 border border-outline-variant dark:border-slate-700 rounded-xl font-body-md text-on-surface dark:text-slate-100 focus:outline-none focus:border-primary"
               />
             </div>
 
             <div className="space-y-1">
-              <label className="font-label-md text-label-md text-on-surface-variant ml-1" htmlFor="license">
+              <label className="font-label-md text-label-md text-on-surface-variant dark:text-slate-400 ml-1" htmlFor="license">
                 Medical License / NMC ID
               </label>
               <input
@@ -92,12 +92,12 @@ export default function DoctorLogin() {
                 placeholder="MCI-12345-2022"
                 value={medicalLicense}
                 onChange={(e) => setMedicalLicense(e.target.value)}
-                className="w-full px-4 py-3 bg-surface-container-lowest border border-outline-variant rounded-xl font-body-md text-on-surface focus:outline-none focus:border-primary"
+                className="w-full px-4 py-3 bg-surface-container-lowest dark:bg-slate-900 border border-outline-variant dark:border-slate-700 rounded-xl font-body-md text-on-surface dark:text-slate-100 focus:outline-none focus:border-primary"
               />
             </div>
 
             <div className="space-y-1">
-              <label className="font-label-md text-label-md text-on-surface-variant ml-1" htmlFor="docPassword">
+              <label className="font-label-md text-label-md text-on-surface-variant dark:text-slate-400 ml-1" htmlFor="docPassword">
                 Password
               </label>
               <input
@@ -108,7 +108,7 @@ export default function DoctorLogin() {
                 placeholder="••••••••"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="w-full px-4 py-3 bg-surface-container-lowest border border-outline-variant rounded-xl font-body-md text-on-surface focus:outline-none focus:border-primary"
+                className="w-full px-4 py-3 bg-surface-container-lowest dark:bg-slate-900 border border-outline-variant dark:border-slate-700 rounded-xl font-body-md text-on-surface dark:text-slate-100 focus:outline-none focus:border-primary"
               />
             </div>
 
@@ -122,7 +122,7 @@ export default function DoctorLogin() {
           </form>
 
           <div className="mt-6 text-center">
-            <p className="font-body-sm text-body-sm text-on-surface-variant">
+            <p className="font-body-sm text-body-sm text-on-surface-variant dark:text-slate-400">
               Not registered as a practitioner?{" "}
               <Link to="/doctor-register" className="text-primary font-semibold hover:underline">
                 Apply for Doctor Portal

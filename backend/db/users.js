@@ -286,6 +286,24 @@ export const updateUserRole = async (userIdOrEmail, role) => {
 };
 
 /**
+ * Delete a user row by ID from Supabase
+ */
+export const deleteUserById = async (id) => {
+  if (!id || !supabase) return false;
+
+  try {
+    const { error } = await supabase.from('users').delete().eq('id', id);
+    if (error) {
+      throw error;
+    }
+    return true;
+  } catch (e) {
+    console.warn('Supabase deleteUserById warning:', e.message);
+    return false;
+  }
+};
+
+/**
  * Update User Password in Supabase
  */
 export const updateUserPassword = async (email, newPassword) => {

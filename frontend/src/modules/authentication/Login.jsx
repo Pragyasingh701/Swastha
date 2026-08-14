@@ -121,9 +121,9 @@ export default function Login() {
   });
 
   return (
-    <main className="flex min-h-screen w-full flex-col md:flex-row bg-surface font-body-md text-on-surface antialiased overflow-hidden selection:bg-primary-fixed">
+    <main className="flex min-h-screen w-full flex-col md:flex-row bg-surface dark:bg-slate-950 font-body-md text-on-surface dark:text-slate-100 antialiased overflow-hidden selection:bg-primary-fixed">
       {/* LEFT SIDE: Marketing / Illustration */}
-      <section className="relative hidden lg:flex lg:w-1/2 xl:w-7/12 flex-col items-center justify-center p-xl overflow-hidden bg-surface-container-low">
+      <section className="relative hidden lg:flex lg:w-1/2 xl:w-7/12 flex-col items-center justify-center p-xl overflow-hidden bg-surface-container-low dark:bg-slate-900">
         <div className="absolute -top-24 -left-24 w-96 h-96 bg-primary-container/10 rounded-full blur-3xl"></div>
         <div className="absolute -bottom-24 -right-24 w-96 h-96 bg-secondary-container/10 rounded-full blur-3xl"></div>
 
@@ -137,34 +137,34 @@ export default function Login() {
           </div>
 
           <div className="space-y-md">
-            <h1 className="font-headline-lg text-headline-lg text-on-surface tracking-tight">
+            <h1 className="font-headline-lg text-headline-lg text-on-surface dark:text-slate-100 tracking-tight">
               Your Family&apos;s Health. <br /> <span className="text-primary">Organized by AI.</span>
             </h1>
-            <p className="font-body-lg text-body-lg text-on-surface-variant max-w-lg mx-auto">
+            <p className="font-body-lg text-body-lg text-on-surface-variant dark:text-slate-400 max-w-lg mx-auto">
               Securely access all your medical records, AI insights, medicine alerts, and family health timeline from one place.
             </p>
           </div>
 
           {/* Trust Badges */}
           <div className="mt-xl flex flex-wrap justify-center gap-md">
-            <div className="flex items-center gap-2 px-4 py-2 bg-white/50 border border-outline-variant/30 rounded-xl">
+            <div className="flex items-center gap-2 px-4 py-2 bg-white/50 dark:bg-slate-800/50 border border-outline-variant/30 dark:border-slate-700/30 rounded-xl">
               <span className="material-symbols-outlined text-primary text-[20px]" style={{ fontVariationSettings: "'FILL' 1" }}>enhanced_encryption</span>
-              <span className="font-label-md text-label-md text-on-surface-variant">End-to-End Encryption</span>
+              <span className="font-label-md text-label-md text-on-surface-variant dark:text-slate-400">End-to-End Encryption</span>
             </div>
-            <div className="flex items-center gap-2 px-4 py-2 bg-white/50 border border-outline-variant/30 rounded-xl">
+            <div className="flex items-center gap-2 px-4 py-2 bg-white/50 dark:bg-slate-800/50 border border-outline-variant/30 dark:border-slate-700/30 rounded-xl">
               <span className="material-symbols-outlined text-primary text-[20px]" style={{ fontVariationSettings: "'FILL' 1" }}>verified</span>
-              <span className="font-label-md text-label-md text-on-surface-variant">ABHA Ecosystem</span>
+              <span className="font-label-md text-label-md text-on-surface-variant dark:text-slate-400">ABHA Ecosystem</span>
             </div>
-            <div className="flex items-center gap-2 px-4 py-2 bg-white/50 border border-outline-variant/30 rounded-xl">
+            <div className="flex items-center gap-2 px-4 py-2 bg-white/50 dark:bg-slate-800/50 border border-outline-variant/30 dark:border-slate-700/30 rounded-xl">
               <span className="material-symbols-outlined text-primary text-[20px]" style={{ fontVariationSettings: "'FILL' 1" }}>auto_awesome</span>
-              <span className="font-label-md text-label-md text-on-surface-variant">AI-Powered Insights</span>
+              <span className="font-label-md text-label-md text-on-surface-variant dark:text-slate-400">AI-Powered Insights</span>
             </div>
           </div>
         </div>
       </section>
 
       {/* RIGHT SIDE: Login Form */}
-      <section className="flex-1 flex flex-col items-center justify-center p-6 md:p-12 xl:p-24 bg-surface lg:bg-background">
+      <section className="flex-1 flex flex-col items-center justify-center p-6 md:p-12 xl:p-24 bg-surface dark:bg-slate-950 lg:bg-background">
         <div className="lg:hidden mb-8">
           <img
             alt="Swastha Logo"
@@ -174,25 +174,25 @@ export default function Login() {
         </div>
 
         <div className="w-full max-w-[440px] flex flex-col">
-          <div className="bg-white lg:shadow-[0_8px_40px_-12px_rgba(15,23,42,0.08)] rounded-[16px] p-8 lg:p-10 border border-outline-variant/20 lg:border-none">
+          <div className="bg-white dark:bg-slate-900 lg:shadow-[0_8px_40px_-12px_rgba(15,23,42,0.08)] rounded-[16px] p-8 lg:p-10 border border-outline-variant/20 dark:border-slate-800 lg:border-none">
             <div className="text-center mb-10 hidden lg:block">
               <img
                 alt="Swastha Logo"
                 className="h-14 w-auto mx-auto mb-6"
                 src="https://lh3.googleusercontent.com/aida-public/AB6AXuAJoSkUGc0Hv6hSwIbvCI4jXqfw51IEzG1-YtxI6ZPVQAgKF2gkF9bZKnreKdmbtKhGGVqaqifsmWUgklpWmQ5HOc8wCuxt1qRATJ_Lh2di1I5X4T6NAM789pr-DkSrLSej3v9HOhj7ZqEGyH6HQ8WcLrklNBJCzOHWE8w-F08fLnZHhFij-XNf_1_6ZyvNho1amapTks9-HG-P_KngfQr2YcLy_0llXOm7YKhNMA02JRcuWLpa7xSq"
               />
-              <h2 className="font-headline-md text-headline-md text-on-surface">Welcome Back</h2>
-              <p className="font-body-sm text-body-sm text-on-surface-variant mt-2">Log in to manage your clinical data</p>
+              <h2 className="font-headline-md text-headline-md text-on-surface dark:text-slate-100">Welcome Back</h2>
+              <p className="font-body-sm text-body-sm text-on-surface-variant dark:text-slate-400 mt-2">Log in to manage your clinical data</p>
             </div>
 
             <div className="lg:hidden mb-10 text-center">
-              <h2 className="font-headline-lg-mobile text-headline-lg-mobile text-on-surface">Welcome Back</h2>
-              <p className="font-body-sm text-body-sm text-on-surface-variant mt-1">Access your family&apos;s health reports</p>
+              <h2 className="font-headline-lg-mobile text-headline-lg-mobile text-on-surface dark:text-slate-100">Welcome Back</h2>
+              <p className="font-body-sm text-body-sm text-on-surface-variant dark:text-slate-400 mt-1">Access your family&apos;s health reports</p>
             </div>
 
             {/* Error Banner */}
             {errorMessage && (
-              <div className="mb-6 p-4 rounded-xl bg-error-container text-on-error-container text-body-sm flex flex-col gap-2">
+              <div className="mb-6 p-4 rounded-xl bg-error-container dark:bg-rose-500/10 text-on-error-container dark:text-rose-300 text-body-sm flex flex-col gap-2">
                 <div className="flex items-center gap-3">
                   <span className="material-symbols-outlined text-[20px]">error</span>
                   <span>{errorMessage}</span>
@@ -214,7 +214,7 @@ export default function Login() {
                 type="button"
                 onClick={() => handleGoogleAuth()}
                 disabled={isGoogleLoading}
-                className="w-full flex items-center justify-center gap-3 px-6 py-3 bg-white border border-outline-variant rounded-xl font-label-md text-label-md text-on-surface hover:bg-surface-container-low transition-colors duration-200"
+                className="w-full flex items-center justify-center gap-3 px-6 py-3 bg-white dark:bg-slate-800 border border-outline-variant dark:border-slate-700 rounded-xl font-label-md text-label-md text-on-surface dark:text-slate-100 hover:bg-surface-container-low dark:hover:bg-slate-700 transition-colors duration-200"
               >
                 {isGoogleLoading ? (
                   <>
@@ -237,7 +237,7 @@ export default function Login() {
                 )}
               </button>
               <button
-                className="w-full flex items-center justify-center gap-3 px-6 py-3 bg-surface-container-low border border-outline-variant/30 rounded-xl font-label-md text-label-md text-outline cursor-not-allowed"
+                className="w-full flex items-center justify-center gap-3 px-6 py-3 bg-surface-container-low dark:bg-slate-800/60 border border-outline-variant/30 dark:border-slate-700/30 rounded-xl font-label-md text-label-md text-outline dark:text-slate-500 cursor-not-allowed"
                 disabled
               >
                 <span className="material-symbols-outlined text-[20px]">badge</span>
@@ -248,10 +248,10 @@ export default function Login() {
             {/* Divider */}
             <div className="relative mb-8">
               <div className="absolute inset-0 flex items-center">
-                <div className="w-full border-t border-outline-variant"></div>
+                <div className="w-full border-t border-outline-variant dark:border-slate-700"></div>
               </div>
               <div className="relative flex justify-center text-label-sm">
-                <span className="px-3 bg-white text-on-surface-variant font-label-md uppercase tracking-widest text-[10px]">Or with email</span>
+                <span className="px-3 bg-white dark:bg-slate-900 text-on-surface-variant dark:text-slate-400 font-label-md uppercase tracking-widest text-[10px]">Or with email</span>
               </div>
             </div>
 
@@ -259,15 +259,15 @@ export default function Login() {
             <form className="space-y-6" onSubmit={handleSubmit}>
               {/* Email */}
               <div className="space-y-2">
-                <label className="font-label-md text-label-md text-on-surface-variant ml-1" htmlFor="email">
+                <label className="font-label-md text-label-md text-on-surface-variant dark:text-slate-400 ml-1" htmlFor="email">
                   Email Address
                 </label>
                 <div className="relative">
-                  <span className="absolute left-4 top-1/2 -translate-y-1/2 material-symbols-outlined text-outline text-[20px]">mail</span>
+                  <span className="absolute left-4 top-1/2 -translate-y-1/2 material-symbols-outlined text-outline dark:text-slate-500 text-[20px]">mail</span>
                   <input
                     required
                     autoComplete="off"
-                    className="w-full pl-11 pr-4 py-3 bg-surface-container-lowest border border-outline-variant rounded-xl font-body-md text-body-md text-on-surface placeholder:text-outline/60 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all duration-200"
+                    className="w-full pl-11 pr-4 py-3 bg-surface-container-lowest dark:bg-slate-800 border border-outline-variant dark:border-slate-700 rounded-xl font-body-md text-body-md text-on-surface dark:text-slate-100 placeholder:text-outline/60 dark:placeholder:text-slate-500 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all duration-200"
                     id="email"
                     placeholder="name@example.com"
                     type="email"
@@ -279,15 +279,15 @@ export default function Login() {
 
               {/* Password */}
               <div className="space-y-2">
-                <label className="font-label-md text-label-md text-on-surface-variant ml-1" htmlFor="password">
+                <label className="font-label-md text-label-md text-on-surface-variant dark:text-slate-400 ml-1" htmlFor="password">
                   Password
                 </label>
                 <div className="relative">
-                  <span className="absolute left-4 top-1/2 -translate-y-1/2 material-symbols-outlined text-outline text-[20px]">lock</span>
+                  <span className="absolute left-4 top-1/2 -translate-y-1/2 material-symbols-outlined text-outline dark:text-slate-500 text-[20px]">lock</span>
                   <input
                     required
                     autoComplete="new-password"
-                    className="w-full pl-11 pr-11 py-3 bg-surface-container-lowest border border-outline-variant rounded-xl font-body-md text-body-md text-on-surface placeholder:text-outline/60 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all duration-200"
+                    className="w-full pl-11 pr-11 py-3 bg-surface-container-lowest dark:bg-slate-800 border border-outline-variant dark:border-slate-700 rounded-xl font-body-md text-body-md text-on-surface dark:text-slate-100 placeholder:text-outline/60 dark:placeholder:text-slate-500 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all duration-200"
                     id="password"
                     placeholder="••••••••"
                     type={showPassword ? "text" : "password"}
@@ -295,7 +295,7 @@ export default function Login() {
                     onChange={(e) => setPassword(e.target.value)}
                   />
                   <button
-                    className="absolute right-4 top-1/2 -translate-y-1/2 text-outline hover:text-on-surface transition-colors"
+                    className="absolute right-4 top-1/2 -translate-y-1/2 text-outline dark:text-slate-500 hover:text-on-surface dark:hover:text-slate-200 transition-colors"
                     onClick={() => setShowPassword(!showPassword)}
                     type="button"
                   >
@@ -310,13 +310,13 @@ export default function Login() {
               <div className="flex items-center justify-between">
                 <div className="flex items-center">
                   <input
-                    className="w-4 h-4 rounded border-outline-variant text-primary focus:ring-primary-container"
+                    className="w-4 h-4 rounded border-outline-variant dark:border-slate-700 dark:bg-slate-800 text-primary focus:ring-primary-container"
                     id="remember"
                     type="checkbox"
                     checked={rememberMe}
                     onChange={(e) => setRememberMe(e.target.checked)}
                   />
-                  <label className="ml-2 font-label-md text-label-md text-on-surface-variant cursor-pointer" htmlFor="remember">
+                  <label className="ml-2 font-label-md text-label-md text-on-surface-variant dark:text-slate-400 cursor-pointer" htmlFor="remember">
                     Remember Me
                   </label>
                 </div>
@@ -354,7 +354,7 @@ export default function Login() {
             </form>
 
             <div className="mt-8 text-center">
-              <p className="font-body-sm text-body-sm text-on-surface-variant">
+              <p className="font-body-sm text-body-sm text-on-surface-variant dark:text-slate-400">
                 Don&apos;t have an account?{" "}
                 <Link className="text-primary font-semibold hover:underline" to="/register">
                   Create an account

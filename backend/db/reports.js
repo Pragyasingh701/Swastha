@@ -242,3 +242,25 @@ export const deleteTimelineReport = async (userId, reportId) => {
     throw err;
   }
 };
+
+export const deleteAllReportsForUser = async (userId) => {
+  const normalizedUserId = String(userId || '').trim();
+  if (!normalizedUserId || !supabase) return 0;
+
+  try {
+    const { data, error } = await supabase
+      .from(REPORTS_TABLE)
+      .delete()
+      .eq(REPORTS_USER_ID_COLUMN, normalizedUserId)
+      .select('id');
+
+    if (error) {
+      throw error;
+    }
+
+    return Array.isArray(data) ? data.length : 0;
+  } catch (err) {
+    console.error('Supabase delete all reports for user error:', err.message || err);
+    throw err;
+  }
+};
