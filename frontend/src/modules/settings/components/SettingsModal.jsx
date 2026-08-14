@@ -23,7 +23,7 @@ import {
 } from 'lucide-react';
 
 export default function SettingsModal({ isOpen, onClose }) {
-  const { user, token, updateProfile: updateAuthProfile, uploadDocument, setUserRole } = useAuth();
+  const { user, token, updateProfile: updateAuthProfile, uploadDocument } = useAuth();
   const [isSaving, setIsSaving] = useState(false);
   const [message, setMessage] = useState(null);
   const [regCertificateFile, setRegCertificateFile] = useState(null);
@@ -74,13 +74,6 @@ export default function SettingsModal({ isOpen, onClose }) {
   }, [user, isOpen]);
 
   if (!isOpen) return null;
-
-  const isRoleSwitching = formData.role !== (user?.role || 'patient');
-
-  const handleRoleSelect = (selectedRole) => {
-    setFormData((prev) => ({ ...prev, role: selectedRole }));
-    setMessage(null);
-  };
 
   const handleFileSelect = (e) => {
     const file = e.target.files?.[0];
@@ -177,15 +170,9 @@ export default function SettingsModal({ isOpen, onClose }) {
         address: formData.address,
         regCertificateUrl: uploadedCertUrl,
         isSettingsUpdate: true,
-        isRoleSwitch: isRoleSwitching,
       };
 
-      // 1. If role switched, update role in AuthContext & database
-      if (isRoleSwitching && setUserRole) {
-        await setUserRole(formData.role);
-      }
-
-      // 2. Save all fields directly into Supabase database users table
+      // Save all fields directly into Supabase database users table
       let updateRes = null;
       if (updateAuthProfile) {
         updateRes = await updateAuthProfile(payload);
@@ -222,10 +209,10 @@ export default function SettingsModal({ isOpen, onClose }) {
             </div>
             <div>
               <h3 className="text-lg font-extrabold text-slate-900 dark:text-slate-100 leading-tight">
-                Account Settings & Role Switcher
+                Account Settings
               </h3>
               <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                Update personal details, accreditation & switch account type
+                Update your personal details and accreditation
               </p>
             </div>
           </div>
@@ -261,65 +248,31 @@ export default function SettingsModal({ isOpen, onClose }) {
             </div>
           )}
 
-          {/* 1. Account Role Switcher Card */}
+          {/* 1. Account Type Indicator (read-only — role is fixed at registration) */}
           <div>
-            <div className="flex items-center justify-between mb-2">
-              <label className="block text-[11px] font-extrabold uppercase tracking-wider text-slate-600 dark:text-slate-300">
-                Account Type / Role
-              </label>
-              {isRoleSwitching && (
-                <span className="text-[10px] font-extrabold text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-500/10 px-2.5 py-0.5 rounded-full border border-amber-200 dark:border-amber-500/20 uppercase tracking-wider animate-pulse">
-                  Role Change Detected
-                </span>
-              )}
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {/* Patient Option */}
-              <button
-                type="button"
-                onClick={() => handleRoleSelect('patient')}
-                className={`flex items-center gap-3 p-4 rounded-2xl border transition-all text-left ${formData.role === 'patient'
-                    ? 'bg-emerald-50/80 dark:bg-emerald-500/10 border-emerald-500 dark:border-emerald-500/40 text-emerald-950 dark:text-emerald-300 ring-2 ring-emerald-500/20 shadow-sm'
-                    : 'bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700'
+            <label className="block text-[11px] font-extrabold uppercase tracking-wider text-slate-600 dark:text-slate-300 mb-2">
+              Account Type
+            </label>
+            <div
+              className={`flex items-center gap-3 p-4 rounded-2xl border ${formData.role === 'doctor'
+                  ? 'bg-indigo-50/80 dark:bg-indigo-500/10 border-indigo-500 dark:border-indigo-500/40 text-indigo-950 dark:text-indigo-300'
+                  : 'bg-emerald-50/80 dark:bg-emerald-500/10 border-emerald-500 dark:border-emerald-500/40 text-emerald-950 dark:text-emerald-300'
+                }`}
+            >
+              <div
+                className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 text-white shadow-md ${formData.role === 'doctor' ? 'bg-indigo-600' : 'bg-emerald-600'
                   }`}
               >
-                <div
-                  className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${formData.role === 'patient'
-                      ? 'bg-emerald-600 text-white shadow-md'
-                      : 'bg-slate-200 dark:bg-slate-700 text-slate-500 dark:text-slate-400'
-                    }`}
-                >
-                  <ShieldCheck size={22} />
-                </div>
-                <div>
-                  <p className="text-xs font-extrabold uppercase tracking-wider">Patient Account</p>
-                  <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">Timeline, health vault & family records</p>
-                </div>
-              </button>
-
-              {/* Doctor Option */}
-              <button
-                type="button"
-                onClick={() => handleRoleSelect('doctor')}
-                className={`flex items-center gap-3 p-4 rounded-2xl border transition-all text-left ${formData.role === 'doctor'
-                    ? 'bg-indigo-50/80 dark:bg-indigo-500/10 border-indigo-500 dark:border-indigo-500/40 text-indigo-950 dark:text-indigo-300 ring-2 ring-indigo-500/20 shadow-sm'
-                    : 'bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700'
-                  }`}
-              >
-                <div
-                  className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${formData.role === 'doctor'
-                      ? 'bg-indigo-600 text-white shadow-md'
-                      : 'bg-slate-200 dark:bg-slate-700 text-slate-500 dark:text-slate-400'
-                    }`}
-                >
-                  <Stethoscope size={22} />
-                </div>
-                <div>
-                  <p className="text-xs font-extrabold uppercase tracking-wider">Doctor Account</p>
-                  <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">Clinical dashboard & patient search</p>
-                </div>
-              </button>
+                {formData.role === 'doctor' ? <Stethoscope size={22} /> : <ShieldCheck size={22} />}
+              </div>
+              <div>
+                <p className="text-xs font-extrabold uppercase tracking-wider">
+                  {formData.role === 'doctor' ? 'Doctor Account' : 'Patient Account'}
+                </p>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                  {formData.role === 'doctor' ? 'Clinical dashboard & patient search' : 'Timeline, health vault & family records'}
+                </p>
+              </div>
             </div>
           </div>
 
@@ -601,7 +554,7 @@ export default function SettingsModal({ isOpen, onClose }) {
               className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold px-6 py-2.5 rounded-xl transition-all shadow-md shadow-blue-600/20 disabled:opacity-50"
             >
               <Save size={16} />
-              {isSaving ? 'Saving & Verifying...' : isRoleSwitching ? 'Complete Role Switch & Save' : 'Save Changes'}
+              {isSaving ? 'Saving & Verifying...' : 'Save Changes'}
             </button>
           </div>
         </form>
