@@ -6,7 +6,13 @@ import dotenv from 'dotenv';
 
 async function sendEmailViaBrevo(to, subject, html) {
   const apiKey = process.env.BREVO_API_KEY;
-  if (!apiKey) return false;
+  if (!apiKey) {
+    const error = 'BREVO_API_KEY is not configured in the backend environment.';
+    console.error('[Brevo Mailer Error]', error);
+    throw new Error(error);
+  }
+
+  const senderEmail = process.env.EMAIL_FROM_ADDRESS || 'swasthaprojectt@gmail.com';
 
   try {
     const res = await fetch('https://api.brevo.com/v3/smtp/email', {
@@ -17,7 +23,7 @@ async function sendEmailViaBrevo(to, subject, html) {
         'Accept': 'application/json',
       },
       body: JSON.stringify({
-        sender: { name: 'Swastha Support', email: process.env.EMAIL_FROM_ADDRESS || 'swasthaprojectt@gmail.com' },
+        sender: { name: 'Swastha Support', email: senderEmail },
         to: [{ email: to }],
         subject,
         htmlContent: html,
@@ -27,14 +33,16 @@ async function sendEmailViaBrevo(to, subject, html) {
     if (res.ok) {
       console.log(`[Brevo HTTPS Mailer] Email delivered successfully to ${to}`);
       return true;
-    } else {
-      const errText = await res.text();
-      console.error(`[Brevo Mailer Error] ${res.status}: ${errText}`);
-      return false;
     }
+
+    const errText = await res.text();
+    const message = `Brevo returned ${res.status}: ${errText}`;
+    console.error('[Brevo Mailer Error]', message);
+    throw new Error(message);
   } catch (err) {
-    console.error(`[Brevo Mailer Exception]`, err.message);
-    return false;
+    const message = err?.message || 'Unknown email sending error.';
+    console.error('[Brevo Mailer Exception]', message);
+    throw new Error(message);
   }
 }
 
@@ -51,10 +59,8 @@ export const sendOTPEmail = async (email, otpCode) => {
     </div>
   `;
 
-  const sent = await sendEmailViaBrevo(email, subject, html);
-  if (!sent) {
-    console.log(`📧 [SWASTHA MAILER] Verification code generated for ${email}`);
-  }
+  await sendEmailViaBrevo(email, subject, html);
+  console.log(`📧 [SWASTHA MAILER] Verification code generated for ${email}`);
 };
 
 export const sendPasswordResetEmail = async (email, resetToken) => {

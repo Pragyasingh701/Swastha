@@ -261,6 +261,21 @@ export const authService = {
   },
 
   /**
+   * Get a user by their database ID or patient code.
+   */
+  async getUserById(userId, token) {
+    const activeToken = token || localStorage.getItem('swastha_token') || sessionStorage.getItem('swastha_token');
+    const response = await fetch(`${API_BASE_URL}/auth/users/${encodeURIComponent(userId)}`, {
+      headers: {
+        ...(activeToken ? { Authorization: `Bearer ${activeToken}` } : {}),
+      },
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.message || 'User not found');
+    return data.user || data;
+  },
+
+  /**
    * Get authenticated user profile
    */
   async getProfile(token) {

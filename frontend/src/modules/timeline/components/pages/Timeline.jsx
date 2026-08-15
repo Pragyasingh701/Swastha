@@ -102,6 +102,7 @@ export default function Timeline() {
   const navigate = useNavigate();
   const { token, isAuthenticated, user } = useAuth();
   const targetEmail = location.state?.memberEmail || new URLSearchParams(location.search).get('email') || '';
+  const targetUserId = location.state?.patientUserId || new URLSearchParams(location.search).get('userId') || '';
   const [events, setEvents] = useState([]);
   const [familyMembers, setFamilyMembers] = useState([]);
   const [showUploadModal, setShowUploadModal] = useState(false);
@@ -187,7 +188,7 @@ export default function Timeline() {
 
     setLoading(true);
     try {
-      const response = await reportService.getTimelineReports(token, targetEmail);
+      const response = await reportService.getTimelineReports(token, targetEmail, targetUserId);
       const mapped = (response.reports || []).map(mapReportToEvent);
       setEvents(sortEvents(mapped));
     } catch (err) {
@@ -216,7 +217,7 @@ export default function Timeline() {
   useEffect(() => {
     loadTimelineEvents();
     loadFamilyMembers();
-  }, [profileId, isAuthenticated, token, targetEmail]);
+  }, [profileId, isAuthenticated, token, targetEmail, targetUserId]);
 
   useEffect(() => {
     const handleFamilyMembersUpdated = () => {
