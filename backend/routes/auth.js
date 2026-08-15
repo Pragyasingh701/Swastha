@@ -4,6 +4,7 @@ import jwt from 'jsonwebtoken';
 import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
+import supabase from '../config/supabase.js';
 import { sendOTPEmail, sendPasswordResetEmail } from '../utils/mailer.js';
 import { findUserByEmail, findUserById, createOrUpdateUser, updateUserRole, updateUserPassword, deleteUserById } from '../db/users.js';
 import { getFamilyVaultForUser, deleteFamilyVaultForUser } from '../db/family.js';
@@ -285,13 +286,20 @@ router.post('/login', async (req, res) => {
   const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
   otpStore.set(normalizedEmail, { code: otpCode, expiresAt: Date.now() + 10 * 60 * 1000 });
 
-  await sendOTPEmail(normalizedEmail, otpCode);
-
-  return res.json({
-    requiresOTP: true,
-    email: normalizedEmail,
-    message: 'Verification code sent to your email.',
-  });
+  try {
+    await sendOTPEmail(normalizedEmail, otpCode);
+    return res.json({
+      requiresOTP: true,
+      email: normalizedEmail,
+      message: 'Verification code sent to your email.',
+    });
+  } catch (error) {
+    otpStore.delete(normalizedEmail);
+    return res.status(500).json({
+      message: 'Failed to send verification email.',
+      error: error.message,
+    });
+  }
 });
 
 // Validation helpers for email & phone correctness
@@ -390,13 +398,21 @@ router.post('/register', async (req, res) => {
   // Generate 6-digit OTP code for Registration Verification
   const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
   otpStore.set(normalizedEmail, { code: otpCode, expiresAt: Date.now() + 10 * 60 * 1000 });
-  await sendOTPEmail(normalizedEmail, otpCode);
 
-  return res.status(201).json({
-    requiresOTP: true,
-    email: normalizedEmail,
-    message: 'Account created! Verification code sent to your email.',
-  });
+  try {
+    await sendOTPEmail(normalizedEmail, otpCode);
+    return res.status(201).json({
+      requiresOTP: true,
+      email: normalizedEmail,
+      message: 'Account created! Verification code sent to your email.',
+    });
+  } catch (error) {
+    otpStore.delete(normalizedEmail);
+    return res.status(500).json({
+      message: 'Account created, but the verification email could not be sent.',
+      error: error.message,
+    });
+  }
 });
 
 /**
@@ -434,13 +450,21 @@ router.post('/google-login', async (req, res) => {
     // Generate 6-digit OTP code for Google Verification
     const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
     otpStore.set(normalizedEmail, { code: otpCode, expiresAt: Date.now() + 10 * 60 * 1000 });
-    await sendOTPEmail(normalizedEmail, otpCode);
 
-    return res.json({
-      requiresOTP: true,
-      email: normalizedEmail,
-      message: 'Verification code sent to your Google email address.',
-    });
+    try {
+      await sendOTPEmail(normalizedEmail, otpCode);
+      return res.json({
+        requiresOTP: true,
+        email: normalizedEmail,
+        message: 'Verification code sent to your Google email address.',
+      });
+    } catch (error) {
+      otpStore.delete(normalizedEmail);
+      return res.status(500).json({
+        message: 'Could not send the verification email to your Google address.',
+        error: error.message,
+      });
+    }
   } catch (error) {
     console.error('Google login error:', error);
     return res.status(401).json({ message: 'Invalid Google authentication token', error: error.message });
@@ -482,13 +506,21 @@ router.post('/google-register', async (req, res) => {
     // Generate 6-digit OTP code for Google Verification
     const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
     otpStore.set(normalizedEmail, { code: otpCode, expiresAt: Date.now() + 10 * 60 * 1000 });
-    await sendOTPEmail(normalizedEmail, otpCode);
 
-    return res.status(200).json({
-      requiresOTP: true,
-      email: normalizedEmail,
-      message: 'Verification code sent to your Google email address.',
-    });
+    try {
+      await sendOTPEmail(normalizedEmail, otpCode);
+      return res.status(200).json({
+        requiresOTP: true,
+        email: normalizedEmail,
+        message: 'Verification code sent to your Google email address.',
+      });
+    } catch (error) {
+      otpStore.delete(normalizedEmail);
+      return res.status(500).json({
+        message: 'Could not send the verification email to your Google address.',
+        error: error.message,
+      });
+    }
   } catch (error) {
     console.error('Google registration error:', error);
     return res.status(401).json({ message: 'Invalid Google authentication token', error: error.message });
@@ -765,11 +797,18 @@ router.post('/send-otp', async (req, res) => {
   const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
   otpStore.set(normalizedEmail, { code: otpCode, expiresAt: Date.now() + 10 * 60 * 1000 });
 
-  await sendOTPEmail(normalizedEmail, otpCode);
-
-  return res.json({
-    message: `Verification code sent to ${normalizedEmail}`,
-  });
+  try {
+    await sendOTPEmail(normalizedEmail, otpCode);
+    return res.json({
+      message: `Verification code sent to ${normalizedEmail}`,
+    });
+  } catch (error) {
+    otpStore.delete(normalizedEmail);
+    return res.status(500).json({
+      message: 'Failed to send verification code.',
+      error: error.message,
+    });
+  }
 });
 
 /**
@@ -836,9 +875,16 @@ router.post('/change-password/send-otp', authenticateToken, async (req, res) => 
     const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
     otpStore.set(`changepwd:${email}`, { code: otpCode, expiresAt: Date.now() + 10 * 60 * 1000 });
 
-    await sendOTPEmail(email, otpCode);
-
-    return res.json({ message: `Verification code sent to ${email}` });
+    try {
+      await sendOTPEmail(email, otpCode);
+      return res.json({ message: `Verification code sent to ${email}` });
+    } catch (error) {
+      otpStore.delete(`changepwd:${email}`);
+      return res.status(500).json({
+        message: 'Failed to send verification code to your email.',
+        error: error.message,
+      });
+    }
   } catch (error) {
     console.error('Change-password send-otp error:', error);
     return res.status(500).json({ message: 'Failed to send verification code', error: error.message });
@@ -941,12 +987,19 @@ router.post('/forgot-password', async (req, res) => {
   const resetToken = 'rst_' + Math.random().toString(36).substring(2) + Date.now().toString(36);
   resetTokenStore.set(resetToken, { email: normalizedEmail, expiresAt: Date.now() + 30 * 60 * 1000 });
 
-  await sendPasswordResetEmail(normalizedEmail, resetToken);
-
-  return res.json({
-    message: `Password reset link sent to ${normalizedEmail}`,
-    resetToken,
-  });
+  try {
+    await sendPasswordResetEmail(normalizedEmail, resetToken);
+    return res.json({
+      message: `Password reset link sent to ${normalizedEmail}`,
+      resetToken,
+    });
+  } catch (error) {
+    resetTokenStore.delete(resetToken);
+    return res.status(500).json({
+      message: 'Failed to send password reset email.',
+      error: error.message,
+    });
+  }
 });
 
 /**
@@ -997,6 +1050,61 @@ router.post('/reset-password', async (req, res) => {
 
   await updateUserPassword(targetEmail, newPassword);
   return res.json({ message: 'Password reset successfully. You can now login with your new password.' });
+});
+
+/**
+ * GET /api/auth/users/:userId
+ * Looks up an application user by their ID or patient_code.
+ */
+router.get('/users/:userId', async (req, res) => {
+  const { userId } = req.params;
+  if (!userId) {
+    return res.status(400).json({ message: 'User ID is required.' });
+  }
+
+  try {
+    let user = await findUserById(userId);
+
+    if (!user && supabase) {
+      const normalizedUserId = String(userId).trim();
+      const { data, error } = await supabase
+        .from('users')
+        .select('*')
+        .or(`id.eq.${normalizedUserId},patient_code.eq.${normalizedUserId}`)
+        .maybeSingle();
+
+      if (!error && data) {
+        user = data;
+      }
+    }
+
+    if (!user) {
+      return res.status(404).json({ message: 'No user found with this ID.' });
+    }
+
+    return res.json({
+      user: {
+        ...user,
+        patientId: user.patient_code || user.id,
+        fullName: user.name || user.fullName,
+        mobile: user.phone || user.mobile,
+        phone: user.phone || user.mobile,
+        bloodGroup: user.blood_group || user.bloodGroup || user.blood_type,
+        blood_group: user.blood_group || user.bloodGroup || user.blood_type,
+        dob: user.dob || user.date_of_birth || user.dateOfBirth,
+        licenseNumber: user.license_number || user.licenseNumber || user.regNumber,
+        regNumber: user.license_number || user.licenseNumber || user.regNumber,
+        specialization: user.specialty || user.specialization,
+        specialty: user.specialty || user.specialization,
+        hospitalName: user.hospital_name || user.hospitalName,
+        hospital_name: user.hospital_name || user.hospitalName,
+        hasSelectedRole: !!(user.role && user.role !== 'none'),
+      },
+    });
+  } catch (error) {
+    console.error('User lookup error:', error);
+    return res.status(500).json({ message: 'Failed to fetch user details.', error: error.message });
+  }
 });
 
 /**

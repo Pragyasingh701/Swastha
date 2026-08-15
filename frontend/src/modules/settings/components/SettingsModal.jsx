@@ -37,6 +37,7 @@ export default function SettingsModal({ isOpen, onClose }) {
   const [message, setMessage] = useState(null);
   const [regCertificateFile, setRegCertificateFile] = useState(null);
   const fileInputRef = useRef(null);
+  const patientReferenceId = user?.patient_code || user?.patientCode || user?.id || 'Not available';
 
   const [formData, setFormData] = useState({
     name: '',
@@ -358,6 +359,20 @@ export default function SettingsModal({ isOpen, onClose }) {
                   className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/60 text-slate-400 dark:text-slate-500 text-xs font-semibold cursor-not-allowed"
                 />
               </div>
+
+              {formData.role === 'patient' && (
+                <div>
+                  <label className="block text-[11px] font-extrabold uppercase tracking-wider text-slate-600 dark:text-slate-300 mb-1">
+                    Patient ID / User ID
+                  </label>
+                  <input
+                    type="text"
+                    disabled
+                    value={patientReferenceId}
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/60 text-slate-600 dark:text-slate-300 text-xs font-semibold cursor-not-allowed"
+                  />
+                </div>
+              )}
 
               <div>
                 <label className="block text-[11px] font-extrabold uppercase tracking-wider text-slate-600 dark:text-slate-300 mb-1">

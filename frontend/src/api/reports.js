@@ -66,8 +66,18 @@ function preparePayload(reportData, file) {
   };
 }
 
-export async function getTimelineReports(token, memberEmail) {
-  const query = memberEmail ? `?email=${encodeURIComponent(memberEmail)}` : '';
+export async function getTimelineReports(token, memberEmail, memberUserId) {
+  const params = new URLSearchParams();
+
+  if (memberEmail) {
+    params.set('email', memberEmail);
+  }
+
+  if (memberUserId) {
+    params.set('userId', memberUserId);
+  }
+
+  const query = params.toString() ? `?${params.toString()}` : '';
   return request(query || '/', {}, token);
 }
 

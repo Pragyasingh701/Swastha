@@ -9,8 +9,6 @@ const navItems = [
   { label: "Patients", icon: "groups", route: "/doctor/patients" },
   { label: "AI Insights", icon: "smart_toy", route: "/doctor/clinical-intelligence" },
   { label: "Analytics", icon: "monitoring", route: "/doctor/clinical-analytics" },
-  { label: "Reports", icon: "assessment", route: "/doctor/reports" },
-  { label: "Messages", icon: "mail", route: "/doctor/messages" },
 ];
 
 export default function DoctorSidebar() {

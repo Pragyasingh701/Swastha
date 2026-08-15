@@ -207,9 +207,12 @@ router.get('/', async (req, res) => {
     }
 
     const requestedEmail = String(req.query.email || '').trim();
+    const requestedUserId = String(req.query.userId || '').trim();
     let targetUserId = user.userId;
 
-    if (requestedEmail) {
+    if (requestedUserId) {
+      targetUserId = requestedUserId;
+    } else if (requestedEmail) {
       const targetUser = await findUserByEmail(requestedEmail);
       if (!targetUser?.id) {
         return res.status(404).json({ message: 'No account found for that email.' });
