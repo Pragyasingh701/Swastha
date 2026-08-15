@@ -2,6 +2,15 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../../../context/AuthContext';
 import { authService } from '../../../services/auth';
 import {
+  sanitizePhoneInput,
+  isValidIndianPhone,
+  isValidFullName,
+  isValidPastDate,
+  isValidRegistrationNumber,
+  isValidWordsField,
+  isValidFreeTextField,
+} from '../../../utils/formValidation';
+import {
   X,
   User,
   ShieldCheck,
@@ -87,10 +96,15 @@ export default function SettingsModal({ isOpen, onClose }) {
     setIsSaving(true);
     setMessage(null);
 
-    // Clean and validate phone number
-    const cleanedPhone = formData.phone ? formData.phone.replace(/[\s\-\+\(\)]/g, '') : '';
-    if (!/^\d{10,15}$/.test(cleanedPhone) || /^(\d)\1{9,}$/.test(cleanedPhone) || cleanedPhone === '1234567890') {
-      setMessage({ type: 'error', text: 'Please enter a valid mobile number (10–15 digits).' });
+    const cleanedPhone = sanitizePhoneInput(formData.phone);
+    if (!isValidIndianPhone(cleanedPhone)) {
+      setMessage({ type: 'error', text: 'Please enter a valid 10-digit mobile number.' });
+      setIsSaving(false);
+      return;
+    }
+
+    if (!isValidFullName(formData.name)) {
+      setMessage({ type: 'error', text: 'Please enter a valid full name using letters only.' });
       setIsSaving(false);
       return;
     }
@@ -102,6 +116,11 @@ export default function SettingsModal({ isOpen, onClose }) {
           type: 'error',
           text: 'All patient credentials (Full Name, Date of Birth, Gender, Blood Group, and Mobile Phone) are mandatory.',
         });
+        setIsSaving(false);
+        return;
+      }
+      if (!isValidPastDate(formData.dob)) {
+        setMessage({ type: 'error', text: 'Please enter a valid date of birth.' });
         setIsSaving(false);
         return;
       }
@@ -122,6 +141,36 @@ export default function SettingsModal({ isOpen, onClose }) {
           type: 'error',
           text: 'All doctor credentials (Full Name, Date of Birth, Registration Number, Medical Council, Degree, Specialization, Hospital Name, and Practice Address) are mandatory.',
         });
+        setIsSaving(false);
+        return;
+      }
+
+      if (!isValidPastDate(formData.dob, { minAge: 21, maxAge: 100 })) {
+        setMessage({ type: 'error', text: 'Please enter a valid date of birth (doctors must be at least 21 years old).' });
+        setIsSaving(false);
+        return;
+      }
+
+      if (!isValidRegistrationNumber(formData.regNumber)) {
+        setMessage({ type: 'error', text: 'Please enter a valid Medical Registration Number (must include at least one digit).' });
+        setIsSaving(false);
+        return;
+      }
+
+      if (!isValidWordsField(formData.degree) || !isValidWordsField(formData.specialization)) {
+        setMessage({ type: 'error', text: 'Please enter a valid Degree and Specialization (letters only).' });
+        setIsSaving(false);
+        return;
+      }
+
+      if (!isValidFreeTextField(formData.hospitalName, { minLength: 3, maxLength: 150 })) {
+        setMessage({ type: 'error', text: 'Please enter a valid Hospital or Clinic Name.' });
+        setIsSaving(false);
+        return;
+      }
+
+      if (!isValidFreeTextField(formData.address, { minLength: 8, maxLength: 300 })) {
+        setMessage({ type: 'error', text: 'Please enter a valid, complete practice address.' });
         setIsSaving(false);
         return;
       }
@@ -317,10 +366,12 @@ export default function SettingsModal({ isOpen, onClose }) {
                 <input
                   type="tel"
                   required
+                  inputMode="numeric"
+                  maxLength={10}
                   value={formData.phone}
-                  onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                  onChange={(e) => setFormData({ ...formData, phone: sanitizePhoneInput(e.target.value) })}
                   className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs font-semibold text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-blue-600 focus:outline-none transition-all"
-                  placeholder="+91 98765 43210"
+                  placeholder="98765 43210"
                 />
               </div>
 
@@ -331,6 +382,7 @@ export default function SettingsModal({ isOpen, onClose }) {
                 <input
                   type="date"
                   required
+                  max={new Date().toISOString().split('T')[0]}
                   value={formData.dob}
                   onChange={(e) => setFormData({ ...formData, dob: e.target.value })}
                   className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs font-semibold text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-blue-600 focus:outline-none transition-all"
@@ -397,6 +449,7 @@ export default function SettingsModal({ isOpen, onClose }) {
                   <input
                     type="text"
                     required
+                    maxLength={30}
                     value={formData.regNumber}
                     onChange={(e) => setFormData({ ...formData, regNumber: e.target.value })}
                     className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs font-semibold text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-indigo-600 focus:outline-none"

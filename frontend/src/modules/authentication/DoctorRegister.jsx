@@ -1,6 +1,14 @@
 import React, { useState, useRef, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
+import {
+  sanitizePhoneInput,
+  isValidIndianPhone,
+  isValidPastDate,
+  isValidRegistrationNumber,
+  isValidWordsField,
+  isValidFreeTextField,
+} from "../../utils/formValidation";
 
 export default function DoctorRegister() {
   const navigate = useNavigate();
@@ -48,6 +56,10 @@ export default function DoctorRegister() {
 
   const handleChange = (e) => {
     const { name, value } = e.target;
+    if (name === "mobile") {
+      setForm((prev) => ({ ...prev, mobile: sanitizePhoneInput(value) }));
+      return;
+    }
     setForm((prev) => ({ ...prev, [name]: value }));
   };
 
@@ -59,20 +71,43 @@ export default function DoctorRegister() {
   const handleSubmit = async (e) => {
     e.preventDefault();
 
-    // Mobile Number Correctness Check
-    const cleanedMobile = form.mobile ? form.mobile.replace(/[\s\-\+\(\)]/g, '') : '';
-    if (!/^\d{10,15}$/.test(cleanedMobile) || /^(\d)\1{9,}$/.test(cleanedMobile) || cleanedMobile === '1234567890' || cleanedMobile === '0123456789') {
+    if (!isValidIndianPhone(form.mobile)) {
       setErrorMessage("Please enter a valid 10-digit mobile number.");
       return;
     }
 
-    if (!form.dob) {
-      setErrorMessage("Date of Birth is required.");
+    if (!isValidPastDate(form.dob, { minAge: 21, maxAge: 100 })) {
+      setErrorMessage("Please enter a valid date of birth (doctors must be at least 21 years old).");
       return;
     }
 
     if (!form.gender) {
       setErrorMessage("Please select your gender before completing registration.");
+      return;
+    }
+
+    if (!isValidRegistrationNumber(form.regNumber)) {
+      setErrorMessage("Please enter a valid Medical Registration Number (must include at least one digit, e.g. MCI-12345).");
+      return;
+    }
+
+    if (!isValidWordsField(form.degree)) {
+      setErrorMessage("Please enter a valid Primary Degree (e.g. MBBS, MD).");
+      return;
+    }
+
+    if (!isValidWordsField(form.specialization)) {
+      setErrorMessage("Please enter a valid Specialization (e.g. Cardiology).");
+      return;
+    }
+
+    if (!isValidFreeTextField(form.hospitalName, { minLength: 3, maxLength: 150 })) {
+      setErrorMessage("Please enter a valid Hospital or Clinic Name.");
+      return;
+    }
+
+    if (!isValidFreeTextField(form.address, { minLength: 8, maxLength: 300 })) {
+      setErrorMessage("Please enter a valid, complete practice address.");
       return;
     }
 
@@ -253,9 +288,11 @@ export default function DoctorRegister() {
                             ? "bg-surface-container-low dark:bg-slate-800 cursor-not-allowed opacity-90 select-none"
                             : "bg-surface dark:bg-slate-900 focus:border-primary focus:ring-4 focus:ring-primary/10"
                         }`}
-                        placeholder="+91 98765 43210"
+                        placeholder="98765 43210"
                         required
                         type="tel"
+                        inputMode="numeric"
+                        maxLength={10}
                         name="mobile"
                         value={form.mobile}
                         onChange={handleChange}
@@ -277,6 +314,7 @@ export default function DoctorRegister() {
                         required
                         type="date"
                         name="dob"
+                        max={new Date().toISOString().split('T')[0]}
                         value={form.dob}
                         onChange={handleChange}
                       />
@@ -339,6 +377,7 @@ export default function DoctorRegister() {
                         placeholder="e.g. MCI-12345"
                         required
                         type="text"
+                        maxLength={30}
                         name="regNumber"
                         value={form.regNumber}
                         onChange={handleChange}

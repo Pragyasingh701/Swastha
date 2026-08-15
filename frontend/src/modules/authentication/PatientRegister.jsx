@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
+import { sanitizePhoneInput, isValidIndianPhone, isValidPastDate } from "../../utils/formValidation";
 
 export default function PatientRegister() {
   const navigate = useNavigate();
@@ -39,6 +40,10 @@ export default function PatientRegister() {
 
   const handleChange = (e) => {
     const { name, value } = e.target;
+    if (name === "phone") {
+      setFormData((prev) => ({ ...prev, phone: sanitizePhoneInput(value) }));
+      return;
+    }
     setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
@@ -51,9 +56,13 @@ export default function PatientRegister() {
       return;
     }
 
-    const cleanedPhone = formData.phone ? formData.phone.replace(/[\s\-\+\(\)]/g, '') : '';
-    if (!/^\d{10,15}$/.test(cleanedPhone) || /^(\d)\1{9,}$/.test(cleanedPhone) || cleanedPhone === '1234567890' || cleanedPhone === '0123456789') {
+    if (!isValidIndianPhone(formData.phone)) {
       setErrorMessage("Please enter a valid 10-digit mobile number.");
+      return;
+    }
+
+    if (!isValidPastDate(formData.dob)) {
+      setErrorMessage("Please enter a valid date of birth.");
       return;
     }
 
@@ -271,9 +280,11 @@ export default function PatientRegister() {
                           ? "bg-surface-container-low dark:bg-slate-800 cursor-not-allowed opacity-90 select-none"
                           : "bg-surface-container-low dark:bg-slate-800 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none"
                       }`}
-                      placeholder="+91 98765 43210"
+                      placeholder="98765 43210"
                       required
                       type="tel"
+                      inputMode="numeric"
+                      maxLength={10}
                       name="phone"
                       value={formData.phone}
                       onChange={handleChange}
@@ -296,6 +307,7 @@ export default function PatientRegister() {
                         className="w-full h-[48px] pl-12 pr-4 bg-surface-container-low dark:bg-slate-800 border border-outline-variant dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all font-body-md text-body-md placeholder:text-outline/50 dark:placeholder:text-slate-500"
                         type="date"
                         name="dob"
+                        max={new Date().toISOString().split('T')[0]}
                         value={formData.dob}
                         onChange={handleChange}
                       />
