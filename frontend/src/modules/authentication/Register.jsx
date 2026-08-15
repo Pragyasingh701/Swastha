@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useGoogleLogin } from "@react-oauth/google";
 import { useAuth } from "../../context/AuthContext";
+import { sanitizePhoneInput, isValidIndianPhone, isValidEmail, isValidFullName } from "../../utils/formValidation";
 
 export default function Register() {
   const navigate = useNavigate();
@@ -22,6 +23,10 @@ export default function Register() {
 
   const handleChange = (e) => {
     const { id, value } = e.target;
+    if (id === "phone") {
+      setFormData((prev) => ({ ...prev, phone: sanitizePhoneInput(value) }));
+      return;
+    }
     setFormData((prev) => ({ ...prev, [id]: value }));
   };
 
@@ -29,6 +34,18 @@ export default function Register() {
     e.preventDefault();
     if (!agreedToTerms) {
       setErrorMessage("Please accept the Terms of Service & Privacy Policy.");
+      return;
+    }
+    if (!isValidFullName(formData.fullname)) {
+      setErrorMessage("Please enter your full name using letters only (2-60 characters).");
+      return;
+    }
+    if (!isValidEmail(formData.email)) {
+      setErrorMessage("Please enter a valid email address.");
+      return;
+    }
+    if (!isValidIndianPhone(formData.phone)) {
+      setErrorMessage("Please enter a valid 10-digit mobile number.");
       return;
     }
     if (formData.password !== formData.confirmPassword) {
@@ -326,8 +343,10 @@ export default function Register() {
                     required
                     className="w-full h-11 pl-11 bg-surface dark:bg-slate-800 border border-outline-variant dark:border-slate-700 rounded-xl focus:ring-4 focus:ring-primary/10 focus:border-primary outline-none transition-all placeholder:text-outline-variant/60 dark:placeholder:text-slate-500 font-body-md text-body-md text-on-surface dark:text-slate-100"
                     id="phone"
-                    placeholder="+1 (555) 000-0000"
+                    placeholder="98765 43210"
                     type="tel"
+                    inputMode="numeric"
+                    maxLength={10}
                     value={formData.phone}
                     onChange={handleChange}
                   />
