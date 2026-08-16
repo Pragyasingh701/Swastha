@@ -29,10 +29,10 @@ function normalizeDoctorPatientCard(patient = {}) {
     blood_group: patient_blood_group,
     age: calculatedAge,
     condition: specialty,
-    conditionTone: 'bg-[#dbeafe] dark:bg-blue-500/10 text-[#1d4ed8] dark:text-blue-400',
+    conditionTone: 'bg-[#dbeafe] text-[#1d4ed8]',
     lastVisit: 'Recently linked',
     status: 'Active',
-    statusTone: 'bg-emerald-100 dark:bg-emerald-500/10 text-emerald-800 dark:text-emerald-400',
+    statusTone: 'bg-emerald-100 text-emerald-800',
     avatar: patient.picture || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=400&q=80',
   };
 }

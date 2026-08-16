@@ -98,7 +98,7 @@ export default function PatientRegister() {
   };
 
   return (
-    <div className="bg-background dark:bg-slate-950 text-on-background dark:text-slate-100 min-h-screen">
+    <div className="bg-background text-on-background min-h-screen">
       <main className="flex min-h-screen">
         {/* Left Side: Visual & Brand Content */}
         <section className="hidden lg:flex flex-col relative w-1/2 bg-on-primary-fixed overflow-hidden p-margin-desktop">
@@ -170,7 +170,7 @@ export default function PatientRegister() {
         </section>
 
         {/* Right Side: Registration Form */}
-        <section className="w-full lg:w-1/2 flex items-center justify-center p-margin-mobile md:p-margin-desktop bg-surface dark:bg-slate-900">
+        <section className="w-full lg:w-1/2 flex items-center justify-center p-margin-mobile md:p-margin-desktop bg-surface ">
           <div className="w-full max-w-[480px]">
             {/* Mobile Branding */}
             <div className="lg:hidden flex items-center gap-2 mb-xl">
@@ -184,8 +184,8 @@ export default function PatientRegister() {
             </div>
 
             <div className="mb-xl">
-              <h3 className="font-headline-lg text-headline-lg text-on-surface dark:text-slate-100 mb-xs">Create Patient Account</h3>
-              <p className="font-body-md text-body-md text-on-surface-variant dark:text-slate-400">
+              <h3 className="font-headline-lg text-headline-lg text-on-surface mb-xs">Create Patient Account</h3>
+              <p className="font-body-md text-body-md text-on-surface-variant ">
                 Step into the future of healthcare management.
               </p>
             </div>
@@ -202,7 +202,7 @@ export default function PatientRegister() {
               </button>
 
               {errorMessage && (
-                <div className="p-4 rounded-xl bg-error-container dark:bg-rose-500/10 text-on-error-container dark:text-rose-300 text-body-sm flex items-center gap-3 border border-error/20 dark:border-rose-500/20 shadow-sm">
+                <div className="p-4 rounded-xl bg-error-container text-on-error-container text-body-sm flex items-center gap-3 border border-error/20 shadow-sm">
                   <span className="material-symbols-outlined text-[20px] text-error">error</span>
                   <span className="font-medium">{errorMessage}</span>
                 </div>
@@ -212,18 +212,18 @@ export default function PatientRegister() {
               <form className="space-y-md" onSubmit={handleSubmit}>
                 <div className="space-y-sm">
                   <div className="flex items-center justify-between ml-1">
-                    <label className="font-label-md text-label-md text-on-surface-variant dark:text-slate-400 block">Full Name</label>
-                    <span className="text-[11px] text-outline dark:text-slate-500 font-medium flex items-center gap-1">
+                    <label className="font-label-md text-label-md text-on-surface-variant block">Full Name</label>
+                    <span className="text-[11px] text-outline font-medium flex items-center gap-1">
                       <span className="material-symbols-outlined text-[13px]">lock</span> Account Name
                     </span>
                   </div>
                   <div className="relative">
-                    <span className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-outline dark:text-slate-500 text-[20px]">
+                    <span className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-outline text-[20px]">
                       person
                     </span>
                     <input
                       readOnly
-                      className="w-full h-[48px] pl-12 pr-4 bg-surface-container-low dark:bg-slate-800 border border-outline-variant/60 dark:border-slate-700 rounded-xl font-body-md text-body-md text-on-surface dark:text-slate-100 cursor-not-allowed opacity-90 select-none"
+                      className="w-full h-[48px] pl-12 pr-4 bg-surface-container-low border border-outline-variant/60 rounded-xl font-body-md text-body-md text-on-surface cursor-not-allowed opacity-90 select-none"
                       placeholder="Johnathan Doe"
                       type="text"
                       name="fullName"
@@ -234,20 +234,20 @@ export default function PatientRegister() {
 
                 <div className="space-y-sm">
                   <div className="flex items-center justify-between ml-1">
-                    <label className="font-label-md text-label-md text-on-surface-variant dark:text-slate-400 block">
+                    <label className="font-label-md text-label-md text-on-surface-variant block">
                       Email Address
                     </label>
-                    <span className="text-[11px] text-outline dark:text-slate-500 font-medium flex items-center gap-1">
+                    <span className="text-[11px] text-outline font-medium flex items-center gap-1">
                       <span className="material-symbols-outlined text-[13px]">lock</span> Account Email
                     </span>
                   </div>
                   <div className="relative">
-                    <span className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-outline dark:text-slate-500 text-[20px]">
+                    <span className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-outline text-[20px]">
                       mail
                     </span>
                     <input
                       readOnly
-                      className="w-full h-[48px] pl-12 pr-4 bg-surface-container-low dark:bg-slate-800 border border-outline-variant/60 dark:border-slate-700 rounded-xl font-body-md text-body-md text-on-surface dark:text-slate-100 cursor-not-allowed opacity-90 select-none"
+                      className="w-full h-[48px] pl-12 pr-4 bg-surface-container-low border border-outline-variant/60 rounded-xl font-body-md text-body-md text-on-surface cursor-not-allowed opacity-90 select-none"
                       placeholder="john@healthcare.com"
                       type="email"
                       name="email"
@@ -258,11 +258,11 @@ export default function PatientRegister() {
 
                 <div className="space-y-sm">
                   <div className="flex items-center justify-between ml-1">
-                    <label className="font-label-md text-label-md text-on-surface-variant dark:text-slate-400 block">
+                    <label className="font-label-md text-label-md text-on-surface-variant block">
                       Phone Number
                     </label>
                     {user?.phone || user?.mobile ? (
-                      <span className="text-[11px] text-outline dark:text-slate-500 font-medium flex items-center gap-1">
+                      <span className="text-[11px] text-outline font-medium flex items-center gap-1">
                         <span className="material-symbols-outlined text-[13px]">lock</span> Account Phone
                       </span>
                     ) : (
@@ -270,15 +270,15 @@ export default function PatientRegister() {
                     )}
                   </div>
                   <div className="relative">
-                    <span className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-outline dark:text-slate-500 text-[20px]">
+                    <span className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-outline text-[20px]">
                       call
                     </span>
                     <input
                       readOnly={!!(user?.phone || user?.mobile)}
-                      className={`w-full h-[48px] pl-12 pr-4 rounded-xl border border-outline-variant dark:border-slate-700 transition-all font-body-md text-body-md ${
+                      className={`w-full h-[48px] pl-12 pr-4 rounded-xl border border-outline-variant transition-all font-body-md text-body-md ${
                         user?.phone || user?.mobile
-                          ? "bg-surface-container-low dark:bg-slate-800 cursor-not-allowed opacity-90 select-none"
-                          : "bg-surface-container-low dark:bg-slate-800 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none"
+                          ? "bg-surface-container-low cursor-not-allowed opacity-90 select-none"
+                          : "bg-surface-container-low focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none"
                       }`}
                       placeholder="98765 43210"
                       required
@@ -295,16 +295,16 @@ export default function PatientRegister() {
                 {/* Date of Birth, Blood Group & Gender */}
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-md">
                   <div className="space-y-sm">
-                    <label className="font-label-md text-label-md text-on-surface-variant dark:text-slate-400 block ml-1">
+                    <label className="font-label-md text-label-md text-on-surface-variant block ml-1">
                       Date of Birth
                     </label>
                     <div className="relative">
-                      <span className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-outline dark:text-slate-500 text-[20px]">
+                      <span className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-outline text-[20px]">
                         calendar_today
                       </span>
                       <input
                         required
-                        className="w-full h-[48px] pl-12 pr-4 bg-surface-container-low dark:bg-slate-800 border border-outline-variant dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all font-body-md text-body-md placeholder:text-outline/50 dark:placeholder:text-slate-500"
+                        className="w-full h-[48px] pl-12 pr-4 bg-surface-container-low border border-outline-variant rounded-xl focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all font-body-md text-body-md placeholder:text-outline/50 "
                         type="date"
                         name="dob"
                         max={new Date().toISOString().split('T')[0]}
@@ -314,16 +314,16 @@ export default function PatientRegister() {
                     </div>
                   </div>
                   <div className="space-y-sm">
-                    <label className="font-label-md text-label-md text-on-surface-variant dark:text-slate-400 block ml-1">
+                    <label className="font-label-md text-label-md text-on-surface-variant block ml-1">
                       Blood Group
                     </label>
                     <div className="relative">
-                      <span className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-outline dark:text-slate-500 text-[20px]">
+                      <span className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-outline text-[20px]">
                         water_drop
                       </span>
                       <select
                         required
-                        className="w-full h-[48px] pl-12 pr-4 bg-surface-container-low dark:bg-slate-800 border border-outline-variant dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all font-body-md text-body-md appearance-none"
+                        className="w-full h-[48px] pl-12 pr-4 bg-surface-container-low border border-outline-variant rounded-xl focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all font-body-md text-body-md appearance-none"
                         name="bloodGroup"
                         value={formData.bloodGroup}
                         onChange={handleChange}
@@ -343,16 +343,16 @@ export default function PatientRegister() {
                     </div>
                   </div>
                   <div className="space-y-sm">
-                    <label className="font-label-md text-label-md text-on-surface-variant dark:text-slate-400 block ml-1">
+                    <label className="font-label-md text-label-md text-on-surface-variant block ml-1">
                       Gender
                     </label>
                     <div className="relative">
-                      <span className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-outline dark:text-slate-500 text-[20px]">
+                      <span className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-outline text-[20px]">
                         person
                       </span>
                       <select
                         required
-                        className="w-full h-[48px] pl-12 pr-4 bg-surface-container-low dark:bg-slate-800 border border-outline-variant dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all font-body-md text-body-md appearance-none"
+                        className="w-full h-[48px] pl-12 pr-4 bg-surface-container-low border border-outline-variant rounded-xl focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all font-body-md text-body-md appearance-none"
                         name="gender"
                         value={formData.gender}
                         onChange={handleChange}
@@ -373,13 +373,13 @@ export default function PatientRegister() {
                 <div className="flex items-start gap-3 py-2">
                   <input
                     required
-                    className="mt-1 w-5 h-5 rounded border-outline-variant dark:border-slate-700 text-primary focus:ring-primary/20 cursor-pointer"
+                    className="mt-1 w-5 h-5 rounded border-outline-variant text-primary focus:ring-primary/20 cursor-pointer"
                     id="terms"
                     type="checkbox"
                     checked={agreedToTerms}
                     onChange={(e) => setAgreedToTerms(e.target.checked)}
                   />
-                  <label className="font-body-sm text-body-sm text-on-surface-variant dark:text-slate-400 leading-relaxed" htmlFor="terms">
+                  <label className="font-body-sm text-body-sm text-on-surface-variant leading-relaxed" htmlFor="terms">
                     I agree to the{" "}
                     <a className="text-primary hover:underline font-medium" href="#">
                       Terms of Service
@@ -414,7 +414,7 @@ export default function PatientRegister() {
 
               {/* Login Link */}
               <div className="text-center pt-md">
-                <p className="font-body-md text-body-md text-on-surface-variant dark:text-slate-400">
+                <p className="font-body-md text-body-md text-on-surface-variant ">
                   Want to use another account?{" "}
                   <button
                     type="button"

@@ -17,7 +17,6 @@ export default {
     "./frontend/services/**/*.{js,ts,jsx,tsx}",
     "./frontend/utils/**/*.{js,ts,jsx,tsx}",
   ],
-  darkMode: "class",
   theme: {
     extend: {
       colors: {
