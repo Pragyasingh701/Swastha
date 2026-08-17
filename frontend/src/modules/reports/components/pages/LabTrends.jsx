@@ -33,7 +33,6 @@ import {
 import { useAuth } from "../../../../context/AuthContext";
 import { getLabInsights } from "../../../../api/reports";
 import SettingsModal from "../../../settings/components/SettingsModal";
-import ThemeToggle from "../../../../components/Common/ThemeToggle";
 import ProfileDropdown from "../../../settings/components/ProfileDropdown";
 
 // Same nav list as Dashboard.jsx, with Lab Insights marked active
@@ -48,24 +47,24 @@ const navItems = [
 
 const toneStyles = {
   good: {
-    iconBg: "bg-emerald-50 dark:bg-emerald-500/10 text-emerald-500 dark:text-emerald-400",
+    iconBg: "bg-emerald-50 text-emerald-500 ",
     barBg: "bg-emerald-500",
-    statusText: "text-emerald-500 dark:text-emerald-400",
-    deltaBg: "bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
+    statusText: "text-emerald-500 ",
+    deltaBg: "bg-emerald-50 text-emerald-600 ",
     dot: "bg-emerald-500",
   },
   watch: {
-    iconBg: "bg-orange-50 dark:bg-orange-500/10 text-orange-500 dark:text-orange-400",
+    iconBg: "bg-orange-50 text-orange-500 ",
     barBg: "bg-orange-400",
-    statusText: "text-orange-500 dark:text-orange-400",
-    deltaBg: "bg-orange-50 dark:bg-orange-500/10 text-orange-600 dark:text-orange-400",
+    statusText: "text-orange-500 ",
+    deltaBg: "bg-orange-50 text-orange-600 ",
     dot: "bg-orange-400",
   },
   neutral: {
-    iconBg: "bg-blue-50 dark:bg-blue-500/10 text-blue-500 dark:text-blue-400",
+    iconBg: "bg-blue-50 text-blue-500 ",
     barBg: "bg-blue-400",
-    statusText: "text-slate-400 dark:text-slate-500",
-    deltaBg: "bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400",
+    statusText: "text-slate-400 ",
+    deltaBg: "bg-slate-100 text-slate-500 ",
     dot: "bg-blue-400",
   },
 };
@@ -149,26 +148,25 @@ export default function LabInsights() {
   }, [activeSeries, range]);
 
   return (
-    <div className="flex h-screen overflow-hidden bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100">
+    <div className="flex h-screen overflow-hidden bg-slate-50 text-slate-900 ">
       <Sidebar onOpenSettings={() => setIsSettingsOpen(true)} />
 
       <div className="flex-1 flex flex-col min-w-0 h-screen overflow-hidden">
-        <header className="shrink-0 flex items-center gap-4 px-6 lg:px-8 py-5 border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
+        <header className="shrink-0 flex items-center gap-4 px-6 lg:px-8 py-5 border-b border-slate-200 bg-white ">
           <button
             type="button"
             onClick={() => navigate('/search')}
-            className="flex-1 flex items-center gap-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-4 py-2.5 text-sm text-slate-400 dark:text-slate-500 transition-colors hover:border-blue-300 dark:hover:border-blue-500/50 hover:text-blue-600 dark:hover:text-blue-400"
+            className="flex-1 flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-lg px-4 py-2.5 text-sm text-slate-400 transition-colors hover:border-blue-300 hover:text-blue-600 "
           >
             <Sparkles size={16} />
             Ask Swastha about your health records...
           </button>
 
-          <button className="relative p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 shrink-0">
-            <Bell size={20} className="text-slate-600 dark:text-slate-300" />
+          <button className="relative p-2 rounded-lg hover:bg-slate-100 shrink-0">
+            <Bell size={20} className="text-slate-600 " />
             <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full" />
           </button>
 
-          <ThemeToggle />
 
           <ProfileDropdown />
         </header>
@@ -230,7 +228,7 @@ function Sidebar({ onOpenSettings }) {
   const pathname = location.pathname;
 
   return (
-    <aside className="hidden lg:flex lg:flex-col w-64 shrink-0 bg-slate-50 dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 h-screen overflow-y-auto px-4 py-6">
+    <aside className="hidden lg:flex lg:flex-col w-64 shrink-0 bg-slate-50 border-r border-slate-200 h-screen overflow-y-auto px-4 py-6">
       <div className="px-2 mb-8">
         <Logo />
       </div>
@@ -246,8 +244,8 @@ function Sidebar({ onOpenSettings }) {
               onClick={() => route && navigate(route)}
               className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
                 isActive
-                  ? "bg-blue-100 dark:bg-blue-500/15 text-blue-700 dark:text-blue-400"
-                  : "text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800"
+                  ? "bg-blue-100 text-blue-700 "
+                  : "text-slate-600 hover:bg-slate-100 "
               }`}
             >
             <Icon size={18} />
@@ -271,12 +269,12 @@ function Sidebar({ onOpenSettings }) {
           <button
             type="button"
             onClick={onOpenSettings}
-            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800"
+            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-100 "
           >
             <Settings size={18} />
             Settings
           </button>
-          <button className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800">
+          <button className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-100 ">
             <HelpCircle size={18} />
             Support
           </button>
@@ -292,10 +290,10 @@ function PageHeader() {
   return (
     <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 mb-8">
       <div>
-        <h1 className="text-2xl sm:text-3xl font-semibold text-slate-900 dark:text-slate-100 leading-snug">
+        <h1 className="text-2xl sm:text-3xl font-semibold text-slate-900 leading-snug">
           Lab Insights
         </h1>
-        <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+        <p className="text-sm text-slate-500 mt-1">
           AI-powered trend analysis across your lab reports.
         </p>
       </div>
@@ -307,7 +305,7 @@ function PageHeader() {
 
 function LoadingState() {
   return (
-    <div className="flex flex-col items-center justify-center gap-3 py-24 text-slate-400 dark:text-slate-500">
+    <div className="flex flex-col items-center justify-center gap-3 py-24 text-slate-400 ">
       <Loader2 size={28} className="animate-spin text-blue-500" />
       <p className="text-sm">Analyzing your lab reports…</p>
     </div>
@@ -316,20 +314,20 @@ function LoadingState() {
 
 function ErrorState({ message }) {
   return (
-    <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm p-8 text-center">
-      <p className="text-sm text-slate-500 dark:text-slate-400">{message}</p>
+    <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-8 text-center">
+      <p className="text-sm text-slate-500 ">{message}</p>
     </div>
   );
 }
 
 function EmptyState({ navigate }) {
   return (
-    <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm p-10 text-center flex flex-col items-center gap-3">
-      <div className="w-12 h-12 rounded-xl bg-blue-50 dark:bg-blue-500/10 text-blue-500 dark:text-blue-400 flex items-center justify-center">
+    <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-10 text-center flex flex-col items-center gap-3">
+      <div className="w-12 h-12 rounded-xl bg-blue-50 text-blue-500 flex items-center justify-center">
         <FlaskConical size={22} />
       </div>
-      <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">No Lab Reports yet</h2>
-      <p className="text-sm text-slate-400 dark:text-slate-500 max-w-sm">
+      <h2 className="text-lg font-semibold text-slate-900 ">No Lab Reports yet</h2>
+      <p className="text-sm text-slate-400 max-w-sm">
         Upload a Lab Report to start seeing AI-extracted trends, a health score, and
         follow-up suggestions here.
       </p>
@@ -346,9 +344,9 @@ function EmptyState({ navigate }) {
 
 function NoNumericDataCard() {
   return (
-    <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm p-8 text-center flex flex-col items-center justify-center gap-3 min-h-[280px]">
-      <Beaker size={22} className="text-slate-300 dark:text-slate-600" />
-      <p className="text-sm text-slate-400 dark:text-slate-500 max-w-xs">
+    <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-8 text-center flex flex-col items-center justify-center gap-3 min-h-[280px]">
+      <Beaker size={22} className="text-slate-300 " />
+      <p className="text-sm text-slate-400 max-w-xs">
         Your Lab Reports don't include any extractable numeric results yet
         (e.g. "HbA1c 5.4%") — add specific values to the Key Results field to
         see a trend chart here.
@@ -388,10 +386,10 @@ function StatCard({ series, isActive, onClick }) {
     <button
       type="button"
       onClick={onClick}
-      className={`group text-left bg-white dark:bg-slate-900 rounded-2xl border shadow-sm p-5 transition-all duration-300 hover:-translate-y-1 hover:shadow-lg ${
+      className={`group text-left bg-white rounded-2xl border shadow-sm p-5 transition-all duration-300 hover:-translate-y-1 hover:shadow-lg ${
         isActive
-          ? "border-blue-300 dark:border-blue-500/40 ring-1 ring-blue-100 dark:ring-blue-500/20"
-          : "border-slate-100 dark:border-slate-800"
+          ? "border-blue-300 ring-1 ring-blue-100 "
+          : "border-slate-100 "
       }`}
     >
       <div className="flex items-center justify-between mb-4">
@@ -408,14 +406,14 @@ function StatCard({ series, isActive, onClick }) {
         </span>
       </div>
 
-      <p className="text-sm text-slate-400 dark:text-slate-500 mb-1">{series.testName}</p>
+      <p className="text-sm text-slate-400 mb-1">{series.testName}</p>
       <div className="flex items-baseline gap-2 mb-3">
-        <span className="text-2xl font-semibold text-slate-900 dark:text-slate-100">
+        <span className="text-2xl font-semibold text-slate-900 ">
           {latest.value}{series.unit ? ` ${series.unit}` : ""}
         </span>
       </div>
 
-      <p className="text-xs text-slate-400 dark:text-slate-500">
+      <p className="text-xs text-slate-400 ">
         {series.normalRange ? `Normal range: ${series.normalRange}` : `${series.points.length} recorded value${series.points.length === 1 ? "" : "s"}`}
       </p>
     </button>
@@ -426,28 +424,28 @@ function StatCard({ series, isActive, onClick }) {
 
 function TrendCard({ activeSeries, chartData, range, setRange }) {
   return (
-    <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm p-6 transition-shadow duration-300 hover:shadow-lg">
+    <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6 transition-shadow duration-300 hover:shadow-lg">
       <div className="flex items-start justify-between flex-wrap gap-4 mb-2">
         <div>
-          <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
+          <h2 className="text-lg font-semibold text-slate-900 ">
             {activeSeries.testName} Trend
           </h2>
-          <p className="text-sm text-slate-400 dark:text-slate-500 mt-1">
+          <p className="text-sm text-slate-400 mt-1">
             Extracted from your uploaded Lab Reports
             {activeSeries.normalRange ? ` · Normal range: ${activeSeries.normalRange}${activeSeries.unit ? ` ${activeSeries.unit}` : ""}` : ""}
           </p>
         </div>
 
         {activeSeries.points.length > 6 && (
-          <div className="flex bg-slate-50 dark:bg-slate-800 rounded-xl p-1">
+          <div className="flex bg-slate-50 rounded-xl p-1">
             {["All", "Recent"].map((option) => (
               <button
                 key={option}
                 onClick={() => setRange(option)}
                 className={`px-3 py-1.5 rounded-lg text-sm transition-all duration-200 ${
                   range === option
-                    ? "bg-white dark:bg-slate-900 text-blue-600 dark:text-blue-400 font-medium shadow-sm"
-                    : "text-slate-400 dark:text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
+                    ? "bg-white text-blue-600 font-medium shadow-sm"
+                    : "text-slate-400 hover:text-slate-700 "
                 }`}
               >
                 {option}
@@ -510,9 +508,9 @@ function TrendCard({ activeSeries, chartData, range, setRange }) {
 function TrendTooltip({ active, payload, label, unit }) {
   if (!active || !payload?.length) return null;
   return (
-    <div className="bg-white dark:bg-slate-900 rounded-xl shadow-lg border border-slate-100 dark:border-slate-800 px-3.5 py-2.5 animate-in fade-in duration-150">
-      <p className="text-xs text-slate-400 dark:text-slate-500 mb-0.5">{label}</p>
-      <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+    <div className="bg-white rounded-xl shadow-lg border border-slate-100 px-3.5 py-2.5 animate-in fade-in duration-150">
+      <p className="text-xs text-slate-400 mb-0.5">{label}</p>
+      <p className="text-sm font-semibold text-slate-900 ">
         {payload[0].value}{unit ? ` ${unit}` : ""}
       </p>
     </div>
@@ -554,13 +552,13 @@ function FollowUpCard({ followUps }) {
   const items = followUps || [];
 
   return (
-    <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm p-5 transition-shadow duration-300 hover:shadow-lg">
-      <h3 className="font-semibold text-slate-900 dark:text-slate-100 mb-4">
+    <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5 transition-shadow duration-300 hover:shadow-lg">
+      <h3 className="font-semibold text-slate-900 mb-4">
         Recommended Follow-up
       </h3>
 
       {items.length === 0 ? (
-        <p className="text-sm text-slate-400 dark:text-slate-500">
+        <p className="text-sm text-slate-400 ">
           No follow-up suggestions right now — nothing in your records points to one.
         </p>
       ) : (
@@ -568,15 +566,15 @@ function FollowUpCard({ followUps }) {
           {items.map(({ title, reason }) => (
             <div
               key={title}
-              className="group flex items-center gap-3 p-3 rounded-xl border border-slate-100 dark:border-slate-800 transition-all duration-200 hover:border-blue-200 dark:hover:border-blue-500/30 hover:bg-blue-50/40 dark:hover:bg-blue-500/10 hover:-translate-y-0.5"
+              className="group flex items-center gap-3 p-3 rounded-xl border border-slate-100 transition-all duration-200 hover:border-blue-200 hover:bg-blue-50/40 hover:-translate-y-0.5"
             >
-              <div className="w-9 h-9 rounded-lg bg-blue-50 dark:bg-blue-500/10 text-blue-500 dark:text-blue-400 flex items-center justify-center transition-transform duration-200 group-hover:scale-110 shrink-0">
+              <div className="w-9 h-9 rounded-lg bg-blue-50 text-blue-500 flex items-center justify-center transition-transform duration-200 group-hover:scale-110 shrink-0">
                 <Syringe size={16} />
               </div>
               <div>
-                <p className="text-sm font-medium text-slate-900 dark:text-slate-100">{title}</p>
+                <p className="text-sm font-medium text-slate-900 ">{title}</p>
                 {reason && (
-                  <p className="text-xs text-slate-400 dark:text-slate-500">{reason}</p>
+                  <p className="text-xs text-slate-400 ">{reason}</p>
                 )}
               </div>
             </div>
@@ -593,9 +591,9 @@ function PhysicianSummary({ items }) {
   if (!items || items.length === 0) return null;
 
   return (
-    <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm p-6 sm:p-8 mt-6 transition-shadow duration-300 hover:shadow-lg">
+    <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6 sm:p-8 mt-6 transition-shadow duration-300 hover:shadow-lg">
       <div>
-        <h2 className="text-2xl font-semibold text-slate-900 dark:text-slate-100 mb-6">
+        <h2 className="text-2xl font-semibold text-slate-900 mb-6">
           AI Physician's Summary
         </h2>
 
@@ -614,8 +612,8 @@ function SummaryItem({ dot, title, body }) {
     <div className="flex gap-3">
       <span className={`w-2 h-2 rounded-full mt-2 shrink-0 ${dot}`} />
       <div>
-        <p className="font-medium text-slate-900 dark:text-slate-100 mb-1">{title}</p>
-        <p className="text-sm text-slate-400 dark:text-slate-500 leading-relaxed">{body}</p>
+        <p className="font-medium text-slate-900 mb-1">{title}</p>
+        <p className="text-sm text-slate-400 leading-relaxed">{body}</p>
       </div>
     </div>
   );

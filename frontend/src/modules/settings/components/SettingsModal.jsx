@@ -2,6 +2,15 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../../../context/AuthContext';
 import { authService } from '../../../services/auth';
 import {
+  sanitizePhoneInput,
+  isValidIndianPhone,
+  isValidFullName,
+  isValidPastDate,
+  isValidRegistrationNumber,
+  isValidWordsField,
+  isValidFreeTextField,
+} from '../../../utils/formValidation';
+import {
   X,
   User,
   ShieldCheck,
@@ -88,10 +97,15 @@ export default function SettingsModal({ isOpen, onClose }) {
     setIsSaving(true);
     setMessage(null);
 
-    // Clean and validate phone number
-    const cleanedPhone = formData.phone ? formData.phone.replace(/[\s\-\+\(\)]/g, '') : '';
-    if (!/^\d{10,15}$/.test(cleanedPhone) || /^(\d)\1{9,}$/.test(cleanedPhone) || cleanedPhone === '1234567890') {
-      setMessage({ type: 'error', text: 'Please enter a valid mobile number (10–15 digits).' });
+    const cleanedPhone = sanitizePhoneInput(formData.phone);
+    if (!isValidIndianPhone(cleanedPhone)) {
+      setMessage({ type: 'error', text: 'Please enter a valid 10-digit mobile number.' });
+      setIsSaving(false);
+      return;
+    }
+
+    if (!isValidFullName(formData.name)) {
+      setMessage({ type: 'error', text: 'Please enter a valid full name using letters only.' });
       setIsSaving(false);
       return;
     }
@@ -103,6 +117,11 @@ export default function SettingsModal({ isOpen, onClose }) {
           type: 'error',
           text: 'All patient credentials (Full Name, Date of Birth, Gender, Blood Group, and Mobile Phone) are mandatory.',
         });
+        setIsSaving(false);
+        return;
+      }
+      if (!isValidPastDate(formData.dob)) {
+        setMessage({ type: 'error', text: 'Please enter a valid date of birth.' });
         setIsSaving(false);
         return;
       }
@@ -123,6 +142,36 @@ export default function SettingsModal({ isOpen, onClose }) {
           type: 'error',
           text: 'All doctor credentials (Full Name, Date of Birth, Registration Number, Medical Council, Degree, Specialization, Hospital Name, and Practice Address) are mandatory.',
         });
+        setIsSaving(false);
+        return;
+      }
+
+      if (!isValidPastDate(formData.dob, { minAge: 21, maxAge: 100 })) {
+        setMessage({ type: 'error', text: 'Please enter a valid date of birth (doctors must be at least 21 years old).' });
+        setIsSaving(false);
+        return;
+      }
+
+      if (!isValidRegistrationNumber(formData.regNumber)) {
+        setMessage({ type: 'error', text: 'Please enter a valid Medical Registration Number (must include at least one digit).' });
+        setIsSaving(false);
+        return;
+      }
+
+      if (!isValidWordsField(formData.degree) || !isValidWordsField(formData.specialization)) {
+        setMessage({ type: 'error', text: 'Please enter a valid Degree and Specialization (letters only).' });
+        setIsSaving(false);
+        return;
+      }
+
+      if (!isValidFreeTextField(formData.hospitalName, { minLength: 3, maxLength: 150 })) {
+        setMessage({ type: 'error', text: 'Please enter a valid Hospital or Clinic Name.' });
+        setIsSaving(false);
+        return;
+      }
+
+      if (!isValidFreeTextField(formData.address, { minLength: 8, maxLength: 300 })) {
+        setMessage({ type: 'error', text: 'Please enter a valid, complete practice address.' });
         setIsSaving(false);
         return;
       }
@@ -200,19 +249,19 @@ export default function SettingsModal({ isOpen, onClose }) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 dark:bg-slate-950/80 backdrop-blur-sm animate-in fade-in duration-200">
-      <div className="relative w-full max-w-3xl bg-white dark:bg-slate-900 rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden animate-in zoom-in-95 duration-200">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
+      <div className="relative w-full max-w-3xl bg-white rounded-3xl shadow-2xl border border-slate-200 overflow-hidden animate-in zoom-in-95 duration-200">
         {/* Modal Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-slate-50/50 ">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-blue-50 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400 flex items-center justify-center border border-blue-100 dark:border-blue-500/20">
+            <div className="w-10 h-10 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center border border-blue-100 ">
               <User size={20} />
             </div>
             <div>
-              <h3 className="text-lg font-extrabold text-slate-900 dark:text-slate-100 leading-tight">
+              <h3 className="text-lg font-extrabold text-slate-900 leading-tight">
                 Account Settings
               </h3>
-              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+              <p className="text-xs text-slate-500 mt-0.5">
                 Update your personal details and accreditation
               </p>
             </div>
@@ -221,7 +270,7 @@ export default function SettingsModal({ isOpen, onClose }) {
           <button
             type="button"
             onClick={onClose}
-            className="p-2 rounded-xl text-slate-400 dark:text-slate-500 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+            className="p-2 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"
           >
             <X size={20} />
           </button>
@@ -232,10 +281,10 @@ export default function SettingsModal({ isOpen, onClose }) {
           {message && (
             <div
               className={`p-3.5 rounded-xl flex items-center gap-2.5 text-xs font-semibold ${message.type === 'success'
-                  ? 'bg-emerald-50 dark:bg-emerald-500/10 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-500/20'
+                  ? 'bg-emerald-50 text-emerald-800 border border-emerald-200 '
                   : message.type === 'info'
-                    ? 'bg-blue-50 dark:bg-blue-500/10 text-blue-800 dark:text-blue-300 border border-blue-200 dark:border-blue-500/20'
-                    : 'bg-rose-50 dark:bg-rose-500/10 text-rose-800 dark:text-rose-300 border border-rose-200 dark:border-rose-500/20'
+                    ? 'bg-blue-50 text-blue-800 border border-blue-200 '
+                    : 'bg-rose-50 text-rose-800 border border-rose-200 '
                 }`}
             >
               {message.type === 'success' ? (
@@ -251,13 +300,13 @@ export default function SettingsModal({ isOpen, onClose }) {
 
           {/* 1. Account Type Indicator (read-only — role is fixed at registration) */}
           <div>
-            <label className="block text-[11px] font-extrabold uppercase tracking-wider text-slate-600 dark:text-slate-300 mb-2">
+            <label className="block text-[11px] font-extrabold uppercase tracking-wider text-slate-600 mb-2">
               Account Type
             </label>
             <div
               className={`flex items-center gap-3 p-4 rounded-2xl border ${formData.role === 'doctor'
-                  ? 'bg-indigo-50/80 dark:bg-indigo-500/10 border-indigo-500 dark:border-indigo-500/40 text-indigo-950 dark:text-indigo-300'
-                  : 'bg-emerald-50/80 dark:bg-emerald-500/10 border-emerald-500 dark:border-emerald-500/40 text-emerald-950 dark:text-emerald-300'
+                  ? 'bg-indigo-50/80 border-indigo-500 text-indigo-950 '
+                  : 'bg-emerald-50/80 border-emerald-500 text-emerald-950 '
                 }`}
             >
               <div
@@ -270,7 +319,7 @@ export default function SettingsModal({ isOpen, onClose }) {
                 <p className="text-xs font-extrabold uppercase tracking-wider">
                   {formData.role === 'doctor' ? 'Doctor Account' : 'Patient Account'}
                 </p>
-                <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                <p className="text-[11px] text-slate-500 mt-0.5">
                   {formData.role === 'doctor' ? 'Clinical dashboard & patient search' : 'Timeline, health vault & family records'}
                 </p>
               </div>
@@ -278,15 +327,15 @@ export default function SettingsModal({ isOpen, onClose }) {
           </div>
 
           {/* 2. Personal Information Section */}
-          <div className="pt-4 border-t border-slate-100 dark:border-slate-800 space-y-4">
-            <h4 className="text-xs font-extrabold uppercase tracking-wider text-slate-900 dark:text-slate-100 flex items-center gap-2">
-              <User size={16} className="text-blue-600 dark:text-blue-400" />
+          <div className="pt-4 border-t border-slate-100 space-y-4">
+            <h4 className="text-xs font-extrabold uppercase tracking-wider text-slate-900 flex items-center gap-2">
+              <User size={16} className="text-blue-600 " />
               Personal Credentials & Contact Details
             </h4>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label className="block text-[11px] font-extrabold uppercase tracking-wider text-slate-600 dark:text-slate-300 mb-1">
+                <label className="block text-[11px] font-extrabold uppercase tracking-wider text-slate-600 mb-1">
                   Full Name <span className="text-rose-500">*</span>
                 </label>
                 <input
@@ -294,75 +343,78 @@ export default function SettingsModal({ isOpen, onClose }) {
                   required
                   value={formData.name}
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs font-semibold text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-blue-600 focus:outline-none transition-all"
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 bg-white text-xs font-semibold text-slate-900 focus:ring-2 focus:ring-blue-600 focus:outline-none transition-all"
                   placeholder="e.g. Dr. Jane Doe"
                 />
               </div>
 
               <div>
-                <label className="block text-[11px] font-extrabold uppercase tracking-wider text-slate-600 dark:text-slate-300 mb-1">
+                <label className="block text-[11px] font-extrabold uppercase tracking-wider text-slate-600 mb-1">
                   Email Address
                 </label>
                 <input
                   type="email"
                   disabled
                   value={formData.email}
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/60 text-slate-400 dark:text-slate-500 text-xs font-semibold cursor-not-allowed"
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 bg-slate-50 text-slate-400 text-xs font-semibold cursor-not-allowed"
                 />
               </div>
 
               {formData.role === 'patient' && (
                 <div>
-                  <label className="block text-[11px] font-extrabold uppercase tracking-wider text-slate-600 dark:text-slate-300 mb-1">
+                  <label className="block text-[11px] font-extrabold uppercase tracking-wider text-slate-600 mb-1">
                     Patient ID / User ID
                   </label>
                   <input
                     type="text"
                     disabled
                     value={patientReferenceId}
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/60 text-slate-600 dark:text-slate-300 text-xs font-semibold cursor-not-allowed"
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 bg-slate-50 text-slate-600 text-xs font-semibold cursor-not-allowed"
                   />
                 </div>
               )}
 
               <div>
-                <label className="block text-[11px] font-extrabold uppercase tracking-wider text-slate-600 dark:text-slate-300 mb-1">
+                <label className="block text-[11px] font-extrabold uppercase tracking-wider text-slate-600 mb-1">
                   Mobile Number <span className="text-rose-500">*</span>
                 </label>
                 <input
                   type="tel"
                   required
+                  inputMode="numeric"
+                  maxLength={10}
                   value={formData.phone}
-                  onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs font-semibold text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-blue-600 focus:outline-none transition-all"
-                  placeholder="+91 98765 43210"
+                  onChange={(e) => setFormData({ ...formData, phone: sanitizePhoneInput(e.target.value) })}
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 bg-white text-xs font-semibold text-slate-900 focus:ring-2 focus:ring-blue-600 focus:outline-none transition-all"
+                  placeholder="98765 43210"
                 />
               </div>
 
               <div>
-                <label className="block text-[11px] font-extrabold uppercase tracking-wider text-slate-600 dark:text-slate-300 mb-1">
+                <label className="block text-[11px] font-extrabold uppercase tracking-wider text-slate-600 mb-1">
                   Date of Birth <span className="text-rose-500">*</span>
                 </label>
                 <input
                   type="date"
                   required
+                  max={new Date().toISOString().split('T')[0]}
                   value={formData.dob}
                   onChange={(e) => setFormData({ ...formData, dob: e.target.value })}
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs font-semibold text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-blue-600 focus:outline-none transition-all"
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 bg-white text-xs font-semibold text-slate-900 focus:ring-2 focus:ring-blue-600 focus:outline-none transition-all"
                 />
               </div>
 
               {formData.role === 'patient' && (
                 <>
                   <div>
-                    <label className="block text-[11px] font-extrabold uppercase tracking-wider text-slate-600 dark:text-slate-300 mb-1">
+                    <label className="block text-[11px] font-extrabold uppercase tracking-wider text-slate-600 mb-1">
                       Blood Group <span className="text-rose-500">*</span>
                     </label>
                     <select
                       required
                       value={formData.bloodGroup}
                       onChange={(e) => setFormData({ ...formData, bloodGroup: e.target.value })}
-                      className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-semibold text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-blue-600 focus:outline-none transition-all bg-white dark:bg-slate-800"
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs font-semibold text-slate-900 focus:ring-2 focus:ring-blue-600 focus:outline-none transition-all bg-white "
                     >
                       <option value="" disabled>Select Blood Group</option>
                       <option value="A+">A+</option>
@@ -377,13 +429,13 @@ export default function SettingsModal({ isOpen, onClose }) {
                   </div>
 
                   <div>
-                    <label className="block text-[11px] font-extrabold uppercase tracking-wider text-slate-600 dark:text-slate-300 mb-1">
+                    <label className="block text-[11px] font-extrabold uppercase tracking-wider text-slate-600 mb-1">
                       Gender
                     </label>
                     <select
                       value={formData.gender}
                       onChange={(e) => setFormData({ ...formData, gender: e.target.value })}
-                      className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-semibold text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-blue-600 focus:outline-none transition-all bg-white dark:bg-slate-800"
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs font-semibold text-slate-900 focus:ring-2 focus:ring-blue-600 focus:outline-none transition-all bg-white "
                     >
                       <option value="Male">Male</option>
                       <option value="Female">Female</option>
@@ -398,36 +450,37 @@ export default function SettingsModal({ isOpen, onClose }) {
 
           {/* 3. Doctor Mandatory Registration Credentials */}
           {formData.role === 'doctor' && (
-            <div className="pt-4 border-t border-slate-100 dark:border-slate-800 space-y-4 animate-in fade-in duration-200">
-              <h4 className="text-xs font-extrabold uppercase tracking-wider text-slate-900 dark:text-slate-100 flex items-center gap-2">
-                <Stethoscope size={16} className="text-indigo-600 dark:text-indigo-400" />
+            <div className="pt-4 border-t border-slate-100 space-y-4 animate-in fade-in duration-200">
+              <h4 className="text-xs font-extrabold uppercase tracking-wider text-slate-900 flex items-center gap-2">
+                <Stethoscope size={16} className="text-indigo-600 " />
                 Medical Accreditation & License Credentials
               </h4>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-[11px] font-extrabold uppercase tracking-wider text-slate-600 dark:text-slate-300 mb-1">
+                  <label className="block text-[11px] font-extrabold uppercase tracking-wider text-slate-600 mb-1">
                     Medical Registration Number <span className="text-rose-500">*</span>
                   </label>
                   <input
                     type="text"
                     required
+                    maxLength={30}
                     value={formData.regNumber}
                     onChange={(e) => setFormData({ ...formData, regNumber: e.target.value })}
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs font-semibold text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-indigo-600 focus:outline-none"
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 bg-white text-xs font-semibold text-slate-900 focus:ring-2 focus:ring-indigo-600 focus:outline-none"
                     placeholder="e.g. MCI-12345"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-[11px] font-extrabold uppercase tracking-wider text-slate-600 dark:text-slate-300 mb-1">
+                  <label className="block text-[11px] font-extrabold uppercase tracking-wider text-slate-600 mb-1">
                     Medical Council <span className="text-rose-500">*</span>
                   </label>
                   <select
                     required
                     value={formData.council}
                     onChange={(e) => setFormData({ ...formData, council: e.target.value })}
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-semibold text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-indigo-600 focus:outline-none bg-white dark:bg-slate-800"
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs font-semibold text-slate-900 focus:ring-2 focus:ring-indigo-600 focus:outline-none bg-white "
                   >
                     <option value="National Medical Commission (NMC)">National Medical Commission (NMC)</option>
                     <option value="State Medical Council">State Medical Council</option>
@@ -436,7 +489,7 @@ export default function SettingsModal({ isOpen, onClose }) {
                 </div>
 
                 <div>
-                  <label className="block text-[11px] font-extrabold uppercase tracking-wider text-slate-600 dark:text-slate-300 mb-1">
+                  <label className="block text-[11px] font-extrabold uppercase tracking-wider text-slate-600 mb-1">
                     Primary Degree <span className="text-rose-500">*</span>
                   </label>
                   <input
@@ -444,13 +497,13 @@ export default function SettingsModal({ isOpen, onClose }) {
                     required
                     value={formData.degree}
                     onChange={(e) => setFormData({ ...formData, degree: e.target.value })}
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs font-semibold text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-indigo-600 focus:outline-none"
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 bg-white text-xs font-semibold text-slate-900 focus:ring-2 focus:ring-indigo-600 focus:outline-none"
                     placeholder="e.g. MBBS, MD, MS"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-[11px] font-extrabold uppercase tracking-wider text-slate-600 dark:text-slate-300 mb-1">
+                  <label className="block text-[11px] font-extrabold uppercase tracking-wider text-slate-600 mb-1">
                     Specialization <span className="text-rose-500">*</span>
                   </label>
                   <input
@@ -458,14 +511,14 @@ export default function SettingsModal({ isOpen, onClose }) {
                     required
                     value={formData.specialization}
                     onChange={(e) => setFormData({ ...formData, specialization: e.target.value })}
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs font-semibold text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-indigo-600 focus:outline-none"
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 bg-white text-xs font-semibold text-slate-900 focus:ring-2 focus:ring-indigo-600 focus:outline-none"
                     placeholder="e.g. Cardiology, Neurology"
                   />
                 </div>
 
                 <div className="sm:col-span-2">
-                  <label className="block text-[11px] font-extrabold uppercase tracking-wider text-slate-600 dark:text-slate-300 mb-1">
-                    Years of Clinical Experience: <span className="text-indigo-600 dark:text-indigo-400 font-bold">{formData.experience} yrs</span>
+                  <label className="block text-[11px] font-extrabold uppercase tracking-wider text-slate-600 mb-1">
+                    Years of Clinical Experience: <span className="text-indigo-600 font-bold">{formData.experience} yrs</span>
                   </label>
                   <input
                     type="range"
@@ -474,12 +527,12 @@ export default function SettingsModal({ isOpen, onClose }) {
                     step="1"
                     value={formData.experience}
                     onChange={(e) => setFormData({ ...formData, experience: e.target.value })}
-                    className="w-full h-2 bg-slate-200 dark:bg-slate-700 rounded-lg appearance-none cursor-pointer accent-indigo-600"
+                    className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-indigo-600"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-[11px] font-extrabold uppercase tracking-wider text-slate-600 dark:text-slate-300 mb-1">
+                  <label className="block text-[11px] font-extrabold uppercase tracking-wider text-slate-600 mb-1">
                     Hospital or Primary Clinic Name <span className="text-rose-500">*</span>
                   </label>
                   <input
@@ -487,13 +540,13 @@ export default function SettingsModal({ isOpen, onClose }) {
                     required
                     value={formData.hospitalName}
                     onChange={(e) => setFormData({ ...formData, hospitalName: e.target.value })}
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs font-semibold text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-indigo-600 focus:outline-none"
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 bg-white text-xs font-semibold text-slate-900 focus:ring-2 focus:ring-indigo-600 focus:outline-none"
                     placeholder="Name of primary practice"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-[11px] font-extrabold uppercase tracking-wider text-slate-600 dark:text-slate-300 mb-1">
+                  <label className="block text-[11px] font-extrabold uppercase tracking-wider text-slate-600 mb-1">
                     Full Practice Address <span className="text-rose-500">*</span>
                   </label>
                   <input
@@ -501,7 +554,7 @@ export default function SettingsModal({ isOpen, onClose }) {
                     required
                     value={formData.address}
                     onChange={(e) => setFormData({ ...formData, address: e.target.value })}
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs font-semibold text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-indigo-600 focus:outline-none"
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 bg-white text-xs font-semibold text-slate-900 focus:ring-2 focus:ring-indigo-600 focus:outline-none"
                     placeholder="Enter practice address"
                   />
                 </div>
@@ -509,13 +562,13 @@ export default function SettingsModal({ isOpen, onClose }) {
 
               {/* Doctor Medical Certificate Upload */}
               <div className="pt-2">
-                <label className="block text-[11px] font-extrabold uppercase tracking-wider text-slate-600 dark:text-slate-300 mb-1.5">
+                <label className="block text-[11px] font-extrabold uppercase tracking-wider text-slate-600 mb-1.5">
                   Official Medical Registration Certificate Document <span className="text-rose-500">*</span>
                 </label>
 
                 <div
                   onClick={() => fileInputRef.current?.click()}
-                  className="border-2 border-dashed border-indigo-200 dark:border-indigo-500/30 hover:border-indigo-500 dark:hover:border-indigo-400 bg-indigo-50/40 dark:bg-indigo-500/10 hover:bg-indigo-50/80 dark:hover:bg-indigo-500/20 rounded-2xl p-4 text-center cursor-pointer transition-all flex flex-col items-center justify-center gap-2"
+                  className="border-2 border-dashed border-indigo-200 hover:border-indigo-500 bg-indigo-50/40 hover:bg-indigo-50/80 rounded-2xl p-4 text-center cursor-pointer transition-all flex flex-col items-center justify-center gap-2"
                 >
                   <input
                     type="file"
@@ -524,26 +577,26 @@ export default function SettingsModal({ isOpen, onClose }) {
                     onChange={handleFileSelect}
                     className="hidden"
                   />
-                  <div className="w-10 h-10 rounded-xl bg-indigo-600/10 dark:bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 flex items-center justify-center">
+                  <div className="w-10 h-10 rounded-xl bg-indigo-600/10 text-indigo-600 flex items-center justify-center">
                     <Upload size={20} />
                   </div>
                   <div>
                     {regCertificateFile ? (
-                      <p className="text-xs font-extrabold text-indigo-700 dark:text-indigo-400 flex items-center justify-center gap-1.5">
+                      <p className="text-xs font-extrabold text-indigo-700 flex items-center justify-center gap-1.5">
                         <FileCheck size={16} />
                         {regCertificateFile.name} (Ready to upload)
                       </p>
                     ) : formData.regCertificateUrl ? (
-                      <p className="text-xs font-extrabold text-emerald-700 dark:text-emerald-400 flex items-center justify-center gap-1.5">
+                      <p className="text-xs font-extrabold text-emerald-700 flex items-center justify-center gap-1.5">
                         <CheckCircle2 size={16} />
                         Certificate On File (Click to replace document)
                       </p>
                     ) : (
                       <>
-                        <p className="text-xs font-extrabold text-slate-800 dark:text-slate-100">
+                        <p className="text-xs font-extrabold text-slate-800 ">
                           Click to upload your Medical Registration Certificate
                         </p>
-                        <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-0.5">
+                        <p className="text-[10px] text-slate-400 mt-0.5">
                           Supports PDF, PNG, JPG (Scanned via Gemini Vision AI)
                         </p>
                       </>
@@ -555,11 +608,11 @@ export default function SettingsModal({ isOpen, onClose }) {
           )}
 
           {/* Modal Footer */}
-          <div className="pt-4 border-t border-slate-100 dark:border-slate-800 flex items-center justify-end gap-3">
+          <div className="pt-4 border-t border-slate-100 flex items-center justify-end gap-3">
             <button
               type="button"
               onClick={onClose}
-              className="px-5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
+              className="px-5 py-2.5 rounded-xl border border-slate-200 text-xs font-bold text-slate-600 hover:bg-slate-50 transition-colors"
             >
               Cancel
             </button>

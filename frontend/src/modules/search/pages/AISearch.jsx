@@ -3,7 +3,6 @@ import { useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "../../../context/AuthContext";
 import { searchReports } from "../../../api/search";
 import Logo from "../../../components/Common/Logo";
-import ThemeToggle from "../../../components/Common/ThemeToggle";
 import ProfileDropdown from "../../settings/components/ProfileDropdown";
 import SettingsModal from "../../settings/components/SettingsModal";
 import {
@@ -45,7 +44,7 @@ function Sidebar({ onOpenSettings }) {
   const pathname = location.pathname;
 
   return (
-    <aside className="hidden lg:flex lg:flex-col w-64 shrink-0 bg-slate-50 dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 h-screen overflow-y-auto px-4 py-6">
+    <aside className="hidden lg:flex lg:flex-col w-64 shrink-0 bg-slate-50 border-r border-slate-200 h-screen overflow-y-auto px-4 py-6">
       <div className="px-2 mb-8">
         <Logo />
       </div>
@@ -60,8 +59,8 @@ function Sidebar({ onOpenSettings }) {
               onClick={() => route && navigate(route)}
               className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
                 isActive
-                  ? "bg-blue-100 dark:bg-blue-500/15 text-blue-700 dark:text-blue-400"
-                  : "text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800"
+                  ? "bg-blue-100 text-blue-700 "
+                  : "text-slate-600 hover:bg-slate-100 "
               }`}
             >
               <Icon size={18} />
@@ -84,12 +83,12 @@ function Sidebar({ onOpenSettings }) {
         <div className="space-y-1 pt-2">
           <button
             onClick={onOpenSettings}
-            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800"
+            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-100 "
           >
             <Settings size={18} />
             Settings
           </button>
-          <button className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800">
+          <button className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-100 ">
             <HelpCircle size={18} />
             Support
           </button>
@@ -167,63 +166,62 @@ export default function AISearch() {
   }, [isAuthenticated, location.search]);
 
   return (
-    <div className="flex h-screen overflow-hidden bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100">
+    <div className="flex h-screen overflow-hidden bg-slate-50 text-slate-900 ">
       <Sidebar onOpenSettings={() => setIsSettingsOpen(true)} />
 
       <div className="flex-1 flex flex-col min-w-0 h-screen overflow-hidden">
-        <header className="shrink-0 flex items-center gap-4 px-6 lg:px-8 py-5 border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
+        <header className="shrink-0 flex items-center gap-4 px-6 lg:px-8 py-5 border-b border-slate-200 bg-white ">
           <button
             type="button"
             onClick={() => navigate('/search')}
-            className="flex-1 flex items-center gap-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-4 py-2.5 text-sm text-slate-400 dark:text-slate-500 transition-colors hover:border-blue-300 dark:hover:border-blue-500/50 hover:text-blue-600 dark:hover:text-blue-400"
+            className="flex-1 flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-lg px-4 py-2.5 text-sm text-slate-400 transition-colors hover:border-blue-300 hover:text-blue-600 "
           >
             <Sparkles size={16} />
             Ask Swastha about your health records...
           </button>
 
-          <button className="relative p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 shrink-0">
-            <Bell size={20} className="text-slate-600 dark:text-slate-300" />
+          <button className="relative p-2 rounded-lg hover:bg-slate-100 shrink-0">
+            <Bell size={20} className="text-slate-600 " />
             <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full" />
           </button>
 
-          <ThemeToggle />
 
           <ProfileDropdown />
         </header>
 
       <main className="flex-1 overflow-y-auto px-10 py-8 flex flex-col max-w-4xl mx-auto w-full">
         <div className="mb-6">
-          <h1 className="text-2xl font-semibold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+          <h1 className="text-2xl font-semibold text-slate-900 flex items-center gap-2">
             <Sparkles className="text-blue-600" size={24} />
             Ask Swastha
           </h1>
-          <p className="text-slate-500 dark:text-slate-400 mt-1">
+          <p className="text-slate-500 mt-1">
             Ask a question about your health records in plain language — answers are grounded
             only in your saved reports.
           </p>
         </div>
 
         {!isAuthenticated ? (
-          <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm p-6 text-slate-500 dark:text-slate-400">
+          <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6 text-slate-500 ">
             Please log in to search your health records.
           </div>
         ) : (
           <>
-            <div className="flex-1 bg-white dark:bg-slate-900 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm p-6 mb-4 overflow-y-auto min-h-[320px] max-h-[60vh]">
+            <div className="flex-1 bg-white rounded-2xl border border-slate-100 shadow-sm p-6 mb-4 overflow-y-auto min-h-[320px] max-h-[60vh]">
               {messages.length === 0 ? (
                 <div className="h-full flex flex-col items-center justify-center text-center py-12">
-                  <div className="w-12 h-12 rounded-full bg-blue-50 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400 flex items-center justify-center mb-4">
+                  <div className="w-12 h-12 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center mb-4">
                     <Sparkles size={22} />
                   </div>
-                  <p className="text-slate-600 dark:text-slate-300 font-medium mb-1">Ask anything about your records</p>
-                  <p className="text-slate-400 dark:text-slate-500 text-sm mb-5">Try one of these:</p>
+                  <p className="text-slate-600 font-medium mb-1">Ask anything about your records</p>
+                  <p className="text-slate-400 text-sm mb-5">Try one of these:</p>
                   <div className="flex flex-col gap-2 w-full max-w-md">
                     {EXAMPLE_QUESTIONS.map((q) => (
                       <button
                         key={q}
                         type="button"
                         onClick={() => setQuery(q)}
-                        className="text-left text-sm px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 hover:border-blue-300 dark:hover:border-blue-500/30 hover:bg-blue-50 dark:hover:bg-blue-500/10 hover:text-blue-700 dark:hover:text-blue-400 transition-colors"
+                        className="text-left text-sm px-4 py-2.5 rounded-xl border border-slate-200 text-slate-600 hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700 transition-colors"
                       >
                         {q}
                       </button>
@@ -236,7 +234,7 @@ export default function AISearch() {
                     <ChatBubble key={i} message={m} />
                   ))}
                   {loading && (
-                    <div className="flex items-center gap-2 text-slate-400 dark:text-slate-500 text-sm">
+                    <div className="flex items-center gap-2 text-slate-400 text-sm">
                       <Loader2 size={16} className="animate-spin" />
                       Searching your records...
                     </div>
@@ -246,7 +244,7 @@ export default function AISearch() {
             </div>
 
             {error && (
-              <div className="text-sm text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-500/10 border border-red-100 dark:border-red-500/20 rounded-lg px-3 py-2 mb-3">
+              <div className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2 mb-3">
                 {error}
               </div>
             )}
@@ -257,7 +255,7 @@ export default function AISearch() {
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 placeholder="e.g. What was my blood sugar level in my last report?"
-                className="flex-1 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-4 py-3 text-sm text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-200 dark:focus:ring-blue-500/30 focus:border-blue-400 dark:focus:border-blue-500"
+                className="flex-1 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-200 focus:border-blue-400 "
                 disabled={loading}
               />
               <button
@@ -303,12 +301,12 @@ function ChatBubble({ message }) {
       <div
         className={`text-sm rounded-2xl rounded-bl-sm px-4 py-3 max-w-[85%] ${
           message.isError
-            ? "bg-red-50 dark:bg-red-500/10 text-red-700 dark:text-red-400 border border-red-100 dark:border-red-500/20"
-            : "bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-100 dark:border-slate-700"
+            ? "bg-red-50 text-red-700 border border-red-100 "
+            : "bg-slate-50 text-slate-700 border border-slate-100 "
         }`}
       >
         {/* Headline — the direct one-line answer */}
-        <p className="whitespace-pre-wrap font-medium text-slate-800 dark:text-slate-100">
+        <p className="whitespace-pre-wrap font-medium text-slate-800 ">
           {structured?.headline || message.text}
         </p>
 
@@ -320,9 +318,9 @@ function ChatBubble({ message }) {
                 <span className="mt-1.5 w-1.5 h-1.5 rounded-full bg-blue-400 shrink-0" />
                 <span>
                   {fact.label && (
-                    <span className="font-semibold text-slate-800 dark:text-slate-100">{fact.label}: </span>
+                    <span className="font-semibold text-slate-800 ">{fact.label}: </span>
                   )}
-                  <span className="text-slate-600 dark:text-slate-300">{fact.detail}</span>
+                  <span className="text-slate-600 ">{fact.detail}</span>
                 </span>
               </li>
             ))}
@@ -330,12 +328,12 @@ function ChatBubble({ message }) {
         )}
 
         {structured?.caveat && (
-          <p className="mt-3 text-xs text-slate-400 dark:text-slate-500 italic">{structured.caveat}</p>
+          <p className="mt-3 text-xs text-slate-400 italic">{structured.caveat}</p>
         )}
 
         {message.sources && message.sources.length > 0 && (
-          <div className="mt-3 pt-3 border-t border-slate-200 dark:border-slate-700 space-y-1.5">
-            <p className="text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wide">Sources</p>
+          <div className="mt-3 pt-3 border-t border-slate-200 space-y-1.5">
+            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide">Sources</p>
             {message.sources.map((s) => (
               <SourceRow key={s.report_id} source={s} />
             ))}
@@ -349,18 +347,18 @@ function ChatBubble({ message }) {
 function SourceRow({ source }) {
   const content = (
     <>
-      <FileText size={13} className="shrink-0 text-slate-400 dark:text-slate-500" />
-      <span className="font-medium text-slate-600 dark:text-slate-300 truncate">{source.title || "Untitled report"}</span>
-      {source.category && <span className="text-slate-400 dark:text-slate-500 shrink-0">· {source.category}</span>}
+      <FileText size={13} className="shrink-0 text-slate-400 " />
+      <span className="font-medium text-slate-600 truncate">{source.title || "Untitled report"}</span>
+      {source.category && <span className="text-slate-400 shrink-0">· {source.category}</span>}
       {formatDate(source.report_date) && (
-        <span className="text-slate-400 dark:text-slate-500 shrink-0">· {formatDate(source.report_date)}</span>
+        <span className="text-slate-400 shrink-0">· {formatDate(source.report_date)}</span>
       )}
     </>
   );
 
   if (!source.file_url) {
     return (
-      <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400 px-2 py-1.5">
+      <div className="flex items-center gap-2 text-xs text-slate-500 px-2 py-1.5">
         {content}
       </div>
     );
@@ -371,10 +369,10 @@ function SourceRow({ source }) {
       href={source.file_url}
       target="_blank"
       rel="noopener noreferrer"
-      className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400 px-2 py-1.5 rounded-lg border border-transparent hover:border-blue-200 dark:hover:border-blue-500/30 hover:bg-blue-50 dark:hover:bg-blue-500/10 hover:text-blue-700 dark:hover:text-blue-400 transition-colors"
+      className="flex items-center gap-2 text-xs text-slate-500 px-2 py-1.5 rounded-lg border border-transparent hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700 transition-colors"
     >
       {content}
-      <span className="ml-auto flex items-center gap-1 text-blue-600 dark:text-blue-400 font-medium shrink-0">
+      <span className="ml-auto flex items-center gap-1 text-blue-600 font-medium shrink-0">
         View
         <ExternalLink size={12} />
       </span>

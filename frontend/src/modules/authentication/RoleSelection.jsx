@@ -36,19 +36,19 @@ export default function RoleSelection({ onSelectRole }) {
   };
 
   return (
-    <div className="bg-background dark:bg-slate-950 text-on-surface dark:text-slate-100 min-h-screen flex flex-col relative overflow-x-hidden">
+    <div className="bg-background text-on-surface min-h-screen flex flex-col relative overflow-x-hidden">
       {/* Atmospheric Background Shader */}
       <div className="fixed inset-0 z-0 opacity-40 pointer-events-none" />
 
       {/* Navigation (TopAppBar) */}
-      <header className="fixed top-0 left-0 right-0 z-50 bg-surface/80 dark:bg-slate-900 backdrop-blur-lg border-b border-outline-variant/30 dark:border-slate-700">
+      <header className="fixed top-0 left-0 right-0 z-50 bg-surface/80 backdrop-blur-lg border-b border-outline-variant/30 ">
         <div className="max-w-screen-2xl mx-auto px-6 py-4 flex justify-between items-center">
           <div className="flex items-center gap-3">
             <span className="font-headline-md text-headline-md font-extrabold text-primary tracking-tight">
               Swastha
             </span>
             <div className="h-4 w-[1px] bg-outline-variant/50 mx-1" />
-            <span className="font-label-md text-label-md text-on-surface-variant dark:text-slate-400 font-medium">
+            <span className="font-label-md text-label-md text-on-surface-variant font-medium">
               Select Experience
             </span>
           </div>
@@ -74,10 +74,10 @@ export default function RoleSelection({ onSelectRole }) {
             <span className="inline-flex items-center px-4 py-1 rounded-full bg-primary-fixed text-on-primary-fixed-variant font-label-sm text-label-sm mb-2">
               Healthcare SaaS Platform
             </span>
-            <h1 className="font-display text-display text-on-surface dark:text-slate-100 tracking-tight">
+            <h1 className="font-display text-display text-on-surface tracking-tight">
               How will you use Swastha?
             </h1>
-            <p className="font-body-lg text-body-lg text-on-surface-variant dark:text-slate-400 max-w-2xl mx-auto">
+            <p className="font-body-lg text-body-lg text-on-surface-variant max-w-2xl mx-auto">
               Personalized intelligence for patients and clinical tools for
               practitioners. Choose your workspace to begin.
             </p>
@@ -97,10 +97,10 @@ export default function RoleSelection({ onSelectRole }) {
                   person
                 </span>
               </div>
-              <h2 className="font-headline-md text-headline-md text-on-surface dark:text-slate-100 mb-3">
+              <h2 className="font-headline-md text-headline-md text-on-surface mb-3">
                 Patient
               </h2>
-              <p className="font-body-md text-body-md text-on-surface-variant dark:text-slate-400 mb-8 flex-grow">
+              <p className="font-body-md text-body-md text-on-surface-variant mb-8 flex-grow">
                 Access your health records, sync ABHA records, and receive
                 AI-driven insights to manage your personal health journey
                 with clinical precision.
@@ -122,7 +122,7 @@ export default function RoleSelection({ onSelectRole }) {
 
             {/* Card 2: Doctor */}
             <div
-              className="role-card-transition bg-surface-container-lowest/95 dark:bg-slate-900 border border-outline-variant/30 dark:border-slate-700 p-8 rounded-2xl flex flex-col items-center text-center cursor-pointer group hover:border-primary/50"
+              className="role-card-transition bg-surface-container-lowest/95 border border-outline-variant/30 p-8 rounded-2xl flex flex-col items-center text-center cursor-pointer group hover:border-primary/50"
               onClick={() => handleSelect("doctor")}
             >
               <div className="w-20 h-20 rounded-2xl bg-secondary-container/10 flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
@@ -132,10 +132,10 @@ export default function RoleSelection({ onSelectRole }) {
                   stethoscope
                 </span>
               </div>
-              <h2 className="font-headline-md text-headline-md text-on-surface dark:text-slate-100 mb-3">
+              <h2 className="font-headline-md text-headline-md text-on-surface mb-3">
                 Doctor
               </h2>
-              <p className="font-body-md text-body-md text-on-surface-variant dark:text-slate-400 mb-8 flex-grow">
+              <p className="font-body-md text-body-md text-on-surface-variant mb-8 flex-grow">
                 Streamline patient consultations with intelligent summaries,
                 longitudinal data analysis, and advanced medical vault
                 management tools.
@@ -203,65 +203,65 @@ export default function RoleSelection({ onSelectRole }) {
       <div className="absolute -top-24 -right-24 w-[600px] h-[600px] bg-secondary/5 rounded-full blur-[120px] pointer-events-none" />
 
       {/* Footer */}
-      <footer className="bg-surface-container-low dark:bg-slate-800 border-t border-outline-variant/50 dark:border-slate-700 p-12 mt-auto">
+      <footer className="bg-surface-container-low border-t border-outline-variant/50 p-12 mt-auto">
         <div className="grid grid-cols-1 md:grid-cols-4 gap-8 max-w-7xl mx-auto">
           <div className="col-span-1 md:col-span-2">
             <span className="font-headline-md text-headline-md font-bold text-primary tracking-tight">
               Swastha
             </span>
-            <p className="font-body-sm text-body-sm text-on-surface-variant dark:text-slate-400 mt-4 max-w-sm">
+            <p className="font-body-sm text-body-sm text-on-surface-variant mt-4 max-w-sm">
               Empowering the future of digital health through Clinical
               Intelligence and modern UI precision. Designed for the global
               healthcare ecosystem.
             </p>
           </div>
           <div className="flex flex-col gap-3">
-            <h4 className="font-label-md text-label-md text-on-surface dark:text-slate-100 font-bold uppercase tracking-wider">
+            <h4 className="font-label-md text-label-md text-on-surface font-bold uppercase tracking-wider">
               Legal
             </h4>
             <a
-              className="font-label-sm text-label-sm text-on-surface-variant dark:text-slate-400 hover:text-primary transition-opacity"
+              className="font-label-sm text-label-sm text-on-surface-variant hover:text-primary transition-opacity"
               href="#"
             >
               Privacy Policy
             </a>
             <a
-              className="font-label-sm text-label-sm text-on-surface-variant dark:text-slate-400 hover:text-primary transition-opacity"
+              className="font-label-sm text-label-sm text-on-surface-variant hover:text-primary transition-opacity"
               href="#"
             >
               Terms of Service
             </a>
             <a
-              className="font-label-sm text-label-sm text-on-surface-variant dark:text-slate-400 hover:text-primary transition-opacity"
+              className="font-label-sm text-label-sm text-on-surface-variant hover:text-primary transition-opacity"
               href="#"
             >
               Security Architecture
             </a>
           </div>
           <div className="flex flex-col gap-3">
-            <h4 className="font-label-md text-label-md text-on-surface dark:text-slate-100 font-bold uppercase tracking-wider">
+            <h4 className="font-label-md text-label-md text-on-surface font-bold uppercase tracking-wider">
               Connect
             </h4>
             <a
-              className="font-label-sm text-label-sm text-on-surface-variant dark:text-slate-400 hover:text-primary transition-opacity"
+              className="font-label-sm text-label-sm text-on-surface-variant hover:text-primary transition-opacity"
               href="#"
             >
               Contact Support
             </a>
             <a
-              className="font-label-sm text-label-sm text-on-surface-variant dark:text-slate-400 hover:text-primary transition-opacity"
+              className="font-label-sm text-label-sm text-on-surface-variant hover:text-primary transition-opacity"
               href="#"
             >
               Documentation
             </a>
           </div>
         </div>
-        <div className="max-w-7xl mx-auto mt-12 pt-8 border-t border-outline-variant/30 dark:border-slate-700 flex justify-between items-center">
-          <span className="font-label-sm text-label-sm text-on-surface-variant dark:text-slate-400">
+        <div className="max-w-7xl mx-auto mt-12 pt-8 border-t border-outline-variant/30 flex justify-between items-center">
+          <span className="font-label-sm text-label-sm text-on-surface-variant ">
             © 2026 Swastha Healthcare SaaS. HIPAA &amp; ABHA Compliant.
           </span>
           <div className="flex gap-4">
-            <div className="w-8 h-8 rounded-full bg-surface-container dark:bg-slate-800 flex items-center justify-center hover:bg-surface-container-high dark:hover:bg-slate-700 transition-colors">
+            <div className="w-8 h-8 rounded-full bg-surface-container flex items-center justify-center hover:bg-surface-container-high transition-colors">
               <span className="material-symbols-outlined text-[18px]">
                 share
               </span>
