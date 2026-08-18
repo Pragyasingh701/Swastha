@@ -41,7 +41,7 @@ export default function Login() {
       setIsSuccess(true);
       setTimeout(() => {
         if (result?.user?.hasSelectedRole || (result?.user?.role && result?.user?.role !== 'none')) {
-          navigate("/dashboard", { replace: true });
+          navigate(result?.user?.role === "doctor" ? "/doctor-dashboard" : "/dashboard", { replace: true });
         } else {
           navigate("/role-selection", { replace: true });
         }
@@ -95,7 +95,7 @@ export default function Login() {
 
         setTimeout(() => {
           if (result?.user?.hasSelectedRole || (result?.user?.role && result?.user?.role !== 'none')) {
-            navigate("/dashboard", { replace: true });
+            navigate(result?.user?.role === "doctor" ? "/doctor-dashboard" : "/dashboard", { replace: true });
           } else {
             navigate("/role-selection", { replace: true });
           }

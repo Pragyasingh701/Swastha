@@ -14,7 +14,7 @@ export default function RoleSelection({ onSelectRole }) {
 
     // Only redirect to dashboard if user has completely finished role-specific registration
     if (user?.hasSelectedRole) {
-      navigate('/dashboard', { replace: true });
+      navigate(user?.role === 'doctor' ? '/doctor-dashboard' : '/dashboard', { replace: true });
     }
   }, [user, isAuthenticated, navigate]);
 

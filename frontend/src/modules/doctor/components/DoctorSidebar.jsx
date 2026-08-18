@@ -5,10 +5,8 @@ import Logo from "../../../components/Common/Logo";
 
 const navItems = [
   { label: "Dashboard", icon: "dashboard", route: "/doctor-dashboard" },
-  { label: "Modern Overview", icon: "dashboard_customize", route: "/doctor/modern-dashboard" },
   { label: "Patients", icon: "groups", route: "/doctor/patients" },
   { label: "AI Insights", icon: "smart_toy", route: "/doctor/clinical-intelligence" },
-  { label: "Analytics", icon: "monitoring", route: "/doctor/clinical-analytics" },
 ];
 
 export default function DoctorSidebar() {
