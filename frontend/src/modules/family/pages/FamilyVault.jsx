@@ -19,7 +19,6 @@ import {
 import { useAuth } from '../../../context/AuthContext';
 import ProfileDropdown from '../../settings/components/ProfileDropdown';
 import SettingsModal from '../../settings/components/SettingsModal';
-import ThemeToggle from '../../../components/Common/ThemeToggle';
 import Logo from '../../../components/Common/Logo';
 import {
   createFamilyMember,
@@ -39,6 +38,7 @@ const emptyForm = {
   relationshipTag: '',
   healthOverview: '',
   notes: '',
+  conditions: [],
   lastVisitDate: '',
   nextCheckupDate: '',
   email: '',
@@ -188,7 +188,7 @@ function Sidebar({ onOpenSettings }) {
   const pathname = location.pathname;
 
   return (
-    <aside className="hidden lg:flex lg:flex-col w-64 shrink-0 border-r border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 px-4 py-6 h-screen overflow-y-auto">
+    <aside className="hidden lg:flex lg:flex-col w-64 shrink-0 border-r border-slate-200 bg-slate-50 px-4 py-6 h-screen overflow-y-auto">
       <div className="mb-8 px-2">
         <Logo />
       </div>
@@ -203,8 +203,8 @@ function Sidebar({ onOpenSettings }) {
               type="button"
               onClick={() => route && navigate(route)}
               className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${isActive
-                  ? 'bg-blue-100 dark:bg-blue-500/15 text-blue-700 dark:text-blue-400'
-                  : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
+                  ? 'bg-blue-100 text-blue-700 '
+                  : 'text-slate-600 hover:bg-slate-100 '
                 }`}
               aria-label={label}
               title={label}
@@ -232,14 +232,14 @@ function Sidebar({ onOpenSettings }) {
           <button
             type="button"
             onClick={onOpenSettings}
-            className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-slate-600 dark:text-slate-300 transition-colors hover:bg-slate-100 dark:hover:bg-slate-800"
+            className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-100 "
             title="Settings"
             aria-label="Settings"
           >
             <Settings size={18} />
             Settings
           </button>
-          <button type="button" className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-slate-600 dark:text-slate-300 transition-colors hover:bg-slate-100 dark:hover:bg-slate-800" title="Support" aria-label="Support">
+          <button type="button" className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-100 " title="Support" aria-label="Support">
             <HelpCircle size={18} />
             Support
           </button>
@@ -251,10 +251,10 @@ function Sidebar({ onOpenSettings }) {
 
 function StatCard({ label, value, detail }) {
   return (
-    <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-sm">
-      <p className="text-sm font-medium text-slate-500 dark:text-slate-400">{label}</p>
-      <p className="mt-2 text-3xl font-bold text-slate-900 dark:text-slate-100">{value}</p>
-      <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{detail}</p>
+    <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+      <p className="text-sm font-medium text-slate-500 ">{label}</p>
+      <p className="mt-2 text-3xl font-bold text-slate-900 ">{value}</p>
+      <p className="mt-1 text-sm text-slate-500 ">{detail}</p>
     </div>
   );
 }
@@ -263,22 +263,21 @@ function Header({ userName, userEmail }) {
   const navigate = useNavigate();
 
   return (
-    <header className="shrink-0 flex items-center gap-4 border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-6 py-5 lg:px-8">
+    <header className="shrink-0 flex items-center gap-4 border-b border-slate-200 bg-white px-6 py-5 lg:px-8">
       <button
         type="button"
         onClick={() => navigate('/search')}
-        className="flex-1 flex items-center gap-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-4 py-2.5 text-sm text-slate-400 dark:text-slate-500 transition-colors hover:border-blue-300 dark:hover:border-blue-500/50 hover:text-blue-600 dark:hover:text-blue-400"
+        className="flex-1 flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-lg px-4 py-2.5 text-sm text-slate-400 transition-colors hover:border-blue-300 hover:text-blue-600 "
       >
         <Sparkles size={16} />
         Ask Swastha about your health records...
       </button>
 
-      <button type="button" className="relative rounded-lg p-2 hover:bg-slate-100 dark:hover:bg-slate-800 shrink-0">
-        <Bell size={20} className="text-slate-600 dark:text-slate-300" />
+      <button type="button" className="relative rounded-lg p-2 hover:bg-slate-100 shrink-0">
+        <Bell size={20} className="text-slate-600 " />
         <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-red-500" />
       </button>
 
-      <ThemeToggle />
 
       <ProfileDropdown />
     </header>
@@ -299,6 +298,7 @@ export default function FamilyVault() {
   const [relationshipTags, setRelationshipTags] = useState([]);
   const [healthOverview, setHealthOverview] = useState([]);
   const [form, setForm] = useState(emptyForm);
+  const [conditionDraft, setConditionDraft] = useState({ name: '', ageOfOnset: '' });
   const [addMethod, setAddMethod] = useState('email');
   const [editingMemberId, setEditingMemberId] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -418,10 +418,30 @@ export default function FamilyVault() {
 
   function resetForm() {
     setForm(emptyForm);
+    setConditionDraft({ name: '', ageOfOnset: '' });
     setEditingMemberId(null);
     setAddMethod('email');
     setFieldErrors({});
     setServerErrorMeta(null);
+  }
+
+  function addConditionDraft() {
+    const name = conditionDraft.name.trim();
+    if (!name) return;
+
+    const ageOfOnset = conditionDraft.ageOfOnset !== '' ? Number(conditionDraft.ageOfOnset) : null;
+    setForm((prev) => ({
+      ...prev,
+      conditions: [...(prev.conditions || []), { name, ageOfOnset: Number.isInteger(ageOfOnset) ? ageOfOnset : null }],
+    }));
+    setConditionDraft({ name: '', ageOfOnset: '' });
+  }
+
+  function removeConditionDraft(index) {
+    setForm((prev) => ({
+      ...prev,
+      conditions: (prev.conditions || []).filter((_, i) => i !== index),
+    }));
   }
 
   function handleEdit(member) {
@@ -456,6 +476,7 @@ export default function FamilyVault() {
       relationshipTag: member.relationshipTag || member.relationship_tag || '',
       healthOverview: member.healthOverview || member.health_overview || '',
       notes: cleanedNotes,
+      conditions: Array.isArray(member.conditions) ? member.conditions : [],
       email: email,
       lastVisitDate: member.lastVisitDate || member.last_visit_date || '',
       nextCheckupDate: member.nextCheckupDate || member.next_checkup_date || '',
@@ -507,6 +528,7 @@ export default function FamilyVault() {
       relationshipTag: form.relationshipTag.trim(),
       healthOverview: form.healthOverview.trim(),
       notes: finalNotes,
+      conditions: form.conditions || [],
       lastVisitDate: form.lastVisitDate,
       nextCheckupDate: form.nextCheckupDate,
       authorizationMethod: 'mail',
@@ -527,6 +549,7 @@ export default function FamilyVault() {
           relationship: payload.relationship,
           relationshipTag: payload.relationshipTag,
           healthOverview: payload.healthOverview,
+          conditions: payload.conditions,
           age: payload.age,
           lastVisitDate: payload.lastVisitDate,
           nextCheckupDate: payload.nextCheckupDate,
@@ -609,16 +632,16 @@ export default function FamilyVault() {
   });
 
   return (
-    <div className="h-screen overflow-hidden bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100">
+    <div className="h-screen overflow-hidden bg-slate-50 text-slate-900 ">
       {showVaultModal ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 px-4">
-          <div className="w-full max-w-md rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 shadow-2xl">
-            <div className="inline-flex items-center rounded-full bg-blue-50 dark:bg-blue-500/10 px-3 py-1 text-sm font-medium text-blue-700 dark:text-blue-400">
+          <div className="w-full max-w-md rounded-3xl border border-slate-200 bg-white p-6 shadow-2xl">
+            <div className="inline-flex items-center rounded-full bg-blue-50 px-3 py-1 text-sm font-medium text-blue-700 ">
               <ShieldCheck size={16} className="mr-2" />
               Family Admin Setup
             </div>
-            <h2 className="mt-4 text-2xl font-semibold text-slate-900 dark:text-slate-100">Create your family vault</h2>
-            <p className="mt-2 text-sm leading-6 text-slate-600 dark:text-slate-300">
+            <h2 className="mt-4 text-2xl font-semibold text-slate-900 ">Create your family vault</h2>
+            <p className="mt-2 text-sm leading-6 text-slate-600 ">
               Set up a private family vault and create a vault ID for the family admin. You can add family members after the vault is created.
             </p>
             <div className="mt-6 flex flex-wrap gap-3">
@@ -637,7 +660,7 @@ export default function FamilyVault() {
                   setError('Create a family vault first to manage family members.');
                   setNotice('');
                 }}
-                className="inline-flex items-center justify-center rounded-2xl border border-slate-200 dark:border-slate-800 px-4 py-2.5 text-sm font-semibold text-slate-700 dark:text-slate-300 transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/60"
+                className="inline-flex items-center justify-center rounded-2xl border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-700 transition-colors hover:bg-slate-50 "
               >
                 Later
               </button>
@@ -649,7 +672,7 @@ export default function FamilyVault() {
         <Sidebar onOpenSettings={() => setIsSettingsOpen(true)} />
         <div className="flex-1 flex flex-col min-w-0 h-screen overflow-hidden">
           <Header userName={user?.name || user?.fullName} userEmail={user?.email} />
-          <section className="shrink-0 border-b border-slate-200 dark:border-slate-800 bg-gradient-to-br from-slate-950 via-slate-900 to-blue-950 px-6 py-14 text-white">
+          <section className="shrink-0 border-b border-slate-200 bg-gradient-to-br from-slate-950 via-slate-900 to-blue-950 px-6 py-14 text-white">
             <div className="mx-auto flex max-w-7xl flex-col gap-8 lg:flex-row lg:items-end lg:justify-between">
               <div className="max-w-3xl space-y-5">
                 <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm text-white/80 backdrop-blur">
@@ -683,12 +706,12 @@ export default function FamilyVault() {
 
           <main className="flex-1 overflow-y-auto mx-auto max-w-7xl px-6 py-10">
             {error ? (
-              <div className="mb-6 flex items-start gap-3 rounded-2xl border border-rose-200 dark:border-rose-500/20 bg-rose-50 dark:bg-rose-500/10 px-4 py-3 text-rose-700 dark:text-rose-400">
+              <div className="mb-6 flex items-start gap-3 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-rose-700 ">
                 <AlertCircle className="mt-0.5 shrink-0" size={18} />
                 <div className="text-sm space-y-1">
                   <p>{error}</p>
                   {serverErrorMeta?.code || serverErrorMeta?.hint || serverErrorMeta?.details ? (
-                    <div className="rounded-xl bg-white/70 dark:bg-slate-900/50 p-3 text-rose-700/90 dark:text-rose-400/90">
+                    <div className="rounded-xl bg-white/70 p-3 text-rose-700/90 ">
                       {serverErrorMeta?.code ? <p><span className="font-semibold">Code:</span> {serverErrorMeta.code}</p> : null}
                       {serverErrorMeta?.hint ? <p><span className="font-semibold">Hint:</span> {serverErrorMeta.hint}</p> : null}
                       {serverErrorMeta?.details ? <p><span className="font-semibold">Details:</span> {serverErrorMeta.details}</p> : null}
@@ -699,7 +722,7 @@ export default function FamilyVault() {
             ) : null}
 
             {notice ? (
-              <div className="mb-6 flex items-start gap-3 rounded-2xl border border-emerald-200 dark:border-emerald-500/20 bg-emerald-50 dark:bg-emerald-500/10 px-4 py-3 text-emerald-700 dark:text-emerald-400">
+              <div className="mb-6 flex items-start gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-emerald-700 ">
                 <Sparkles className="mt-0.5 shrink-0" size={18} />
                 <p className="text-sm">{notice}</p>
               </div>
@@ -713,13 +736,13 @@ export default function FamilyVault() {
             </div>
 
             <div className="mt-8 grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
-              <section className="rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 shadow-sm">
+              <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
                 <div className="flex items-center justify-between gap-4">
                   <div>
-                    <h2 className="text-xl font-semibold text-slate-900 dark:text-slate-100">Health Overview</h2>
-                    <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">At-a-glance metrics pulled from Family Vault data.</p>
+                    <h2 className="text-xl font-semibold text-slate-900 ">Health Overview</h2>
+                    <p className="mt-1 text-sm text-slate-500 ">At-a-glance metrics pulled from Family Vault data.</p>
                   </div>
-                  <div className="flex items-center gap-2 rounded-full bg-blue-50 dark:bg-blue-500/10 px-3 py-2 text-sm font-medium text-blue-700 dark:text-blue-400">
+                  <div className="flex items-center gap-2 rounded-full bg-blue-50 px-3 py-2 text-sm font-medium text-blue-700 ">
                     <Users size={16} />
                     {members.length} members
                   </div>
@@ -728,31 +751,31 @@ export default function FamilyVault() {
                 <div className="mt-5 grid gap-4 sm:grid-cols-2">
                   {healthOverviewCards.length > 0 ? (
                     healthOverviewCards.map((item) => (
-                      <div key={item.label} className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800 p-4">
-                        <p className="text-sm font-medium text-slate-500 dark:text-slate-400">{item.label}</p>
-                        <p className="mt-2 text-sm font-semibold uppercase tracking-wide text-blue-700 dark:text-blue-400">Tag: {item.tag}</p>
-                        <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">Relationship: {item.relationship}</p>
-                        <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">{item.detail}</p>
+                      <div key={item.label} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                        <p className="text-sm font-medium text-slate-500 ">{item.label}</p>
+                        <p className="mt-2 text-sm font-semibold uppercase tracking-wide text-blue-700 ">Tag: {item.tag}</p>
+                        <p className="mt-1 text-sm text-slate-600 ">Relationship: {item.relationship}</p>
+                        <p className="mt-2 text-sm text-slate-500 ">{item.detail}</p>
                       </div>
                     ))
                   ) : (
-                    <div className="rounded-2xl border border-dashed border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800 p-5 text-sm text-slate-500 dark:text-slate-400 sm:col-span-2">
+                    <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-5 text-sm text-slate-500 sm:col-span-2">
                       Add family members to populate the dashboard summary.
                     </div>
                   )}
                 </div>
 
                 <div className="mt-6">
-                  <div className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">Relationship Tags</div>
+                  <div className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-400 ">Relationship Tags</div>
                   <div className="flex flex-wrap gap-2">
                     {relationshipTagChips.length > 0 ? (
                       relationshipTagChips.map((tag) => (
-                        <span key={tag.key} className="rounded-full border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-3 py-2 text-sm text-slate-700 dark:text-slate-300">
-                          {tag.label} {tag.count !== undefined ? <span className="text-slate-400 dark:text-slate-500">({tag.count})</span> : null}
+                        <span key={tag.key} className="rounded-full border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 ">
+                          {tag.label} {tag.count !== undefined ? <span className="text-slate-400 ">({tag.count})</span> : null}
                         </span>
                       ))
                     ) : (
-                      <span className="rounded-full border border-dashed border-slate-200 dark:border-slate-800 px-3 py-2 text-sm text-slate-400 dark:text-slate-500">
+                      <span className="rounded-full border border-dashed border-slate-200 px-3 py-2 text-sm text-slate-400 ">
                         No tags yet
                       </span>
                     )}
@@ -760,14 +783,14 @@ export default function FamilyVault() {
                 </div>
               </section>
 
-              <section className="rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 shadow-sm">
+              <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
                 <div>
-                  <h2 className="text-xl font-semibold text-slate-900 dark:text-slate-100">{isEditing ? 'Edit Family Member' : 'Add Family Member'}</h2>
-                  <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Update names, relationships, and health notes from one form.</p>
+                  <h2 className="text-xl font-semibold text-slate-900 ">{isEditing ? 'Edit Family Member' : 'Add Family Member'}</h2>
+                  <p className="mt-1 text-sm text-slate-500 ">Update names, relationships, and health notes from one form.</p>
                 </div>
 
                 {!canManageMembers ? (
-                  <div className="mt-5 rounded-2xl border border-blue-200 dark:border-blue-500/20 bg-blue-50 dark:bg-blue-500/10 px-4 py-3 text-sm text-blue-700 dark:text-blue-400">
+                  <div className="mt-5 rounded-2xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-700 ">
                     Create a family vault first to add or edit family members.
                   </div>
                 ) : null}
@@ -775,41 +798,41 @@ export default function FamilyVault() {
                 <form className={`mt-5 space-y-4 ${!canManageMembers ? 'pointer-events-none opacity-70' : ''}`} onSubmit={handleSubmit}>
                   <div className="grid gap-4 sm:grid-cols-2">
                     <label className="space-y-2">
-                      <span className="text-sm font-medium text-slate-700 dark:text-slate-300">Name <span className="text-rose-500">*</span></span>
+                      <span className="text-sm font-medium text-slate-700 ">Name <span className="text-rose-500">*</span></span>
                       <input
                         value={form.name}
                         onChange={(event) => setForm({ ...form, name: event.target.value })}
                         maxLength={80}
-                        className="w-full rounded-2xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-4 py-3 text-slate-900 dark:text-slate-100 outline-none transition-colors focus:border-blue-400 dark:focus:border-blue-500 focus:bg-white dark:focus:bg-slate-900"
+                        className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900 outline-none transition-colors focus:border-blue-400 focus:bg-white "
                         placeholder="e.g. Ananya Sharma"
                         required
                       />
-                      {fieldErrors.name ? <p className="text-sm text-rose-600 dark:text-rose-400">{fieldErrors.name}</p> : null}
+                      {fieldErrors.name ? <p className="text-sm text-rose-600 ">{fieldErrors.name}</p> : null}
                     </label>
 
                     <label className="space-y-2">
-                      <span className="text-sm font-medium text-slate-700 dark:text-slate-300">Date of Birth <span className="text-rose-500">*</span></span>
+                      <span className="text-sm font-medium text-slate-700 ">Date of Birth <span className="text-rose-500">*</span></span>
                       <input
                         type="date"
                         value={form.dob}
                         onChange={(event) => setForm({ ...form, dob: event.target.value })}
-                        className="w-full rounded-2xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-4 py-3 text-slate-900 dark:text-slate-100 outline-none transition-colors focus:border-blue-400 dark:focus:border-blue-500 focus:bg-white dark:focus:bg-slate-900"
+                        className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900 outline-none transition-colors focus:border-blue-400 focus:bg-white "
                         required
                       />
                       {form.dob && !fieldErrors.dob ? (
-                        <p className="text-xs text-slate-500 dark:text-slate-400">Calculated age: {calculateAgeFromDob(form.dob)} years</p>
+                        <p className="text-xs text-slate-500 ">Calculated age: {calculateAgeFromDob(form.dob)} years</p>
                       ) : null}
-                      {fieldErrors.dob ? <p className="text-sm text-rose-600 dark:text-rose-400">{fieldErrors.dob}</p> : null}
+                      {fieldErrors.dob ? <p className="text-sm text-rose-600 ">{fieldErrors.dob}</p> : null}
                     </label>
                   </div>
 
                   <div className="grid gap-4 sm:grid-cols-2">
                     <label className="space-y-2">
-                      <span className="text-sm font-medium text-slate-700 dark:text-slate-300">Relationship <span className="text-rose-500">*</span></span>
+                      <span className="text-sm font-medium text-slate-700 ">Relationship <span className="text-rose-500">*</span></span>
                       <select
                         value={form.relationship}
                         onChange={(event) => setForm({ ...form, relationship: event.target.value })}
-                        className="w-full rounded-2xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-4 py-3 text-slate-900 dark:text-slate-100 outline-none transition-colors focus:border-blue-400 dark:focus:border-blue-500 focus:bg-white dark:focus:bg-slate-900"
+                        className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900 outline-none transition-colors focus:border-blue-400 focus:bg-white "
                         required
                       >
                         <option value="">Select relationship</option>
@@ -817,15 +840,15 @@ export default function FamilyVault() {
                           <option key={option} value={option}>{option}</option>
                         ))}
                       </select>
-                      {fieldErrors.relationship ? <p className="text-sm text-rose-600 dark:text-rose-400">{fieldErrors.relationship}</p> : null}
+                      {fieldErrors.relationship ? <p className="text-sm text-rose-600 ">{fieldErrors.relationship}</p> : null}
                     </label>
 
                     <label className="space-y-2">
-                      <span className="text-sm font-medium text-slate-700 dark:text-slate-300">Relationship Tag <span className="text-rose-500">*</span></span>
+                      <span className="text-sm font-medium text-slate-700 ">Relationship Tag <span className="text-rose-500">*</span></span>
                       <select
                         value={form.relationshipTag}
                         onChange={(event) => setForm({ ...form, relationshipTag: event.target.value })}
-                        className="w-full rounded-2xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-4 py-3 text-slate-900 dark:text-slate-100 outline-none transition-colors focus:border-blue-400 dark:focus:border-blue-500 focus:bg-white dark:focus:bg-slate-900"
+                        className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900 outline-none transition-colors focus:border-blue-400 focus:bg-white "
                         required
                       >
                         <option value="">Select tag</option>
@@ -833,78 +856,137 @@ export default function FamilyVault() {
                           <option key={option} value={option}>{option}</option>
                         ))}
                       </select>
-                      {fieldErrors.relationshipTag ? <p className="text-sm text-rose-600 dark:text-rose-400">{fieldErrors.relationshipTag}</p> : null}
+                      {fieldErrors.relationshipTag ? <p className="text-sm text-rose-600 ">{fieldErrors.relationshipTag}</p> : null}
                     </label>
                   </div>
 
                   <label className="space-y-2 block">
-                    <span className="text-sm font-medium text-slate-700 dark:text-slate-300">Recipient email <span className="text-rose-500">*</span></span>
+                    <span className="text-sm font-medium text-slate-700 ">Recipient email <span className="text-rose-500">*</span></span>
                     <input
                       type="email"
                       value={form.email}
                       onChange={(event) => setForm({ ...form, email: event.target.value })}
-                      className="w-full rounded-2xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-4 py-3 text-slate-900 dark:text-slate-100 outline-none transition-colors focus:border-blue-400 dark:focus:border-blue-500 focus:bg-white dark:focus:bg-slate-900"
+                      className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900 outline-none transition-colors focus:border-blue-400 focus:bg-white "
                       placeholder="person@example.com"
                       required
                     />
-                    {fieldErrors.email ? <p className="text-sm text-rose-600 dark:text-rose-400">{fieldErrors.email}</p> : null}
+                    {fieldErrors.email ? <p className="text-sm text-rose-600 ">{fieldErrors.email}</p> : null}
                   </label>
 
                   <label className="space-y-2 block">
-                    <span className="text-sm font-medium text-slate-700 dark:text-slate-300">Health Overview <span className="text-rose-500">*</span></span>
+                    <span className="text-sm font-medium text-slate-700 ">Health Overview <span className="text-rose-500">*</span></span>
                     <textarea
                       rows="3"
                       value={form.healthOverview}
                       onChange={(event) => setForm({ ...form, healthOverview: event.target.value })}
                       maxLength={500}
-                      className="w-full rounded-2xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-4 py-3 text-slate-900 dark:text-slate-100 outline-none transition-colors focus:border-blue-400 dark:focus:border-blue-500 focus:bg-white dark:focus:bg-slate-900"
+                      className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900 outline-none transition-colors focus:border-blue-400 focus:bg-white "
                       placeholder="e.g. Hypertension monitoring, stable labs, monthly follow-up"
                       required
                     />
-                    {fieldErrors.healthOverview ? <p className="text-sm text-rose-600 dark:text-rose-400">{fieldErrors.healthOverview}</p> : null}
+                    {fieldErrors.healthOverview ? <p className="text-sm text-rose-600 ">{fieldErrors.healthOverview}</p> : null}
                   </label>
 
+                  <div className="space-y-2">
+                    <span className="text-sm font-medium text-slate-700 ">
+                      Known Conditions <span className="text-slate-400 font-normal">(used for hereditary risk in the doctor view)</span>
+                    </span>
+                    <div className="flex flex-wrap gap-2">
+                      <input
+                        type="text"
+                        value={conditionDraft.name}
+                        onChange={(event) => setConditionDraft({ ...conditionDraft, name: event.target.value })}
+                        onKeyDown={(event) => {
+                          if (event.key === 'Enter') {
+                            event.preventDefault();
+                            addConditionDraft();
+                          }
+                        }}
+                        maxLength={100}
+                        placeholder="e.g. Type 2 Diabetes"
+                        className="flex-1 min-w-[160px] rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-900 outline-none transition-colors focus:border-blue-400 focus:bg-white "
+                      />
+                      <input
+                        type="number"
+                        min="0"
+                        max="150"
+                        value={conditionDraft.ageOfOnset}
+                        onChange={(event) => setConditionDraft({ ...conditionDraft, ageOfOnset: event.target.value })}
+                        placeholder="Age of onset"
+                        className="w-36 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-900 outline-none transition-colors focus:border-blue-400 focus:bg-white "
+                      />
+                      <button
+                        type="button"
+                        onClick={addConditionDraft}
+                        className="rounded-2xl border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-700 transition-colors hover:bg-slate-50 "
+                      >
+                        Add
+                      </button>
+                    </div>
+                    {(form.conditions || []).length > 0 ? (
+                      <div className="flex flex-wrap gap-2 pt-1">
+                        {form.conditions.map((condition, index) => (
+                          <span
+                            key={`${condition.name}-${index}`}
+                            className="inline-flex items-center gap-2 rounded-full bg-blue-50 px-3 py-1.5 text-xs font-medium text-blue-700 "
+                          >
+                            {condition.name}
+                            {condition.ageOfOnset != null ? ` · onset ${condition.ageOfOnset}` : ''}
+                            <button
+                              type="button"
+                              onClick={() => removeConditionDraft(index)}
+                              className="text-blue-400 hover:text-blue-700"
+                              aria-label={`Remove ${condition.name}`}
+                            >
+                              ×
+                            </button>
+                          </span>
+                        ))}
+                      </div>
+                    ) : null}
+                  </div>
+
                   <label className="space-y-2 block">
-                    <span className="text-sm font-medium text-slate-700 dark:text-slate-300">Notes</span>
+                    <span className="text-sm font-medium text-slate-700 ">Notes</span>
                     <textarea
                       rows="3"
                       value={form.notes}
                       onChange={(event) => setForm({ ...form, notes: event.target.value })}
                       maxLength={1000}
-                      className="w-full rounded-2xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-4 py-3 text-slate-900 dark:text-slate-100 outline-none transition-colors focus:border-blue-400 dark:focus:border-blue-500 focus:bg-white dark:focus:bg-slate-900"
+                      className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900 outline-none transition-colors focus:border-blue-400 focus:bg-white "
                       placeholder="Notes for reminders, allergies, doctors, etc."
                       required
                     />
-                    {fieldErrors.notes ? <p className="text-sm text-rose-600 dark:text-rose-400">{fieldErrors.notes}</p> : null}
+                    {fieldErrors.notes ? <p className="text-sm text-rose-600 ">{fieldErrors.notes}</p> : null}
                   </label>
 
                   <div className="grid gap-4 sm:grid-cols-2">
                     <label className="space-y-2">
-                      <span className="text-sm font-medium text-slate-700 dark:text-slate-300">Last Visit Date <span className="text-rose-500">*</span></span>
+                      <span className="text-sm font-medium text-slate-700 ">Last Visit Date <span className="text-rose-500">*</span></span>
                       <input
                         type="date"
                         value={form.lastVisitDate}
                         onChange={(event) => setForm({ ...form, lastVisitDate: event.target.value })}
-                        className="w-full rounded-2xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-4 py-3 text-slate-900 dark:text-slate-100 outline-none transition-colors focus:border-blue-400 dark:focus:border-blue-500 focus:bg-white dark:focus:bg-slate-900"
+                        className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900 outline-none transition-colors focus:border-blue-400 focus:bg-white "
                         required
                       />
-                      {fieldErrors.lastVisitDate ? <p className="text-sm text-rose-600 dark:text-rose-400">{fieldErrors.lastVisitDate}</p> : null}
+                      {fieldErrors.lastVisitDate ? <p className="text-sm text-rose-600 ">{fieldErrors.lastVisitDate}</p> : null}
                     </label>
 
                     <label className="space-y-2">
-                      <span className="text-sm font-medium text-slate-700 dark:text-slate-300">Next Checkup Date <span className="text-rose-500">*</span></span>
+                      <span className="text-sm font-medium text-slate-700 ">Next Checkup Date <span className="text-rose-500">*</span></span>
                       <input
                         type="date"
                         value={form.nextCheckupDate}
                         onChange={(event) => setForm({ ...form, nextCheckupDate: event.target.value })}
-                        className="w-full rounded-2xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-4 py-3 text-slate-900 dark:text-slate-100 outline-none transition-colors focus:border-blue-400 dark:focus:border-blue-500 focus:bg-white dark:focus:bg-slate-900"
+                        className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900 outline-none transition-colors focus:border-blue-400 focus:bg-white "
                         required
                       />
-                      {fieldErrors.nextCheckupDate ? <p className="text-sm text-rose-600 dark:text-rose-400">{fieldErrors.nextCheckupDate}</p> : null}
+                      {fieldErrors.nextCheckupDate ? <p className="text-sm text-rose-600 ">{fieldErrors.nextCheckupDate}</p> : null}
                     </label>
                   </div>
 
-                  {fieldErrors.form ? <p className="text-sm text-rose-600 dark:text-rose-400">{fieldErrors.form}</p> : null}
+                  {fieldErrors.form ? <p className="text-sm text-rose-600 ">{fieldErrors.form}</p> : null}
 
                   <div className="flex flex-wrap gap-3 pt-2">
                     <button
@@ -919,7 +1001,7 @@ export default function FamilyVault() {
                       <button
                         type="button"
                         onClick={resetForm}
-                        className="inline-flex items-center justify-center rounded-2xl border border-slate-200 dark:border-slate-700 px-5 py-3 text-sm font-semibold text-slate-700 dark:text-slate-300 transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/60"
+                        className="inline-flex items-center justify-center rounded-2xl border border-slate-200 px-5 py-3 text-sm font-semibold text-slate-700 transition-colors hover:bg-slate-50 "
                       >
                         Cancel Edit
                       </button>
@@ -929,17 +1011,17 @@ export default function FamilyVault() {
               </section>
             </div>
 
-            <section className="mt-8 rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 shadow-sm">
+            <section className="mt-8 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
               <div className="flex items-center justify-between gap-4">
                 <div>
-                  <h2 className="text-xl font-semibold text-slate-900 dark:text-slate-100">All Family Members</h2>
-                  <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Review, edit, and remove every saved member.</p>
+                  <h2 className="text-xl font-semibold text-slate-900 ">All Family Members</h2>
+                  <p className="mt-1 text-sm text-slate-500 ">Review, edit, and remove every saved member.</p>
                 </div>
               </div>
 
               <div className="mt-6 space-y-4">
                 {loading ? (
-                  <div className="rounded-2xl border border-dashed border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800 p-8 text-center text-sm text-slate-500 dark:text-slate-400">
+                  <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-8 text-center text-sm text-slate-500 ">
                     Loading family vault...
                   </div>
                 ) : members.length > 0 ? (
@@ -947,7 +1029,7 @@ export default function FamilyVault() {
                     <FamilyMember key={member.id} member={member} onEdit={handleEdit} onDelete={handleDelete} />
                   ))
                 ) : (
-                  <div className="rounded-2xl border border-dashed border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800 p-8 text-center text-sm text-slate-500 dark:text-slate-400">
+                  <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-8 text-center text-sm text-slate-500 ">
                     No family members yet. Add the first one using the form above.
                   </div>
                 )}

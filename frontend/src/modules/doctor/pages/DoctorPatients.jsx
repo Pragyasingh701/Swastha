@@ -2,11 +2,12 @@ import React, { useEffect, useState, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { Sparkles, Bell, X, CalendarDays, Stethoscope, XCircle, ChevronDown, ChevronRight, AlertTriangle, FlaskConical, ClipboardList, ScanLine, Syringe, FileText } from "lucide-react";
 import DoctorSidebar from "../components/DoctorSidebar";
-import ThemeToggle from "../../../components/Common/ThemeToggle";
 import ProfileDropdown from "../../settings/components/ProfileDropdown";
 import { getDoctorPatients, linkPatientToDoctor, deletePatientFromDoctor } from "../../../services/doctorPatients";
 import { getTimelineReports } from "../../../api/reports";
+import { getPatientFamilyMembers } from "../../../api/family";
 import { useAuth } from "../../../context/AuthContext";
+import FamilyTreeTab from "../components/FamilyTreeTab";
 
 export default function DoctorPatients() {
   const navigate = useNavigate();
@@ -16,6 +17,7 @@ export default function DoctorPatients() {
   const [selectedTab, setSelectedTab] = useState('timeline');
   const [patientTimeline, setPatientTimeline] = useState([]);
   const [patientVault, setPatientVault] = useState([]);
+  const [patientFamilyMembers, setPatientFamilyMembers] = useState([]);
   const [timelineLoading, setTimelineLoading] = useState(false);
   const [isAddPatientOpen, setIsAddPatientOpen] = useState(false);
   const [userId, setUserId] = useState("");
@@ -54,6 +56,7 @@ export default function DoctorPatients() {
     if (!selectedPatient) {
       setPatientTimeline([]);
       setPatientVault([]);
+      setPatientFamilyMembers([]);
       return;
     }
 
@@ -61,22 +64,26 @@ export default function DoctorPatients() {
       if (!token) {
         setPatientTimeline([]);
         setPatientVault([]);
+        setPatientFamilyMembers([]);
         return;
       }
 
       setTimelineLoading(true);
       try {
         const patientUserId = selectedPatient.patientUserId || selectedPatient.patientId || selectedPatient.id;
-        const [timelineResponse, vaultResponse] = await Promise.all([
+        const [timelineResponse, vaultResponse, familyMembers] = await Promise.all([
           getTimelineReports(token, selectedPatient.email || '', patientUserId),
           getTimelineReports(token, '', patientUserId),
+          getPatientFamilyMembers(patientUserId).catch(() => []),
         ]);
 
         setPatientTimeline(timelineResponse.reports || []);
         setPatientVault(vaultResponse.reports || []);
+        setPatientFamilyMembers(familyMembers || []);
       } catch (err) {
         setPatientTimeline([]);
         setPatientVault([]);
+        setPatientFamilyMembers([]);
       } finally {
         setTimelineLoading(false);
       }
@@ -264,26 +271,25 @@ export default function DoctorPatients() {
   };
 
   return (
-    <div className="h-screen overflow-hidden bg-[#faf8ff] dark:bg-slate-950 text-[#191b23] dark:text-slate-100 antialiased flex">
+    <div className="h-screen overflow-hidden bg-[#faf8ff] text-[#191b23] antialiased flex">
       <DoctorSidebar />
 
       <div className="flex-1 flex flex-col h-screen overflow-hidden min-w-0">
-        <header className="shrink-0 flex items-center gap-4 px-6 lg:px-8 py-5 border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
+        <header className="shrink-0 flex items-center gap-4 px-6 lg:px-8 py-5 border-b border-slate-200 bg-white ">
           <button
             type="button"
-            onClick={() => navigate('/search')}
-            className="flex-1 flex items-center gap-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-4 py-2.5 text-sm text-slate-400 dark:text-slate-500 transition-colors hover:border-blue-300 dark:hover:border-blue-500/50 hover:text-blue-600 dark:hover:text-blue-400"
+            onClick={() => navigate('/doctor/clinical-intelligence')}
+            className="flex-1 flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-lg px-4 py-2.5 text-sm text-slate-400 transition-colors hover:border-blue-300 hover:text-blue-600 "
           >
             <Sparkles size={16} />
             Ask Swastha about your health records...
           </button>
 
-          <button className="relative p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 shrink-0">
-            <Bell size={20} className="text-slate-600 dark:text-slate-300" />
+          <button className="relative p-2 rounded-lg hover:bg-slate-100 shrink-0">
+            <Bell size={20} className="text-slate-600 " />
             <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full" />
           </button>
 
-          <ThemeToggle />
 
           <ProfileDropdown />
         </header>
@@ -291,8 +297,8 @@ export default function DoctorPatients() {
         <main className="flex-1 overflow-y-auto p-4 md:p-10 lg:px-12 py-8 space-y-8 overflow-x-hidden">
           <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
             <div>
-              <h2 className="text-5xl font-bold tracking-tight text-[#191b23] dark:text-slate-100">Patients</h2>
-              <p className="mt-1 text-lg text-[#434655] dark:text-slate-300">Manage patient records and clinical history.</p>
+              <h2 className="text-5xl font-bold tracking-tight text-[#191b23] ">Patients</h2>
+              <p className="mt-1 text-lg text-[#434655] ">Manage patient records and clinical history.</p>
             </div>
 
             <div className="flex flex-wrap items-center gap-3 relative">
@@ -399,7 +405,7 @@ export default function DoctorPatients() {
               <button
                 type="button"
                 onClick={() => setIsAddPatientOpen(true)}
-                className="h-11 px-6 rounded-lg bg-[#004ac6] dark:bg-blue-600 text-white hover:opacity-90 transition-opacity flex items-center gap-2 shadow-sm border-t border-white/20"
+                className="h-11 px-6 rounded-lg bg-[#004ac6] text-white hover:opacity-90 transition-opacity flex items-center gap-2 shadow-sm border-t border-white/20"
               >
                 <span className="material-symbols-outlined text-[18px]">add</span>
                 New Patient
@@ -413,24 +419,24 @@ export default function DoctorPatients() {
               onClick={() => setIsAddPatientOpen(false)}
             >
               <div
-                className="w-full max-w-md rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xl"
+                className="w-full max-w-md rounded-3xl bg-white border border-slate-200 shadow-xl"
                 onClick={(e) => e.stopPropagation()}
               >
-                <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/80">
+                <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200 bg-slate-50 ">
                   <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-2xl bg-blue-50 dark:bg-blue-500/10 flex items-center justify-center text-blue-600 dark:text-blue-400">
+                    <div className="w-10 h-10 rounded-2xl bg-blue-50 flex items-center justify-center text-blue-600 ">
                       <span className="material-symbols-outlined text-[22px]">person_add</span>
                     </div>
                     <div>
-                      <h3 className="text-lg font-bold text-slate-900 dark:text-slate-100">Add New Patient</h3>
-                      <p className="text-xs text-slate-500 dark:text-slate-400">Create a patient record with a user ID</p>
+                      <h3 className="text-lg font-bold text-slate-900 ">Add New Patient</h3>
+                      <p className="text-xs text-slate-500 ">Create a patient record with a user ID</p>
                     </div>
                   </div>
 
                   <button
                     type="button"
                     onClick={() => setIsAddPatientOpen(false)}
-                    className="p-2 rounded-xl text-slate-500 hover:bg-slate-200 dark:hover:bg-slate-800 hover:text-slate-700 dark:hover:text-slate-200 transition-colors"
+                    className="p-2 rounded-xl text-slate-500 hover:bg-slate-200 hover:text-slate-700 transition-colors"
                   >
                     <X size={18} />
                   </button>
@@ -438,7 +444,7 @@ export default function DoctorPatients() {
 
                 <div className="p-5 space-y-5">
                   <div>
-                    <label className="block text-[11px] font-extrabold uppercase tracking-[0.12em] text-slate-600 dark:text-slate-300 mb-2">
+                    <label className="block text-[11px] font-extrabold uppercase tracking-[0.12em] text-slate-600 mb-2">
                       User ID
                     </label>
                     <div className="relative">
@@ -451,27 +457,27 @@ export default function DoctorPatients() {
                           if (errorMessage) setErrorMessage("");
                         }}
                         placeholder="Enter patient user ID"
-                        className="w-full pl-10 pr-3.5 py-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm text-slate-900 dark:text-slate-100 placeholder:text-slate-400 focus:ring-2 focus:ring-blue-600 focus:border-blue-500 focus:outline-none transition-all"
+                        className="w-full pl-10 pr-3.5 py-3 rounded-xl border border-slate-200 bg-white text-sm text-slate-900 placeholder:text-slate-400 focus:ring-2 focus:ring-blue-600 focus:border-blue-500 focus:outline-none transition-all"
                       />
                     </div>
                   </div>
 
                   {errorMessage && (
-                    <div className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2.5 text-xs text-rose-700 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-300">
+                    <div className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2.5 text-xs text-rose-700 ">
                       {errorMessage}
                     </div>
                   )}
 
-                  <div className="rounded-xl bg-blue-50 dark:bg-blue-500/10 border border-blue-100 dark:border-blue-500/20 px-3 py-2.5 text-xs text-blue-700 dark:text-blue-300">
+                  <div className="rounded-xl bg-blue-50 border border-blue-100 px-3 py-2.5 text-xs text-blue-700 ">
                     Use the patient’s existing user ID from the database to link the record.
                   </div>
                 </div>
 
-                <div className="flex items-center justify-end gap-3 px-5 py-4 border-t border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/70 rounded-b-3xl">
+                <div className="flex items-center justify-end gap-3 px-5 py-4 border-t border-slate-200 bg-slate-50 rounded-b-3xl">
                   <button
                     type="button"
                     onClick={() => setIsAddPatientOpen(false)}
-                    className="px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                    className="px-4 py-2.5 rounded-xl border border-slate-200 text-slate-700 hover:bg-slate-100 transition-colors"
                   >
                     Cancel
                   </button>
@@ -491,22 +497,22 @@ export default function DoctorPatients() {
           {selectedPatient && (
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
               {/* Profile Card */}
-              <div className="lg:col-span-1 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-md overflow-hidden">
+              <div className="lg:col-span-1 rounded-2xl border border-slate-200 bg-white shadow-md overflow-hidden">
                 {/* Profile Header */}
-                <div className="border-b border-slate-200 dark:border-slate-800 bg-gradient-to-r from-blue-50 to-blue-100 dark:from-blue-500/5 dark:to-blue-500/10 p-6">
+                <div className="border-b border-slate-200 bg-gradient-to-r from-blue-50 to-blue-100 p-6">
                   <div className="flex flex-col items-center text-center gap-4 mb-4">
                     <img
                       alt="Selected patient"
-                      className="w-24 h-24 rounded-full object-cover border-4 border-white dark:border-slate-800 shadow-md"
+                      className="w-24 h-24 rounded-full object-cover border-4 border-white shadow-md"
                       src={selectedPatient.avatar}
                     />
                     <div className="min-w-0 w-full">
-                      <h3 className="text-xl font-bold text-slate-900 dark:text-slate-100 truncate">{selectedPatient.name}</h3>
-                      <p className="text-xs text-slate-600 dark:text-slate-300 truncate">
+                      <h3 className="text-xl font-bold text-slate-900 truncate">{selectedPatient.name}</h3>
+                      <p className="text-xs text-slate-600 truncate">
                         {selectedPatient.email || 'No email'}
                       </p>
                       <div className="mt-3 flex items-center justify-center gap-2">
-                        <span className="inline-flex items-center rounded-full bg-green-100 dark:bg-green-500/10 px-3 py-1 text-xs font-semibold text-green-700 dark:text-green-400">
+                        <span className="inline-flex items-center rounded-full bg-green-100 px-3 py-1 text-xs font-semibold text-green-700 ">
                           Active Patient
                         </span>
                       </div>
@@ -515,7 +521,7 @@ export default function DoctorPatients() {
                   <button
                     type="button"
                     onClick={() => setSelectedPatient(null)}
-                    className="w-full inline-flex items-center justify-center gap-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors shadow-sm"
+                    className="w-full inline-flex items-center justify-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 hover:bg-slate-100 transition-colors shadow-sm"
                   >
                     <XCircle size={14} />
                     Close Profile
@@ -524,67 +530,67 @@ export default function DoctorPatients() {
 
                 {/* Patient Details Grid */}
                 <div className="p-6 space-y-4">
-                  <div className="rounded-xl bg-slate-50 dark:bg-slate-800/50 p-3 border border-slate-200/50 dark:border-slate-700/50">
+                  <div className="rounded-xl bg-slate-50 p-3 border border-slate-200/50 ">
                     <div className="flex items-center gap-2 mb-1">
                       <span className="material-symbols-outlined text-slate-400 text-[14px]">badge</span>
-                      <p className="text-[9px] uppercase tracking-[0.1em] font-semibold text-slate-500 dark:text-slate-400">User ID</p>
+                      <p className="text-[9px] uppercase tracking-[0.1em] font-semibold text-slate-500 ">User ID</p>
                     </div>
-                    <p className="text-xs font-bold text-slate-900 dark:text-slate-100 break-all ml-6">{selectedPatient.patientUserId || selectedPatient.patientId || selectedPatient.id}</p>
+                    <p className="text-xs font-bold text-slate-900 break-all ml-6">{selectedPatient.patientUserId || selectedPatient.patientId || selectedPatient.id}</p>
                   </div>
-                  <div className="rounded-xl bg-slate-50 dark:bg-slate-800/50 p-3 border border-slate-200/50 dark:border-slate-700/50">
+                  <div className="rounded-xl bg-slate-50 p-3 border border-slate-200/50 ">
                     <div className="flex items-center gap-2 mb-1">
                       <span className="material-symbols-outlined text-slate-400 text-[14px]">phone</span>
-                      <p className="text-[9px] uppercase tracking-[0.1em] font-semibold text-slate-500 dark:text-slate-400">Phone</p>
+                      <p className="text-[9px] uppercase tracking-[0.1em] font-semibold text-slate-500 ">Phone</p>
                     </div>
-                    <p className="text-xs font-semibold text-slate-900 dark:text-slate-100 ml-6">{selectedPatient.phone || selectedPatient.patient_phone || '—'}</p>
+                    <p className="text-xs font-semibold text-slate-900 ml-6">{selectedPatient.phone || selectedPatient.patient_phone || '—'}</p>
                   </div>
-                  <div className="rounded-xl bg-slate-50 dark:bg-slate-800/50 p-3 border border-slate-200/50 dark:border-slate-700/50">
+                  <div className="rounded-xl bg-slate-50 p-3 border border-slate-200/50 ">
                     <div className="flex items-center gap-2 mb-1">
                       <span className="material-symbols-outlined text-slate-400 text-[14px]">wc</span>
-                      <p className="text-[9px] uppercase tracking-[0.1em] font-semibold text-slate-500 dark:text-slate-400">Gender</p>
+                      <p className="text-[9px] uppercase tracking-[0.1em] font-semibold text-slate-500 ">Gender</p>
                     </div>
-                    <p className="text-xs font-semibold text-slate-900 dark:text-slate-100 ml-6">{selectedPatient.gender || selectedPatient.patient_gender || '—'}</p>
+                    <p className="text-xs font-semibold text-slate-900 ml-6">{selectedPatient.gender || selectedPatient.patient_gender || '—'}</p>
                   </div>
-                  <div className="rounded-xl bg-slate-50 dark:bg-slate-800/50 p-3 border border-slate-200/50 dark:border-slate-700/50">
+                  <div className="rounded-xl bg-slate-50 p-3 border border-slate-200/50 ">
                     <div className="flex items-center gap-2 mb-1">
                       <span className="material-symbols-outlined text-slate-400 text-[14px]">cake</span>
-                      <p className="text-[9px] uppercase tracking-[0.1em] font-semibold text-slate-500 dark:text-slate-400">Age</p>
+                      <p className="text-[9px] uppercase tracking-[0.1em] font-semibold text-slate-500 ">Age</p>
                     </div>
-                    <p className="text-xs font-semibold text-slate-900 dark:text-slate-100 ml-6">{selectedPatient.age || '—'}</p>
+                    <p className="text-xs font-semibold text-slate-900 ml-6">{selectedPatient.age || '—'}</p>
                   </div>
-                  <div className="rounded-xl bg-slate-50 dark:bg-slate-800/50 p-3 border border-slate-200/50 dark:border-slate-700/50">
+                  <div className="rounded-xl bg-slate-50 p-3 border border-slate-200/50 ">
                     <div className="flex items-center gap-2 mb-1">
                       <span className="material-symbols-outlined text-slate-400 text-[14px]">bloodtype</span>
-                      <p className="text-[9px] uppercase tracking-[0.1em] font-semibold text-slate-500 dark:text-slate-400">Blood Type</p>
+                      <p className="text-[9px] uppercase tracking-[0.1em] font-semibold text-slate-500 ">Blood Type</p>
                     </div>
-                    <p className="text-xs font-semibold text-slate-900 dark:text-slate-100 ml-6">{selectedPatient.blood_group || selectedPatient.patient_blood_group || '—'}</p>
+                    <p className="text-xs font-semibold text-slate-900 ml-6">{selectedPatient.blood_group || selectedPatient.patient_blood_group || '—'}</p>
                   </div>
-                  <div className="rounded-xl bg-slate-50 dark:bg-slate-800/50 p-3 border border-slate-200/50 dark:border-slate-700/50">
+                  <div className="rounded-xl bg-slate-50 p-3 border border-slate-200/50 ">
                     <div className="flex items-center gap-2 mb-1">
                       <span className="material-symbols-outlined text-slate-400 text-[14px]">event</span>
-                      <p className="text-[9px] uppercase tracking-[0.1em] font-semibold text-slate-500 dark:text-slate-400">DOB</p>
+                      <p className="text-[9px] uppercase tracking-[0.1em] font-semibold text-slate-500 ">DOB</p>
                     </div>
-                    <p className="text-xs font-semibold text-slate-900 dark:text-slate-100 ml-6">
+                    <p className="text-xs font-semibold text-slate-900 ml-6">
                       {selectedPatient.dob || selectedPatient.patient_dob ? new Date(selectedPatient.dob || selectedPatient.patient_dob).toLocaleDateString() : '—'}
                     </p>
                   </div>
                   {(selectedPatient.email) && (
-                    <div className="rounded-xl bg-blue-50 dark:bg-blue-500/10 border border-blue-200 dark:border-blue-500/20 p-3">
+                    <div className="rounded-xl bg-blue-50 border border-blue-200 p-3">
                       <div className="flex items-center gap-2 mb-1">
-                        <span className="material-symbols-outlined text-blue-600 dark:text-blue-400 text-[14px]">mail</span>
-                        <p className="text-[9px] uppercase tracking-[0.1em] font-semibold text-blue-600 dark:text-blue-400">Email</p>
+                        <span className="material-symbols-outlined text-blue-600 text-[14px]">mail</span>
+                        <p className="text-[9px] uppercase tracking-[0.1em] font-semibold text-blue-600 ">Email</p>
                       </div>
-                      <p className="text-xs text-blue-900 dark:text-blue-200 break-all ml-6">{selectedPatient.email}</p>
+                      <p className="text-xs text-blue-900 break-all ml-6">{selectedPatient.email}</p>
                     </div>
                   )}
                 </div>
               </div>
 
               {/* Timeline & Vault Content */}
-              <div className="lg:col-span-2 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-md overflow-hidden flex flex-col max-h-[calc(100vh-200px)]">
+              <div className="lg:col-span-2 rounded-2xl border border-slate-200 bg-white shadow-md overflow-hidden flex flex-col max-h-[calc(100vh-200px)]">
 
               {/* Tabs */}
-              <div className="shrink-0 border-b border-slate-200 dark:border-slate-800 px-6 py-4 bg-white dark:bg-slate-900 flex gap-3">
+              <div className="shrink-0 border-b border-slate-200 px-6 py-4 bg-white flex gap-3">
                 <button
                   type="button"
                   onClick={() => {
@@ -594,8 +600,8 @@ export default function DoctorPatients() {
                   }}
                   className={`rounded-lg px-4 py-2.5 text-sm font-semibold transition-all ${
                     selectedTab === 'timeline'
-                      ? 'bg-blue-600 dark:bg-blue-600 text-white shadow-md'
-                      : 'border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800'
+                      ? 'bg-blue-600 text-white shadow-md'
+                      : 'border border-slate-200 text-slate-600 hover:bg-slate-50 '
                   }`}
                 >
                   Medical Timeline
@@ -610,11 +616,22 @@ export default function DoctorPatients() {
                   }}
                   className={`rounded-lg px-4 py-2.5 text-sm font-semibold transition-all ${
                     selectedTab === 'vault'
-                      ? 'bg-blue-600 dark:bg-blue-600 text-white shadow-md'
-                      : 'border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800'
+                      ? 'bg-blue-600 text-white shadow-md'
+                      : 'border border-slate-200 text-slate-600 hover:bg-slate-50 '
                   }`}
                 >
                   Medical Vault
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSelectedTab('family')}
+                  className={`rounded-lg px-4 py-2.5 text-sm font-semibold transition-all ${
+                    selectedTab === 'family'
+                      ? 'bg-blue-600 text-white shadow-md'
+                      : 'border border-slate-200 text-slate-600 hover:bg-slate-50 '
+                  }`}
+                >
+                  Family Tree
                 </button>
               </div>
 
@@ -622,20 +639,20 @@ export default function DoctorPatients() {
               <div className="flex-1 overflow-y-auto p-6">
 
               {timelineLoading ? (
-                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
+                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-500 ">
                   Loading patient data...
                 </div>
               ) : selectedTab === 'timeline' ? (
                 <div className="space-y-6">
                   {/* Timeline Filter Bar */}
-                  <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm p-4 flex items-center justify-between flex-wrap gap-3">
+                  <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4 flex items-center justify-between flex-wrap gap-3">
                     <div className="flex items-center gap-3 flex-wrap">
                       <div className="relative">
                         <button
                           type="button"
                           onClick={() => setShowDateRange((v) => !v)}
                           className={`flex items-center gap-2 text-sm px-3 py-2 rounded-xl transition-all duration-200 ${
-                            (dateFrom || dateTo) ? "bg-blue-50 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400 font-medium" : "text-slate-600 dark:text-slate-300 bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700"
+                            (dateFrom || dateTo) ? "bg-blue-50 text-blue-600 font-medium" : "text-slate-600 bg-slate-50 hover:bg-slate-100 "
                           }`}
                         >
                           <span>
@@ -647,24 +664,24 @@ export default function DoctorPatients() {
                         </button>
 
                         {showDateRange && (
-                          <div className="absolute top-full mt-2 left-0 bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-lg p-4 z-10 min-w-[300px]">
+                          <div className="absolute top-full mt-2 left-0 bg-white rounded-xl border border-slate-200 shadow-lg p-4 z-10 min-w-[300px]">
                             <div className="space-y-3">
                               <div>
-                                <label className="text-xs font-semibold text-slate-600 dark:text-slate-300 uppercase tracking-[0.08em]">From</label>
+                                <label className="text-xs font-semibold text-slate-600 uppercase tracking-[0.08em]">From</label>
                                 <input
                                   type="date"
                                   value={dateFrom}
                                   onChange={(e) => setDateFrom(e.target.value)}
-                                  className="mt-1 w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                  className="mt-1 w-full px-3 py-2 border border-slate-200 rounded-lg bg-white text-slate-900 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                                 />
                               </div>
                               <div>
-                                <label className="text-xs font-semibold text-slate-600 dark:text-slate-300 uppercase tracking-[0.08em]">To</label>
+                                <label className="text-xs font-semibold text-slate-600 uppercase tracking-[0.08em]">To</label>
                                 <input
                                   type="date"
                                   value={dateTo}
                                   onChange={(e) => setDateTo(e.target.value)}
-                                  className="mt-1 w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                  className="mt-1 w-full px-3 py-2 border border-slate-200 rounded-lg bg-white text-slate-900 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                                 />
                               </div>
                               <div className="flex gap-2 pt-2">
@@ -675,7 +692,7 @@ export default function DoctorPatients() {
                                     setDateTo('');
                                     setShowDateRange(false);
                                   }}
-                                  className="flex-1 px-3 py-2 text-xs font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-colors"
+                                  className="flex-1 px-3 py-2 text-xs font-medium text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
                                 >
                                   Clear
                                 </button>
@@ -698,7 +715,7 @@ export default function DoctorPatients() {
                             type="button"
                             onClick={() => setCategoryFilter(categoryFilter ? '' : getAvailableCategories()[0])}
                             className={`flex items-center gap-2 text-sm px-3 py-2 rounded-xl transition-all duration-200 ${
-                              categoryFilter ? "bg-blue-50 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400 font-medium" : "text-slate-600 dark:text-slate-300 bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700"
+                              categoryFilter ? "bg-blue-50 text-blue-600 font-medium" : "text-slate-600 bg-slate-50 hover:bg-slate-100 "
                             }`}
                           >
                             {categoryFilter || "All categories"}
@@ -708,7 +725,7 @@ export default function DoctorPatients() {
                             <button
                               type="button"
                               onClick={() => setCategoryFilter('')}
-                              className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 text-xs"
+                              className="text-slate-400 hover:text-slate-600 text-xs"
                             >
                               ✕
                             </button>
@@ -720,24 +737,24 @@ export default function DoctorPatients() {
 
                   {/* Timeline Infographic */}
                   {patientTimeline.length === 0 ? (
-                    <div className="rounded-2xl border-2 border-dashed border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-800/30 p-12 text-center">
+                    <div className="rounded-2xl border-2 border-dashed border-slate-300 bg-slate-50 p-12 text-center">
                       <div className="flex justify-center mb-3">
-                        <div className="p-3 rounded-full bg-slate-200 dark:bg-slate-700">
-                          <span className="material-symbols-outlined text-slate-600 dark:text-slate-300">calendar_today</span>
+                        <div className="p-3 rounded-full bg-slate-200 ">
+                          <span className="material-symbols-outlined text-slate-600 ">calendar_today</span>
                         </div>
                       </div>
-                      <p className="text-sm font-medium text-slate-600 dark:text-slate-300">No medical timeline yet</p>
-                      <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">Medical records will appear here once added</p>
+                      <p className="text-sm font-medium text-slate-600 ">No medical timeline yet</p>
+                      <p className="text-xs text-slate-500 mt-1">Medical records will appear here once added</p>
                     </div>
                   ) : filteredEvents.length === 0 ? (
-                    <div className="rounded-2xl border-2 border-dashed border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-800/30 p-12 text-center">
+                    <div className="rounded-2xl border-2 border-dashed border-slate-300 bg-slate-50 p-12 text-center">
                       <div className="flex justify-center mb-3">
-                        <div className="p-3 rounded-full bg-amber-100 dark:bg-amber-500/10">
-                          <span className="material-symbols-outlined text-amber-600 dark:text-amber-400">filter_alt_off</span>
+                        <div className="p-3 rounded-full bg-amber-100 ">
+                          <span className="material-symbols-outlined text-amber-600 ">filter_alt_off</span>
                         </div>
                       </div>
-                      <p className="text-sm font-medium text-slate-600 dark:text-slate-300">No entries match this filter</p>
-                      <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">Try adjusting your date range or category selection</p>
+                      <p className="text-sm font-medium text-slate-600 ">No entries match this filter</p>
+                      <p className="text-xs text-slate-500 mt-1">Try adjusting your date range or category selection</p>
                     </div>
                   ) : (
                     <TimelineInfographic
@@ -752,19 +769,19 @@ export default function DoctorPatients() {
                 <div className="space-y-6">
                   {/* Summary Stats */}
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div className="rounded-2xl border border-slate-200 bg-gradient-to-br from-slate-50 to-slate-100 p-4 dark:border-slate-700 dark:bg-gradient-to-br dark:from-slate-800 dark:to-slate-900">
-                      <p className="text-[10px] uppercase tracking-[0.12em] font-semibold text-slate-500 dark:text-slate-400">Total Records</p>
-                      <p className="mt-3 text-3xl font-bold text-slate-900 dark:text-slate-100">{patientVault.length}</p>
+                    <div className="rounded-2xl border border-slate-200 bg-gradient-to-br from-slate-50 to-slate-100 p-4 ">
+                      <p className="text-[10px] uppercase tracking-[0.12em] font-semibold text-slate-500 ">Total Records</p>
+                      <p className="mt-3 text-3xl font-bold text-slate-900 ">{patientVault.length}</p>
                     </div>
-                    <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-800">
-                      <p className="text-[11px] uppercase tracking-[0.12em] text-slate-500 dark:text-slate-400">Latest Visit</p>
-                      <p className="mt-3 text-base font-semibold text-slate-900 dark:text-slate-100">
+                    <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 ">
+                      <p className="text-[11px] uppercase tracking-[0.12em] text-slate-500 ">Latest Visit</p>
+                      <p className="mt-3 text-base font-semibold text-slate-900 ">
                         {patientVault[0]?.reportDate ? new Date(patientVault[0].reportDate).toLocaleDateString() : 'N/A'}
                       </p>
                     </div>
-                    <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-800">
-                      <p className="text-[11px] uppercase tracking-[0.12em] text-slate-500 dark:text-slate-400">Categories</p>
-                      <p className="mt-3 text-base font-semibold text-slate-900 dark:text-slate-100">
+                    <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 ">
+                      <p className="text-[11px] uppercase tracking-[0.12em] text-slate-500 ">Categories</p>
+                      <p className="mt-3 text-base font-semibold text-slate-900 ">
                         {new Set(patientVault.map((item) => item.category || 'Other')).size} types
                       </p>
                     </div>
@@ -773,7 +790,7 @@ export default function DoctorPatients() {
                   {/* AI Smart Categorization */}
                   {patientVault.length > 0 && (
                     <div className="space-y-3">
-                      <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-200">AI Smart Categorization</h3>
+                      <h3 className="text-sm font-semibold text-slate-700 ">AI Smart Categorization</h3>
                       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                         {VAULT_CATEGORY_CARDS.map((card, idx) => {
                           const Icon = card.icon;
@@ -787,16 +804,16 @@ export default function DoctorPatients() {
                               onClick={() => setVaultCategoryFilter(isActive ? null : card.title)}
                               className={`rounded-2xl border-2 p-4 transition-all duration-200 flex flex-col items-center gap-2 ${
                                 isActive
-                                  ? 'border-blue-500 bg-blue-50 dark:bg-blue-500/10'
-                                  : 'border-slate-200 dark:border-slate-700 hover:border-blue-200 dark:hover:border-blue-500/30'
+                                  ? 'border-blue-500 bg-blue-50 '
+                                  : 'border-slate-200 hover:border-blue-200 '
                               }`}
                             >
-                              <Icon size={24} className={isActive ? 'text-blue-600 dark:text-blue-400' : 'text-slate-600 dark:text-slate-400'} />
+                              <Icon size={24} className={isActive ? 'text-blue-600 ' : 'text-slate-600 '} />
                               <div className="text-center">
-                                <p className={`text-xs font-semibold ${isActive ? 'text-blue-700 dark:text-blue-300' : 'text-slate-700 dark:text-slate-200'}`}>
+                                <p className={`text-xs font-semibold ${isActive ? 'text-blue-700 ' : 'text-slate-700 '}`}>
                                   {card.title}
                                 </p>
-                                <p className={`text-[10px] ${isActive ? 'text-blue-600 dark:text-blue-400' : 'text-slate-500 dark:text-slate-400'}`}>
+                                <p className={`text-[10px] ${isActive ? 'text-blue-600 ' : 'text-slate-500 '}`}>
                                   {count} {count === 1 ? 'record' : 'records'}
                                 </p>
                               </div>
@@ -816,84 +833,84 @@ export default function DoctorPatients() {
                         placeholder="Search by title, doctor, hospital, or category..."
                         value={vaultSearchQuery}
                         onChange={(e) => setVaultSearchQuery(e.target.value)}
-                        className="w-full pl-10 pr-4 py-2.5 border border-slate-200 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        className="w-full pl-10 pr-4 py-2.5 border border-slate-200 rounded-xl bg-white text-slate-900 placeholder:text-slate-400 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                       />
                     </div>
                   )}
 
                   {/* Vault Reports */}
                   {patientVault.length === 0 ? (
-                    <div className="rounded-2xl border-2 border-dashed border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-800/30 p-12 text-center">
+                    <div className="rounded-2xl border-2 border-dashed border-slate-300 bg-slate-50 p-12 text-center">
                       <div className="flex justify-center mb-3">
-                        <div className="p-3 rounded-full bg-slate-200 dark:bg-slate-700">
-                          <span className="material-symbols-outlined text-slate-600 dark:text-slate-300">folder_open</span>
+                        <div className="p-3 rounded-full bg-slate-200 ">
+                          <span className="material-symbols-outlined text-slate-600 ">folder_open</span>
                         </div>
                       </div>
-                      <p className="text-sm font-medium text-slate-600 dark:text-slate-300">Medical vault is empty</p>
-                      <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">Medical records will appear here once uploaded</p>
+                      <p className="text-sm font-medium text-slate-600 ">Medical vault is empty</p>
+                      <p className="text-xs text-slate-500 mt-1">Medical records will appear here once uploaded</p>
                     </div>
                   ) : filteredVaultReports.length === 0 ? (
-                    <div className="rounded-2xl border-2 border-dashed border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-800/30 p-12 text-center">
+                    <div className="rounded-2xl border-2 border-dashed border-slate-300 bg-slate-50 p-12 text-center">
                       <div className="flex justify-center mb-3">
-                        <div className="p-3 rounded-full bg-amber-100 dark:bg-amber-500/10">
-                          <span className="material-symbols-outlined text-amber-600 dark:text-amber-400">search_off</span>
+                        <div className="p-3 rounded-full bg-amber-100 ">
+                          <span className="material-symbols-outlined text-amber-600 ">search_off</span>
                         </div>
                       </div>
-                      <p className="text-sm font-medium text-slate-600 dark:text-slate-300">No records match your search</p>
-                      <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">Try adjusting your filters or search query</p>
+                      <p className="text-sm font-medium text-slate-600 ">No records match your search</p>
+                      <p className="text-xs text-slate-500 mt-1">Try adjusting your filters or search query</p>
                     </div>
                   ) : (
                     <div className="space-y-4">
                       {filteredVaultReports.map((report) => {
                         const categoryMeta = {
-                          'Prescription': { icon: ClipboardList, tone: 'bg-blue-50 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400' },
-                          'Prescriptions': { icon: ClipboardList, tone: 'bg-blue-50 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400' },
-                          'Lab Report': { icon: FlaskConical, tone: 'bg-orange-50 dark:bg-orange-500/10 text-orange-600 dark:text-orange-400' },
-                          'Lab Reports': { icon: FlaskConical, tone: 'bg-orange-50 dark:bg-orange-500/10 text-orange-600 dark:text-orange-400' },
-                          'Imaging': { icon: ScanLine, tone: 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300' },
-                          'MRI/Scans': { icon: ScanLine, tone: 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300' },
-                          'Vaccination': { icon: Syringe, tone: 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300' },
-                          'Consultation': { icon: FileText, tone: 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300' },
+                          'Prescription': { icon: ClipboardList, tone: 'bg-blue-50 text-blue-600 ' },
+                          'Prescriptions': { icon: ClipboardList, tone: 'bg-blue-50 text-blue-600 ' },
+                          'Lab Report': { icon: FlaskConical, tone: 'bg-orange-50 text-orange-600 ' },
+                          'Lab Reports': { icon: FlaskConical, tone: 'bg-orange-50 text-orange-600 ' },
+                          'Imaging': { icon: ScanLine, tone: 'bg-slate-100 text-slate-600 ' },
+                          'MRI/Scans': { icon: ScanLine, tone: 'bg-slate-100 text-slate-600 ' },
+                          'Vaccination': { icon: Syringe, tone: 'bg-slate-100 text-slate-600 ' },
+                          'Consultation': { icon: FileText, tone: 'bg-slate-100 text-slate-600 ' },
                         };
                         const meta = categoryMeta[report.category] || categoryMeta.Consultation;
                         const Icon = meta.icon;
 
                         return (
-                          <div key={report.id} className={`rounded-2xl border border-slate-200 dark:border-slate-800 p-5 transition-all duration-200 hover:shadow-md dark:bg-slate-900/50 ${meta.tone}`}>
+                          <div key={report.id} className={`rounded-2xl border border-slate-200 p-5 transition-all duration-200 hover:shadow-md ${meta.tone}`}>
                             <div className="flex items-start justify-between gap-4 flex-wrap">
                               <div className="flex items-start gap-4 flex-1 min-w-0">
                                 <Icon size={20} className="shrink-0 mt-1" />
                                 <div className="min-w-0 flex-1">
-                                  <h4 className="font-semibold text-base text-slate-900 dark:text-slate-100 line-clamp-2">
+                                  <h4 className="font-semibold text-base text-slate-900 line-clamp-2">
                                     {report.title || report.category || 'Medical Record'}
                                   </h4>
                                   <div className="mt-2 space-y-1 text-sm">
                                     {report.doctor && (
-                                      <p className="text-slate-600 dark:text-slate-300">
+                                      <p className="text-slate-600 ">
                                         <span className="font-medium">Doctor:</span> {report.doctor}
                                       </p>
                                     )}
                                     {report.hospital && (
-                                      <p className="text-slate-600 dark:text-slate-300">
+                                      <p className="text-slate-600 ">
                                         <span className="font-medium">Hospital:</span> {report.hospital}
                                       </p>
                                     )}
                                     {report.reportDate && (
-                                      <p className="text-slate-600 dark:text-slate-300">
+                                      <p className="text-slate-600 ">
                                         <span className="font-medium">Date:</span> {new Date(report.reportDate).toLocaleDateString()}
                                       </p>
                                     )}
                                   </div>
 
                                   {report.diagnosis && (
-                                    <p className="mt-3 text-sm text-slate-700 dark:text-slate-200">
+                                    <p className="mt-3 text-sm text-slate-700 ">
                                       <span className="font-medium">Key Finding:</span> {report.diagnosis}
                                     </p>
                                   )}
                                 </div>
                               </div>
 
-                              <span className="inline-flex items-center rounded-full bg-white dark:bg-slate-800 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-slate-600 dark:text-slate-300 shrink-0">
+                              <span className="inline-flex items-center rounded-full bg-white px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-slate-600 shrink-0">
                                 {report.category || 'Record'}
                               </span>
                             </div>
@@ -903,6 +920,8 @@ export default function DoctorPatients() {
                     </div>
                   )}
                 </div>
+              ) : selectedTab === 'family' ? (
+                <FamilyTreeTab members={patientFamilyMembers} loading={timelineLoading} />
               ) : null}
               </div>
             </div>
@@ -912,11 +931,11 @@ export default function DoctorPatients() {
           {!selectedPatient && (
             <section>
               {isFetchingPatients ? (
-                <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-8 text-sm text-slate-500 dark:text-slate-400">
+                <div className="rounded-2xl border border-slate-200 bg-white p-8 text-sm text-slate-500 ">
                   Loading patient list...
                 </div>
             ) : patients.length === 0 ? (
-              <div className="rounded-2xl border border-dashed border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 p-8 text-center text-slate-500 dark:text-slate-400">
+              <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-8 text-center text-slate-500 ">
                 No patients linked yet. Add a patient using the user ID.
               </div>
             ) : (
@@ -924,7 +943,7 @@ export default function DoctorPatients() {
                 {patients.map((patient) => (
                   <div
                     key={`${patient.patientUserId || patient.id}-${patient.name}`}
-                    className="bg-white dark:bg-slate-900 rounded-2xl p-6 shadow-[0_4px_12px_rgba(15,23,42,0.05)] dark:shadow-black/30 border border-[#c3c6d7]/20 dark:border-slate-800 hover:shadow-[0_8px_24px_rgba(15,23,42,0.08)] transition-all"
+                    className="bg-white rounded-2xl p-6 shadow-[0_4px_12px_rgba(15,23,42,0.05)] border border-[#c3c6d7]/20 hover:shadow-[0_8px_24px_rgba(15,23,42,0.08)] transition-all"
                     onClick={() => {
                       if (openMenuId === patient.linkId) {
                         setOpenMenuId(null);
@@ -935,12 +954,12 @@ export default function DoctorPatients() {
                       <div className="flex items-center gap-4">
                         <img
                           alt="Patient Photo"
-                          className="w-14 h-14 rounded-full object-cover border border-[#c3c6d7]/30 dark:border-slate-700"
+                          className="w-14 h-14 rounded-full object-cover border border-[#c3c6d7]/30 "
                           src={patient.avatar}
                         />
                         <div>
-                          <h3 className="font-semibold text-lg text-[#191b23] dark:text-slate-100">{patient.name}</h3>
-                          <p className="text-sm text-[#434655] dark:text-slate-300">
+                          <h3 className="font-semibold text-lg text-[#191b23] ">{patient.name}</h3>
+                          <p className="text-sm text-[#434655] ">
                             ID: {patient.id} • {patient.age} Y • {patient.gender}
                           </p>
                         </div>
@@ -952,12 +971,12 @@ export default function DoctorPatients() {
                             e.stopPropagation();
                             setOpenMenuId(openMenuId === patient.linkId ? null : patient.linkId);
                           }}
-                          className="material-symbols-outlined text-[#737686] dark:text-slate-400 cursor-pointer hover:text-[#004ac6] dark:hover:text-blue-400 transition-colors"
+                          className="material-symbols-outlined text-[#737686] cursor-pointer hover:text-[#004ac6] transition-colors"
                         >
                           more_vert
                         </button>
                         {openMenuId === patient.linkId && (
-                          <div className="absolute right-0 top-8 bg-white dark:bg-slate-800 rounded-lg shadow-lg border border-slate-200 dark:border-slate-700 z-20 min-w-[160px]">
+                          <div className="absolute right-0 top-8 bg-white rounded-lg shadow-lg border border-slate-200 z-20 min-w-[160px]">
                             <button
                               type="button"
                               onClick={(e) => {
@@ -965,7 +984,7 @@ export default function DoctorPatients() {
                                 handleDeletePatient(patient);
                               }}
                               disabled={deletingPatientId === (patient.patientUserId || patient.id)}
-                              className="w-full text-left px-4 py-2.5 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-500/10 flex items-center gap-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                              className="w-full text-left px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 flex items-center gap-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                             >
                               <XCircle size={16} />
                               {deletingPatientId === (patient.patientUserId || patient.id) ? 'Removing...' : 'Remove Patient'}
@@ -977,17 +996,17 @@ export default function DoctorPatients() {
 
                     <div className="space-y-2 mb-6">
                       <div className="flex items-center justify-between">
-                        <span className="text-sm text-[#434655] dark:text-slate-300">Condition</span>
+                        <span className="text-sm text-[#434655] ">Condition</span>
                         <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${patient.conditionTone}`}>
                           {patient.condition}
                         </span>
                       </div>
                       <div className="flex items-center justify-between">
-                        <span className="text-sm text-[#434655] dark:text-slate-300">Last Visit</span>
-                        <span className="text-sm font-medium text-[#191b23] dark:text-slate-100">{patient.lastVisit}</span>
+                        <span className="text-sm text-[#434655] ">Last Visit</span>
+                        <span className="text-sm font-medium text-[#191b23] ">{patient.lastVisit}</span>
                       </div>
                       <div className="flex items-center justify-between">
-                        <span className="text-sm text-[#434655] dark:text-slate-300">Status</span>
+                        <span className="text-sm text-[#434655] ">Status</span>
                         <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${patient.statusTone}`}>
                           {patient.status}
                         </span>
@@ -997,7 +1016,7 @@ export default function DoctorPatients() {
                     <button
                       type="button"
                       onClick={() => setSelectedPatient(patient)}
-                      className="w-full py-2.5 rounded-lg border border-[#c3c6d7]/60 dark:border-slate-700 text-[#434655] dark:text-slate-300 hover:bg-[#f3f3fe] dark:hover:bg-slate-800 hover:text-[#004ac6] dark:hover:text-blue-400 hover:border-[#004ac6]/30 dark:hover:border-blue-500/30 transition-all flex justify-center items-center gap-1"
+                      className="w-full py-2.5 rounded-lg border border-[#c3c6d7]/60 text-[#434655] hover:bg-[#f3f3fe] hover:text-[#004ac6] hover:border-[#004ac6]/30 transition-all flex justify-center items-center gap-1"
                     >
                       View Profile
                       <span className="material-symbols-outlined text-[16px]">arrow_forward</span>
@@ -1099,7 +1118,7 @@ function YearBadge({ year, count, collapsed, onToggle }) {
       <button
         type="button"
         onClick={onToggle}
-        className="relative z-10 flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-blue-700 text-white ring-8 ring-white dark:ring-slate-950 transition-transform duration-200 hover:scale-110"
+        className="relative z-10 flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-blue-700 text-white ring-8 ring-white transition-transform duration-200 hover:scale-110"
         title={collapsed ? `Expand ${year}` : `Collapse ${year}`}
       >
         {collapsed ? <ChevronRight size={18} /> : <ChevronDown size={18} />}
@@ -1123,11 +1142,11 @@ function DayGroup({ events, onSelectEvent }) {
   const isCluster = events.length > 1;
 
   return (
-    <div className="relative z-10 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-4">
+    <div className="relative z-10 rounded-2xl bg-slate-50 border border-slate-200 p-4">
       <div className="flex items-baseline gap-2 mb-3">
-        <span className="text-sm font-bold text-slate-700 dark:text-slate-200">{events[0].displayDate}</span>
+        <span className="text-sm font-bold text-slate-700 ">{events[0].displayDate}</span>
         {isCluster && (
-          <span className="text-[10px] font-semibold text-slate-500 dark:text-slate-400 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-full px-2 py-0.5">
+          <span className="text-[10px] font-semibold text-slate-500 bg-white border border-slate-200 rounded-full px-2 py-0.5">
             {events.length} entries
           </span>
         )}
@@ -1138,11 +1157,11 @@ function DayGroup({ events, onSelectEvent }) {
           const Icon = event.icon;
           const iconSize = isCluster ? "w-8 h-8 ring-4" : "w-11 h-11 ring-8";
           const dotStyles = {
-            lab: "bg-orange-50 dark:bg-orange-500/10 text-orange-600 dark:text-orange-400 ring-orange-100 dark:ring-orange-500/20",
-            medication: "bg-blue-50 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400 ring-blue-100 dark:ring-blue-500/20",
-            imaging: "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 ring-slate-200 dark:ring-slate-700",
-            immunization: "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 ring-slate-200 dark:ring-slate-700",
-            consultation: "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 ring-slate-200 dark:ring-slate-700",
+            lab: "bg-orange-50 text-orange-600 ring-orange-100 ",
+            medication: "bg-blue-50 text-blue-600 ring-blue-100 ",
+            imaging: "bg-slate-100 text-slate-600 ring-slate-200 ",
+            immunization: "bg-slate-100 text-slate-600 ring-slate-200 ",
+            consultation: "bg-slate-100 text-slate-600 ring-slate-200 ",
           };
 
           return (
@@ -1165,26 +1184,26 @@ function DayGroup({ events, onSelectEvent }) {
 
 function EventCard({ event }) {
   return (
-    <div className="group relative flex-1 bg-white dark:bg-slate-900 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm p-6 transition-all duration-300 ease-out hover:shadow-lg hover:-translate-y-1 hover:border-blue-100 dark:hover:border-blue-500/20">
+    <div className="group relative flex-1 bg-white rounded-2xl border border-slate-100 shadow-sm p-6 transition-all duration-300 ease-out hover:shadow-lg hover:-translate-y-1 hover:border-blue-100 ">
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div className="min-w-0">
-          <h3 className="font-semibold text-slate-900 dark:text-slate-100 transition-colors duration-200 group-hover:text-blue-700 dark:group-hover:text-blue-400">
+          <h3 className="font-semibold text-slate-900 transition-colors duration-200 group-hover:text-blue-700 ">
             {event.title}
           </h3>
-          <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+          <p className="text-sm text-slate-500 mt-1">
             {event.doctor}
             {event.hospital ? ` · ${event.hospital}` : ''}
           </p>
 
           {event.diagnosis ? (
-            <p className="text-sm text-slate-500 dark:text-slate-400 mt-2 flex items-start gap-1.5">
+            <p className="text-sm text-slate-500 mt-2 flex items-start gap-1.5">
               <Sparkles size={13} className="text-blue-500 shrink-0 mt-0.5" />
               <span className="line-clamp-1">{event.diagnosis}</span>
             </p>
           ) : null}
         </div>
 
-        <span className="inline-flex items-center rounded-full bg-slate-100 dark:bg-slate-800 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-slate-600 dark:text-slate-300 shrink-0">
+        <span className="inline-flex items-center rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-slate-600 shrink-0">
           {event.category}
         </span>
       </div>
@@ -1229,20 +1248,20 @@ function EventDetails({ event, onClose }) {
       <div className="w-full max-w-4xl max-h-[90vh] overflow-y-auto rounded-3xl bg-white dark:bg-slate-900 p-6 shadow-2xl">
         <div className="flex items-start justify-between gap-4">
           <div>
-            <p className="text-sm font-semibold uppercase tracking-[0.24em] text-blue-600 dark:text-blue-400">
+            <p className="text-sm font-semibold uppercase tracking-[0.24em] text-blue-600 ">
               {event.category}
             </p>
-            <h2 className="mt-3 text-2xl font-semibold text-slate-900 dark:text-slate-100">
+            <h2 className="mt-3 text-2xl font-semibold text-slate-900 ">
               {event.title}
             </h2>
-            <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">
+            <p className="mt-2 text-sm text-slate-500 ">
               {formattedDate} · {event.hospital || 'Medical Record'}
             </p>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="rounded-full border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 p-3 text-slate-500 dark:text-slate-400 transition-colors hover:bg-slate-100 dark:hover:bg-slate-700 hover:text-slate-700 dark:hover:text-slate-200"
+            className="rounded-full border border-slate-200 bg-slate-50 p-3 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-700 "
           >
             <X size={18} />
           </button>
@@ -1252,30 +1271,30 @@ function EventDetails({ event, onClose }) {
           <div className="space-y-4">
             <div className="grid gap-4 sm:grid-cols-2">
               {event.doctor && (
-                <div className="rounded-2xl border border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 p-4">
-                  <p className="text-sm text-slate-500 dark:text-slate-400">Doctor</p>
-                  <p className="mt-2 text-base font-semibold text-slate-900 dark:text-slate-100">{event.doctor}</p>
+                <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
+                  <p className="text-sm text-slate-500 ">Doctor</p>
+                  <p className="mt-2 text-base font-semibold text-slate-900 ">{event.doctor}</p>
                 </div>
               )}
 
               {event.category && (
-                <div className="rounded-2xl border border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 p-4">
-                  <p className="text-sm text-slate-500 dark:text-slate-400">Category</p>
-                  <p className="mt-2 text-base font-semibold text-slate-900 dark:text-slate-100">{event.category}</p>
+                <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
+                  <p className="text-sm text-slate-500 ">Category</p>
+                  <p className="mt-2 text-base font-semibold text-slate-900 ">{event.category}</p>
                 </div>
               )}
 
               {event.diagnosis && (
-                <div className="rounded-2xl border border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 p-4">
-                  <p className="text-sm text-slate-500 dark:text-slate-400">Diagnosis</p>
-                  <p className="mt-2 text-base font-semibold text-slate-900 dark:text-slate-100">{event.diagnosis}</p>
+                <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
+                  <p className="text-sm text-slate-500 ">Diagnosis</p>
+                  <p className="mt-2 text-base font-semibold text-slate-900 ">{event.diagnosis}</p>
                 </div>
               )}
 
               {event.medicines && (
-                <div className="rounded-2xl border border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 p-4">
-                  <p className="text-sm text-slate-500 dark:text-slate-400">Medicines</p>
-                  <p className="mt-2 text-base font-semibold text-slate-900 dark:text-slate-100">{event.medicines}</p>
+                <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
+                  <p className="text-sm text-slate-500 ">Medicines</p>
+                  <p className="mt-2 text-base font-semibold text-slate-900 ">{event.medicines}</p>
                 </div>
               )}
             </div>

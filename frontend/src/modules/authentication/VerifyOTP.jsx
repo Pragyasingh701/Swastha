@@ -46,6 +46,21 @@ export default function VerifyOTP() {
     }
   };
 
+  const handlePaste = (e) => {
+    e.preventDefault();
+    const pasted = e.clipboardData.getData("text").replace(/\D/g, "").slice(0, 6);
+    if (!pasted) return;
+
+    const newOtp = ["", "", "", "", "", ""];
+    for (let i = 0; i < pasted.length; i++) {
+      newOtp[i] = pasted[i];
+    }
+    setOtp(newOtp);
+
+    const nextIndex = Math.min(pasted.length, 5);
+    inputRefs.current[nextIndex]?.focus();
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     const otpString = otp.join("");
@@ -82,21 +97,21 @@ export default function VerifyOTP() {
   };
 
   return (
-    <main className="min-h-screen w-full flex flex-col justify-center items-center p-6 bg-surface dark:bg-slate-950 font-body-md text-on-surface dark:text-slate-100 selection:bg-primary-fixed">
+    <main className="min-h-screen w-full flex flex-col justify-center items-center p-6 bg-surface font-body-md text-on-surface selection:bg-primary-fixed">
       <div className="w-full max-w-[440px]">
-        <div className="bg-white dark:bg-slate-900 shadow-[0_8px_40px_-12px_rgba(15,23,42,0.08)] rounded-[20px] p-8 lg:p-10 border border-outline-variant/20 dark:border-slate-700">
+        <div className="bg-white shadow-[0_8px_40px_-12px_rgba(15,23,42,0.08)] rounded-[20px] p-8 lg:p-10 border border-outline-variant/20 ">
           <div className="text-center mb-8">
             <div className="w-14 h-14 mx-auto mb-4 bg-primary-container/10 text-primary rounded-2xl flex items-center justify-center">
               <span className="material-symbols-outlined text-[30px]">phonelink_ring</span>
             </div>
-            <h2 className="font-headline-md text-headline-md text-on-surface dark:text-slate-100">Verify Security Code</h2>
-            <p className="font-body-sm text-body-sm text-on-surface-variant dark:text-slate-400 mt-2">
-              We&apos;ve sent a 6-digit verification code to <span className="font-semibold text-on-surface dark:text-slate-100">{email}</span>
+            <h2 className="font-headline-md text-headline-md text-on-surface ">Verify Security Code</h2>
+            <p className="font-body-sm text-body-sm text-on-surface-variant mt-2">
+              We&apos;ve sent a 6-digit verification code to <span className="font-semibold text-on-surface ">{email}</span>
             </p>
           </div>
 
           {error && (
-            <div className="mb-6 p-4 rounded-xl bg-error-container dark:bg-rose-500/10 text-on-error-container dark:text-rose-300 text-body-sm flex items-center gap-3">
+            <div className="mb-6 p-4 rounded-xl bg-error-container text-on-error-container text-body-sm flex items-center gap-3">
               <span className="material-symbols-outlined text-[20px]">error</span>
               <span>{error}</span>
             </div>
@@ -114,7 +129,8 @@ export default function VerifyOTP() {
                   value={digit}
                   onChange={(e) => handleChange(index, e.target.value)}
                   onKeyDown={(e) => handleKeyDown(index, e)}
-                  className="w-12 h-14 text-center text-headline-md font-extrabold bg-surface-container-lowest dark:bg-slate-900 border border-outline-variant dark:border-slate-700 rounded-xl focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all"
+                  onPaste={handlePaste}
+                  className="w-12 h-14 text-center text-headline-md font-extrabold bg-surface-container-lowest border border-outline-variant rounded-xl focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all"
                 />
               ))}
             </div>
@@ -130,7 +146,7 @@ export default function VerifyOTP() {
 
           <div className="mt-8 text-center">
             {timer > 0 ? (
-              <p className="font-body-sm text-body-sm text-on-surface-variant dark:text-slate-400">
+              <p className="font-body-sm text-body-sm text-on-surface-variant ">
                 Resend code in <span className="font-semibold text-primary">{timer}s</span>
               </p>
             ) : (

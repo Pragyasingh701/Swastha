@@ -28,6 +28,27 @@ function isPendingAuthorizationMember(member) {
   return member?.authorizationStatus === 'pending' || Boolean(member?.notes && /\[PendingAuthorization:[^\]]+\]/.test(member.notes));
 }
 
+function sanitizeConditions(list) {
+  if (!Array.isArray(list)) return [];
+
+  return list
+    .map((entry) => {
+      const name = typeof entry?.name === 'string' ? entry.name.trim().slice(0, 100) : '';
+      if (!name) return null;
+
+      const ageOfOnset = Number(entry?.ageOfOnset);
+      const notes = typeof entry?.notes === 'string' ? entry.notes.trim().slice(0, 200) : '';
+
+      return {
+        name,
+        ageOfOnset: Number.isInteger(ageOfOnset) && ageOfOnset >= 0 && ageOfOnset <= 150 ? ageOfOnset : null,
+        ...(notes ? { notes } : {}),
+      };
+    })
+    .filter(Boolean)
+    .slice(0, 20);
+}
+
 function normalizeMember(row) {
   if (!row) return null;
   const userIdFromRow = row[FAMILY_USER_ID_COLUMN] ?? row.user_id ?? row.userId ?? null;
@@ -43,6 +64,7 @@ function normalizeMember(row) {
     relationshipTag: row.relationship_tag,
     healthOverview: row.health_overview,
     notes: row.notes,
+    conditions: Array.isArray(row.conditions) ? row.conditions : [],
     lastVisitDate: row.last_visit_date,
     nextCheckupDate: row.next_checkup_date,
     authorizationStatus: row.authorization_status || 'approved',
@@ -79,6 +101,7 @@ function buildMemberPayload(memberData = {}) {
     relationship_tag: memberData.relationshipTag?.trim() || memberData.relationship_tag || null,
     health_overview: memberData.healthOverview?.trim() || memberData.health_overview || null,
     notes: memberData.notes?.trim() || null,
+    conditions: sanitizeConditions(memberData.conditions),
     last_visit_date: memberData.lastVisitDate || memberData.last_visit_date || null,
     next_checkup_date: memberData.nextCheckupDate || memberData.next_checkup_date || null,
     authorization_status: memberData.authorizationStatus || memberData.authorization_status || (memberData.authorizationMethod === 'mail' ? 'pending' : 'approved'),
@@ -114,6 +137,7 @@ function buildMemberUpdatePayload(memberData = {}) {
   if (has('relationshipTag') || has('relationship_tag')) payload.relationship_tag = memberData.relationshipTag?.trim() || memberData.relationship_tag || null;
   if (has('healthOverview') || has('health_overview')) payload.health_overview = memberData.healthOverview?.trim() || memberData.health_overview || null;
   if (has('notes')) payload.notes = memberData.notes?.trim() || null;
+  if (has('conditions')) payload.conditions = sanitizeConditions(memberData.conditions);
   if (has('lastVisitDate') || has('last_visit_date')) payload.last_visit_date = memberData.lastVisitDate || memberData.last_visit_date || null;
   if (has('nextCheckupDate') || has('next_checkup_date')) payload.next_checkup_date = memberData.nextCheckupDate || memberData.next_checkup_date || null;
   if (has('authorizationStatus') || has('authorization_status')) payload.authorization_status = memberData.authorizationStatus || memberData.authorization_status;

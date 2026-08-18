@@ -7,7 +7,6 @@ import * as reportService from "../../../../api/reports";
 import * as familyService from "../../../../api/family";
 import { indexReport, removeReportFromIndex } from "../../../../api/search";
 import SettingsModal from "../../../settings/components/SettingsModal";
-import ThemeToggle from "../../../../components/Common/ThemeToggle";
 import ProfileDropdown from "../../../settings/components/ProfileDropdown";
 import Logo from "../../../../components/Common/Logo";
 import {
@@ -71,19 +70,19 @@ const CATEGORY_META = {
 // as a permanent category color (matches Dashboard's SafetyAlert palette),
 // independent of whether anything on the report actually needs attention.
 const dotStyles = {
-  lab: "bg-orange-50 dark:bg-orange-500/10 text-orange-600 dark:text-orange-400 ring-orange-100 dark:ring-orange-500/20",
-  medication: "bg-blue-50 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400 ring-blue-100 dark:ring-blue-500/20",
-  imaging: "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 ring-slate-200 dark:ring-slate-700",
-  immunization: "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 ring-slate-200 dark:ring-slate-700",
-  consultation: "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 ring-slate-200 dark:ring-slate-700",
+  lab: "bg-orange-50 text-orange-600 ring-orange-100 ",
+  medication: "bg-blue-50 text-blue-600 ring-blue-100 ",
+  imaging: "bg-slate-100 text-slate-600 ring-slate-200 ",
+  immunization: "bg-slate-100 text-slate-600 ring-slate-200 ",
+  consultation: "bg-slate-100 text-slate-600 ring-slate-200 ",
 };
 
 const tagStyles = {
-  lab: "text-orange-600 dark:text-orange-400",
-  medication: "text-blue-600 dark:text-blue-400",
-  imaging: "text-slate-600 dark:text-slate-300",
-  immunization: "text-slate-600 dark:text-slate-300",
-  consultation: "text-slate-600 dark:text-slate-300",
+  lab: "text-orange-600 ",
+  medication: "text-blue-600 ",
+  imaging: "text-slate-600 ",
+  immunization: "text-slate-600 ",
+  consultation: "text-slate-600 ",
 };
 
 // "NEEDS ATTENTION" only means one concrete thing: this report has fields
@@ -332,26 +331,25 @@ export default function Timeline() {
   }, [events, categoryFilter, dateFrom, dateTo]);
 
   return (
-    <div className="flex h-screen overflow-hidden bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100">
+    <div className="flex h-screen overflow-hidden bg-slate-50 text-slate-900 ">
       <Sidebar onUploadClick={() => setShowUploadModal(true)} onOpenSettings={() => setIsSettingsOpen(true)} />
 
       <div className="flex-1 flex flex-col min-w-0 h-screen overflow-hidden">
-        <header className="shrink-0 flex items-center gap-4 px-6 lg:px-8 py-5 border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
+        <header className="shrink-0 flex items-center gap-4 px-6 lg:px-8 py-5 border-b border-slate-200 bg-white ">
           <button
             type="button"
             onClick={() => navigate('/search')}
-            className="flex-1 flex items-center gap-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-4 py-2.5 text-sm text-slate-400 dark:text-slate-500 transition-colors hover:border-blue-300 dark:hover:border-blue-500/50 hover:text-blue-600 dark:hover:text-blue-400"
+            className="flex-1 flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-lg px-4 py-2.5 text-sm text-slate-400 transition-colors hover:border-blue-300 hover:text-blue-600 "
           >
             <Sparkles size={16} />
             Ask Swastha about your health records...
           </button>
 
-          <button className="relative p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 shrink-0">
-            <Bell size={20} className="text-slate-600 dark:text-slate-300" />
+          <button className="relative p-2 rounded-lg hover:bg-slate-100 shrink-0">
+            <Bell size={20} className="text-slate-600 " />
             <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full" />
           </button>
 
-          <ThemeToggle />
 
           <ProfileDropdown />
         </header>
@@ -359,13 +357,13 @@ export default function Timeline() {
       <main className="flex-1 overflow-y-auto px-6 sm:px-10 py-8">
         <div className="flex flex-wrap items-start justify-between gap-4 mb-6">
           <div>
-            <h1 className="text-2xl font-semibold text-slate-900 dark:text-slate-100">
+            <h1 className="text-2xl font-semibold text-slate-900 ">
               Health Timeline
             </h1>
-            <p className="text-slate-500 dark:text-slate-400 mt-1">
+            <p className="text-slate-500 mt-1">
               {targetEmail ? `Comprehensive history for ${targetEmail}` : 'Comprehensive history of your medical journey'}
               {profileId ? (
-                <span className="text-slate-400 dark:text-slate-500"> · profile {profileId}</span>
+                <span className="text-slate-400 "> · profile {profileId}</span>
               ) : null}
             </p>
           </div>
@@ -375,10 +373,10 @@ export default function Timeline() {
               <button
                 type="button"
                 onClick={() => navigate('/timeline')}
-                className={`w-9 h-9 rounded-full flex items-center justify-center text-[10px] font-semibold ring-2 ring-white dark:ring-slate-900 transition-transform duration-200 hover:scale-110 ${
+                className={`w-9 h-9 rounded-full flex items-center justify-center text-[10px] font-semibold ring-2 ring-white transition-transform duration-200 hover:scale-110 ${
                   !targetEmail
-                    ? "bg-blue-600 ring-blue-200 dark:ring-blue-500/30 text-white"
-                    : "bg-slate-100 dark:bg-slate-800 ring-slate-200 dark:ring-slate-700 text-slate-500 dark:text-slate-400"
+                    ? "bg-blue-600 ring-blue-200 text-white"
+                    : "bg-slate-100 ring-slate-200 text-slate-500 "
                 }`}
                 title={!targetEmail ? "Viewing your timeline" : "Me"}
                 aria-label="Self timeline"
@@ -424,7 +422,7 @@ export default function Timeline() {
                       title={member.name || 'Family member'}
                     >
                       <div
-                        className={`flex h-9 min-w-[36px] items-center justify-center overflow-hidden rounded-full px-0 text-center text-xs font-medium text-white ring-2 ring-white dark:ring-slate-900 transition-all duration-200 group-hover:min-w-[140px] group-hover:px-4 ${
+                        className={`flex h-9 min-w-[36px] items-center justify-center overflow-hidden rounded-full px-0 text-center text-xs font-medium text-white ring-2 ring-white transition-all duration-200 group-hover:min-w-[140px] group-hover:px-4 ${
                           isActive ? "bg-blue-600" : "bg-slate-400"
                         }`}
                         aria-label={member.name || 'Family member'}
@@ -442,7 +440,7 @@ export default function Timeline() {
               {familyMembers.length > 3 && (
                 <div className="relative group">
                   <div
-                    className="w-9 h-9 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-xs font-medium flex items-center justify-center ring-2 ring-white dark:ring-slate-900 transition-transform duration-200 hover:scale-110"
+                    className="w-9 h-9 rounded-full bg-slate-100 text-slate-600 text-xs font-medium flex items-center justify-center ring-2 ring-white transition-transform duration-200 hover:scale-110"
                     aria-label={`${familyMembers.length - 3} more family members`}
                   >
                     +{familyMembers.length - 3}
@@ -519,7 +517,7 @@ function Sidebar({ onUploadClick, onOpenSettings }) {
   const pathname = location.pathname;
 
   return (
-    <aside className="hidden lg:flex lg:flex-col w-64 shrink-0 bg-slate-50 dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 h-screen overflow-y-auto px-4 py-6">
+    <aside className="hidden lg:flex lg:flex-col w-64 shrink-0 bg-slate-50 border-r border-slate-200 h-screen overflow-y-auto px-4 py-6">
       <div className="px-2 mb-8">
         <Logo />
       </div>
@@ -535,8 +533,8 @@ function Sidebar({ onUploadClick, onOpenSettings }) {
               onClick={() => route && navigate(route)}
               className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
                 isActive
-                  ? "bg-blue-100 dark:bg-blue-500/15 text-blue-700 dark:text-blue-400"
-                  : "text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800"
+                  ? "bg-blue-100 text-blue-700 "
+                  : "text-slate-600 hover:bg-slate-100 "
               }`}
             >
             <Icon size={18} />
@@ -560,12 +558,12 @@ function Sidebar({ onUploadClick, onOpenSettings }) {
           <button
             type="button"
             onClick={onOpenSettings}
-            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800"
+            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-100 "
           >
             <Settings size={18} />
             Settings
           </button>
-          <button className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800">
+          <button className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-100 ">
             <HelpCircle size={18} />
             Support
           </button>
@@ -582,14 +580,14 @@ function FilterBar({ categoryFilter, setCategoryFilter, categories, dateFrom, da
   const hasDateRange = Boolean(dateFrom || dateTo);
 
   return (
-    <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm p-4 mb-8 flex items-center justify-between flex-wrap gap-3">
+    <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4 mb-8 flex items-center justify-between flex-wrap gap-3">
       <div className="flex items-center gap-3 flex-wrap">
         <div className="relative">
           <button
             type="button"
             onClick={() => setShowDateRange((v) => !v)}
             className={`flex items-center gap-2 text-sm px-3 py-2 rounded-xl transition-all duration-200 ${
-              hasDateRange ? "bg-blue-50 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400 font-medium" : "text-slate-600 dark:text-slate-300 bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700"
+              hasDateRange ? "bg-blue-50 text-blue-600 font-medium" : "text-slate-600 bg-slate-50 hover:bg-slate-100 "
             }`}
           >
             <span>
@@ -601,23 +599,23 @@ function FilterBar({ categoryFilter, setCategoryFilter, categories, dateFrom, da
           </button>
 
           {showDateRange && (
-            <div className="absolute z-20 top-full left-0 mt-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-lg p-4 flex flex-col gap-3 w-64">
-              <label className="text-xs font-medium text-slate-500 dark:text-slate-400">
+            <div className="absolute z-20 top-full left-0 mt-2 bg-white border border-slate-200 rounded-xl shadow-lg p-4 flex flex-col gap-3 w-64">
+              <label className="text-xs font-medium text-slate-500 ">
                 From
                 <input
                   type="date"
                   value={dateFrom}
                   onChange={(e) => setDateFrom(e.target.value)}
-                  className="mt-1 w-full border border-slate-200 dark:border-slate-700 dark:bg-slate-800 rounded-lg px-3 py-2 text-sm text-slate-700 dark:text-slate-200"
+                  className="mt-1 w-full border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-700 "
                 />
               </label>
-              <label className="text-xs font-medium text-slate-500 dark:text-slate-400">
+              <label className="text-xs font-medium text-slate-500 ">
                 To
                 <input
                   type="date"
                   value={dateTo}
                   onChange={(e) => setDateTo(e.target.value)}
-                  className="mt-1 w-full border border-slate-200 dark:border-slate-700 dark:bg-slate-800 rounded-lg px-3 py-2 text-sm text-slate-700 dark:text-slate-200"
+                  className="mt-1 w-full border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-700 "
                 />
               </label>
               {hasDateRange && (
@@ -627,7 +625,7 @@ function FilterBar({ categoryFilter, setCategoryFilter, categories, dateFrom, da
                     setDateFrom("");
                     setDateTo("");
                   }}
-                  className="text-xs text-slate-500 dark:text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 self-start"
+                  className="text-xs text-slate-500 hover:text-blue-600 self-start"
                 >
                   Clear dates
                 </button>
@@ -636,7 +634,7 @@ function FilterBar({ categoryFilter, setCategoryFilter, categories, dateFrom, da
           )}
         </div>
 
-        <div className="w-px h-5 bg-slate-200 dark:bg-slate-800" />
+        <div className="w-px h-5 bg-slate-200 " />
 
         {categories.map((category) => {
           const isActive = category === categoryFilter;
@@ -647,8 +645,8 @@ function FilterBar({ categoryFilter, setCategoryFilter, categories, dateFrom, da
               className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm transition-all duration-200
                 ${
                   isActive
-                    ? "bg-blue-50 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400 font-medium"
-                    : "text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/60 hover:text-slate-800 dark:hover:text-slate-200"
+                    ? "bg-blue-50 text-blue-600 font-medium"
+                    : "text-slate-500 hover:bg-slate-50 hover:text-slate-800 "
                 }`}
             >
               {category}
@@ -668,7 +666,7 @@ function FilterBar({ categoryFilter, setCategoryFilter, categories, dateFrom, da
       </div>
 
       <div className="flex items-center gap-2">
-        <button className="w-9 h-9 rounded-xl flex items-center justify-center text-slate-400 dark:text-slate-500 transition-all duration-200 hover:bg-slate-50 dark:hover:bg-slate-800/60 hover:text-blue-600 dark:hover:text-blue-400">
+        <button className="w-9 h-9 rounded-xl flex items-center justify-center text-slate-400 transition-all duration-200 hover:bg-slate-50 hover:text-blue-600 ">
           <SlidersHorizontal size={17} />
         </button>
       </div>
@@ -704,12 +702,12 @@ function groupEventsByDate(events) {
 
 function TimelineInfographic({ events, loading, onSelectEvent, collapsedYears, onToggleYear }) {
   if (loading) {
-    return <p className="text-slate-400 dark:text-slate-500 text-sm py-10 text-center">Loading timeline...</p>;
+    return <p className="text-slate-400 text-sm py-10 text-center">Loading timeline...</p>;
   }
 
   if (events.length === 0) {
     return (
-      <p className="text-slate-400 dark:text-slate-500 text-sm py-10 text-center">
+      <p className="text-slate-400 text-sm py-10 text-center">
         No entries match this filter yet.
       </p>
     );
@@ -752,7 +750,7 @@ function YearBadge({ year, count, collapsed, onToggle }) {
       <button
         type="button"
         onClick={onToggle}
-        className="relative z-10 flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-blue-700 text-white ring-8 ring-slate-50 dark:ring-slate-950 transition-transform duration-200 hover:scale-110"
+        className="relative z-10 flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-blue-700 text-white ring-8 ring-slate-50 transition-transform duration-200 hover:scale-110"
         title={collapsed ? `Expand ${year}` : `Collapse ${year}`}
       >
         {collapsed ? <ChevronRight size={18} /> : <ChevronDown size={18} />}
@@ -781,11 +779,11 @@ function DayGroup({ events, onSelectEvent }) {
   const isCluster = events.length > 1;
 
   return (
-    <div className="relative z-10 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-4">
+    <div className="relative z-10 rounded-2xl bg-slate-50 border border-slate-200 p-4">
       <div className="flex items-baseline gap-2 mb-3">
-        <span className="text-sm font-bold text-slate-700 dark:text-slate-200">{events[0].displayDate}</span>
+        <span className="text-sm font-bold text-slate-700 ">{events[0].displayDate}</span>
         {isCluster && (
-          <span className="text-[10px] font-semibold text-slate-500 dark:text-slate-400 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-full px-2 py-0.5">
+          <span className="text-[10px] font-semibold text-slate-500 bg-white border border-slate-200 rounded-full px-2 py-0.5">
             {events.length} entries
           </span>
         )}
@@ -823,10 +821,10 @@ function DayGroup({ events, onSelectEvent }) {
 function EventCard({ event, notable }) {
   return (
     <div
-      className={`group relative flex-1 bg-white dark:bg-slate-900 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm p-6
+      className={`group relative flex-1 bg-white rounded-2xl border border-slate-100 shadow-sm p-6
         transition-all duration-300 ease-out
         hover:shadow-lg hover:-translate-y-1
-        ${notable ? "border-l-4 border-l-orange-500" : "hover:border-blue-100 dark:hover:border-blue-500/20"}`}
+        ${notable ? "border-l-4 border-l-orange-500" : "hover:border-blue-100 "}`}
     >
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div className="min-w-0">
@@ -836,38 +834,38 @@ function EventCard({ event, notable }) {
               NEEDS ATTENTION
             </p>
           )}
-          <h3 className="font-semibold text-slate-900 dark:text-slate-100 transition-colors duration-200 group-hover:text-blue-700 dark:group-hover:text-blue-400">
+          <h3 className="font-semibold text-slate-900 transition-colors duration-200 group-hover:text-blue-700 ">
             {event.title}
           </h3>
-          <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+          <p className="text-sm text-slate-500 mt-1">
             {event.doctor || 'Unknown doctor'}
             {event.hospital ? ` · ${event.hospital}` : ''}
           </p>
 
           {/* one-line AI summary, sourced from diagnosis for now */}
           {event.diagnosis ? (
-            <p className="text-sm text-slate-500 dark:text-slate-400 mt-2 flex items-start gap-1.5">
+            <p className="text-sm text-slate-500 mt-2 flex items-start gap-1.5">
               <Sparkles size={13} className="text-blue-500 shrink-0 mt-0.5" />
               <span className="line-clamp-1">{event.diagnosis}</span>
             </p>
           ) : null}
 
           {event.analysis ? (
-            <p className="text-sm text-slate-500 dark:text-slate-400 mt-2 flex items-start gap-1.5">
+            <p className="text-sm text-slate-500 mt-2 flex items-start gap-1.5">
               <FileText size={13} className="text-blue-500 shrink-0 mt-0.5" />
               <span className="line-clamp-2">{event.analysis}</span>
             </p>
           ) : null}
 
           {event.unclearFields && event.unclearFields.length > 0 && (
-            <p className="flex items-center gap-1.5 text-xs font-medium text-amber-600 dark:text-amber-400 mt-2">
+            <p className="flex items-center gap-1.5 text-xs font-medium text-amber-600 mt-2">
               <span className="leading-none">⚠</span>
               {event.unclearFields.length === 1 ? "1 field" : `${event.unclearFields.length} fields`} unverified — check original document
             </p>
           )}
         </div>
 
-        <span className="inline-flex items-center rounded-full bg-slate-100 dark:bg-slate-800 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-slate-600 dark:text-slate-300 shrink-0">
+        <span className="inline-flex items-center rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-slate-600 shrink-0">
           {event.category}
         </span>
       </div>
@@ -926,20 +924,20 @@ function EventDetails({ event, onClose, onEdit, onDelete }) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 px-4 py-6">
-      <div className="w-full max-w-5xl max-h-[90vh] overflow-y-auto rounded-3xl bg-white dark:bg-slate-900 p-6 shadow-2xl">
+      <div className="w-full max-w-5xl max-h-[90vh] overflow-y-auto rounded-3xl bg-white p-6 shadow-2xl">
         <div className="flex items-start justify-between gap-4">
           <div>
-            <p className="text-sm font-semibold uppercase tracking-[0.24em] text-blue-600 dark:text-blue-400">
+            <p className="text-sm font-semibold uppercase tracking-[0.24em] text-blue-600 ">
               {event.category}
             </p>
-            <h2 className="mt-3 text-2xl font-semibold text-slate-900 dark:text-slate-100">
+            <h2 className="mt-3 text-2xl font-semibold text-slate-900 ">
               {event.title}
             </h2>
-            <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">
+            <p className="mt-2 text-sm text-slate-500 ">
               {formattedDate} · {event.hospital || 'Medical Record'}
             </p>
             {formattedEditedAt && (
-              <p className="mt-1 text-xs text-slate-400 dark:text-slate-500">
+              <p className="mt-1 text-xs text-slate-400 ">
                 Last edited {formattedEditedAt}
               </p>
             )}
@@ -947,7 +945,7 @@ function EventDetails({ event, onClose, onEdit, onDelete }) {
           <button
             type="button"
             onClick={onClose}
-            className="rounded-full border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 p-3 text-slate-500 dark:text-slate-400 transition-colors hover:bg-slate-100 dark:hover:bg-slate-700 hover:text-slate-700 dark:hover:text-slate-200"
+            className="rounded-full border border-slate-200 bg-slate-50 p-3 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-700 "
           >
             <X size={18} />
           </button>
@@ -957,13 +955,13 @@ function EventDetails({ event, onClose, onEdit, onDelete }) {
           {/* Left: analysis and metadata */}
           <div className="space-y-4">
             {event.unclearFields && event.unclearFields.length > 0 && (
-              <div className="rounded-2xl border border-amber-200 dark:border-amber-500/20 bg-amber-50 dark:bg-amber-500/10 p-4 flex items-start gap-3">
-                <span className="text-amber-600 dark:text-amber-400 text-lg leading-none mt-0.5">⚠</span>
+              <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 flex items-start gap-3">
+                <span className="text-amber-600 text-lg leading-none mt-0.5">⚠</span>
                 <div>
-                  <p className="font-semibold text-amber-700 dark:text-amber-400">
+                  <p className="font-semibold text-amber-700 ">
                     {event.unclearFields.length === 1 ? "One field" : `${event.unclearFields.length} fields`} unverified
                   </p>
-                  <p className="text-sm text-gray-600 dark:text-slate-400 mt-1">
+                  <p className="text-sm text-gray-600 mt-1">
                     AI couldn't confidently read <span className="font-medium">{event.unclearFields.join(', ')}</span> from
                     the uploaded document (usually illegible handwriting), and it wasn't filled in manually either.
                     {event.fileUrl ? " Check the original document below." : " No original document is attached to verify against."}
@@ -974,45 +972,45 @@ function EventDetails({ event, onClose, onEdit, onDelete }) {
 
             <div className="grid gap-4 sm:grid-cols-2">
               {event.doctor && (
-                <div className="rounded-2xl border border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 p-4">
-                  <p className="text-sm text-slate-500 dark:text-slate-400">Doctor</p>
-                  <p className="mt-2 text-base font-semibold text-slate-900 dark:text-slate-100">{event.doctor}</p>
+                <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
+                  <p className="text-sm text-slate-500 ">Doctor</p>
+                  <p className="mt-2 text-base font-semibold text-slate-900 ">{event.doctor}</p>
                 </div>
               )}
 
               {event.category && (
-                <div className="rounded-2xl border border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 p-4">
-                  <p className="text-sm text-slate-500 dark:text-slate-400">Category</p>
-                  <p className="mt-2 text-base font-semibold text-slate-900 dark:text-slate-100">{event.category}</p>
+                <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
+                  <p className="text-sm text-slate-500 ">Category</p>
+                  <p className="mt-2 text-base font-semibold text-slate-900 ">{event.category}</p>
                 </div>
               )}
 
               {event.diagnosis && (
-                <div className="rounded-2xl border border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 p-4">
-                  <p className="text-sm text-slate-500 dark:text-slate-400">Diagnosis</p>
-                  <p className="mt-2 text-base font-semibold text-slate-900 dark:text-slate-100">{event.diagnosis}</p>
+                <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
+                  <p className="text-sm text-slate-500 ">Diagnosis</p>
+                  <p className="mt-2 text-base font-semibold text-slate-900 ">{event.diagnosis}</p>
                 </div>
               )}
 
               {event.medicines && (
-                <div className="rounded-2xl border border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 p-4">
-                  <p className="text-sm text-slate-500 dark:text-slate-400">Medicines</p>
-                  <p className="mt-2 text-base font-semibold text-slate-900 dark:text-slate-100">{event.medicines}</p>
+                <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
+                  <p className="text-sm text-slate-500 ">Medicines</p>
+                  <p className="mt-2 text-base font-semibold text-slate-900 ">{event.medicines}</p>
                 </div>
               )}
             </div>
 
             {event.analysis ? (
-              <div className="rounded-2xl border border-blue-100 dark:border-blue-500/20 bg-blue-50 dark:bg-blue-500/10 p-4">
-                <p className="text-sm text-blue-700 dark:text-blue-400">PDF / file analysis</p>
-                <p className="mt-2 text-sm text-slate-700 dark:text-slate-300 whitespace-pre-line">{event.analysis}</p>
+              <div className="rounded-2xl border border-blue-100 bg-blue-50 p-4">
+                <p className="text-sm text-blue-700 ">PDF / file analysis</p>
+                <p className="mt-2 text-sm text-slate-700 whitespace-pre-line">{event.analysis}</p>
               </div>
             ) : null}
 
             {event.notes ? (
-              <div className="rounded-2xl border border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 p-4">
-                <p className="text-sm text-slate-500 dark:text-slate-400">Notes</p>
-                <p className="mt-2 text-sm text-slate-600 dark:text-slate-300 whitespace-pre-line">{event.notes}</p>
+              <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
+                <p className="text-sm text-slate-500 ">Notes</p>
+                <p className="mt-2 text-sm text-slate-600 whitespace-pre-line">{event.notes}</p>
               </div>
             ) : null}
           </div>
@@ -1020,13 +1018,13 @@ function EventDetails({ event, onClose, onEdit, onDelete }) {
           {/* Right: preview */}
           <div className="space-y-4">
             {event.fileUrl ? (
-              <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 p-3 h-full flex flex-col">
-                <p className="text-sm text-slate-500 dark:text-slate-400">Document preview</p>
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3 h-full flex flex-col">
+                <p className="text-sm text-slate-500 ">Document preview</p>
                 {getPreviewType(event.fileUrl) === 'pdf' ? (
                   <iframe
                     src={getPreviewUrl(event.fileUrl)}
                     title="PDF preview"
-                    className="mt-3 flex-1 w-full rounded-xl border border-slate-200 dark:border-slate-800"
+                    className="mt-3 flex-1 w-full rounded-xl border border-slate-200 "
                     style={{ minHeight: 420 }}
                   />
                 ) : getPreviewType(event.fileUrl) === 'image' ? (
@@ -1036,28 +1034,28 @@ function EventDetails({ event, onClose, onEdit, onDelete }) {
                     className="mt-3 max-h-[520px] w-full rounded-xl object-contain"
                   />
                 ) : (
-                  <p className="mt-3 text-sm text-slate-500 dark:text-slate-400">Preview not available for this file type.</p>
+                  <p className="mt-3 text-sm text-slate-500 ">Preview not available for this file type.</p>
                 )}
 
                 <a
                   href={event.fileUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="mt-3 inline-flex items-center gap-2 rounded-2xl border border-blue-100 dark:border-blue-500/20 bg-blue-50 dark:bg-blue-500/10 px-4 py-2 text-blue-700 dark:text-blue-400 text-sm font-semibold transition-colors hover:bg-blue-100 dark:hover:bg-blue-500/20"
+                  className="mt-3 inline-flex items-center gap-2 rounded-2xl border border-blue-100 bg-blue-50 px-4 py-2 text-blue-700 text-sm font-semibold transition-colors hover:bg-blue-100 "
                 >
                   <FileText size={16} />
                   View original document
                 </a>
               </div>
             ) : event.fileName ? (
-              <div className="rounded-2xl border border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 p-4">
-                <p className="text-sm text-slate-500 dark:text-slate-400">Attached file</p>
-                <p className="mt-2 text-sm font-semibold text-slate-900 dark:text-slate-100 break-all">{event.fileName}</p>
-                <p className="mt-1 text-xs text-slate-400 dark:text-slate-500">Original document not stored yet — filename only.</p>
+              <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
+                <p className="text-sm text-slate-500 ">Attached file</p>
+                <p className="mt-2 text-sm font-semibold text-slate-900 break-all">{event.fileName}</p>
+                <p className="mt-1 text-xs text-slate-400 ">Original document not stored yet — filename only.</p>
               </div>
             ) : (
-              <div className="rounded-2xl border border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 p-4">
-                <p className="text-sm text-slate-500 dark:text-slate-400">No document attached</p>
+              <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
+                <p className="text-sm text-slate-500 ">No document attached</p>
               </div>
             )}
           </div>
@@ -1081,7 +1079,7 @@ function EventDetails({ event, onClose, onEdit, onDelete }) {
           <button
             type="button"
             onClick={onClose}
-            className="inline-flex items-center justify-center rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-4 py-3 text-sm font-semibold text-slate-700 dark:text-slate-200 transition-colors hover:bg-slate-50 dark:hover:bg-slate-700"
+            className="inline-flex items-center justify-center rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition-colors hover:bg-slate-50 "
           >
             Close
           </button>

@@ -4,7 +4,6 @@ import { useAuth } from "../../../context/AuthContext";
 import { authService } from "../../../services/auth";
 import ProfileDropdown from "../../settings/components/ProfileDropdown";
 import SettingsModal from "../../settings/components/SettingsModal";
-import ThemeToggle from "../../../components/Common/ThemeToggle";
 import Logo from "../../../components/Common/Logo";
 
 import {
@@ -118,7 +117,7 @@ function Sidebar({ onOpenSettings }) {
   const pathname = location.pathname;
 
   return (
-    <aside className="hidden lg:flex lg:flex-col w-64 shrink-0 bg-slate-50 dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 h-screen overflow-y-auto px-4 py-6">
+    <aside className="hidden lg:flex lg:flex-col w-64 shrink-0 bg-slate-50 border-r border-slate-200 h-screen overflow-y-auto px-4 py-6">
       <div className="px-2 mb-8">
         <Logo />
       </div>
@@ -134,8 +133,8 @@ function Sidebar({ onOpenSettings }) {
               onClick={() => route && navigate(route)}
               className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
                 isActive
-                  ? "bg-blue-100 dark:bg-blue-500/15 text-blue-700 dark:text-blue-400"
-                  : "text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800"
+                  ? "bg-blue-100 text-blue-700 "
+                  : "text-slate-600 hover:bg-slate-100 "
               }`}
             >
             <Icon size={18} />
@@ -159,12 +158,12 @@ function Sidebar({ onOpenSettings }) {
           <button
             type="button"
             onClick={onOpenSettings}
-            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800"
+            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-100 "
           >
             <Settings size={18} />
             Settings
           </button>
-          <button className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800">
+          <button className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-100 ">
             <HelpCircle size={18} />
             Support
           </button>
@@ -178,22 +177,21 @@ function Header({ profile }) {
   const navigate = useNavigate();
 
   return (
-    <header className="shrink-0 flex items-center gap-4 px-6 lg:px-8 py-5 border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
+    <header className="shrink-0 flex items-center gap-4 px-6 lg:px-8 py-5 border-b border-slate-200 bg-white ">
       <button
         type="button"
         onClick={() => navigate('/search')}
-        className="flex-1 flex items-center gap-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-4 py-2.5 text-sm text-slate-400 dark:text-slate-500 transition-colors hover:border-blue-300 dark:hover:border-blue-500/50 hover:text-blue-600 dark:hover:text-blue-400"
+        className="flex-1 flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-lg px-4 py-2.5 text-sm text-slate-400 transition-colors hover:border-blue-300 hover:text-blue-600 "
       >
         <Sparkles size={16} />
         Ask Swastha about your health records...
       </button>
 
-      <button className="relative p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 shrink-0">
-        <Bell size={20} className="text-slate-600 dark:text-slate-300" />
+      <button className="relative p-2 rounded-lg hover:bg-slate-100 shrink-0">
+        <Bell size={20} className="text-slate-600 " />
         <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full" />
       </button>
 
-      <ThemeToggle />
 
       <ProfileDropdown customProfile={profile} />
     </header>
@@ -202,7 +200,7 @@ function Header({ profile }) {
 
 function StatCard({ icon: Icon, tag, tagColor, value, label, iconBg }) {
   return (
-    <div className="group bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 transition-all duration-300 hover:-translate-y-1 hover:shadow-lg dark:hover:shadow-black/30 hover:border-slate-300 dark:hover:border-slate-700">
+    <div className="group bg-white border border-slate-200 rounded-2xl p-5 transition-all duration-300 hover:-translate-y-1 hover:shadow-lg hover:border-slate-300 ">
       <div className="flex items-start justify-between mb-4">
         <div
           className={`w-10 h-10 rounded-lg flex items-center justify-center ${iconBg} transition-transform duration-300 group-hover:scale-110`}
@@ -210,30 +208,30 @@ function StatCard({ icon: Icon, tag, tagColor, value, label, iconBg }) {
           <Icon size={18} />
         </div>
         {tag && (
-          <span className={`text-xs font-medium ${tagColor || "text-slate-400 dark:text-slate-500"}`}>
+          <span className={`text-xs font-medium ${tagColor || "text-slate-400 "}`}>
             {tag}
           </span>
         )}
       </div>
-      <p className="text-3xl font-bold text-slate-900 dark:text-slate-100">{value}</p>
-      <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">{label}</p>
+      <p className="text-3xl font-bold text-slate-900 ">{value}</p>
+      <p className="text-sm text-slate-500 mt-1">{label}</p>
     </div>
   );
 }
 
 function Hba1cChart() {
   return (
-    <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 transition-all duration-300 hover:shadow-lg dark:hover:shadow-black/30 hover:border-slate-300 dark:hover:border-slate-700">
+    <div className="bg-white border border-slate-200 rounded-2xl p-6 transition-all duration-300 hover:shadow-lg hover:border-slate-300 ">
       <div className="flex items-start justify-between mb-1">
         <div>
-          <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
+          <h3 className="text-lg font-semibold text-slate-900 ">
             HbA1c Lab Trends
           </h3>
-          <p className="text-sm text-slate-400 dark:text-slate-500 mt-0.5">
+          <p className="text-sm text-slate-400 mt-0.5">
             Clinical tracking over last 6 months
           </p>
         </div>
-        <span className="text-xs font-medium bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 px-3 py-1.5 rounded-full">
+        <span className="text-xs font-medium bg-emerald-50 text-emerald-600 px-3 py-1.5 rounded-full">
           Normal Range
         </span>
       </div>
@@ -270,10 +268,10 @@ function Hba1cChart() {
         </ResponsiveContainer>
       </div>
 
-      <div className="flex gap-3 bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-800 rounded-xl p-4 mt-2 transition-colors duration-200 hover:bg-slate-100/70 dark:hover:bg-slate-800">
-        <Sparkles size={18} className="text-blue-600 dark:text-blue-400 shrink-0 mt-0.5" />
-        <p className="text-sm text-slate-600 dark:text-slate-300">
-          <span className="font-semibold text-slate-800 dark:text-slate-100">AI Observation: </span>
+      <div className="flex gap-3 bg-slate-50 border border-slate-100 rounded-xl p-4 mt-2 transition-colors duration-200 hover:bg-slate-100/70 ">
+        <Sparkles size={18} className="text-blue-600 shrink-0 mt-0.5" />
+        <p className="text-sm text-slate-600 ">
+          <span className="font-semibold text-slate-800 ">AI Observation: </span>
           Your HbA1c has decreased by 0.4% since last quarter. This indicates
           excellent glycemic control through your recent dietary changes.
         </p>
@@ -284,12 +282,12 @@ function Hba1cChart() {
 
 function RecentUploads() {
   return (
-    <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-6">
+    <div className="bg-white border border-slate-200 rounded-xl p-6">
       <div className="flex items-center justify-between mb-4">
-        <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
+        <h3 className="text-lg font-semibold text-slate-900 ">
           Recent Uploads
         </h3>
-        <button className="text-sm font-medium text-blue-600 dark:text-blue-400 hover:underline">
+        <button className="text-sm font-medium text-blue-600 hover:underline">
           View All
         </button>
       </div>
@@ -298,21 +296,21 @@ function RecentUploads() {
         {recentUploads.map(({ icon: Icon, title, subtitle, status }) => (
           <div
             key={title}
-            className="flex items-center gap-4 border border-slate-100 dark:border-slate-800 rounded-lg p-4 hover:bg-slate-50 dark:hover:bg-slate-800/60 transition-colors cursor-pointer"
+            className="flex items-center gap-4 border border-slate-100 rounded-lg p-4 hover:bg-slate-50 transition-colors cursor-pointer"
           >
-            <div className="w-10 h-10 rounded-lg bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-500 dark:text-slate-400 shrink-0">
+            <div className="w-10 h-10 rounded-lg bg-slate-100 flex items-center justify-center text-slate-500 shrink-0">
               <Icon size={18} />
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-semibold text-slate-800 dark:text-slate-100 truncate">
+              <p className="text-sm font-semibold text-slate-800 truncate">
                 {title}
               </p>
-              <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">{subtitle}</p>
+              <p className="text-xs text-slate-400 mt-0.5">{subtitle}</p>
             </div>
-            <span className="text-xs font-medium bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 px-3 py-1.5 rounded-full whitespace-nowrap">
+            <span className="text-xs font-medium bg-emerald-50 text-emerald-600 px-3 py-1.5 rounded-full whitespace-nowrap">
               {status}
             </span>
-            <ChevronRight size={16} className="text-slate-300 dark:text-slate-600 shrink-0" />
+            <ChevronRight size={16} className="text-slate-300 shrink-0" />
           </div>
         ))}
       </div>
@@ -322,12 +320,12 @@ function RecentUploads() {
 
 function CurrentMedications() {
   return (
-    <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5">
+    <div className="bg-white border border-slate-200 rounded-xl p-5">
       <div className="flex items-center justify-between mb-4">
-        <h3 className="text-base font-semibold text-slate-900 dark:text-slate-100">
+        <h3 className="text-base font-semibold text-slate-900 ">
           Current Medications
         </h3>
-        <button className="text-xs font-semibold text-blue-600 dark:text-blue-400 hover:underline">
+        <button className="text-xs font-semibold text-blue-600 hover:underline">
           REFILL ALL
         </button>
       </div>
@@ -337,10 +335,10 @@ function CurrentMedications() {
           <div key={name} className="flex items-center gap-3">
             <span className={`w-1.5 h-10 rounded-full ${color}`} />
             <div className="flex-1">
-              <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">{name}</p>
-              <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">{schedule}</p>
+              <p className="text-sm font-semibold text-slate-800 ">{name}</p>
+              <p className="text-xs text-slate-400 mt-0.5">{schedule}</p>
             </div>
-            <span className="w-5 h-5 rounded-full border-2 border-slate-300 dark:border-slate-700" />
+            <span className="w-5 h-5 rounded-full border-2 border-slate-300 " />
           </div>
         ))}
       </div>
@@ -389,7 +387,7 @@ export default function Dashboard() {
   }, [cachedUser, isAuthenticated, token]);
 
   return (
-    <div className="flex h-screen overflow-hidden bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100">
+    <div className="flex h-screen overflow-hidden bg-slate-50 text-slate-900 ">
       <Sidebar onOpenSettings={() => setIsSettingsOpen(true)} />
 
       <div className="flex-1 flex flex-col min-w-0 h-screen overflow-hidden">
@@ -398,10 +396,10 @@ export default function Dashboard() {
         <main className="flex-1 overflow-y-auto px-6 lg:px-8 py-8">
           <div className="flex items-center justify-between mb-6">
             <div>
-              <h2 className="text-2xl font-bold text-slate-900 dark:text-slate-100">
+              <h2 className="text-2xl font-bold text-slate-900 ">
                 Welcome back, {profile?.name || 'User'}
               </h2>
-              <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+              <p className="text-sm text-slate-500 mt-1">
                 {isProfileLoading
                   ? 'Loading your profile from the database...'
                   : profile?.role
@@ -409,7 +407,7 @@ export default function Dashboard() {
                     : 'Your clinical intelligence overview for today.'}
               </p>
             </div>
-            <span className="flex items-center gap-2 bg-blue-50 dark:bg-blue-500/10 text-blue-700 dark:text-blue-400 text-sm font-medium px-4 py-2 rounded-lg">
+            <span className="flex items-center gap-2 bg-blue-50 text-blue-700 text-sm font-medium px-4 py-2 rounded-lg">
               <ShieldCheck size={16} />
               {profile?.email ? 'Profile Synced' : 'ABHA Synced'}
             </span>

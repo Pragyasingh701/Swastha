@@ -2,7 +2,6 @@ import React from "react";
 import logo from "../../../assets/swastha-logo.png";
 import { useNavigate } from "react-router-dom";
 import DoctorSidebar from "../components/DoctorSidebar";
-import ThemeToggle from "../../../components/Common/ThemeToggle";
 import ProfileDropdown from "../../settings/components/ProfileDropdown";
 import {
   ShieldPlus,
@@ -42,7 +41,7 @@ const statCards = [
     icon: Activity,
     label: "Today's Appts",
     value: "12",
-    badge: { text: "+2 walk-ins", tone: "bg-blue-50 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400" },
+    badge: { text: "+2 walk-ins", tone: "bg-blue-50 text-blue-600 " },
   },
   {
     icon: Users,
@@ -53,7 +52,7 @@ const statCards = [
     icon: BarChart3,
     label: "Pending Reports",
     value: "8",
-    badge: { text: "Action Req.", tone: "bg-red-50 dark:bg-red-500/10 text-red-600 dark:text-red-400" },
+    badge: { text: "Action Req.", tone: "bg-red-50 text-red-600 " },
   },
   {
     icon: Video,
@@ -70,9 +69,9 @@ const scheduleItems = [
     detail: "Video Follow-up",
     detailIcon: Video,
     avatar: "https://i.pravatar.cc/80?img=13",
-    status: { text: "Waiting (5m)", tone: "bg-blue-50 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400" },
+    status: { text: "Waiting (5m)", tone: "bg-blue-50 text-blue-600 " },
     action: { label: "Join Now", style: "primary" },
-    dotTone: "bg-blue-600 ring-blue-100 dark:ring-blue-500/20",
+    dotTone: "bg-blue-600 ring-blue-100 ",
     state: "upcoming",
   },
   {
@@ -81,9 +80,9 @@ const scheduleItems = [
     detail: "Routine Checkup",
     detailIcon: Stethoscope,
     avatar: "https://i.pravatar.cc/80?img=32",
-    status: { text: "Checked-in", tone: "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300" },
+    status: { text: "Checked-in", tone: "bg-slate-100 text-slate-600 " },
     action: { label: "View Chart", style: "secondary" },
-    dotTone: "bg-slate-300 dark:bg-slate-600 ring-slate-100 dark:ring-slate-800",
+    dotTone: "bg-slate-300 ring-slate-100 ",
     state: "upcoming",
   },
   {
@@ -93,7 +92,7 @@ const scheduleItems = [
     detailIcon: Activity,
     initials: "MJ",
     status: { text: "Completed", tone: "" },
-    dotTone: "bg-slate-300 dark:bg-slate-600",
+    dotTone: "bg-slate-300 ",
     state: "done",
   },
 ];
@@ -107,7 +106,7 @@ const quickActions = [
 
 export default function DoctorDashboard() {
   return (
-    <div className="h-screen overflow-hidden bg-slate-50 dark:bg-slate-950 flex">
+    <div className="h-screen overflow-hidden bg-slate-50 flex">
       <Sidebar />
 
       <div className="flex-1 flex flex-col h-screen overflow-hidden min-w-0">
@@ -145,22 +144,21 @@ function TopBar() {
   const navigate = useNavigate();
 
   return (
-    <header className="shrink-0 flex items-center gap-4 px-6 lg:px-8 py-5 border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
+    <header className="shrink-0 flex items-center gap-4 px-6 lg:px-8 py-5 border-b border-slate-200 bg-white ">
       <button
         type="button"
-        onClick={() => navigate('/search')}
-        className="flex-1 flex items-center gap-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-4 py-2.5 text-sm text-slate-400 dark:text-slate-500 transition-colors hover:border-blue-300 dark:hover:border-blue-500/50 hover:text-blue-600 dark:hover:text-blue-400"
+        onClick={() => navigate('/doctor/clinical-intelligence')}
+        className="flex-1 flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-lg px-4 py-2.5 text-sm text-slate-400 transition-colors hover:border-blue-300 hover:text-blue-600 "
       >
         <Sparkles size={16} />
         Ask Swastha about your health records...
       </button>
 
-      <button className="relative p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 shrink-0">
-        <Bell size={20} className="text-slate-600 dark:text-slate-300" />
+      <button className="relative p-2 rounded-lg hover:bg-slate-100 shrink-0">
+        <Bell size={20} className="text-slate-600 " />
         <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full" />
       </button>
 
-      <ThemeToggle />
 
       <ProfileDropdown />
     </header>
@@ -173,10 +171,10 @@ function PageHeader() {
   return (
     <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-4 mb-8">
       <div>
-        <h2 className="text-2xl md:text-3xl font-bold text-slate-900 dark:text-slate-100 mb-1">
+        <h2 className="text-2xl md:text-3xl font-bold text-slate-900 mb-1">
           Good Morning, Dr. Jenkins
         </h2>
-        <p className="text-slate-500 dark:text-slate-400">
+        <p className="text-slate-500 ">
           Here is your clinical overview for today, October 24.
         </p>
       </div>
@@ -198,15 +196,15 @@ function StatGrid() {
       ))}
 
       {/* Patient satisfaction — wider card */}
-      <div className="group col-span-2 sm:col-span-3 lg:col-span-2 bg-gradient-to-br from-white to-blue-50/60 dark:from-slate-900 dark:to-blue-950/40 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 flex items-start justify-between transition-all duration-300 hover:-translate-y-1 hover:shadow-lg dark:hover:shadow-black/30">
+      <div className="group col-span-2 sm:col-span-3 lg:col-span-2 bg-gradient-to-br from-white to-blue-50/60 border border-slate-200 rounded-2xl p-5 flex items-start justify-between transition-all duration-300 hover:-translate-y-1 hover:shadow-lg ">
         <div>
-          <p className="text-sm text-slate-500 dark:text-slate-400 mb-1">Patient Satisfaction</p>
+          <p className="text-sm text-slate-500 mb-1">Patient Satisfaction</p>
           <div className="flex items-baseline gap-1">
-            <span className="text-4xl font-bold text-slate-900 dark:text-slate-100">4.9</span>
-            <span className="text-lg text-slate-400 dark:text-slate-500">/5</span>
+            <span className="text-4xl font-bold text-slate-900 ">4.9</span>
+            <span className="text-lg text-slate-400 ">/5</span>
           </div>
         </div>
-        <div className="flex text-blue-600 dark:text-blue-400 gap-0.5 mt-1">
+        <div className="flex text-blue-600 gap-0.5 mt-1">
           {[...Array(4)].map((_, i) => (
             <Star key={i} size={16} className="fill-current" />
           ))}
@@ -221,17 +219,17 @@ function StatCard({ card }) {
   const Icon = card.icon;
   return (
     <div
-      className={`group relative bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 overflow-hidden transition-all duration-300 hover:-translate-y-1 hover:shadow-lg dark:hover:shadow-black/30 ${
+      className={`group relative bg-white border border-slate-200 rounded-2xl p-5 overflow-hidden transition-all duration-300 hover:-translate-y-1 hover:shadow-lg ${
         card.accent ? "border-t-2 border-t-blue-500" : ""
       }`}
     >
       <Icon
         size={56}
-        className="absolute -top-1 -right-1 text-blue-600 dark:text-blue-400 opacity-[0.06] transition-transform duration-300 group-hover:scale-110"
+        className="absolute -top-1 -right-1 text-blue-600 opacity-[0.06] transition-transform duration-300 group-hover:scale-110"
       />
-      <p className="text-sm text-slate-500 dark:text-slate-400 mb-2 relative z-10">{card.label}</p>
+      <p className="text-sm text-slate-500 mb-2 relative z-10">{card.label}</p>
       <div className="flex items-end gap-2 relative z-10">
-        <h3 className="text-3xl font-bold text-slate-900 dark:text-slate-100 leading-none">
+        <h3 className="text-3xl font-bold text-slate-900 leading-none">
           {card.value}
         </h3>
         {card.badge && (
@@ -250,18 +248,18 @@ function StatCard({ card }) {
 
 function TodaySchedule() {
   return (
-    <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 transition-shadow duration-300 hover:shadow-lg dark:hover:shadow-black/30">
-      <div className="flex items-center justify-between mb-5 pb-3 border-b border-slate-100 dark:border-slate-800">
-        <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
+    <div className="bg-white border border-slate-200 rounded-2xl p-6 transition-shadow duration-300 hover:shadow-lg ">
+      <div className="flex items-center justify-between mb-5 pb-3 border-b border-slate-100 ">
+        <h3 className="text-lg font-semibold text-slate-900 ">
           Today's Schedule
         </h3>
-        <button className="text-sm font-medium text-blue-600 dark:text-blue-400 transition-colors duration-200 hover:text-blue-700 dark:hover:text-blue-300 hover:underline">
+        <button className="text-sm font-medium text-blue-600 transition-colors duration-200 hover:text-blue-700 hover:underline">
           View Full Calendar
         </button>
       </div>
 
       <div className="relative pl-2">
-        <div className="absolute left-[19px] top-2 bottom-2 w-px bg-slate-200 dark:bg-slate-800" />
+        <div className="absolute left-[19px] top-2 bottom-2 w-px bg-slate-200 " />
 
         <div className="flex flex-col gap-5">
           {scheduleItems.map((item) => (
@@ -283,14 +281,14 @@ function ScheduleRow({ item }) {
         <div
           className={`w-3 h-3 rounded-full ring-4 ${item.dotTone}`}
         />
-        <span className="text-xs text-slate-400 dark:text-slate-500 mt-1">{item.time}</span>
+        <span className="text-xs text-slate-400 mt-1">{item.time}</span>
       </div>
 
       <div
         className={`flex-1 rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 transition-all duration-200 ${
           isPast
-            ? "bg-slate-50 dark:bg-slate-800/60"
-            : "bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 shadow-sm group-hover:border-blue-200 dark:group-hover:border-blue-500/40 group-hover:shadow-md"
+            ? "bg-slate-50 "
+            : "bg-white border border-slate-100 shadow-sm group-hover:border-blue-200 group-hover:shadow-md"
         }`}
       >
         <div className="flex items-center gap-3">
@@ -301,19 +299,19 @@ function ScheduleRow({ item }) {
               className="w-11 h-11 rounded-full object-cover transition-transform duration-200 group-hover:scale-105"
             />
           ) : (
-            <div className="w-11 h-11 rounded-full bg-slate-200 dark:bg-slate-700 text-slate-500 dark:text-slate-300 font-semibold flex items-center justify-center">
+            <div className="w-11 h-11 rounded-full bg-slate-200 text-slate-500 font-semibold flex items-center justify-center">
               {item.initials}
             </div>
           )}
           <div>
             <h4
-              className={`text-sm font-semibold text-slate-900 dark:text-slate-100 ${
+              className={`text-sm font-semibold text-slate-900 ${
                 isPast ? "line-through" : ""
               }`}
             >
               {item.name}
             </h4>
-            <p className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+            <p className="flex items-center gap-1.5 text-xs text-slate-500 mt-0.5">
               <DetailIcon size={13} />
               {item.detail}
             </p>
@@ -332,7 +330,7 @@ function ScheduleRow({ item }) {
             </button>
           )}
           {item.action?.style === "secondary" && (
-            <button className="border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 text-xs font-semibold px-4 py-2 rounded-lg bg-white dark:bg-slate-800 transition-colors duration-200 hover:bg-slate-50 dark:hover:bg-slate-700">
+            <button className="border border-slate-200 text-slate-700 text-xs font-semibold px-4 py-2 rounded-lg bg-white transition-colors duration-200 hover:bg-slate-50 ">
               {item.action.label}
             </button>
           )}
@@ -346,8 +344,8 @@ function ScheduleRow({ item }) {
 
 function QuickActions() {
   return (
-    <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 transition-shadow duration-300 hover:shadow-lg dark:hover:shadow-black/30">
-      <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100 mb-4">
+    <div className="bg-white border border-slate-200 rounded-2xl p-6 transition-shadow duration-300 hover:shadow-lg ">
+      <h3 className="text-lg font-semibold text-slate-900 mb-4">
         Quick Actions
       </h3>
       <div className="grid grid-cols-2 gap-3">
@@ -356,22 +354,22 @@ function QuickActions() {
             key={label}
             className={`group flex flex-col items-center justify-center gap-2 p-4 rounded-xl border transition-all duration-200 ${
               danger
-                ? "bg-red-50 dark:bg-red-500/10 border-red-100 dark:border-red-500/20 hover:bg-red-100 dark:hover:bg-red-500/20"
-                : "bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 hover:border-blue-300 dark:hover:border-blue-500/40 hover:bg-blue-50/50 dark:hover:bg-blue-500/10"
+                ? "bg-red-50 border-red-100 hover:bg-red-100 "
+                : "bg-white border-slate-200 hover:border-blue-300 hover:bg-blue-50/50 "
             }`}
           >
             <div
               className={`w-10 h-10 rounded-full flex items-center justify-center transition-transform duration-200 group-hover:scale-110 ${
                 danger
                   ? "bg-red-600 text-white animate-pulse"
-                  : "bg-blue-50 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400"
+                  : "bg-blue-50 text-blue-600 "
               }`}
             >
               <Icon size={18} />
             </div>
             <span
               className={`text-xs font-medium text-center ${
-                danger ? "text-red-600 dark:text-red-400 font-semibold" : "text-slate-700 dark:text-slate-300"
+                danger ? "text-red-600 font-semibold" : "text-slate-700 "
               }`}
             >
               {label}
@@ -387,24 +385,24 @@ function QuickActions() {
 
 function ClinicalInsight() {
   return (
-    <div className="relative bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 overflow-hidden transition-shadow duration-300 hover:shadow-lg dark:hover:shadow-black/30">
+    <div className="relative bg-white border border-slate-200 rounded-2xl p-6 overflow-hidden transition-shadow duration-300 hover:shadow-lg ">
       <div className="absolute top-0 left-0 w-1 h-full bg-gradient-to-b from-blue-600 to-sky-400" />
 
       <div className="flex items-start gap-3 relative z-10">
-        <div className="w-9 h-9 rounded-full bg-blue-50 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400 flex items-center justify-center shrink-0">
+        <div className="w-9 h-9 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
           <Sparkles size={18} />
         </div>
         <div>
-          <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-100 mb-1.5">
+          <h4 className="text-sm font-semibold text-slate-900 mb-1.5">
             Clinical Intelligence Insight
           </h4>
-          <p className="text-sm text-slate-500 dark:text-slate-400 leading-relaxed">
+          <p className="text-sm text-slate-500 leading-relaxed">
             Based on recent labs, patient{" "}
-            <span className="font-semibold text-blue-600 dark:text-blue-400">Robert Chen</span>{" "}
+            <span className="font-semibold text-blue-600 ">Robert Chen</span>{" "}
             shows a 15% increase in LDL levels. Consider reviewing statin
             dosage during today's follow-up.
           </p>
-          <button className="mt-3 flex items-center gap-1.5 text-sm font-medium text-blue-600 dark:text-blue-400 transition-all duration-200 hover:gap-2.5 hover:text-blue-700 dark:hover:text-blue-300">
+          <button className="mt-3 flex items-center gap-1.5 text-sm font-medium text-blue-600 transition-all duration-200 hover:gap-2.5 hover:text-blue-700 ">
             Review Lab Trends
             <ArrowRight size={14} />
           </button>

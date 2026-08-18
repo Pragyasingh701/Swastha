@@ -84,18 +84,18 @@ export default function ChangePasswordModal({ isOpen, onClose }) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 dark:bg-black/70 backdrop-blur-sm animate-in fade-in duration-200">
-      <div className="relative w-full max-w-md bg-white dark:bg-slate-900 rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-700 overflow-hidden animate-in zoom-in-95 duration-200">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/50">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
+      <div className="relative w-full max-w-md bg-white rounded-3xl shadow-2xl border border-slate-200 overflow-hidden animate-in zoom-in-95 duration-200">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-slate-50/50 ">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-blue-50 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400 flex items-center justify-center border border-blue-100 dark:border-blue-500/20">
+            <div className="w-10 h-10 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center border border-blue-100 ">
               <KeyRound size={20} />
             </div>
             <div>
-              <h3 className="text-lg font-extrabold text-slate-900 dark:text-slate-100 leading-tight">
+              <h3 className="text-lg font-extrabold text-slate-900 leading-tight">
                 Change Password
               </h3>
-              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+              <p className="text-xs text-slate-500 mt-0.5">
                 Verify it's you, then set a new password
               </p>
             </div>
@@ -103,7 +103,7 @@ export default function ChangePasswordModal({ isOpen, onClose }) {
           <button
             type="button"
             onClick={onClose}
-            className="p-2 rounded-xl text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+            className="p-2 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"
           >
             <X size={20} />
           </button>
@@ -111,7 +111,7 @@ export default function ChangePasswordModal({ isOpen, onClose }) {
 
         <div className="p-6 space-y-5">
           {error && (
-            <div className="p-3.5 rounded-xl flex items-center gap-2.5 text-xs font-semibold bg-rose-50 dark:bg-rose-500/10 text-rose-800 dark:text-rose-300 border border-rose-200 dark:border-rose-500/20">
+            <div className="p-3.5 rounded-xl flex items-center gap-2.5 text-xs font-semibold bg-rose-50 text-rose-800 border border-rose-200 ">
               <AlertCircle size={16} className="shrink-0" />
               {error}
             </div>
@@ -119,16 +119,16 @@ export default function ChangePasswordModal({ isOpen, onClose }) {
 
           {step === 'intro' && isGoogleAccount && (
             <div className="space-y-5 text-center py-2">
-              <div className="w-14 h-14 mx-auto rounded-2xl bg-blue-50 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400 flex items-center justify-center">
+              <div className="w-14 h-14 mx-auto rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center">
                 <LogIn size={26} />
               </div>
-              <p className="text-sm text-slate-600 dark:text-slate-300">
-                No password needed — <span className="font-bold text-slate-900 dark:text-slate-100">{user?.email}</span> was registered using Google Sign-In. Just continue signing in with the "Continue with Google" button.
+              <p className="text-sm text-slate-600 ">
+                No password needed — <span className="font-bold text-slate-900 ">{user?.email}</span> was registered using Google Sign-In. Just continue signing in with the "Continue with Google" button.
               </p>
               <button
                 type="button"
                 onClick={onClose}
-                className="w-full bg-slate-900 dark:bg-slate-100 hover:bg-slate-800 dark:hover:bg-white text-white dark:text-slate-900 text-sm font-bold px-6 py-3 rounded-xl transition-all"
+                className="w-full bg-slate-900 hover:bg-slate-800 text-white text-sm font-bold px-6 py-3 rounded-xl transition-all"
               >
                 Got it
               </button>
@@ -137,12 +137,12 @@ export default function ChangePasswordModal({ isOpen, onClose }) {
 
           {step === 'intro' && !isGoogleAccount && (
             <div className="space-y-5 text-center py-2">
-              <div className="w-14 h-14 mx-auto rounded-2xl bg-blue-50 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400 flex items-center justify-center">
+              <div className="w-14 h-14 mx-auto rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center">
                 <MailCheck size={26} />
               </div>
-              <p className="text-sm text-slate-600 dark:text-slate-300">
+              <p className="text-sm text-slate-600 ">
                 We'll send a 6-digit verification code to{' '}
-                <span className="font-bold text-slate-900 dark:text-slate-100">{user?.email}</span> to confirm it's you before changing your password.
+                <span className="font-bold text-slate-900 ">{user?.email}</span> to confirm it's you before changing your password.
               </p>
               <button
                 type="button"
@@ -158,8 +158,8 @@ export default function ChangePasswordModal({ isOpen, onClose }) {
 
           {step === 'otp' && (
             <form onSubmit={handleVerifyOtp} className="space-y-5">
-              <p className="text-sm text-slate-600 dark:text-slate-300 text-center">
-                Enter the 6-digit code sent to <span className="font-bold text-slate-900 dark:text-slate-100">{user?.email}</span>
+              <p className="text-sm text-slate-600 text-center">
+                Enter the 6-digit code sent to <span className="font-bold text-slate-900 ">{user?.email}</span>
               </p>
               <input
                 type="text"
@@ -169,13 +169,13 @@ export default function ChangePasswordModal({ isOpen, onClose }) {
                 value={otpCode}
                 onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
                 placeholder="••••••"
-                className="w-full text-center text-2xl font-extrabold tracking-[0.5em] px-3.5 py-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-blue-600 focus:outline-none transition-all"
+                className="w-full text-center text-2xl font-extrabold tracking-[0.5em] px-3.5 py-3 rounded-xl border border-slate-200 bg-white text-slate-900 focus:ring-2 focus:ring-blue-600 focus:outline-none transition-all"
               />
               <button
                 type="button"
                 onClick={handleSendOtp}
                 disabled={isLoading}
-                className="w-full text-xs font-bold text-blue-600 dark:text-blue-400 hover:underline disabled:opacity-50"
+                className="w-full text-xs font-bold text-blue-600 hover:underline disabled:opacity-50"
               >
                 Resend code
               </button>
@@ -193,7 +193,7 @@ export default function ChangePasswordModal({ isOpen, onClose }) {
           {step === 'password' && (
             <form onSubmit={handleResetPassword} className="space-y-4">
               <div>
-                <label className="block text-[11px] font-extrabold uppercase tracking-wider text-slate-600 dark:text-slate-400 mb-1">
+                <label className="block text-[11px] font-extrabold uppercase tracking-wider text-slate-600 mb-1">
                   New Password
                 </label>
                 <div className="relative">
@@ -203,19 +203,19 @@ export default function ChangePasswordModal({ isOpen, onClose }) {
                     value={newPassword}
                     onChange={(e) => setNewPassword(e.target.value)}
                     placeholder="At least 8 characters"
-                    className="w-full px-3.5 py-2.5 pr-10 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm font-semibold text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-blue-600 focus:outline-none transition-all"
+                    className="w-full px-3.5 py-2.5 pr-10 rounded-xl border border-slate-200 bg-white text-sm font-semibold text-slate-900 focus:ring-2 focus:ring-blue-600 focus:outline-none transition-all"
                   />
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 "
                   >
                     {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
                   </button>
                 </div>
               </div>
               <div>
-                <label className="block text-[11px] font-extrabold uppercase tracking-wider text-slate-600 dark:text-slate-400 mb-1">
+                <label className="block text-[11px] font-extrabold uppercase tracking-wider text-slate-600 mb-1">
                   Confirm New Password
                 </label>
                 <input
@@ -224,7 +224,7 @@ export default function ChangePasswordModal({ isOpen, onClose }) {
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
                   placeholder="Re-enter password"
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm font-semibold text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-blue-600 focus:outline-none transition-all"
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 bg-white text-sm font-semibold text-slate-900 focus:ring-2 focus:ring-blue-600 focus:outline-none transition-all"
                 />
               </div>
               <button
@@ -240,17 +240,17 @@ export default function ChangePasswordModal({ isOpen, onClose }) {
 
           {step === 'success' && (
             <div className="space-y-4 text-center py-4">
-              <div className="w-14 h-14 mx-auto rounded-full bg-emerald-100 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
+              <div className="w-14 h-14 mx-auto rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center">
                 <CheckCircle2 size={28} />
               </div>
-              <h3 className="text-base font-extrabold text-slate-900 dark:text-slate-100">Password Updated!</h3>
-              <p className="text-sm text-slate-500 dark:text-slate-400">
+              <h3 className="text-base font-extrabold text-slate-900 ">Password Updated!</h3>
+              <p className="text-sm text-slate-500 ">
                 Your password has been changed successfully. Use it next time you log in.
               </p>
               <button
                 type="button"
                 onClick={onClose}
-                className="w-full bg-slate-900 dark:bg-slate-100 hover:bg-slate-800 dark:hover:bg-white text-white dark:text-slate-900 text-sm font-bold px-6 py-3 rounded-xl transition-all"
+                className="w-full bg-slate-900 hover:bg-slate-800 text-white text-sm font-bold px-6 py-3 rounded-xl transition-all"
               >
                 Done
               </button>

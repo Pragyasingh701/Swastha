@@ -312,10 +312,49 @@ function isValidEmail(email) {
 function isValidPhone(phone) {
   if (!phone || typeof phone !== 'string') return false;
   const cleaned = phone.replace(/[\s\-\+\(\)]/g, '');
-  if (!/^\d{10,15}$/.test(cleaned)) return false;
-  if (/^(\d)\1{9,}$/.test(cleaned)) return false; // Rejects 0000000000, 1111111111, etc.
-  if (cleaned === '1234567890' || cleaned === '0123456789') return false;
+  // Indian mobile numbers: exactly 10 digits, starting with 6-9
+  if (!/^[6-9]\d{9}$/.test(cleaned)) return false;
+  if (/^(\d)\1{9}$/.test(cleaned)) return false; // Rejects 6666666666, 9999999999, etc.
   return true;
+}
+
+function isValidFullName(name) {
+  if (!name || typeof name !== 'string') return false;
+  return /^[A-Za-z][A-Za-z .'-]{1,59}$/.test(name.trim());
+}
+
+function isValidRegistrationNumber(value) {
+  if (!value || typeof value !== 'string') return false;
+  return /^(?=.*\d)[A-Za-z0-9/\-\s]{4,30}$/.test(value.trim());
+}
+
+function isValidWordsField(value) {
+  if (!value || typeof value !== 'string') return false;
+  return /^[A-Za-z][A-Za-z .,&-]{1,59}$/.test(value.trim());
+}
+
+function isValidFreeTextField(value, { minLength = 3, maxLength = 300 } = {}) {
+  if (!value || typeof value !== 'string') return false;
+  const trimmed = value.trim();
+  if (trimmed.length < minLength || trimmed.length > maxLength) return false;
+  return /[A-Za-z]/.test(trimmed);
+}
+
+function isValidPastDate(dateStr, { minAge = 0, maxAge = 120 } = {}) {
+  if (!dateStr) return false;
+  const dob = new Date(dateStr);
+  if (Number.isNaN(dob.getTime())) return false;
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  if (dob > today) return false;
+
+  let age = today.getFullYear() - dob.getFullYear();
+  const monthDiff = today.getMonth() - dob.getMonth();
+  if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < dob.getDate())) {
+    age -= 1;
+  }
+  return age >= minAge && age <= maxAge;
 }
 
 /**
@@ -326,6 +365,10 @@ router.post('/register', async (req, res) => {
   const { fullName, email, password, phone, role = 'none', specialty, licenseNumber } = req.body;
   if (!fullName || !email || !password || !phone) {
     return res.status(400).json({ message: 'Full Name, Email, Phone Number, and Password are all required.' });
+  }
+
+  if (!isValidFullName(fullName)) {
+    return res.status(400).json({ message: 'Please enter your full name using letters only (2-60 characters).' });
   }
 
   if (!isValidEmail(email)) {
@@ -622,8 +665,14 @@ router.post('/profile', authenticateToken, async (req, res) => {
         message: 'All patient details (Full Name, Date of Birth, Gender, Blood Group, and Mobile Phone Number) are mandatory when setting up a Patient account.',
       });
     }
+    if (nameVal && !isValidFullName(nameVal)) {
+      return res.status(400).json({ message: 'Please enter a valid full name using letters only.' });
+    }
     if (phoneVal && !isValidPhone(phoneVal)) {
-      return res.status(400).json({ message: 'Please enter a valid mobile number (10–15 digits).' });
+      return res.status(400).json({ message: 'Please enter a valid 10-digit mobile number.' });
+    }
+    if (dob && !isValidPastDate(dob)) {
+      return res.status(400).json({ message: 'Please enter a valid date of birth.' });
     }
   }
 
@@ -644,8 +693,29 @@ router.post('/profile', authenticateToken, async (req, res) => {
           message: 'All doctor credentials (Full Name, Date of Birth, Mobile Number, Medical Registration #, Council, Degree, Specialization, Hospital/Clinic Name, Practice Address, and Medical Registration Certificate) are mandatory when setting up a Doctor account.',
         });
       }
+      if (nameVal && !isValidFullName(nameVal)) {
+        return res.status(400).json({ message: 'Please enter a valid full name using letters only.' });
+      }
       if (phoneVal && !isValidPhone(phoneVal)) {
-        return res.status(400).json({ message: 'Please enter a valid mobile number (10–15 digits).' });
+        return res.status(400).json({ message: 'Please enter a valid 10-digit mobile number.' });
+      }
+      if (dob && !isValidPastDate(dob, { minAge: 21, maxAge: 100 })) {
+        return res.status(400).json({ message: 'Please enter a valid date of birth (doctors must be at least 21 years old).' });
+      }
+      if (licVal && !isValidRegistrationNumber(licVal)) {
+        return res.status(400).json({ message: 'Please enter a valid Medical Registration Number (must include at least one digit).' });
+      }
+      if (degree && !isValidWordsField(degree)) {
+        return res.status(400).json({ message: 'Please enter a valid Primary Degree.' });
+      }
+      if (specVal && !isValidWordsField(specVal)) {
+        return res.status(400).json({ message: 'Please enter a valid Specialization.' });
+      }
+      if (hospitalName && !isValidFreeTextField(hospitalName, { minLength: 3, maxLength: 150 })) {
+        return res.status(400).json({ message: 'Please enter a valid Hospital or Clinic Name.' });
+      }
+      if (address && !isValidFreeTextField(address, { minLength: 8, maxLength: 300 })) {
+        return res.status(400).json({ message: 'Please enter a valid, complete practice address.' });
       }
 
       // Process & Extract Medical Data from Uploaded Certificate via Gemini Vision AI

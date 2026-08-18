@@ -4,7 +4,6 @@ import { useAuth } from "../../../context/AuthContext";
 import { getTimelineReports, generateReportSummary } from "../../../api/reports";
 import Logo from "../../../components/Common/Logo";
 import SettingsModal from "../../settings/components/SettingsModal";
-import ThemeToggle from "../../../components/Common/ThemeToggle";
 import ProfileDropdown from "../../settings/components/ProfileDropdown";
 import {
   LayoutGrid,
@@ -47,13 +46,13 @@ const navItems = [
 ];
 
 const CATEGORY_META = {
-  Prescription: { icon: ClipboardList, tone: "bg-blue-50 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400" },
-  Prescriptions: { icon: ClipboardList, tone: "bg-blue-50 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400" },
-  "Lab Report": { icon: FlaskConical, tone: "bg-orange-50 dark:bg-orange-500/10 text-orange-600 dark:text-orange-400" },
-  "Lab Reports": { icon: FlaskConical, tone: "bg-orange-50 dark:bg-orange-500/10 text-orange-600 dark:text-orange-400" },
-  Imaging: { icon: ScanLine, tone: "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300" },
-  Vaccination: { icon: Syringe, tone: "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300" },
-  Consultation: { icon: FileText, tone: "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300" },
+  Prescription: { icon: ClipboardList, tone: "bg-blue-50 text-blue-600 " },
+  Prescriptions: { icon: ClipboardList, tone: "bg-blue-50 text-blue-600 " },
+  "Lab Report": { icon: FlaskConical, tone: "bg-orange-50 text-orange-600 " },
+  "Lab Reports": { icon: FlaskConical, tone: "bg-orange-50 text-orange-600 " },
+  Imaging: { icon: ScanLine, tone: "bg-slate-100 text-slate-600 " },
+  Vaccination: { icon: Syringe, tone: "bg-slate-100 text-slate-600 " },
+  Consultation: { icon: FileText, tone: "bg-slate-100 text-slate-600 " },
 };
 
 // Category cards shown in "AI Smart Categorization" — fixed set of labels
@@ -195,7 +194,7 @@ export default function MedicalVault() {
   }, [reports, categoryFilter, searchQuery]);
 
   return (
-    <div className="flex h-screen overflow-hidden bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100">
+    <div className="flex h-screen overflow-hidden bg-slate-50 text-slate-900 ">
       <Sidebar onOpenSettings={() => setIsSettingsOpen(true)} />
 
       <div className="flex-1 flex flex-col min-w-0 h-screen overflow-hidden">
@@ -204,12 +203,12 @@ export default function MedicalVault() {
         <main className="flex-1 overflow-y-auto px-4 sm:px-6 lg:px-8 py-6 lg:py-8 min-w-0 overflow-x-hidden">
           <div className="flex items-center justify-between mb-6">
             <div>
-              <h2 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Medical Vault</h2>
-              <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+              <h2 className="text-2xl font-bold text-slate-900 ">Medical Vault</h2>
+              <p className="text-sm text-slate-500 mt-1">
                 All your clinical documents, securely stored in one place.
               </p>
             </div>
-            <span className="flex items-center gap-1.5 bg-blue-50 dark:bg-blue-500/10 text-blue-700 dark:text-blue-400 text-xs font-semibold px-3 py-2 rounded-full whitespace-nowrap transition-transform duration-200 hover:scale-105 shrink-0">
+            <span className="flex items-center gap-1.5 bg-blue-50 text-blue-700 text-xs font-semibold px-3 py-2 rounded-full whitespace-nowrap transition-transform duration-200 hover:scale-105 shrink-0">
               <ShieldCheck size={14} />
               PRIVATE
             </span>
@@ -218,14 +217,14 @@ export default function MedicalVault() {
           <div className="relative mb-6">
             <Search
               size={16}
-              className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500"
+              className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 "
             />
             <input
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Search clinical documents, doctor names, or symptoms..."
-              className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl pl-11 pr-4 py-3 text-sm text-slate-700 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-blue-200 dark:focus:ring-blue-500/30 focus:border-blue-300 dark:focus:border-blue-500/50"
+              className="w-full bg-white border border-slate-200 rounded-xl pl-11 pr-4 py-3 text-sm text-slate-700 placeholder:text-slate-400 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-blue-200 focus:border-blue-300 "
             />
           </div>
 
@@ -283,7 +282,7 @@ function Sidebar({ onOpenSettings }) {
   const pathname = location.pathname;
 
   return (
-    <aside className="hidden lg:flex lg:flex-col w-64 shrink-0 bg-slate-50 dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 h-screen overflow-y-auto px-4 py-6">
+    <aside className="hidden lg:flex lg:flex-col w-64 shrink-0 bg-slate-50 border-r border-slate-200 h-screen overflow-y-auto px-4 py-6">
       <div className="px-2 mb-8">
         <Logo />
       </div>
@@ -299,8 +298,8 @@ function Sidebar({ onOpenSettings }) {
               onClick={() => route && navigate(route)}
               className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
                 isActive
-                  ? "bg-blue-100 dark:bg-blue-500/15 text-blue-700 dark:text-blue-400"
-                  : "text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800"
+                  ? "bg-blue-100 text-blue-700 "
+                  : "text-slate-600 hover:bg-slate-100 "
               }`}
             >
             <Icon size={18} />
@@ -324,12 +323,12 @@ function Sidebar({ onOpenSettings }) {
           <button
             type="button"
             onClick={onOpenSettings}
-            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800"
+            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-100 "
           >
             <Settings size={18} />
             Settings
           </button>
-          <button className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800">
+          <button className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-100 ">
             <HelpCircle size={18} />
             Support
           </button>
@@ -345,22 +344,21 @@ function Header({ profile }) {
   const navigate = useNavigate();
 
   return (
-    <header className="shrink-0 flex items-center gap-4 px-6 lg:px-8 py-5 border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
+    <header className="shrink-0 flex items-center gap-4 px-6 lg:px-8 py-5 border-b border-slate-200 bg-white ">
       <button
         type="button"
         onClick={() => navigate('/search')}
-        className="flex-1 flex items-center gap-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-4 py-2.5 text-sm text-slate-400 dark:text-slate-500 transition-colors hover:border-blue-300 dark:hover:border-blue-500/50 hover:text-blue-600 dark:hover:text-blue-400"
+        className="flex-1 flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-lg px-4 py-2.5 text-sm text-slate-400 transition-colors hover:border-blue-300 hover:text-blue-600 "
       >
         <Sparkles size={16} />
         Ask Swastha about your health records...
       </button>
 
-      <button className="relative p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 shrink-0">
-        <Bell size={20} className="text-slate-600 dark:text-slate-300" />
+      <button className="relative p-2 rounded-lg hover:bg-slate-100 shrink-0">
+        <Bell size={20} className="text-slate-600 " />
         <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full" />
       </button>
 
-      <ThemeToggle />
 
       <ProfileDropdown customProfile={profile} />
     </header>
@@ -384,23 +382,23 @@ function SummaryRow({ reports, loading }) {
 
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 mb-8">
-      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5">
+      <div className="bg-white border border-slate-200 rounded-2xl p-5">
         <div className="flex items-center justify-between mb-4">
-          <p className="text-sm text-slate-500 dark:text-slate-400">Total Documents</p>
-          <div className="w-9 h-9 rounded-lg bg-slate-50 dark:bg-slate-800 text-slate-500 dark:text-slate-400 flex items-center justify-center">
+          <p className="text-sm text-slate-500 ">Total Documents</p>
+          <div className="w-9 h-9 rounded-lg bg-slate-50 text-slate-500 flex items-center justify-center">
             <FileText size={16} />
           </div>
         </div>
-        <p className="text-3xl font-bold text-slate-900 dark:text-slate-100">{loading ? "—" : total}</p>
+        <p className="text-3xl font-bold text-slate-900 ">{loading ? "—" : total}</p>
         {thisMonth > 0 && (
-          <p className="text-xs text-emerald-600 dark:text-emerald-400 mt-3">+{thisMonth} this month</p>
+          <p className="text-xs text-emerald-600 mt-3">+{thisMonth} this month</p>
         )}
       </div>
 
-      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5">
+      <div className="bg-white border border-slate-200 rounded-2xl p-5">
         <div className="flex items-center justify-between mb-4">
-          <p className="text-sm text-slate-500 dark:text-slate-400">Recent Uploads</p>
-          <div className="w-9 h-9 rounded-lg bg-slate-50 dark:bg-slate-800 text-slate-500 dark:text-slate-400 flex items-center justify-center">
+          <p className="text-sm text-slate-500 ">Recent Uploads</p>
+          <div className="w-9 h-9 rounded-lg bg-slate-50 text-slate-500 flex items-center justify-center">
             <PlusCircle size={16} />
           </div>
         </div>
@@ -413,7 +411,7 @@ function SummaryRow({ reports, loading }) {
                 <span
                   key={doc.id}
                   title={doc.title}
-                  className="w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-800 border-2 border-white dark:border-slate-900 flex items-center justify-center text-slate-500 dark:text-slate-400"
+                  className="w-8 h-8 rounded-full bg-slate-100 border-2 border-white flex items-center justify-center text-slate-500 "
                 >
                   <Icon size={13} />
                 </span>
@@ -421,7 +419,7 @@ function SummaryRow({ reports, loading }) {
             })}
           </div>
         ) : (
-          <p className="text-sm text-slate-400 dark:text-slate-500 mt-1">No uploads yet</p>
+          <p className="text-sm text-slate-400 mt-1">No uploads yet</p>
         )}
       </div>
     </div>
@@ -435,11 +433,11 @@ function SmartCategorization({ categoryCounts, activeCategory, onSelectCategory 
     <div className="mb-8">
       <div className="flex items-start justify-between mb-4 flex-wrap gap-2">
         <div>
-          <p className="flex items-center gap-2 font-semibold text-slate-900 dark:text-slate-100">
+          <p className="flex items-center gap-2 font-semibold text-slate-900 ">
             <Sparkles size={16} className="text-blue-600" />
             AI Smart Categorization
           </p>
-          <p className="text-sm text-slate-400 dark:text-slate-500 mt-1">
+          <p className="text-sm text-slate-400 mt-1">
             Documents are automatically tagged and filed by category.
           </p>
         </div>
@@ -447,7 +445,7 @@ function SmartCategorization({ categoryCounts, activeCategory, onSelectCategory 
           <button
             type="button"
             onClick={() => onSelectCategory(activeCategory)}
-            className="flex items-center gap-1 text-sm font-medium text-blue-600 dark:text-blue-400 transition-all duration-200 hover:gap-2"
+            className="flex items-center gap-1 text-sm font-medium text-blue-600 transition-all duration-200 hover:gap-2"
           >
             Clear filter
             <X size={15} />
@@ -465,22 +463,22 @@ function SmartCategorization({ categoryCounts, activeCategory, onSelectCategory 
               type="button"
               key={title}
               onClick={() => onSelectCategory(title)}
-              className={`group bg-white dark:bg-slate-900 border rounded-2xl p-5 min-h-[140px] flex flex-col justify-between text-left transition-all duration-300 hover:-translate-y-1 hover:shadow-lg cursor-pointer ${
-                isActive ? "border-blue-400 dark:border-blue-500/50 ring-2 ring-blue-100 dark:ring-blue-500/20" : "border-slate-200 dark:border-slate-800 hover:border-blue-200 dark:hover:border-blue-500/40"
+              className={`group bg-white border rounded-2xl p-5 min-h-[140px] flex flex-col justify-between text-left transition-all duration-300 hover:-translate-y-1 hover:shadow-lg cursor-pointer ${
+                isActive ? "border-blue-400 ring-2 ring-blue-100 " : "border-slate-200 hover:border-blue-200 "
               }`}
             >
               <div
                 className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all duration-300 group-hover:scale-110 ${
-                  isActive ? "bg-blue-50 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400" : "bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 group-hover:bg-blue-50 dark:group-hover:bg-blue-500/10 group-hover:text-blue-600 dark:group-hover:text-blue-400"
+                  isActive ? "bg-blue-50 text-blue-600 " : "bg-slate-50 text-slate-600 group-hover:bg-blue-50 group-hover:text-blue-600 "
                 }`}
               >
                 <Icon size={18} />
               </div>
               <div>
-                <p className="font-semibold text-slate-900 dark:text-slate-100 group-hover:text-blue-700 dark:group-hover:text-blue-400 transition-colors duration-200">
+                <p className="font-semibold text-slate-900 group-hover:text-blue-700 transition-colors duration-200">
                   {title}
                 </p>
-                <p className="text-sm text-slate-400 dark:text-slate-500 mt-0.5">
+                <p className="text-sm text-slate-400 mt-0.5">
                   {count} {count === 1 ? "item" : "items"}
                 </p>
               </div>
@@ -498,16 +496,16 @@ function RecentActivity({ reports, loading, error, activeCategory, onClearFilter
   const visibleDocs = reports.slice(0, 8);
 
   return (
-    <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 transition-shadow duration-300 hover:shadow-lg dark:hover:shadow-black/30">
+    <div className="bg-white border border-slate-200 rounded-2xl p-6 transition-shadow duration-300 hover:shadow-lg ">
       <div className="flex items-center justify-between mb-5 flex-wrap gap-2">
-        <h3 className="font-semibold text-slate-900 dark:text-slate-100">
+        <h3 className="font-semibold text-slate-900 ">
           {activeCategory ? `${activeCategory}` : "Recent Activity"}
         </h3>
         {activeCategory && (
           <button
             type="button"
             onClick={onClearFilter}
-            className="text-xs font-medium text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 flex items-center gap-1"
+            className="text-xs font-medium text-blue-600 hover:text-blue-700 flex items-center gap-1"
           >
             <X size={13} />
             Clear
@@ -516,11 +514,11 @@ function RecentActivity({ reports, loading, error, activeCategory, onClearFilter
       </div>
 
       {loading ? (
-        <p className="text-sm text-slate-400 dark:text-slate-500 text-center py-10">Loading documents...</p>
+        <p className="text-sm text-slate-400 text-center py-10">Loading documents...</p>
       ) : error ? (
-        <p className="text-sm text-red-600 dark:text-red-400 text-center py-10">{error}</p>
+        <p className="text-sm text-red-600 text-center py-10">{error}</p>
       ) : visibleDocs.length === 0 ? (
-        <p className="text-sm text-slate-400 dark:text-slate-500 text-center py-10">
+        <p className="text-sm text-slate-400 text-center py-10">
           {activeCategory ? "No documents in this category yet." : "No documents uploaded yet."}
         </p>
       ) : (
@@ -541,7 +539,7 @@ function RecentActivity({ reports, loading, error, activeCategory, onClearFilter
           <div className="hidden sm:block overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="text-left text-xs text-slate-400 dark:text-slate-500 uppercase tracking-wide border-b border-slate-100 dark:border-slate-800">
+                <tr className="text-left text-xs text-slate-400 uppercase tracking-wide border-b border-slate-100 ">
                   <th className="pb-3 font-medium">Document Name</th>
                   <th className="pb-3 font-medium">Type</th>
                   <th className="pb-3 font-medium">Date</th>
@@ -566,7 +564,7 @@ function RecentActivity({ reports, loading, error, activeCategory, onClearFilter
       <button
         type="button"
         onClick={onViewAll}
-        className="w-full text-center text-sm font-medium text-blue-600 dark:text-blue-400 mt-5 pt-4 border-t border-slate-100 dark:border-slate-800 transition-colors duration-200 hover:text-blue-700 dark:hover:text-blue-300"
+        className="w-full text-center text-sm font-medium text-blue-600 mt-5 pt-4 border-t border-slate-100 transition-colors duration-200 hover:text-blue-700 "
       >
         View All Documents
       </button>
@@ -579,14 +577,14 @@ function DocCard({ doc, onViewDetails, onViewSummary }) {
   const Icon = meta.icon;
 
   return (
-    <div className="border border-slate-100 dark:border-slate-800 rounded-xl p-4">
+    <div className="border border-slate-100 rounded-xl p-4">
       <div className="flex items-start gap-3 mb-3">
         <div className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${meta.tone}`}>
           <Icon size={16} />
         </div>
         <div className="min-w-0 flex-1">
-          <p className="font-medium text-slate-900 dark:text-slate-100 truncate">{doc.title || "Untitled report"}</p>
-          <p className="text-xs text-slate-400 dark:text-slate-500">{doc.hospital || doc.doctor || "Unknown source"}</p>
+          <p className="font-medium text-slate-900 truncate">{doc.title || "Untitled report"}</p>
+          <p className="text-xs text-slate-400 ">{doc.hospital || doc.doctor || "Unknown source"}</p>
         </div>
       </div>
 
@@ -594,7 +592,7 @@ function DocCard({ doc, onViewDetails, onViewSummary }) {
         <span className={`text-xs font-medium px-2.5 py-1 rounded-full whitespace-nowrap ${meta.tone}`}>
           {doc.category || "Consultation"}
         </span>
-        <span className="text-xs text-slate-500 dark:text-slate-400 whitespace-nowrap">
+        <span className="text-xs text-slate-500 whitespace-nowrap">
           {formatDate(doc.reportDate)}
         </span>
       </div>
@@ -603,7 +601,7 @@ function DocCard({ doc, onViewDetails, onViewSummary }) {
         <button
           type="button"
           onClick={onViewDetails}
-          className="flex-1 text-xs font-semibold px-3.5 py-2 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700 transition-all duration-200"
+          className="flex-1 text-xs font-semibold px-3.5 py-2 rounded-lg bg-slate-100 text-slate-700 hover:bg-slate-200 transition-all duration-200"
         >
           View Details
         </button>
@@ -625,15 +623,15 @@ function DocRow({ doc, onViewDetails, onViewSummary }) {
   const Icon = meta.icon;
 
   return (
-    <tr className="group border-b border-slate-50 dark:border-slate-800 last:border-0 transition-colors duration-200 hover:bg-slate-50/60 dark:hover:bg-slate-800/60">
+    <tr className="group border-b border-slate-50 last:border-0 transition-colors duration-200 hover:bg-slate-50/60 ">
       <td className="py-4 pr-4">
         <div className="flex items-center gap-3">
           <div className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 transition-transform duration-200 group-hover:scale-110 ${meta.tone}`}>
             <Icon size={16} />
           </div>
           <div className="min-w-0">
-            <p className="font-medium text-slate-900 dark:text-slate-100 truncate">{doc.title || "Untitled report"}</p>
-            <p className="text-xs text-slate-400 dark:text-slate-500">{doc.hospital || doc.doctor || "Unknown source"}</p>
+            <p className="font-medium text-slate-900 truncate">{doc.title || "Untitled report"}</p>
+            <p className="text-xs text-slate-400 ">{doc.hospital || doc.doctor || "Unknown source"}</p>
           </div>
         </div>
       </td>
@@ -642,7 +640,7 @@ function DocRow({ doc, onViewDetails, onViewSummary }) {
           {doc.category || "Consultation"}
         </span>
       </td>
-      <td className="py-4 pr-4 text-slate-500 dark:text-slate-400 whitespace-nowrap">
+      <td className="py-4 pr-4 text-slate-500 whitespace-nowrap">
         {formatDate(doc.reportDate)}
       </td>
       <td className="py-4 text-right">
@@ -650,7 +648,7 @@ function DocRow({ doc, onViewDetails, onViewSummary }) {
           <button
             type="button"
             onClick={onViewDetails}
-            className="text-xs font-semibold px-3.5 py-2 rounded-lg whitespace-nowrap bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700 transition-all duration-200"
+            className="text-xs font-semibold px-3.5 py-2 rounded-lg whitespace-nowrap bg-slate-100 text-slate-700 hover:bg-slate-200 transition-all duration-200"
           >
             View Details
           </button>
@@ -676,17 +674,17 @@ function ReportPreview({ report, onClose }) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 px-4 py-6">
-      <div className="w-full max-w-5xl max-h-[90vh] overflow-y-auto rounded-3xl bg-white dark:bg-slate-900 p-6 shadow-2xl">
+      <div className="w-full max-w-5xl max-h-[90vh] overflow-y-auto rounded-3xl bg-white p-6 shadow-2xl">
         <div className="flex items-start justify-between gap-4">
           <div className="flex items-center gap-3 min-w-0">
             <div className={`w-11 h-11 rounded-xl flex items-center justify-center shrink-0 ${meta.tone}`}>
               <Icon size={20} />
             </div>
             <div className="min-w-0">
-              <p className="text-xs font-semibold uppercase tracking-wide text-blue-600 dark:text-blue-400">
+              <p className="text-xs font-semibold uppercase tracking-wide text-blue-600 ">
                 {report.category || "Consultation"}
               </p>
-              <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100 truncate">
+              <h2 className="text-lg font-semibold text-slate-900 truncate">
                 {report.title || "Untitled report"}
               </h2>
             </div>
@@ -694,7 +692,7 @@ function ReportPreview({ report, onClose }) {
           <button
             type="button"
             onClick={onClose}
-            className="rounded-full border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800 p-2.5 text-slate-500 dark:text-slate-400 transition-colors hover:bg-slate-100 dark:hover:bg-slate-700 hover:text-slate-700 dark:hover:text-slate-200 shrink-0"
+            className="rounded-full border border-slate-200 bg-slate-50 p-2.5 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-700 shrink-0"
           >
             <X size={16} />
           </button>
@@ -704,55 +702,55 @@ function ReportPreview({ report, onClose }) {
           {/* Left: text, metadata and notes/analysis */}
           <div className="space-y-4">
             <div className="grid gap-3 sm:grid-cols-2">
-              <div className="rounded-xl border border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-800 p-3">
-                <p className="text-xs text-slate-500 dark:text-slate-400">Date</p>
-                <p className="mt-1 text-sm font-semibold text-slate-900 dark:text-slate-100">{formatDate(report.reportDate)}</p>
+              <div className="rounded-xl border border-slate-100 bg-slate-50 p-3">
+                <p className="text-xs text-slate-500 ">Date</p>
+                <p className="mt-1 text-sm font-semibold text-slate-900 ">{formatDate(report.reportDate)}</p>
               </div>
               {report.doctor && (
-                <div className="rounded-xl border border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-800 p-3">
-                  <p className="text-xs text-slate-500 dark:text-slate-400">Doctor</p>
-                  <p className="mt-1 text-sm font-semibold text-slate-900 dark:text-slate-100">{report.doctor}</p>
+                <div className="rounded-xl border border-slate-100 bg-slate-50 p-3">
+                  <p className="text-xs text-slate-500 ">Doctor</p>
+                  <p className="mt-1 text-sm font-semibold text-slate-900 ">{report.doctor}</p>
                 </div>
               )}
               {report.hospital && (
-                <div className="rounded-xl border border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-800 p-3">
-                  <p className="text-xs text-slate-500 dark:text-slate-400">Hospital</p>
-                  <p className="mt-1 text-sm font-semibold text-slate-900 dark:text-slate-100">{report.hospital}</p>
+                <div className="rounded-xl border border-slate-100 bg-slate-50 p-3">
+                  <p className="text-xs text-slate-500 ">Hospital</p>
+                  <p className="mt-1 text-sm font-semibold text-slate-900 ">{report.hospital}</p>
                 </div>
               )}
               {report.diagnosis && (
-                <div className="rounded-xl border border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-800 p-3">
-                  <p className="text-xs text-slate-500 dark:text-slate-400">Diagnosis</p>
-                  <p className="mt-1 text-sm font-semibold text-slate-900 dark:text-slate-100">{report.diagnosis}</p>
+                <div className="rounded-xl border border-slate-100 bg-slate-50 p-3">
+                  <p className="text-xs text-slate-500 ">Diagnosis</p>
+                  <p className="mt-1 text-sm font-semibold text-slate-900 ">{report.diagnosis}</p>
                 </div>
               )}
             </div>
 
             {report.notes && (
-              <div className="rounded-xl border border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-800 p-3">
-                <p className="text-xs text-slate-500 dark:text-slate-400">Notes</p>
-                <p className="mt-1 text-sm text-slate-700 dark:text-slate-300 whitespace-pre-line">{report.notes}</p>
+              <div className="rounded-xl border border-slate-100 bg-slate-50 p-3">
+                <p className="text-xs text-slate-500 ">Notes</p>
+                <p className="mt-1 text-sm text-slate-700 whitespace-pre-line">{report.notes}</p>
               </div>
             )}
 
             {report.analysis && (
-              <div className="rounded-2xl border border-blue-100 dark:border-blue-500/20 bg-blue-50 dark:bg-blue-500/10 p-4">
-                <p className="text-sm text-blue-700 dark:text-blue-400">Analysis / Summary</p>
-                <p className="mt-2 text-sm text-slate-700 dark:text-slate-300 whitespace-pre-line">{report.analysis}</p>
+              <div className="rounded-2xl border border-blue-100 bg-blue-50 p-4">
+                <p className="text-sm text-blue-700 ">Analysis / Summary</p>
+                <p className="mt-2 text-sm text-slate-700 whitespace-pre-line">{report.analysis}</p>
               </div>
             )}
           </div>
 
           {/* Right: document preview */}
-          <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800 p-4 h-full flex flex-col">
-            <p className="text-sm text-slate-500 dark:text-slate-400 mb-3">Document preview</p>
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 h-full flex flex-col">
+            <p className="text-sm text-slate-500 mb-3">Document preview</p>
             <div className="flex-1 overflow-hidden">
               {report.fileUrl ? (
                 getPreviewType(report.fileUrl) === "pdf" ? (
                   <iframe
                     src={getPreviewUrl(report.fileUrl)}
                     title="Report PDF preview"
-                    className="w-full h-full rounded-xl border border-slate-200 dark:border-slate-700"
+                    className="w-full h-full rounded-xl border border-slate-200 "
                     style={{ minHeight: 360 }}
                   />
                 ) : getPreviewType(report.fileUrl) === "image" ? (
@@ -762,10 +760,10 @@ function ReportPreview({ report, onClose }) {
                     className="w-full h-full rounded-xl object-contain"
                   />
                 ) : (
-                  <p className="text-sm text-slate-500 dark:text-slate-400">Preview not available for this file type.</p>
+                  <p className="text-sm text-slate-500 ">Preview not available for this file type.</p>
                 )
               ) : (
-                <p className="text-xs text-slate-400 dark:text-slate-500">No file attached to this report.</p>
+                <p className="text-xs text-slate-400 ">No file attached to this report.</p>
               )}
             </div>
 
@@ -774,7 +772,7 @@ function ReportPreview({ report, onClose }) {
                 href={getPreviewUrl(report.fileUrl)}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="mt-4 inline-flex items-center gap-2 rounded-2xl border border-blue-100 dark:border-blue-500/20 bg-blue-50 dark:bg-blue-500/10 px-4 py-2 text-blue-700 dark:text-blue-400 text-sm font-semibold transition-colors hover:bg-blue-100 dark:hover:bg-blue-500/20"
+                className="mt-4 inline-flex items-center gap-2 rounded-2xl border border-blue-100 bg-blue-50 px-4 py-2 text-blue-700 text-sm font-semibold transition-colors hover:bg-blue-100 "
               >
                 <FileText size={16} />
                 Open document
@@ -834,7 +832,7 @@ function AISummaryView({ report: initialReport, token, onSummaryGenerated, onClo
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 px-4 py-6">
-      <div className="w-full max-w-5xl max-h-[90vh] overflow-y-auto rounded-3xl bg-white dark:bg-slate-900 shadow-2xl">
+      <div className="w-full max-w-5xl max-h-[90vh] overflow-y-auto rounded-3xl bg-white shadow-2xl">
         {/* Header banner */}
         <div className="bg-gradient-to-br from-blue-600 to-blue-700 rounded-t-3xl p-6 text-white">
           <div className="flex items-start justify-between gap-4">
@@ -882,13 +880,13 @@ function AISummaryView({ report: initialReport, token, onSummaryGenerated, onClo
             {generating ? (
               <div className="flex flex-col items-center justify-center py-10 text-center">
                 <Loader2 className="w-7 h-7 text-blue-600 animate-spin mb-3" />
-                <p className="text-sm font-medium text-slate-700 dark:text-slate-300">Generating AI summary...</p>
-                <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">Reading the full report to write a plain-language summary.</p>
+                <p className="text-sm font-medium text-slate-700 ">Generating AI summary...</p>
+                <p className="text-xs text-slate-400 mt-1">Reading the full report to write a plain-language summary.</p>
               </div>
             ) : genError ? (
-              <div className="rounded-xl border border-red-100 dark:border-red-500/20 bg-red-50 dark:bg-red-500/10 p-4 text-center">
-                <p className="text-sm font-semibold text-red-700 dark:text-red-400">Couldn't generate a summary</p>
-                <p className="text-xs text-red-600 dark:text-red-400 mt-1">{genError}</p>
+              <div className="rounded-xl border border-red-100 bg-red-50 p-4 text-center">
+                <p className="text-sm font-semibold text-red-700 ">Couldn't generate a summary</p>
+                <p className="text-xs text-red-600 mt-1">{genError}</p>
                 <button
                   type="button"
                   onClick={runGenerate}
@@ -900,19 +898,19 @@ function AISummaryView({ report: initialReport, token, onSummaryGenerated, onClo
               </div>
             ) : (
               <>
-                <div className="rounded-2xl border border-blue-100 dark:border-blue-500/20 bg-blue-50/60 dark:bg-blue-500/10 p-4">
-                  <p className="text-sm text-slate-800 dark:text-slate-200 leading-relaxed whitespace-pre-line">{report.analysis}</p>
+                <div className="rounded-2xl border border-blue-100 bg-blue-50/60 p-4">
+                  <p className="text-sm text-slate-800 leading-relaxed whitespace-pre-line">{report.analysis}</p>
                 </div>
 
                 {highlights.length > 0 && (
                   <div className="grid gap-3 sm:grid-cols-2 mt-4">
                     {highlights.map(({ label, value, icon: HighlightIcon }) => (
-                      <div key={label} className="rounded-xl border border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-800 p-3">
-                        <p className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400">
+                      <div key={label} className="rounded-xl border border-slate-100 bg-slate-50 p-3">
+                        <p className="flex items-center gap-1.5 text-xs text-slate-500 ">
                           <HighlightIcon size={13} />
                           {label}
                         </p>
-                        <p className="mt-1 text-sm font-semibold text-slate-900 dark:text-slate-100">{value}</p>
+                        <p className="mt-1 text-sm font-semibold text-slate-900 ">{value}</p>
                       </div>
                     ))}
                   </div>
@@ -926,7 +924,7 @@ function AISummaryView({ report: initialReport, token, onSummaryGenerated, onClo
                   <button
                     type="button"
                     onClick={runGenerate}
-                    className="ml-auto inline-flex items-center gap-1.5 text-xs font-medium text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300"
+                    className="ml-auto inline-flex items-center gap-1.5 text-xs font-medium text-blue-600 hover:text-blue-700 "
                   >
                     <RefreshCw size={12} />
                     Regenerate
@@ -937,15 +935,15 @@ function AISummaryView({ report: initialReport, token, onSummaryGenerated, onClo
           </div>
 
           {/* Right: preview */}
-          <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800 p-4 h-full flex flex-col">
-            <p className="text-sm text-slate-500 dark:text-slate-400 mb-3">Document preview</p>
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 h-full flex flex-col">
+            <p className="text-sm text-slate-500 mb-3">Document preview</p>
             <div className="flex-1 overflow-hidden">
               {report.fileUrl ? (
                 getPreviewType(report.fileUrl) === "pdf" ? (
                   <iframe
                     src={getPreviewUrl(report.fileUrl)}
                     title="Summary PDF preview"
-                    className="w-full h-full rounded-xl border border-slate-200 dark:border-slate-700"
+                    className="w-full h-full rounded-xl border border-slate-200 "
                     style={{ minHeight: 360 }}
                   />
                 ) : getPreviewType(report.fileUrl) === "image" ? (
@@ -955,10 +953,10 @@ function AISummaryView({ report: initialReport, token, onSummaryGenerated, onClo
                     className="w-full h-full rounded-xl object-contain"
                   />
                 ) : (
-                  <p className="text-sm text-slate-500 dark:text-slate-400">Preview not available for this file type.</p>
+                  <p className="text-sm text-slate-500 ">Preview not available for this file type.</p>
                 )
               ) : (
-                <p className="text-xs text-slate-400 dark:text-slate-500">No file attached to this report.</p>
+                <p className="text-xs text-slate-400 ">No file attached to this report.</p>
               )}
             </div>
 
@@ -967,7 +965,7 @@ function AISummaryView({ report: initialReport, token, onSummaryGenerated, onClo
                 href={getPreviewUrl(report.fileUrl)}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="mt-4 inline-flex items-center gap-2 rounded-2xl border border-blue-100 dark:border-blue-500/20 bg-blue-50 dark:bg-blue-500/10 px-4 py-2 text-blue-700 dark:text-blue-400 text-sm font-semibold transition-colors hover:bg-blue-100 dark:hover:bg-blue-500/20"
+                className="mt-4 inline-flex items-center gap-2 rounded-2xl border border-blue-100 bg-blue-50 px-4 py-2 text-blue-700 text-sm font-semibold transition-colors hover:bg-blue-100 "
               >
                 <FileText size={16} />
                 Open document

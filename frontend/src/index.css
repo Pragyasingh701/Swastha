@@ -3,11 +3,11 @@
 @tailwind utilities;
 
 html, body, #root {
-  @apply bg-white dark:bg-slate-950;
+  @apply bg-white;
 }
 
 ::-webkit-scrollbar-thumb {
-  @apply bg-slate-300 dark:bg-slate-700;
+  @apply bg-slate-300;
 }
 
 /* Material Symbols baseline */
@@ -34,11 +34,6 @@ html, body, #root {
   background: rgba(255, 255, 255, 0.8);
   backdrop-filter: blur(16px);
   border: 1px solid rgba(255, 255, 255, 0.1);
-}
-
-.dark .glass-card {
-  background: rgba(15, 23, 42, 0.75);
-  border: 1px solid rgba(148, 163, 184, 0.15);
 }
 
 /* Float animation for hero image */
