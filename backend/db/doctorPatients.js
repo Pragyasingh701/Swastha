@@ -103,6 +103,30 @@ export const getDoctorPatients = async (doctorId) => {
   }
 };
 
+export const isDoctorLinkedToPatient = async (doctorId, patientUserId) => {
+  if (!doctorId || !patientUserId || !supabase) {
+    return false;
+  }
+
+  try {
+    const { data, error } = await supabase
+      .from('doctor_patient')
+      .select('id')
+      .eq('doctor_id', doctorId)
+      .eq('patient_id', patientUserId)
+      .maybeSingle();
+
+    if (error && error.code !== 'PGRST116') {
+      throw error;
+    }
+
+    return Boolean(data);
+  } catch (error) {
+    console.warn('Doctor-patient link check warning:', error?.message || error);
+    return false;
+  }
+};
+
 export const linkDoctorToPatient = async ({ doctorId, patientUserId }) => {
   if (!doctorId || !patientUserId) {
     throw new Error('Doctor ID and patient ID are required.');

@@ -2,10 +2,12 @@ import React, { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { useGoogleLogin } from "@react-oauth/google";
 import { useAuth } from "../../context/AuthContext";
+import { useGoogleAuthBlocked } from "../../context/GoogleAuthStatusContext";
 
 export default function Login() {
   const navigate = useNavigate();
   const { login, loginWithGoogle } = useAuth();
+  const googleAuthBlocked = useGoogleAuthBlocked();
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -212,7 +214,13 @@ export default function Login() {
             <div className="space-y-3 mb-8">
               <button
                 type="button"
-                onClick={() => handleGoogleAuth()}
+                onClick={() => {
+                  if (googleAuthBlocked) {
+                    setErrorMessage("Google Sign-In looks like it's being blocked, often by an ad blocker or privacy extension. Disable it for this site, or sign in with your email and password below.");
+                    return;
+                  }
+                  handleGoogleAuth();
+                }}
                 disabled={isGoogleLoading}
                 className="w-full flex items-center justify-center gap-3 px-6 py-3 bg-white border border-outline-variant rounded-xl font-label-md text-label-md text-on-surface hover:bg-surface-container-low transition-colors duration-200"
               >
