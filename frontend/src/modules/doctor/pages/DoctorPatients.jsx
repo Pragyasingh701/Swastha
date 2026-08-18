@@ -32,6 +32,7 @@ export default function DoctorPatients() {
   const [collapsedYears, setCollapsedYears] = useState(new Set());
   const [selectedEvent, setSelectedEvent] = useState(null);
   const [showDateRange, setShowDateRange] = useState(false);
+  const [showFilterPanel, setShowFilterPanel] = useState(false);
   const [vaultCategoryFilter, setVaultCategoryFilter] = useState(null);
   const [vaultSearchQuery, setVaultSearchQuery] = useState('');
 
@@ -258,6 +259,17 @@ export default function DoctorPatients() {
     return list;
   }, [patientVault, vaultCategoryFilter, vaultSearchQuery]);
 
+  // Calculate active filters count
+  const activeFiltersCount = (categoryFilter ? 1 : 0) + (dateFrom ? 1 : 0) + (dateTo ? 1 : 0);
+
+  // Clear all filters
+  const handleClearAllFilters = () => {
+    setCategoryFilter('');
+    setDateFrom('');
+    setDateTo('');
+    setShowFilterPanel(false);
+  };
+
   return (
     <div className="h-screen overflow-hidden bg-[#faf8ff] text-[#191b23] antialiased flex">
       <DoctorSidebar />
@@ -289,14 +301,107 @@ export default function DoctorPatients() {
               <p className="mt-1 text-lg text-[#434655] ">Manage patient records and clinical history.</p>
             </div>
 
-            <div className="flex flex-wrap items-center gap-3">
+            <div className="flex flex-wrap items-center gap-3 relative">
               <button
                 type="button"
-                className="h-11 px-6 rounded-lg border border-[#c3c6d7] text-[#191b23] hover:bg-[#f3f3fe] transition-colors flex items-center gap-2 bg-white shadow-sm"
+                onClick={() => setShowFilterPanel(!showFilterPanel)}
+                className={`h-11 px-6 rounded-lg border transition-colors flex items-center gap-2 shadow-sm ${
+                  showFilterPanel || activeFiltersCount > 0
+                    ? 'border-blue-300 bg-blue-50 dark:bg-blue-500/10 dark:border-blue-500/40 text-blue-600 dark:text-blue-400'
+                    : 'border-[#c3c6d7] dark:border-slate-700 bg-white dark:bg-slate-900 text-[#191b23] dark:text-slate-100 hover:bg-[#f3f3fe] dark:hover:bg-slate-800'
+                }`}
               >
                 <span className="material-symbols-outlined text-[18px]">filter_list</span>
                 Filter
+                {activeFiltersCount > 0 && (
+                  <span className="ml-1 px-2 py-0.5 bg-blue-600 dark:bg-blue-600 text-white text-xs font-semibold rounded-full">
+                    {activeFiltersCount}
+                  </span>
+                )}
               </button>
+
+              {/* Filter Panel */}
+              {showFilterPanel && selectedPatient && (
+                <div className="absolute top-full mt-2 right-0 z-50 bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-lg p-5 w-96 max-w-[calc(100vw-2rem)]">
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">Filter Medical Records</h3>
+                    <button
+                      type="button"
+                      onClick={() => setShowFilterPanel(false)}
+                      className="p-1 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-colors"
+                    >
+                      <X size={16} className="text-slate-500" />
+                    </button>
+                  </div>
+
+                  <div className="space-y-4">
+                    {/* Category Filter */}
+                    {getAvailableCategories().length > 0 && (
+                      <div>
+                        <label className="text-xs font-semibold uppercase tracking-[0.08em] text-slate-600 dark:text-slate-300 mb-2 block">
+                          Category
+                        </label>
+                        <select
+                          value={categoryFilter}
+                          onChange={(e) => setCategoryFilter(e.target.value)}
+                          className="w-full px-3 py-2.5 border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        >
+                          <option value="">All categories</option>
+                          {getAvailableCategories().map((cat) => (
+                            <option key={cat} value={cat}>
+                              {cat}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+
+                    {/* Date Range Filter */}
+                    <div className="space-y-3">
+                      <label className="text-xs font-semibold uppercase tracking-[0.08em] text-slate-600 dark:text-slate-300 block">
+                        Date Range
+                      </label>
+                      <div>
+                        <label className="text-[10px] text-slate-500 dark:text-slate-400 mb-1 block">From</label>
+                        <input
+                          type="date"
+                          value={dateFrom}
+                          onChange={(e) => setDateFrom(e.target.value)}
+                          className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[10px] text-slate-500 dark:text-slate-400 mb-1 block">To</label>
+                        <input
+                          type="date"
+                          value={dateTo}
+                          onChange={(e) => setDateTo(e.target.value)}
+                          className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Filter Actions */}
+                    <div className="flex gap-2 pt-3 border-t border-slate-200 dark:border-slate-700">
+                      <button
+                        type="button"
+                        onClick={handleClearAllFilters}
+                        disabled={activeFiltersCount === 0}
+                        className="flex-1 px-3 py-2 text-xs font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        Clear All
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setShowFilterPanel(false)}
+                        className="flex-1 px-3 py-2 text-xs font-medium bg-blue-600 text-white hover:bg-blue-700 rounded-lg transition-colors"
+                      >
+                        Apply Filters
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
               <button
                 type="button"
                 onClick={() => setIsAddPatientOpen(true)}

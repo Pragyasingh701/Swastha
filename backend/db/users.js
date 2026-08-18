@@ -1,6 +1,44 @@
 import supabase from '../config/supabase.js';
 
 /**
+ * Generate a unique 6-digit patient code
+ */
+export const generatePatientCode = async () => {
+  let patientCode;
+  let isUnique = false;
+  let attempts = 0;
+  const maxAttempts = 10;
+
+  while (!isUnique && attempts < maxAttempts) {
+    // Generate random 6-digit code (000000 to 999999)
+    patientCode = String(Math.floor(Math.random() * 1000000)).padStart(6, '0');
+
+    // Check if code already exists in database
+    try {
+      const { data, error } = await supabase
+        .from('users')
+        .select('id')
+        .eq('patient_code', patientCode)
+        .maybeSingle();
+
+      if (!error && !data) {
+        isUnique = true;
+      }
+    } catch (err) {
+      console.warn('Error checking patient code uniqueness:', err.message);
+    }
+
+    attempts++;
+  }
+
+  if (!isUnique) {
+    throw new Error('Failed to generate unique patient code after multiple attempts');
+  }
+
+  return patientCode;
+};
+
+/**
  * Find user by email from Supabase
  */
 export const findUserByEmail = async (email) => {
@@ -127,6 +165,20 @@ export const createOrUpdateUser = async (userData) => {
   const licenseExpiryDate = isDoctor ? (userData.licenseExpiryDate || userData.license_expiry_date || existingUser?.license_expiry_date || null) : null;
   const verificationStatus = isDoctor ? (userData.verificationStatus || userData.verification_status || existingUser?.verification_status || 'pending') : 'verified';
 
+  // Generate unique 6-digit patient code for patients (both new and existing)
+  let patientCode = existingUser?.patient_code || userData?.patient_code || null;
+  
+  // If patient doesn't have a code, generate one (works for both new and existing patients)
+  if (!isDoctor && !patientCode) {
+    try {
+      patientCode = await generatePatientCode();
+      console.log(`✅ Generated patient code: ${patientCode} for user ${normalizedEmail}`);
+    } catch (err) {
+      console.error('⚠️ Failed to generate patient code:', err.message);
+      patientCode = null;
+    }
+  }
+
   let savedUser = {
     id: userId,
     email: normalizedEmail,
@@ -149,6 +201,7 @@ export const createOrUpdateUser = async (userData) => {
     gender,
     emergencyContact,
     emergency_contact: emergencyContact,
+    patient_code: patientCode,
     specialty,
     specialization: specialty,
     license_number: licenseNumber,
@@ -185,6 +238,7 @@ export const createOrUpdateUser = async (userData) => {
         dob,
         blood_group: bloodGroup,
         gender,
+        patient_code: patientCode,
         specialty,
         license_number: licenseNumber,
         council,
@@ -230,7 +284,7 @@ export const createOrUpdateUser = async (userData) => {
 
       if (!error && data && data.length > 0) {
         const userRow = data[0];
-        console.log(`⚡ [Supabase] User profile updated in database: ${normalizedEmail} (Role: ${userRow.role}, Specialty: ${userRow.specialty}, License: ${userRow.license_number})`);
+        console.log(`⚡ [Supabase] User profile updated in database: ${normalizedEmail} (Role: ${userRow.role}, Specialty: ${userRow.specialty}, License: ${userRow.license_number}, PatientCode: ${userRow.patient_code})`);
         savedUser = {
           ...savedUser,
           ...userRow,
@@ -242,6 +296,7 @@ export const createOrUpdateUser = async (userData) => {
           bloodGroup: userRow.blood_group || bloodGroup,
           blood_group: userRow.blood_group || bloodGroup,
           gender: userRow.gender || gender,
+          patient_code: userRow.patient_code || patientCode,
           hasSelectedRole: !!(userRow.role && userRow.role !== 'none'),
         };
       } else if (error) {
