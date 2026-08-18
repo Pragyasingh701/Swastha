@@ -33,32 +33,17 @@ export const authService = {
   },
 
   /**
-   * Google Login (on Login page) -> verifies existing account
+   * Completes the redirect-based Google Sign-In flow: exchanges the authorization code
+   * Google sent back with the app's backend, which exchanges it with Google server-to-server.
    */
-  async loginWithGoogle(credential) {
-    const payload = typeof credential === 'object' && credential !== null ? credential : { credential };
-    const response = await fetch(`${API_BASE_URL}/auth/google-login`, {
+  async exchangeGoogleCode({ code, redirectUri, mode = 'login', role }) {
+    const response = await fetch(`${API_BASE_URL}/auth/google/exchange`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
+      body: JSON.stringify({ code, redirectUri, mode, role }),
     });
     const data = await response.json();
     if (!response.ok) throw new Error(data.message || 'Google Sign-In failed');
-    return data;
-  },
-
-  /**
-   * Google Register (on Register page) -> checks existing or creates new account
-   */
-  async registerWithGoogle(credential, role = 'patient') {
-    const payload = typeof credential === 'object' && credential !== null ? { ...credential, role } : { credential, role };
-    const response = await fetch(`${API_BASE_URL}/auth/google-register`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    });
-    const data = await response.json();
-    if (!response.ok) throw new Error(data.message || 'Google Registration failed');
     return data;
   },
 

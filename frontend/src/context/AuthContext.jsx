@@ -148,36 +148,13 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  const loginWithGoogle = async (googleResponse, remember = false) => {
+  const finishGoogleAuth = async ({ code, redirectUri, mode = 'login', role }) => {
     setIsLoading(true);
     setError(null);
     try {
-      const tokenToSend = typeof googleResponse === 'object' && googleResponse !== null
-        ? (googleResponse.access_token || googleResponse.credential || googleResponse.id_token || googleResponse.token || googleResponse)
-        : googleResponse;
-      const result = await authService.loginWithGoogle(tokenToSend);
+      const result = await authService.exchangeGoogleCode({ code, redirectUri, mode, role });
       if (result.token && result.user) {
-        saveAuthSession(result.token, result.user, remember);
-      }
-      return result;
-    } catch (err) {
-      setError(err.message);
-      throw err;
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const registerWithGoogle = async (googleResponse, role = 'patient', remember = true) => {
-    setIsLoading(true);
-    setError(null);
-    try {
-      const tokenToSend = typeof googleResponse === 'object' && googleResponse !== null
-        ? (googleResponse.access_token || googleResponse.credential || googleResponse.id_token || googleResponse.token || googleResponse)
-        : googleResponse;
-      const result = await authService.registerWithGoogle(tokenToSend, role);
-      if (result.token && result.user) {
-        saveAuthSession(result.token, result.user, remember);
+        saveAuthSession(result.token, result.user, true);
       }
       return result;
     } catch (err) {
@@ -284,8 +261,7 @@ export const AuthProvider = ({ children }) => {
         error,
         login,
         register,
-        loginWithGoogle,
-        registerWithGoogle,
+        finishGoogleAuth,
         verifyOTP,
         sendOTP,
         logout,

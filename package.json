@@ -13,7 +13,6 @@
     "start:backend": "node backend/server.js"
   },
   "dependencies": {
-    "@react-oauth/google": "^0.13.5",
     "@supabase/supabase-js": "^2.110.7",
     "concurrently": "^10.0.3",
     "cors": "^2.8.5",
