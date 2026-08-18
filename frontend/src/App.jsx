@@ -17,8 +17,6 @@ import ResetPassword from "./modules/authentication/ResetPassword";
 import DoctorDashboard from "./modules/doctor/pages/DoctorDashboard";
 import DoctorPatients from "./modules/doctor/pages/DoctorPatients";
 import ClinicalIntelligence from "./modules/doctor/pages/ClinicalIntelligence";
-import ClinicalAnalytics from "./modules/doctor/pages/ClinicalAnalytics";
-import ModernHealthDashboard from "./modules/doctor/pages/ModernHealthDashboard";
 import DoctorReports from "./modules/doctor/pages/DoctorReports";
 import DoctorMessages from "./modules/doctor/pages/DoctorMessages";
 import DoctorSettings from "./modules/doctor/pages/DoctorSettings";
@@ -56,6 +54,11 @@ function hasCompletedRole(user) {
   return Boolean(user.hasSelectedRole || (user.role && user.role !== 'none'));
 }
 
+// Helper function to route a fully-onboarded user to the correct dashboard for their role
+function getHomeRoute(user) {
+  return user?.role === "doctor" ? "/doctor-dashboard" : "/dashboard";
+}
+
 // GuestRoute: Restricted to unauthenticated users (or users who haven't completed role setup yet).
 // If authenticated & role is completed -> redirect to /dashboard.
 // If authenticated & NO role -> redirect to /role-selection.
@@ -68,7 +71,7 @@ function GuestRoute({ children }) {
 
   if (isAuthenticated) {
     if (hasCompletedRole(user)) {
-      return <Navigate to="/dashboard" replace />;
+      return <Navigate to={getHomeRoute(user)} replace />;
     } else {
       return <Navigate to="/role-selection" replace />;
     }
@@ -92,7 +95,7 @@ function OnboardingRoute({ children }) {
   }
 
   if (hasCompletedRole(user)) {
-    return <Navigate to="/dashboard" replace />;
+    return <Navigate to={getHomeRoute(user)} replace />;
   }
 
   return children;
@@ -107,7 +110,7 @@ function OTPRoute({ children }) {
   }
 
   if (isAuthenticated && hasCompletedRole(user)) {
-    return <Navigate to="/dashboard" replace />;
+    return <Navigate to={getHomeRoute(user)} replace />;
   }
 
   return children;
@@ -171,7 +174,7 @@ function WildcardRedirect() {
     return <Navigate to="/" replace />;
   }
 
-  return <Navigate to={hasCompletedRole(user) ? "/dashboard" : "/role-selection"} replace />;
+  return <Navigate to={hasCompletedRole(user) ? getHomeRoute(user) : "/role-selection"} replace />;
 }
 
 export default function App() {
@@ -251,24 +254,6 @@ export default function App() {
           element={
             <DoctorRoute>
               <ClinicalIntelligence />
-            </DoctorRoute>
-          }
-        />
-
-        <Route
-          path="/doctor/clinical-analytics"
-          element={
-            <DoctorRoute>
-              <ClinicalAnalytics />
-            </DoctorRoute>
-          }
-        />
-
-        <Route
-          path="/doctor/modern-dashboard"
-          element={
-            <DoctorRoute>
-              <ModernHealthDashboard />
             </DoctorRoute>
           }
         />
