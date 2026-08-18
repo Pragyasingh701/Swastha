@@ -12,6 +12,7 @@ import DoctorRegister from "./modules/authentication/DoctorRegister";
 import PatientRegister from "./modules/authentication/PatientRegister";
 import DoctorLogin from "./modules/authentication/DoctorLogin";
 import VerifyOTP from "./modules/authentication/VerifyOTP";
+import GoogleCallback from "./modules/authentication/GoogleCallback";
 import ForgotPassword from "./modules/authentication/ForgotPassword";
 import ResetPassword from "./modules/authentication/ResetPassword";
 import DoctorDashboard from "./modules/doctor/pages/DoctorDashboard";
@@ -191,6 +192,7 @@ export default function App() {
 
         {/* Onboarding & Verification Routes */}
         <Route path="/verify-otp" element={<OTPRoute><VerifyOTP /></OTPRoute>} />
+        <Route path="/auth/google/callback" element={<GoogleCallback />} />
         <Route path="/role-selection" element={<OnboardingRoute><RoleSelection /></OnboardingRoute>} />
         <Route path="/doctor-register" element={<OnboardingRoute><DoctorRegister /></OnboardingRoute>} />
         <Route path="/patient-register" element={<OnboardingRoute><PatientRegister /></OnboardingRoute>} />

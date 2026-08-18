@@ -13,6 +13,7 @@ import { processMedicalCertificate } from '../services/certificateParserService.
 
 const router = express.Router();
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || '771272691038-s9h707grr3b4ojkgp48aa5vb9tej2sjh.apps.googleusercontent.com';
+const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET || '';
 const JWT_SECRET = process.env.JWT_SECRET || 'swastha_dev_secret_key_2026';
 const googleClient = new OAuth2Client(GOOGLE_CLIENT_ID);
 
@@ -416,6 +417,47 @@ router.post('/register', async (req, res) => {
 });
 
 /**
+ * Shared completion logic for any Google sign-in path: find-or-create the user, then
+ * send the 6-digit OTP the same way password-based login does. Used by google-login,
+ * google-register, and the redirect-based google/exchange route so all three stay in sync.
+ */
+async function completeGoogleAuth(res, { email, name, picture, sub }, { role } = {}) {
+  const normalizedEmail = email.toLowerCase().trim();
+  const existingUser = await findUserByEmail(normalizedEmail);
+
+  if (!existingUser) {
+    await createOrUpdateUser({
+      id: 'usr_g_' + (sub || Date.now()),
+      email: normalizedEmail,
+      name: name || normalizedEmail.split('@')[0],
+      picture: picture || null,
+      role: role && role !== 'none' ? role : null,
+      hasSelectedRole: false,
+      authProvider: 'google',
+    });
+  }
+
+  // Generate 6-digit OTP code for Google Verification
+  const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
+  otpStore.set(normalizedEmail, { code: otpCode, expiresAt: Date.now() + 10 * 60 * 1000 });
+
+  try {
+    await sendOTPEmail(normalizedEmail, otpCode);
+    return res.json({
+      requiresOTP: true,
+      email: normalizedEmail,
+      message: 'Verification code sent to your Google email address.',
+    });
+  } catch (error) {
+    otpStore.delete(normalizedEmail);
+    return res.status(500).json({
+      message: 'Could not send the verification email to your Google address.',
+      error: error.message,
+    });
+  }
+}
+
+/**
  * POST /api/auth/google-login
  * Google Sign-In on Login Page -> Verifies user with Google, creates/updates user, sends 6-digit OTP
  */
@@ -427,44 +469,12 @@ router.post('/google-login', async (req, res) => {
   }
 
   try {
-    const { email, name, picture, sub } = await decodeGoogleCredential(googleCredential, req.body);
-    if (!email) {
+    const profile = await decodeGoogleCredential(googleCredential, req.body);
+    if (!profile.email) {
       return res.status(400).json({ message: 'Could not extract valid email from Google credentials' });
     }
 
-    const normalizedEmail = email.toLowerCase().trim();
-    const existingUser = await findUserByEmail(normalizedEmail);
-
-    if (!existingUser) {
-      await createOrUpdateUser({
-        id: 'usr_g_' + (sub || Date.now()),
-        email: normalizedEmail,
-        name: name || normalizedEmail.split('@')[0],
-        picture: picture || null,
-        role: null,
-        hasSelectedRole: false,
-        authProvider: 'google',
-      });
-    }
-
-    // Generate 6-digit OTP code for Google Verification
-    const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
-    otpStore.set(normalizedEmail, { code: otpCode, expiresAt: Date.now() + 10 * 60 * 1000 });
-
-    try {
-      await sendOTPEmail(normalizedEmail, otpCode);
-      return res.json({
-        requiresOTP: true,
-        email: normalizedEmail,
-        message: 'Verification code sent to your Google email address.',
-      });
-    } catch (error) {
-      otpStore.delete(normalizedEmail);
-      return res.status(500).json({
-        message: 'Could not send the verification email to your Google address.',
-        error: error.message,
-      });
-    }
+    return await completeGoogleAuth(res, profile);
   } catch (error) {
     console.error('Google login error:', error);
     return res.status(401).json({ message: 'Invalid Google authentication token', error: error.message });
@@ -483,47 +493,65 @@ router.post('/google-register', async (req, res) => {
   }
 
   try {
-    const { email, name, picture, sub } = await decodeGoogleCredential(googleCredential, req.body);
-    if (!email) {
+    const profile = await decodeGoogleCredential(googleCredential, req.body);
+    if (!profile.email) {
       return res.status(400).json({ message: 'Could not extract valid email from Google credentials' });
     }
 
-    const normalizedEmail = email.toLowerCase().trim();
-    const existingUser = await findUserByEmail(normalizedEmail);
-
-    if (!existingUser) {
-      await createOrUpdateUser({
-        id: 'usr_g_' + (sub || Date.now()),
-        email: normalizedEmail,
-        name: name || normalizedEmail.split('@')[0],
-        picture: picture || null,
-        role: role !== 'none' ? role : null,
-        hasSelectedRole: false,
-        authProvider: 'google',
-      });
-    }
-
-    // Generate 6-digit OTP code for Google Verification
-    const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
-    otpStore.set(normalizedEmail, { code: otpCode, expiresAt: Date.now() + 10 * 60 * 1000 });
-
-    try {
-      await sendOTPEmail(normalizedEmail, otpCode);
-      return res.status(200).json({
-        requiresOTP: true,
-        email: normalizedEmail,
-        message: 'Verification code sent to your Google email address.',
-      });
-    } catch (error) {
-      otpStore.delete(normalizedEmail);
-      return res.status(500).json({
-        message: 'Could not send the verification email to your Google address.',
-        error: error.message,
-      });
-    }
+    return await completeGoogleAuth(res, profile, { role });
   } catch (error) {
     console.error('Google registration error:', error);
     return res.status(401).json({ message: 'Invalid Google authentication token', error: error.message });
+  }
+});
+
+/**
+ * POST /api/auth/google/exchange
+ * Redirect-flow completion: exchanges an OAuth authorization code for tokens server-to-server
+ * (needs GOOGLE_CLIENT_SECRET), then runs the same completeGoogleAuth flow as above. This is
+ * what lets "Continue with Google" work as a full-page redirect instead of a popup, so ad
+ * blockers that block window.open()/popups can't break it.
+ */
+router.post('/google/exchange', async (req, res) => {
+  const { code, redirectUri, mode = 'login', role } = req.body;
+
+  if (!code || !redirectUri) {
+    return res.status(400).json({ message: 'Authorization code and redirect URI are required.' });
+  }
+
+  if (!GOOGLE_CLIENT_SECRET) {
+    console.error('GOOGLE_CLIENT_SECRET is not configured; cannot complete Google code exchange.');
+    return res.status(500).json({ message: 'Google sign-in is not configured on the server yet.' });
+  }
+
+  try {
+    const tokenResponse = await fetch('https://oauth2.googleapis.com/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        code,
+        client_id: GOOGLE_CLIENT_ID,
+        client_secret: GOOGLE_CLIENT_SECRET,
+        redirect_uri: redirectUri,
+        grant_type: 'authorization_code',
+      }),
+    });
+
+    const tokenData = await tokenResponse.json();
+    if (!tokenResponse.ok || !tokenData.id_token) {
+      console.error('Google token exchange failed:', tokenData);
+      return res.status(401).json({ message: 'Google sign-in could not be completed. Please try again.' });
+    }
+
+    const profile = await decodeGoogleCredential(tokenData.id_token);
+    if (!profile.email) {
+      return res.status(400).json({ message: 'Could not extract valid email from Google credentials' });
+    }
+
+    return await completeGoogleAuth(res, profile, { role: mode === 'register' ? role : undefined });
+  } catch (error) {
+    console.error('Google code exchange error:', error);
+    return res.status(401).json({ message: 'Google sign-in could not be completed.', error: error.message });
   }
 });
 
