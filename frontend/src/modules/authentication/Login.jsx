@@ -117,8 +117,15 @@ export default function Login() {
       console.error("Google Login Error:", errorResponse);
       setErrorMessage("Google Sign-In popup failed or was closed.");
     },
-    onNonOAuthError: () => {
+    onNonOAuthError: (nonOAuthError) => {
       setIsGoogleLoading(false);
+      if (nonOAuthError?.type === 'popup_failed_to_open') {
+        setErrorMessage("Google's sign-in popup was blocked, often by an ad blocker or your browser's popup blocker. Please allow popups for this site (or disable the extension), or sign in with your email and password below.");
+      } else if (nonOAuthError?.type === 'popup_closed') {
+        setErrorMessage("Google Sign-In was closed before completing. Please try again.");
+      } else {
+        setErrorMessage("Google Sign-In couldn't be started. Please try again or sign in with your email and password below.");
+      }
     },
   });
 
