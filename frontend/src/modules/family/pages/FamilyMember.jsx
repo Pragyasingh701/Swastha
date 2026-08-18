@@ -77,6 +77,7 @@ export default function FamilyMember({ member, onEdit, onDelete }) {
   
   const lastVisitDate = member.lastVisitDate || member.last_visit_date;
   const nextCheckupDate = member.nextCheckupDate || member.next_checkup_date;
+  const conditions = Array.isArray(member.conditions) ? member.conditions : [];
 
   return (
     <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition-shadow hover:shadow-md">
@@ -99,6 +100,19 @@ export default function FamilyMember({ member, onEdit, onDelete }) {
               </span>
             ) : null}
           </p>
+          {conditions.length > 0 ? (
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              {conditions.map((condition, index) => (
+                <span
+                  key={`${condition.name}-${index}`}
+                  className="inline-flex items-center rounded-full bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-700"
+                >
+                  {condition.name}
+                  {condition.ageOfOnset != null ? ` · onset ${condition.ageOfOnset}` : ''}
+                </span>
+              ))}
+            </div>
+          ) : null}
         </div>
 
         <div className="flex flex-wrap gap-2">

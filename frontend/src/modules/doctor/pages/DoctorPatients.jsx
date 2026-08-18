@@ -5,7 +5,9 @@ import DoctorSidebar from "../components/DoctorSidebar";
 import ProfileDropdown from "../../settings/components/ProfileDropdown";
 import { getDoctorPatients, linkPatientToDoctor, deletePatientFromDoctor } from "../../../services/doctorPatients";
 import { getTimelineReports } from "../../../api/reports";
+import { getPatientFamilyMembers } from "../../../api/family";
 import { useAuth } from "../../../context/AuthContext";
+import FamilyTreeTab from "../components/FamilyTreeTab";
 
 export default function DoctorPatients() {
   const navigate = useNavigate();
@@ -15,6 +17,7 @@ export default function DoctorPatients() {
   const [selectedTab, setSelectedTab] = useState('timeline');
   const [patientTimeline, setPatientTimeline] = useState([]);
   const [patientVault, setPatientVault] = useState([]);
+  const [patientFamilyMembers, setPatientFamilyMembers] = useState([]);
   const [timelineLoading, setTimelineLoading] = useState(false);
   const [isAddPatientOpen, setIsAddPatientOpen] = useState(false);
   const [userId, setUserId] = useState("");
@@ -52,6 +55,7 @@ export default function DoctorPatients() {
     if (!selectedPatient) {
       setPatientTimeline([]);
       setPatientVault([]);
+      setPatientFamilyMembers([]);
       return;
     }
 
@@ -59,22 +63,26 @@ export default function DoctorPatients() {
       if (!token) {
         setPatientTimeline([]);
         setPatientVault([]);
+        setPatientFamilyMembers([]);
         return;
       }
 
       setTimelineLoading(true);
       try {
         const patientUserId = selectedPatient.patientUserId || selectedPatient.patientId || selectedPatient.id;
-        const [timelineResponse, vaultResponse] = await Promise.all([
+        const [timelineResponse, vaultResponse, familyMembers] = await Promise.all([
           getTimelineReports(token, selectedPatient.email || '', patientUserId),
           getTimelineReports(token, '', patientUserId),
+          getPatientFamilyMembers(patientUserId).catch(() => []),
         ]);
 
         setPatientTimeline(timelineResponse.reports || []);
         setPatientVault(vaultResponse.reports || []);
+        setPatientFamilyMembers(familyMembers || []);
       } catch (err) {
         setPatientTimeline([]);
         setPatientVault([]);
+        setPatientFamilyMembers([]);
       } finally {
         setTimelineLoading(false);
       }
@@ -509,6 +517,17 @@ export default function DoctorPatients() {
                 >
                   Medical Vault
                 </button>
+                <button
+                  type="button"
+                  onClick={() => setSelectedTab('family')}
+                  className={`rounded-lg px-4 py-2.5 text-sm font-semibold transition-all ${
+                    selectedTab === 'family'
+                      ? 'bg-blue-600 text-white shadow-md'
+                      : 'border border-slate-200 text-slate-600 hover:bg-slate-50 '
+                  }`}
+                >
+                  Family Tree
+                </button>
               </div>
 
               {/* Content Area - Scrollable */}
@@ -796,6 +815,8 @@ export default function DoctorPatients() {
                     </div>
                   )}
                 </div>
+              ) : selectedTab === 'family' ? (
+                <FamilyTreeTab members={patientFamilyMembers} loading={timelineLoading} />
               ) : null}
               </div>
             </div>

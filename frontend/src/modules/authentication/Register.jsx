@@ -2,11 +2,13 @@ import React, { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useGoogleLogin } from "@react-oauth/google";
 import { useAuth } from "../../context/AuthContext";
+import { useGoogleAuthBlocked } from "../../context/GoogleAuthStatusContext";
 import { sanitizePhoneInput, isValidIndianPhone, isValidEmail, isValidFullName } from "../../utils/formValidation";
 
 export default function Register() {
   const navigate = useNavigate();
   const { register, registerWithGoogle } = useAuth();
+  const googleAuthBlocked = useGoogleAuthBlocked();
   const [formData, setFormData] = useState({
     fullname: "",
     email: "",
@@ -447,7 +449,13 @@ export default function Register() {
               <button
                 className="w-full h-12 border border-outline-variant rounded-xl flex items-center justify-center gap-3 font-body-md text-body-md font-semibold text-on-surface hover:bg-surface-container-low transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
                 type="button"
-                onClick={() => handleGoogleRegister()}
+                onClick={() => {
+                  if (googleAuthBlocked) {
+                    setErrorMessage("Google Sign-In looks like it's being blocked, often by an ad blocker or privacy extension. Disable it for this site, or register with your email and password below.");
+                    return;
+                  }
+                  handleGoogleRegister();
+                }}
                 disabled={isGoogleLoading || isLoading}
               >
                 {isGoogleLoading ? (

@@ -38,6 +38,7 @@ const emptyForm = {
   relationshipTag: '',
   healthOverview: '',
   notes: '',
+  conditions: [],
   lastVisitDate: '',
   nextCheckupDate: '',
   email: '',
@@ -297,6 +298,7 @@ export default function FamilyVault() {
   const [relationshipTags, setRelationshipTags] = useState([]);
   const [healthOverview, setHealthOverview] = useState([]);
   const [form, setForm] = useState(emptyForm);
+  const [conditionDraft, setConditionDraft] = useState({ name: '', ageOfOnset: '' });
   const [addMethod, setAddMethod] = useState('email');
   const [editingMemberId, setEditingMemberId] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -416,10 +418,30 @@ export default function FamilyVault() {
 
   function resetForm() {
     setForm(emptyForm);
+    setConditionDraft({ name: '', ageOfOnset: '' });
     setEditingMemberId(null);
     setAddMethod('email');
     setFieldErrors({});
     setServerErrorMeta(null);
+  }
+
+  function addConditionDraft() {
+    const name = conditionDraft.name.trim();
+    if (!name) return;
+
+    const ageOfOnset = conditionDraft.ageOfOnset !== '' ? Number(conditionDraft.ageOfOnset) : null;
+    setForm((prev) => ({
+      ...prev,
+      conditions: [...(prev.conditions || []), { name, ageOfOnset: Number.isInteger(ageOfOnset) ? ageOfOnset : null }],
+    }));
+    setConditionDraft({ name: '', ageOfOnset: '' });
+  }
+
+  function removeConditionDraft(index) {
+    setForm((prev) => ({
+      ...prev,
+      conditions: (prev.conditions || []).filter((_, i) => i !== index),
+    }));
   }
 
   function handleEdit(member) {
@@ -454,6 +476,7 @@ export default function FamilyVault() {
       relationshipTag: member.relationshipTag || member.relationship_tag || '',
       healthOverview: member.healthOverview || member.health_overview || '',
       notes: cleanedNotes,
+      conditions: Array.isArray(member.conditions) ? member.conditions : [],
       email: email,
       lastVisitDate: member.lastVisitDate || member.last_visit_date || '',
       nextCheckupDate: member.nextCheckupDate || member.next_checkup_date || '',
@@ -505,6 +528,7 @@ export default function FamilyVault() {
       relationshipTag: form.relationshipTag.trim(),
       healthOverview: form.healthOverview.trim(),
       notes: finalNotes,
+      conditions: form.conditions || [],
       lastVisitDate: form.lastVisitDate,
       nextCheckupDate: form.nextCheckupDate,
       authorizationMethod: 'mail',
@@ -525,6 +549,7 @@ export default function FamilyVault() {
           relationship: payload.relationship,
           relationshipTag: payload.relationshipTag,
           healthOverview: payload.healthOverview,
+          conditions: payload.conditions,
           age: payload.age,
           lastVisitDate: payload.lastVisitDate,
           nextCheckupDate: payload.nextCheckupDate,
@@ -861,6 +886,65 @@ export default function FamilyVault() {
                     />
                     {fieldErrors.healthOverview ? <p className="text-sm text-rose-600 ">{fieldErrors.healthOverview}</p> : null}
                   </label>
+
+                  <div className="space-y-2">
+                    <span className="text-sm font-medium text-slate-700 ">
+                      Known Conditions <span className="text-slate-400 font-normal">(used for hereditary risk in the doctor view)</span>
+                    </span>
+                    <div className="flex flex-wrap gap-2">
+                      <input
+                        type="text"
+                        value={conditionDraft.name}
+                        onChange={(event) => setConditionDraft({ ...conditionDraft, name: event.target.value })}
+                        onKeyDown={(event) => {
+                          if (event.key === 'Enter') {
+                            event.preventDefault();
+                            addConditionDraft();
+                          }
+                        }}
+                        maxLength={100}
+                        placeholder="e.g. Type 2 Diabetes"
+                        className="flex-1 min-w-[160px] rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-900 outline-none transition-colors focus:border-blue-400 focus:bg-white "
+                      />
+                      <input
+                        type="number"
+                        min="0"
+                        max="150"
+                        value={conditionDraft.ageOfOnset}
+                        onChange={(event) => setConditionDraft({ ...conditionDraft, ageOfOnset: event.target.value })}
+                        placeholder="Age of onset"
+                        className="w-36 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-900 outline-none transition-colors focus:border-blue-400 focus:bg-white "
+                      />
+                      <button
+                        type="button"
+                        onClick={addConditionDraft}
+                        className="rounded-2xl border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-700 transition-colors hover:bg-slate-50 "
+                      >
+                        Add
+                      </button>
+                    </div>
+                    {(form.conditions || []).length > 0 ? (
+                      <div className="flex flex-wrap gap-2 pt-1">
+                        {form.conditions.map((condition, index) => (
+                          <span
+                            key={`${condition.name}-${index}`}
+                            className="inline-flex items-center gap-2 rounded-full bg-blue-50 px-3 py-1.5 text-xs font-medium text-blue-700 "
+                          >
+                            {condition.name}
+                            {condition.ageOfOnset != null ? ` · onset ${condition.ageOfOnset}` : ''}
+                            <button
+                              type="button"
+                              onClick={() => removeConditionDraft(index)}
+                              className="text-blue-400 hover:text-blue-700"
+                              aria-label={`Remove ${condition.name}`}
+                            >
+                              ×
+                            </button>
+                          </span>
+                        ))}
+                      </div>
+                    ) : null}
+                  </div>
 
                   <label className="space-y-2 block">
                     <span className="text-sm font-medium text-slate-700 ">Notes</span>
