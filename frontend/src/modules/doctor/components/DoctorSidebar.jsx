@@ -8,7 +8,6 @@ const navItems = [
   { label: "Modern Overview", icon: "dashboard_customize", route: "/doctor/modern-dashboard" },
   { label: "Patients", icon: "groups", route: "/doctor/patients" },
   { label: "AI Insights", icon: "smart_toy", route: "/doctor/clinical-intelligence" },
-  { label: "Analytics", icon: "monitoring", route: "/doctor/clinical-analytics" },
 ];
 
 export default function DoctorSidebar() {

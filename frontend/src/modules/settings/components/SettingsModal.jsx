@@ -28,7 +28,7 @@ export default function SettingsModal({ isOpen, onClose }) {
   const [message, setMessage] = useState(null);
   const [regCertificateFile, setRegCertificateFile] = useState(null);
   const fileInputRef = useRef(null);
-  const patientReferenceId = user?.patient_code || user?.patientCode || user?.id || 'Not available';
+  const patientCode = user?.patient_code || user?.patientCode || 'Not assigned yet';
 
   const [formData, setFormData] = useState({
     name: '',
@@ -314,14 +314,45 @@ export default function SettingsModal({ isOpen, onClose }) {
               {formData.role === 'patient' && (
                 <div>
                   <label className="block text-[11px] font-extrabold uppercase tracking-wider text-slate-600 dark:text-slate-300 mb-1">
-                    Patient ID / User ID
+                    Patient Code
                   </label>
-                  <input
-                    type="text"
-                    disabled
-                    value={patientReferenceId}
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/60 text-slate-600 dark:text-slate-300 text-xs font-semibold cursor-not-allowed"
-                  />
+                  {patientCode === 'Not assigned yet' ? (
+                    <div className="rounded-xl border border-amber-200 dark:border-amber-500/30 bg-amber-50 dark:bg-amber-500/10 p-4">
+                      <div className="flex items-start gap-2">
+                        <span className="material-symbols-outlined text-amber-600 dark:text-amber-400 text-[18px] shrink-0">info</span>
+                        <div>
+                          <p className="text-sm font-semibold text-amber-800 dark:text-amber-300">Patient Code Not Generated</p>
+                          <p className="text-xs text-amber-700 dark:text-amber-400 mt-1">
+                            Your patient code will be automatically generated when you log in again.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="text"
+                        disabled
+                        value={patientCode}
+                        className="flex-1 px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-blue-50 dark:bg-blue-500/10 text-blue-700 dark:text-blue-400 text-sm font-bold cursor-not-allowed tracking-widest"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          navigator.clipboard.writeText(patientCode);
+                          setMessage({ type: 'success', text: 'Patient code copied!' });
+                          setTimeout(() => setMessage(null), 2000);
+                        }}
+                        className="px-3 py-2.5 rounded-lg bg-blue-600 text-white hover:bg-blue-700 text-xs font-semibold transition-colors"
+                        title="Copy patient code"
+                      >
+                        Copy
+                      </button>
+                    </div>
+                  )}
+                  {patientCode !== 'Not assigned yet' && (
+                    <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-1.5">Your unique identifier for doctors to link your medical records</p>
+                  )}
                 </div>
               )}
 

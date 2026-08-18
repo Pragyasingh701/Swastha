@@ -6,7 +6,7 @@ import path from 'path';
 import fs from 'fs';
 import supabase from '../config/supabase.js';
 import { sendOTPEmail, sendPasswordResetEmail } from '../utils/mailer.js';
-import { findUserByEmail, findUserById, createOrUpdateUser, updateUserRole, updateUserPassword, deleteUserById } from '../db/users.js';
+import { findUserByEmail, findUserById, createOrUpdateUser, updateUserRole, updateUserPassword, deleteUserById, generatePatientCode } from '../db/users.js';
 import { getFamilyVaultForUser, deleteFamilyVaultForUser } from '../db/family.js';
 import { deleteAllReportsForUser } from '../db/reports.js';
 import { processMedicalCertificate } from '../services/certificateParserService.js';
@@ -541,11 +541,19 @@ router.post('/verify-otp', async (req, res) => {
   let user = await findUserByEmail(key);
 
   if (!user) {
+    // New user - createOrUpdateUser will generate patient code if needed
     user = await createOrUpdateUser({
       email: key,
       name: key.split('@')[0],
       role: 'none',
       authProvider: 'email',
+    });
+  } else {
+    // Existing user - ensure patient code is generated if missing
+    // createOrUpdateUser will now handle this automatically
+    user = await createOrUpdateUser({
+      ...user,
+      email: key,
     });
   }
 
