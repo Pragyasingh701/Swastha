@@ -39,26 +39,24 @@ router.get('/', async (req, res) => {
 router.post('/link', async (req, res) => {
   const authUser = getAuthUser(req);
 
+  // Diagnostic logging — safe and minimal (do not log tokens or full patient codes)
+  const bodyKeys = Object.keys(req.body || {});
+  const rawPatientCode = String(req.body?.patientCode ?? '').trim();
+  // Normalize common user input such as leading '#' (users sometimes paste codes with #)
+  const patientCode = rawPatientCode.replace(/^#/, '').trim();
+  const patientCodePresent = rawPatientCode.length > 0;
+
+  // Log only existence/length and a truncated doctor id (no tokens, no full PII)
+  console.warn(
+    `[doctor-patients/link] authUser=${authUser?.userId ? authUser.userId.slice(0,8) + '...' : 'none'} bodyKeys=${bodyKeys.join(',') || 'none'} patientCodePresent=${patientCodePresent} rawLen=${rawPatientCode.length}`
+  );
+
   if (!authUser?.userId) {
     return res.status(401).json({ message: 'Authentication required.' });
   }
 
-  // Accept only patientCode from the client. Do not accept raw user IDs for linking.
-  // Accept patientCode (camelCase) or patient_code (snake_case) from clients
-  const rawPatientCode = String(req.body?.patientCode ?? req.body?.patient_code ?? '').trim();
-  // Normalize common user input such as leading '#' (users sometimes paste codes with #)
-  const patientCode = rawPatientCode.replace(/^#/, '').trim();
-
   if (!patientCode) {
     return res.status(400).json({ message: 'Patient code is required.' });
-  }
-
-  // Masked logging for diagnostics (don't log full code in production logs)
-  try {
-    const masked = patientCode.length > 8 ? `${patientCode.slice(0,8)}...(${patientCode.length} chars)` : patientCode;
-    console.info(`Doctor ${authUser.userId} attempting to link patient code: ${masked}`);
-  } catch (e) {
-    // ignore logging errors
   }
 
   try {
