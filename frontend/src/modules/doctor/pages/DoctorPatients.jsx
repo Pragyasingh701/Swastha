@@ -20,7 +20,7 @@ export default function DoctorPatients() {
   const [patientFamilyMembers, setPatientFamilyMembers] = useState([]);
   const [timelineLoading, setTimelineLoading] = useState(false);
   const [isAddPatientOpen, setIsAddPatientOpen] = useState(false);
-  const [userId, setUserId] = useState("");
+  const [patientCode, setPatientCode] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [isFetchingPatients, setIsFetchingPatients] = useState(false);
@@ -93,8 +93,8 @@ export default function DoctorPatients() {
   }, [selectedPatient, token]);
 
   const handleAddPatient = async () => {
-    const trimmedId = userId.trim();
-    if (!trimmedId) return;
+    const trimmedId = patientCode.trim();
+    if (!trimmedId) { setErrorMessage('Patient code is required.'); setIsLoading(false); return; }
 
     setIsLoading(true);
     setErrorMessage("");
@@ -108,10 +108,10 @@ export default function DoctorPatients() {
         return alreadyExists ? prev : [nextPatient, ...prev];
       });
 
-      setUserId("");
+      setPatientCode("");
       setIsAddPatientOpen(false);
     } catch (err) {
-      setErrorMessage(err.message || 'No patient found with that ID.');
+      setErrorMessage(err.message || 'No patient found with that code.');
     } finally {
       setIsLoading(false);
     }
@@ -429,7 +429,7 @@ export default function DoctorPatients() {
                     </div>
                     <div>
                       <h3 className="text-lg font-bold text-slate-900 ">Add New Patient</h3>
-                      <p className="text-xs text-slate-500 ">Create a patient record with a user ID</p>
+                      <p className="text-xs text-slate-500 ">Create or link a patient using their patient code</p>
                     </div>
                   </div>
 
@@ -445,18 +445,18 @@ export default function DoctorPatients() {
                 <div className="p-5 space-y-5">
                   <div>
                     <label className="block text-[11px] font-extrabold uppercase tracking-[0.12em] text-slate-600 mb-2">
-                      User ID
+                      Patient Code
                     </label>
                     <div className="relative">
                       <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-[18px]">badge</span>
                       <input
                         type="text"
-                        value={userId}
+                        value={patientCode}
                         onChange={(e) => {
-                          setUserId(e.target.value);
+                          setPatientCode(e.target.value);
                           if (errorMessage) setErrorMessage("");
                         }}
-                        placeholder="Enter patient user ID"
+                        placeholder="Enter patient code (e.g., 012345)"
                         className="w-full pl-10 pr-3.5 py-3 rounded-xl border border-slate-200 bg-white text-sm text-slate-900 placeholder:text-slate-400 focus:ring-2 focus:ring-blue-600 focus:border-blue-500 focus:outline-none transition-all"
                       />
                     </div>
@@ -469,7 +469,7 @@ export default function DoctorPatients() {
                   )}
 
                   <div className="rounded-xl bg-blue-50 border border-blue-100 px-3 py-2.5 text-xs text-blue-700 ">
-                    Use the patient’s existing user ID from the database to link the record.
+                  Use the patient’s existing patient code from the database to link the record.
                   </div>
                 </div>
 
@@ -484,7 +484,7 @@ export default function DoctorPatients() {
                   <button
                     type="button"
                     onClick={handleAddPatient}
-                    disabled={!userId.trim() || isLoading}
+                    disabled={!patientCode.trim() || isLoading}
                     className="px-4 py-2.5 rounded-xl bg-[#004ac6] text-white hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-opacity shadow-sm"
                   >
                     {isLoading ? 'Checking...' : 'Add Patient'}
@@ -533,9 +533,9 @@ export default function DoctorPatients() {
                   <div className="rounded-xl bg-slate-50 p-3 border border-slate-200/50 ">
                     <div className="flex items-center gap-2 mb-1">
                       <span className="material-symbols-outlined text-slate-400 text-[14px]">badge</span>
-                      <p className="text-[9px] uppercase tracking-[0.1em] font-semibold text-slate-500 ">User ID</p>
+                      <p className="text-[9px] uppercase tracking-[0.1em] font-semibold text-slate-500 ">Patient Code</p>
                     </div>
-                    <p className="text-xs font-bold text-slate-900 break-all ml-6">{selectedPatient.patientUserId || selectedPatient.patientId || selectedPatient.id}</p>
+                    <p className="text-xs font-bold text-slate-900 break-all ml-6">{(selectedPatient?.patientId || selectedPatient?.patient_code || selectedPatient?.patientUserId || selectedPatient?.id || '—').replace(/^#/, '')}</p>
                   </div>
                   <div className="rounded-xl bg-slate-50 p-3 border border-slate-200/50 ">
                     <div className="flex items-center gap-2 mb-1">
@@ -936,7 +936,7 @@ export default function DoctorPatients() {
                 </div>
             ) : patients.length === 0 ? (
               <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-8 text-center text-slate-500 ">
-                No patients linked yet. Add a patient using the user ID.
+              No patients linked yet. Add a patient using the patient code.
               </div>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">

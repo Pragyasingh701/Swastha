@@ -1,3 +1,4 @@
+﻿import { getAuthHeader } from './client';
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || `${window.location.origin}/api`;
 
 function getStoredToken() {
@@ -12,11 +13,8 @@ async function request(path, options = {}, token) {
   const authToken = token || getStoredToken();
   const headers = {
     ...(options.headers || {}),
+    ...(getAuthHeader(authToken)),
   };
-
-  if (authToken) {
-    headers.Authorization = `Bearer ${authToken}`;
-  }
 
   const response = await fetch(`${API_BASE_URL}/reports${path}`, {
     ...options,
@@ -105,20 +103,12 @@ export async function deleteTimelineReport(reportId, token) {
   }, token);
 }
 
-// On-demand AI summary generation for a report that doesn't have one yet.
-// Normally the summary is already generated at save time; this is the
-// fallback path for reports saved before that existed, or where
-// generation failed. Returns { report } with `analysis` now populated.
 export async function generateReportSummary(reportId, token) {
   return request(`/${encodeURIComponent(reportId)}/summarize`, {
     method: 'POST',
   }, token);
 }
 
-// Real Lab Insights: fetches the user's Lab Report entries and an
-// AI-generated {healthScore, series (extracted numeric trends),
-// physicianSummary, followUps} built from them. Returns
-// { insights: null, labReportCount: 0 } when there are no lab reports yet.
 export async function getLabInsights(token) {
   return request('/lab-insights', {}, token);
 }

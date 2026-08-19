@@ -131,31 +131,29 @@ export const isDoctorLinkedToPatient = async (doctorId, patientUserId) => {
   }
 };
 
-export const linkDoctorToPatient = async ({ doctorId, patientUserId }) => {
-  if (!doctorId || !patientUserId) {
-    throw new Error('Doctor ID and patient ID are required.');
+export const linkDoctorToPatient = async ({ doctorId, patientCode }) => {
+  if (!doctorId || !patientCode) {
+    throw new Error('Doctor ID and patient code are required.');
   }
 
   if (!supabase) {
     throw new Error('Database connection is unavailable.');
   }
 
-  const normalizedPatientId = String(patientUserId).trim();
-  if (!normalizedPatientId) {
-    throw new Error('Patient ID is required.');
+  const normalizedPatientCode = String(patientCode).trim();
+  if (!normalizedPatientCode) {
+    throw new Error('Patient code is required.');
   }
 
   let patient = null;
 
   try {
-    // Post-split: searching `patients` directly (was `users` filtered by
-    // role='patient') means a doctor ID or a role-less pending ID can never
-    // match here — the old post-hoc `patient.role !== 'patient'` check is
-    // now structurally guaranteed rather than checked after the fact.
+    // Only allow lookup by patient_code. Reject direct user ID lookups to
+    // ensure linking is only possible via patient codes provided to patients.
     const { data, error } = await supabase
       .from('patients')
       .select('*')
-      .or(`id.eq.${normalizedPatientId},patient_code.eq.${normalizedPatientId}`)
+      .eq('patient_code', normalizedPatientCode)
       .maybeSingle();
 
     if (error && error.code !== 'PGRST116') {
@@ -165,11 +163,11 @@ export const linkDoctorToPatient = async ({ doctorId, patientUserId }) => {
     patient = data;
   } catch (error) {
     console.warn('Doctor patient lookup warning:', error?.message || error);
-    throw new Error('Unable to verify the patient ID at the moment.');
+    throw new Error('Unable to verify the patient code at the moment.');
   }
 
   if (!patient) {
-    throw new Error('No patient user found with this ID.');
+    throw new Error('No patient found with this code.');
   }
 
   const { data: existingLink, error: existingLinkError } = await supabase
