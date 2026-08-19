@@ -2,7 +2,6 @@
 // backend/) — see rag/README.md. Uses the same stored JWT as the rest of
 // the app; the rag service verifies it itself.
 const RAG_BASE_URL = import.meta.env.VITE_RAG_BASE_URL || 'http://localhost:3010/api';
-import { getAuthHeader } from './client';
 
 function getStoredToken() {
   try {

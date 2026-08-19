@@ -1,5 +1,4 @@
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5001/api';
-import { getAuthHeader } from '../api/client';
 
 function getStoredAuth() {
   try {
@@ -18,8 +17,11 @@ async function request(path, options = {}) {
   const headers = {
     'Content-Type': 'application/json',
     ...(options.headers || {}),
-    ...(getAuthHeader(token)),
   };
+
+  if (token) {
+    headers.Authorization = `Bearer ${token}`;
+  }
 
   const response = await fetch(`${API_BASE_URL}/doctor-patients${path}`, {
     ...options,
@@ -60,6 +62,5 @@ export default {
   getDoctorPatients,
   linkPatientToDoctor,
 };
-
 
 

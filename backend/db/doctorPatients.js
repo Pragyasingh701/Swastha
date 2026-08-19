@@ -1,5 +1,4 @@
 import supabase from '../config/supabase.js';
-import { findUserById } from './users.js';
 
 function normalizeDoctorPatientCard(patient = {}) {
   const patientIdValue = patient.patient_code || patient.id;
@@ -121,29 +120,20 @@ export const linkDoctorToPatient = async ({ doctorId, patientUserId }) => {
   let patient = null;
 
   try {
-    // Normalize input: allow '#123456' or '123456' from UI
-    const lookupKey = String(patientUserId || '').trim().replace(/^#/, '');
+    const { data, error } = await supabase
+      .from('users')
+      .select('*')
+      .or(`id.eq.${normalizedPatientId},patient_code.eq.${normalizedPatientId}`)
+      .maybeSingle();
 
-    // First try by internal user ID using helper
-    patient = await findUserById(lookupKey);
-
-    // If not found by ID, try lookup by patient_code
-    if (!patient && supabase) {
-      const { data: byCode, error: codeError } = await supabase
-        .from('users')
-        .select('*')
-        .eq('patient_code', lookupKey)
-        .maybeSingle();
-
-      if (codeError && codeError.code !== 'PGRST116') {
-        throw codeError;
-      }
-
-      patient = byCode;
+    if (error && error.code !== 'PGRST116') {
+      throw error;
     }
+
+    patient = data;
   } catch (error) {
     console.warn('Doctor patient lookup warning:', error?.message || error);
-    throw new Error('Unable to verify the patient identifier at the moment.');
+    throw new Error('Unable to verify the patient ID at the moment.');
   }
 
   if (!patient) {
