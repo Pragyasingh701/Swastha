@@ -18,6 +18,7 @@ import ResetPassword from "./modules/authentication/ResetPassword";
 import DoctorDashboard from "./modules/doctor/pages/DoctorDashboard";
 import DoctorPatients from "./modules/doctor/pages/DoctorPatients";
 import ClinicalIntelligence from "./modules/doctor/pages/ClinicalIntelligence";
+import DoctorAskSwastha from "./modules/doctor/pages/DoctorAskSwastha";
 import DoctorReports from "./modules/doctor/pages/DoctorReports";
 import DoctorMessages from "./modules/doctor/pages/DoctorMessages";
 import DoctorSettings from "./modules/doctor/pages/DoctorSettings";
@@ -256,6 +257,15 @@ export default function App() {
           element={
             <DoctorRoute>
               <ClinicalIntelligence />
+            </DoctorRoute>
+          }
+        />
+
+        <Route
+          path="/doctor/ask-swastha"
+          element={
+            <DoctorRoute>
+              <DoctorAskSwastha />
             </DoctorRoute>
           }
         />

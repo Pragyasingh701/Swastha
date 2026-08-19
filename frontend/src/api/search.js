@@ -66,6 +66,37 @@ export async function removeReportFromIndex(reportId) {
 }
 
 /**
+ * Ask a conversational (multi-turn) question, with memory scoped to
+ * session_id. patientUserId is optional — a doctor passes it to ask about
+ * a specific linked patient's records instead of their own; the rag
+ * service verifies the doctor_patient link on every call, so an
+ * unauthorized patientUserId fails server-side regardless of what the
+ * frontend sends.
+ * Returns { answer, structured, sources, noResultsFound, session_id }.
+ */
+export async function searchReportsConversational(query, sessionId, patientUserId) {
+  return request('/search/chat', {
+    method: 'POST',
+    body: JSON.stringify({
+      query,
+      session_id: sessionId,
+      ...(patientUserId ? { patient_user_id: patientUserId } : {}),
+    }),
+  });
+}
+
+/**
+ * Clear a conversation's memory (e.g. the doctor switches to a different
+ * patient, or starts a fresh chat with the same one).
+ */
+export async function clearConversation(sessionId, patientUserId) {
+  return request(`/search/chat/${encodeURIComponent(sessionId)}`, {
+    method: 'DELETE',
+    body: JSON.stringify(patientUserId ? { patient_user_id: patientUserId } : {}),
+  });
+}
+
+/**
  * Upload a medical report image and get back AI-extracted fields
  * (title, doctor, hospital, diagnosis, medicines, notes, ...) for the user
  * to review/edit before saving. Does not save anything itself — the file
@@ -92,4 +123,11 @@ export async function extractReportFromFile(file) {
   return data;
 }
 
-export default { searchReports, indexReport, removeReportFromIndex, extractReportFromFile };
+export default {
+  searchReports,
+  searchReportsConversational,
+  clearConversation,
+  indexReport,
+  removeReportFromIndex,
+  extractReportFromFile,
+};

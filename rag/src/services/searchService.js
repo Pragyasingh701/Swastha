@@ -230,4 +230,14 @@ function parseStructuredAnswer(raw, excerpts) {
   };
 }
 
-export { SIMILARITY_THRESHOLD, MATCH_COUNT, NO_RESULTS_MESSAGE };
+// parseStructuredAnswer, verifyFileUrl and buildGroundedPrompt are also exported
+// so conversationalSearchService.js can reuse the exact same grounding
+// prompt, JSON parsing and dead-link checking rather than copying them.
+export {
+  SIMILARITY_THRESHOLD,
+  MATCH_COUNT,
+  NO_RESULTS_MESSAGE,
+  parseStructuredAnswer,
+  verifyFileUrl,
+  buildGroundedPrompt,
+};
