@@ -8,7 +8,7 @@
 
 | Layer | Technologies & Libraries | Description |
 | :--- | :--- | :--- |
-| **Frontend** (`frontend/`) | **React 18**, **Vite**, **Tailwind CSS**, **React Router v6**, **Recharts**, **Lucide Icons**, **`@react-oauth/google`** | Modern responsive SPA featuring medical timeline UI, lab trends chart visualizer, dark mode styling, and social authentication. |
+| **Frontend** (`frontend/`) | **React 18**, **Vite**, **Tailwind CSS**, **React Router v6**, **Recharts**, **Lucide Icons** | Modern responsive SPA featuring medical timeline UI, lab trends chart visualizer, dark mode styling, and redirect-based Google Sign-In. |
 | **Backend API** (`backend/`) | **Node.js**, **Express.js** (`:5001`), **Supabase Client SDK**, **Brevo REST API**, **Multer**, **`google-auth-library`**, **JWT** | Core API for user auth, Brevo-powered 6-digit email OTPs, password resets, family vault management, doctor license validation, and local document uploads. |
 | **RAG Microservice** (`rag/`) | **Node.js**, **Express.js** (`:3010`), **Google Gemini API**, **OpenRouter API**, **Supabase Client SDK** | Standalone vector search & prescription OCR microservice. Generates 768-dim embeddings (`gemini-embedding-001`) and synthesizes grounded answers via OpenRouter LLMs. |
 | **Database & Vector Storage** | **Supabase PostgreSQL**, **`pgvector`** extension | Cloud Postgres database hosting 5 custom tables (`users`, `reports`, `vault_table`, `family_members`, `report_embeddings`) with HNSW cosine vector index. |
@@ -17,13 +17,13 @@
 
 ## 🌟 Key Features
 
-- **🛡️ Secure Multi-Role Authentication**: Patient and Doctor onboarding with Google OAuth 2.0 (with account deduplication), 6-digit email OTP verification via **Brevo HTTPS REST API**, password resets, and JWT session tokens.
+- **🛡️ Secure Multi-Role Authentication**: Patient and Doctor onboarding with redirect-based Google OAuth 2.0 (full-page redirect to Google + `/auth/google/callback`, with account deduplication — avoids ad-blockers breaking popup-based auth), 6-digit email OTP verification via **Brevo HTTPS REST API**, password resets, and JWT session tokens.
 - **🔬 Doctor Certificate AI Verification**: Automated parsing and credential validation of medical registration certificates using **Google Gemini 2.0 Flash AI** vision capabilities upon doctor signup.
 - **📜 Smart Medical Timeline & OCR Ingestion**: Chronological visual record of consultations, prescriptions, lab reports, and diagnoses. Automatically flags **unclear fields** (e.g. illegible doctor handwriting) to alert clinicians.
 - **🔍 Grounded RAG Semantic Search**: Standalone vector search microservice performing `pgvector` similarity search over patient records and synthesizing natural-language answers via **OpenRouter AI**.
 - **👨‍👩‍👧‍👦 Family Vault & Authorization Network**: Centralized health management for families. Manage dependants (children/elders) and send email-authorized consent requests for adult family members.
 - **📊 AI Lab Trends Visualizer**: Interactive trend analysis powered by **Recharts**, tracking blood work, lab parameters, and vital metrics over time.
-- **👨‍⚕️ Doctor Clinical Dashboard**: Dedicated portal allowing verified healthcare professionals to search patient records, view past diagnoses, active medications, and medical history.
+- **👨‍⚕️ Doctor Clinical Dashboard**: Dedicated portal allowing verified healthcare professionals to link patients by their unique 6-digit **patient code** (or user ID), then search records, view past diagnoses, active medications, and medical history.
 
 ---
 
@@ -206,17 +206,32 @@ $$;
 ```env
 PORT=5001
 GOOGLE_CLIENT_ID=your_google_client_id_here.apps.googleusercontent.com
+
+# Required for the redirect-based Google Sign-In flow (exchanges the auth code for tokens).
+# Also add http://localhost:5173/auth/google/callback (and your deployed frontend origin +
+# /auth/google/callback) as an Authorized redirect URI on this OAuth client.
+GOOGLE_CLIENT_SECRET=your_google_client_secret_here
+
 JWT_SECRET=your_jwt_secret_key_here
+
+# Used to build links in transactional emails (password reset, family authorization confirm).
+# Defaults to localhost if unset — set these explicitly in production.
+FRONTEND_URL=http://localhost:5173
+BACKEND_URL=http://localhost:5001
 
 # Supabase Credentials
 SUPABASE_URL=https://your-project-ref.supabase.co
 SUPABASE_SERVICE_ROLE_KEY=your_supabase_service_role_key_here
+SUPABASE_REPORTS_BUCKET=reports
 
 # Brevo Transactional Email Key (for OTPs & Password Resets)
 BREVO_API_KEY=your_brevo_api_key_here
 
 # Google Gemini Vision AI Key (Doctor Certificate Verification & OCR)
 GEMINI_API_KEY=your_gemini_api_key_here
+
+# Swastha RAG microservice base URL — triggers AI summary generation on report save
+RAG_BASE_URL=http://localhost:3010/api
 ```
 
 ### 2. Standalone RAG Microservice Setup (`rag/.env`)
