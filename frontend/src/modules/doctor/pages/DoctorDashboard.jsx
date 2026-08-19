@@ -1,413 +1,441 @@
-import React from "react";
-import logo from "../../../assets/swastha-logo.png";
-import { useNavigate } from "react-router-dom";
-import DoctorSidebar from "../components/DoctorSidebar";
+import React, { useEffect, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
+import { useAuth } from "../../../context/AuthContext";
+import { authService } from "../../../services/auth";
 import ProfileDropdown from "../../settings/components/ProfileDropdown";
+import SettingsModal from "../../settings/components/SettingsModal";
+import Logo from "../../../components/Common/Logo";
+
 import {
-  ShieldPlus,
   LayoutGrid,
+  TrendingUp,
+  Folder,
   Users,
   ClipboardList,
-  FileText,
-  BarChart3,
-  Mail,
-  TrendingUp,
   Bell,
   Settings,
-  Search,
   HelpCircle,
-  Plus,
-  Video,
-  Star,
-  RotateCw,
-  Pill,
-  FolderOpen,
-  Siren,
+  PlusCircle,
+  ShieldCheck,
+  AlertTriangle,
+  FileText,
   Sparkles,
-  ArrowRight,
-  Stethoscope,
-  Activity,
+  ChevronRight,
+  LogOut,
 } from "lucide-react";
+import {
+  LineChart,
+  Line,
+  XAxis,
+  ResponsiveContainer,
+  Tooltip,
+} from "recharts";
 
-/* -----------------------------------------------------------
-   Sidebar nav — Appointments, Consultations, and Schedule
-   removed per request. Swap doctorProfile / scheduleItems for
-   real data once wired to the backend.
------------------------------------------------------------- */
 
+// ---- Mock data (swap with real API data later) ----
+const hba1cData = [
+  { month: "Jan", value: 6.9 },
+  { month: "Feb", value: 6.7 },
+  { month: "Mar", value: 6.5 },
+  { month: "Apr", value: 6.6 },
+  { month: "May", value: 6.5 },
+  { month: "Jun", value: 6.8 },
+];
+
+const navItems = [
+  { label: "Dashboard", icon: LayoutGrid, active: true, route: "/dashboard" },
+  { label: "Health Timeline", icon: TrendingUp, route: "/timeline" },
+  { label: "Medical Vault", icon: Folder, route: "/vault" },
+  { label: "Family Records", icon: Users, route: "/family-vault" },
+  { label: "Lab Insights", icon: TrendingUp, route: "/lab-trends" },
+  { label: "Ask Swastha", icon: Sparkles, route: "/search" },
+];
+
+const recentUploads = [
+  {
+    icon: FileText,
+    title: "Complete Blood Count (CBC)",
+    subtitle: "Apollo Diagnostics • Oct 12, 2024",
+    status: "AI Processed",
+  },
+  {
+    icon: ClipboardList,
+    title: "Cardiology Prescription",
+    subtitle: "Dr. Sarah Williams • Oct 10, 2024",
+    status: "AI Processed",
+  },
+];
+
+const medications = [
+  {
+    name: "Telmisartan 40mg",
+    schedule: "Daily • After Breakfast",
+    color: "bg-blue-600",
+  },
+  {
+    name: "Metformin 500mg",
+    schedule: "Twice Daily • With Meals",
+    color: "bg-orange-500",
+  },
+];
 
 const statCards = [
   {
-    icon: Activity,
-    label: "Today's Appts",
-    value: "12",
-    badge: { text: "+2 walk-ins", tone: "bg-blue-50 text-blue-600 " },
+    icon: FileText,
+    tag: "+3 this week",
+    value: "24",
+    label: "Total Reports",
+    iconBg: "bg-blue-50 text-blue-600",
   },
   {
     icon: Users,
-    label: "Total Patients",
-    value: "1,240",
+    tag: null,
+    value: "4",
+    label: "Family Members",
+    iconBg: "bg-blue-50 text-blue-600",
   },
   {
-    icon: BarChart3,
-    label: "Pending Reports",
-    value: "8",
-    badge: { text: "Action Req.", tone: "bg-red-50 text-red-600 " },
+    icon: AlertTriangle,
+    tag: "Action Required",
+    tagColor: "text-orange-600",
+    value: "2",
+    label: "Medicine Alerts",
+    iconBg: "bg-orange-50 text-orange-600",
   },
   {
-    icon: Video,
-    label: "Consultations Done",
-    value: "45",
-    accent: true,
+    icon: ClipboardList,
+    tag: "In 2 days",
+    value: "1",
+    label: "Upcoming Checkups",
+    iconBg: "bg-blue-50 text-blue-600",
   },
 ];
 
-const scheduleItems = [
-  {
-    time: "10:30",
-    name: "Robert Chen",
-    detail: "Video Follow-up",
-    detailIcon: Video,
-    avatar: "https://i.pravatar.cc/80?img=13",
-    status: { text: "Waiting (5m)", tone: "bg-blue-50 text-blue-600 " },
-    action: { label: "Join Now", style: "primary" },
-    dotTone: "bg-blue-600 ring-blue-100 ",
-    state: "upcoming",
-  },
-  {
-    time: "11:15",
-    name: "Emily Stanton",
-    detail: "Routine Checkup",
-    detailIcon: Stethoscope,
-    avatar: "https://i.pravatar.cc/80?img=32",
-    status: { text: "Checked-in", tone: "bg-slate-100 text-slate-600 " },
-    action: { label: "View Chart", style: "secondary" },
-    dotTone: "bg-slate-300 ring-slate-100 ",
-    state: "upcoming",
-  },
-  {
-    time: "09:00",
-    name: "Michael Jordan",
-    detail: "ECG Review",
-    detailIcon: Activity,
-    initials: "MJ",
-    status: { text: "Completed", tone: "" },
-    dotTone: "bg-slate-300 ",
-    state: "done",
-  },
-];
+function Sidebar({ onOpenSettings }) {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const pathname = location.pathname;
 
-const quickActions = [
-  { icon: Video, label: "Start Consult" },
-  { icon: Pill, label: "Add Script" },
-  { icon: FolderOpen, label: "View Reports" },
-  { icon: Siren, label: "Emergency Cases", danger: true },
-];
-
-export default function DoctorDashboard() {
   return (
-    <div className="h-screen overflow-hidden bg-slate-50 flex">
-      <Sidebar />
-
-      <div className="flex-1 flex flex-col h-screen overflow-hidden min-w-0">
-        <TopBar />
-
-        <main className="flex-1 overflow-y-auto px-6 md:px-10 py-8">
-          <PageHeader />
-
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-            <div className="lg:col-span-8 flex flex-col gap-6">
-              <StatGrid />
-              <TodaySchedule />
-            </div>
-
-            <div className="lg:col-span-4 flex flex-col gap-6">
-              <QuickActions />
-              <ClinicalInsight />
-            </div>
-          </div>
-        </main>
+    <aside className="hidden lg:flex lg:flex-col w-64 shrink-0 bg-slate-50 border-r border-slate-200 h-screen overflow-y-auto px-4 py-6">
+      <div className="px-2 mb-8">
+        <Logo />
       </div>
-    </div>
+
+      <nav className="flex-1 space-y-1">
+        {navItems.map(({ label, icon: Icon, active, route }) => {
+          const isActive = Boolean(route && (pathname === route || pathname.startsWith(`${route}/`))) || active;
+
+          return (
+            <button
+              key={label}
+              type="button"
+              onClick={() => route && navigate(route)}
+              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                isActive
+                  ? "bg-blue-100 text-blue-700 "
+                  : "text-slate-600 hover:bg-slate-100 "
+              }`}
+            >
+            <Icon size={18} />
+            {label}
+            </button>
+          );
+        })}
+      </nav>
+
+      <div className="space-y-3 pt-4">
+        <button
+          type="button"
+          onClick={() => navigate('/family-vault')}
+          className="w-full flex items-center justify-center gap-2 bg-blue-700 hover:bg-blue-800 transition-colors text-white text-sm font-semibold py-2.5 rounded-lg"
+        >
+          <PlusCircle size={18} />
+          Open Family Vault
+        </button>
+
+        <div className="space-y-1 pt-2">
+          <button
+            type="button"
+            onClick={onOpenSettings}
+            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-100 "
+          >
+            <Settings size={18} />
+            Settings
+          </button>
+          <button className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-100 ">
+            <HelpCircle size={18} />
+            Support
+          </button>
+        </div>
+      </div>
+    </aside>
   );
 }
 
-/* ---------------------------- Sidebar ---------------------------- */
-
-function Sidebar() {
-  return <DoctorSidebar />;
-}
-
-/* ----------------------------- Top bar ----------------------------- */
-
-function TopBar() {
-  const navigate = useNavigate();
-
+function Header({ profile }) {
   return (
-    <header className="shrink-0 flex items-center gap-4 px-6 lg:px-8 py-5 border-b border-slate-200 bg-white ">
-      <button
-        type="button"
-        onClick={() => navigate('/doctor/clinical-intelligence')}
-        className="flex-1 flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-lg px-4 py-2.5 text-sm text-slate-400 transition-colors hover:border-blue-300 hover:text-blue-600 "
-      >
-        <Sparkles size={16} />
-        Ask Swastha about your health records...
-      </button>
-
+    <header className="shrink-0 flex items-center justify-end gap-4 px-6 lg:px-8 py-5 border-b border-slate-200 bg-white ">
       <button className="relative p-2 rounded-lg hover:bg-slate-100 shrink-0">
         <Bell size={20} className="text-slate-600 " />
         <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full" />
       </button>
 
 
-      <ProfileDropdown />
+      <ProfileDropdown customProfile={profile} />
     </header>
   );
 }
 
-/* --------------------------- Page header --------------------------- */
-
-function PageHeader() {
+function StatCard({ icon: Icon, tag, tagColor, value, label, iconBg }) {
   return (
-    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-4 mb-8">
-      <div>
-        <h2 className="text-2xl md:text-3xl font-bold text-slate-900 mb-1">
-          Good Morning, Dr. Jenkins
-        </h2>
-        <p className="text-slate-500 ">
-          Here is your clinical overview for today, October 24.
-        </p>
-      </div>
-      <button className="flex items-center gap-2 bg-blue-600 text-white px-5 py-2.5 rounded-xl text-sm font-semibold transition-all duration-200 hover:bg-blue-700 hover:shadow-md hover:-translate-y-0.5">
-        <Plus size={18} />
-        New Consultation
-      </button>
-    </div>
-  );
-}
-
-/* --------------------------- Stat grid --------------------------- */
-
-function StatGrid() {
-  return (
-    <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-      {statCards.map((card) => (
-        <StatCard key={card.label} card={card} />
-      ))}
-
-      {/* Patient satisfaction — wider card */}
-      <div className="group col-span-2 sm:col-span-3 lg:col-span-2 bg-gradient-to-br from-white to-blue-50/60 border border-slate-200 rounded-2xl p-5 flex items-start justify-between transition-all duration-300 hover:-translate-y-1 hover:shadow-lg ">
-        <div>
-          <p className="text-sm text-slate-500 mb-1">Patient Satisfaction</p>
-          <div className="flex items-baseline gap-1">
-            <span className="text-4xl font-bold text-slate-900 ">4.9</span>
-            <span className="text-lg text-slate-400 ">/5</span>
-          </div>
+    <div className="group bg-white border border-slate-200 rounded-2xl p-5 transition-all duration-300 hover:-translate-y-1 hover:shadow-lg hover:border-slate-300 ">
+      <div className="flex items-start justify-between mb-4">
+        <div
+          className={`w-10 h-10 rounded-lg flex items-center justify-center ${iconBg} transition-transform duration-300 group-hover:scale-110`}
+        >
+          <Icon size={18} />
         </div>
-        <div className="flex text-blue-600 gap-0.5 mt-1">
-          {[...Array(4)].map((_, i) => (
-            <Star key={i} size={16} className="fill-current" />
-          ))}
-          <RotateCw size={16} />
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function StatCard({ card }) {
-  const Icon = card.icon;
-  return (
-    <div
-      className={`group relative bg-white border border-slate-200 rounded-2xl p-5 overflow-hidden transition-all duration-300 hover:-translate-y-1 hover:shadow-lg ${
-        card.accent ? "border-t-2 border-t-blue-500" : ""
-      }`}
-    >
-      <Icon
-        size={56}
-        className="absolute -top-1 -right-1 text-blue-600 opacity-[0.06] transition-transform duration-300 group-hover:scale-110"
-      />
-      <p className="text-sm text-slate-500 mb-2 relative z-10">{card.label}</p>
-      <div className="flex items-end gap-2 relative z-10">
-        <h3 className="text-3xl font-bold text-slate-900 leading-none">
-          {card.value}
-        </h3>
-        {card.badge && (
-          <span
-            className={`text-xs font-medium px-2 py-0.5 rounded-full mb-0.5 ${card.badge.tone}`}
-          >
-            {card.badge.text}
+        {tag && (
+          <span className={`text-xs font-medium ${tagColor || "text-slate-400 "}`}>
+            {tag}
           </span>
         )}
       </div>
+      <p className="text-3xl font-bold text-slate-900 ">{value}</p>
+      <p className="text-sm text-slate-500 mt-1">{label}</p>
     </div>
   );
 }
 
-/* ------------------------- Today's schedule ------------------------- */
-
-function TodaySchedule() {
+function Hba1cChart() {
   return (
-    <div className="bg-white border border-slate-200 rounded-2xl p-6 transition-shadow duration-300 hover:shadow-lg ">
-      <div className="flex items-center justify-between mb-5 pb-3 border-b border-slate-100 ">
+    <div className="bg-white border border-slate-200 rounded-2xl p-6 transition-all duration-300 hover:shadow-lg hover:border-slate-300 ">
+      <div className="flex items-start justify-between mb-1">
+        <div>
+          <h3 className="text-lg font-semibold text-slate-900 ">
+            HbA1c Lab Trends
+          </h3>
+          <p className="text-sm text-slate-400 mt-0.5">
+            Clinical tracking over last 6 months
+          </p>
+        </div>
+        <span className="text-xs font-medium bg-emerald-50 text-emerald-600 px-3 py-1.5 rounded-full">
+          Normal Range
+        </span>
+      </div>
+
+      <div className="h-56 mt-4 -ml-2">
+        <ResponsiveContainer width="100%" height="100%">
+          <LineChart data={hba1cData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+            <XAxis
+              dataKey="month"
+              axisLine={false}
+              tickLine={false}
+              tick={{ fill: "#94a3b8", fontSize: 12 }}
+            />
+            <Tooltip
+              cursor={{ stroke: "#cbd5e1", strokeDasharray: "4 4" }}
+              contentStyle={{
+                borderRadius: 10,
+                border: "1px solid #e2e8f0",
+                boxShadow: "0 4px 12px rgba(15,23,42,0.08)",
+                fontSize: 12,
+              }}
+            />
+            <Line
+              type="monotone"
+              dataKey="value"
+              stroke="#2563eb"
+              strokeWidth={2.5}
+              dot={{ r: 4, fill: "#2563eb", strokeWidth: 0 }}
+              activeDot={{ r: 7, fill: "#2563eb", stroke: "#fff", strokeWidth: 3 }}
+              isAnimationActive
+              animationDuration={600}
+            />
+          </LineChart>
+        </ResponsiveContainer>
+      </div>
+
+      <div className="flex gap-3 bg-slate-50 border border-slate-100 rounded-xl p-4 mt-2 transition-colors duration-200 hover:bg-slate-100/70 ">
+        <Sparkles size={18} className="text-blue-600 shrink-0 mt-0.5" />
+        <p className="text-sm text-slate-600 ">
+          <span className="font-semibold text-slate-800 ">AI Observation: </span>
+          Your HbA1c has decreased by 0.4% since last quarter. This indicates
+          excellent glycemic control through your recent dietary changes.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function RecentUploads() {
+  return (
+    <div className="bg-white border border-slate-200 rounded-xl p-6">
+      <div className="flex items-center justify-between mb-4">
         <h3 className="text-lg font-semibold text-slate-900 ">
-          Today's Schedule
+          Recent Uploads
         </h3>
-        <button className="text-sm font-medium text-blue-600 transition-colors duration-200 hover:text-blue-700 hover:underline">
-          View Full Calendar
+        <button className="text-sm font-medium text-blue-600 hover:underline">
+          View All
         </button>
       </div>
 
-      <div className="relative pl-2">
-        <div className="absolute left-[19px] top-2 bottom-2 w-px bg-slate-200 " />
-
-        <div className="flex flex-col gap-5">
-          {scheduleItems.map((item) => (
-            <ScheduleRow key={item.name} item={item} />
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function ScheduleRow({ item }) {
-  const DetailIcon = item.detailIcon;
-  const isPast = item.state === "done";
-
-  return (
-    <div className={`group flex gap-4 relative ${isPast ? "opacity-60" : ""}`}>
-      <div className="relative z-10 flex flex-col items-center w-10 pt-1 shrink-0">
-        <div
-          className={`w-3 h-3 rounded-full ring-4 ${item.dotTone}`}
-        />
-        <span className="text-xs text-slate-400 mt-1">{item.time}</span>
-      </div>
-
-      <div
-        className={`flex-1 rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 transition-all duration-200 ${
-          isPast
-            ? "bg-slate-50 "
-            : "bg-white border border-slate-100 shadow-sm group-hover:border-blue-200 group-hover:shadow-md"
-        }`}
-      >
-        <div className="flex items-center gap-3">
-          {item.avatar ? (
-            <img
-              src={item.avatar}
-              alt={item.name}
-              className="w-11 h-11 rounded-full object-cover transition-transform duration-200 group-hover:scale-105"
-            />
-          ) : (
-            <div className="w-11 h-11 rounded-full bg-slate-200 text-slate-500 font-semibold flex items-center justify-center">
-              {item.initials}
-            </div>
-          )}
-          <div>
-            <h4
-              className={`text-sm font-semibold text-slate-900 ${
-                isPast ? "line-through" : ""
-              }`}
-            >
-              {item.name}
-            </h4>
-            <p className="flex items-center gap-1.5 text-xs text-slate-500 mt-0.5">
-              <DetailIcon size={13} />
-              {item.detail}
-            </p>
-          </div>
-        </div>
-
-        <div className="flex items-center justify-between sm:justify-end gap-3 w-full sm:w-auto">
-          <span
-            className={`text-xs font-medium px-3 py-1 rounded-full ${item.status.tone}`}
+      <div className="space-y-3">
+        {recentUploads.map(({ icon: Icon, title, subtitle, status }) => (
+          <div
+            key={title}
+            className="flex items-center gap-4 border border-slate-100 rounded-lg p-4 hover:bg-slate-50 transition-colors cursor-pointer"
           >
-            {item.status.text}
-          </span>
-          {item.action?.style === "primary" && (
-            <button className="bg-blue-600 text-white text-xs font-semibold px-4 py-2 rounded-lg transition-all duration-200 hover:bg-blue-700 hover:shadow-md">
-              {item.action.label}
-            </button>
-          )}
-          {item.action?.style === "secondary" && (
-            <button className="border border-slate-200 text-slate-700 text-xs font-semibold px-4 py-2 rounded-lg bg-white transition-colors duration-200 hover:bg-slate-50 ">
-              {item.action.label}
-            </button>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-/* --------------------------- Quick actions --------------------------- */
-
-function QuickActions() {
-  return (
-    <div className="bg-white border border-slate-200 rounded-2xl p-6 transition-shadow duration-300 hover:shadow-lg ">
-      <h3 className="text-lg font-semibold text-slate-900 mb-4">
-        Quick Actions
-      </h3>
-      <div className="grid grid-cols-2 gap-3">
-        {quickActions.map(({ icon: Icon, label, danger }) => (
-          <button
-            key={label}
-            className={`group flex flex-col items-center justify-center gap-2 p-4 rounded-xl border transition-all duration-200 ${
-              danger
-                ? "bg-red-50 border-red-100 hover:bg-red-100 "
-                : "bg-white border-slate-200 hover:border-blue-300 hover:bg-blue-50/50 "
-            }`}
-          >
-            <div
-              className={`w-10 h-10 rounded-full flex items-center justify-center transition-transform duration-200 group-hover:scale-110 ${
-                danger
-                  ? "bg-red-600 text-white animate-pulse"
-                  : "bg-blue-50 text-blue-600 "
-              }`}
-            >
+            <div className="w-10 h-10 rounded-lg bg-slate-100 flex items-center justify-center text-slate-500 shrink-0">
               <Icon size={18} />
             </div>
-            <span
-              className={`text-xs font-medium text-center ${
-                danger ? "text-red-600 font-semibold" : "text-slate-700 "
-              }`}
-            >
-              {label}
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold text-slate-800 truncate">
+                {title}
+              </p>
+              <p className="text-xs text-slate-400 mt-0.5">{subtitle}</p>
+            </div>
+            <span className="text-xs font-medium bg-emerald-50 text-emerald-600 px-3 py-1.5 rounded-full whitespace-nowrap">
+              {status}
             </span>
-          </button>
+            <ChevronRight size={16} className="text-slate-300 shrink-0" />
+          </div>
         ))}
       </div>
     </div>
   );
 }
 
-/* ------------------------- Clinical insight ------------------------- */
-
-function ClinicalInsight() {
+function CurrentMedications() {
   return (
-    <div className="relative bg-white border border-slate-200 rounded-2xl p-6 overflow-hidden transition-shadow duration-300 hover:shadow-lg ">
-      <div className="absolute top-0 left-0 w-1 h-full bg-gradient-to-b from-blue-600 to-sky-400" />
-
-      <div className="flex items-start gap-3 relative z-10">
-        <div className="w-9 h-9 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
-          <Sparkles size={18} />
-        </div>
-        <div>
-          <h4 className="text-sm font-semibold text-slate-900 mb-1.5">
-            Clinical Intelligence Insight
-          </h4>
-          <p className="text-sm text-slate-500 leading-relaxed">
-            Based on recent labs, patient{" "}
-            <span className="font-semibold text-blue-600 ">Robert Chen</span>{" "}
-            shows a 15% increase in LDL levels. Consider reviewing statin
-            dosage during today's follow-up.
-          </p>
-          <button className="mt-3 flex items-center gap-1.5 text-sm font-medium text-blue-600 transition-all duration-200 hover:gap-2.5 hover:text-blue-700 ">
-            Review Lab Trends
-            <ArrowRight size={14} />
-          </button>
-        </div>
+    <div className="bg-white border border-slate-200 rounded-xl p-5">
+      <div className="flex items-center justify-between mb-4">
+        <h3 className="text-base font-semibold text-slate-900 ">
+          Current Medications
+        </h3>
+        <button className="text-xs font-semibold text-blue-600 hover:underline">
+          REFILL ALL
+        </button>
       </div>
+
+      <div className="space-y-3">
+        {medications.map(({ name, schedule, color }) => (
+          <div key={name} className="flex items-center gap-3">
+            <span className={`w-1.5 h-10 rounded-full ${color}`} />
+            <div className="flex-1">
+              <p className="text-sm font-semibold text-slate-800 ">{name}</p>
+              <p className="text-xs text-slate-400 mt-0.5">{schedule}</p>
+            </div>
+            <span className="w-5 h-5 rounded-full border-2 border-slate-300 " />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+export default function Dashboard() {
+  const navigate = useNavigate();
+  const { token, user: cachedUser, isAuthenticated } = useAuth();
+  const [profile, setProfile] = useState(cachedUser);
+  const [isProfileLoading, setIsProfileLoading] = useState(false);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    async function loadProfile() {
+      if (!isAuthenticated || !token) {
+        setProfile(cachedUser);
+        return;
+      }
+
+      setIsProfileLoading(true);
+      try {
+        const result = await authService.getProfile(token);
+        if (isMounted && result?.user) {
+          setProfile(result.user);
+        }
+      } catch {
+        if (isMounted) {
+          setProfile(cachedUser);
+        }
+      } finally {
+        if (isMounted) {
+          setIsProfileLoading(false);
+        }
+      }
+    }
+
+    loadProfile();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [cachedUser, isAuthenticated, token]);
+
+  return (
+    <div className="flex h-screen overflow-hidden bg-slate-50 text-slate-900 ">
+      <Sidebar onOpenSettings={() => setIsSettingsOpen(true)} />
+
+      <div className="flex-1 flex flex-col min-w-0 h-screen overflow-hidden">
+        <Header profile={profile} />
+
+        <main className="flex-1 overflow-y-auto px-6 lg:px-8 py-8">
+          <div className="flex items-center justify-between mb-6">
+            <div>
+              <h2 className="text-2xl font-bold text-slate-900 ">
+                Welcome back, {profile?.name || 'User'}
+              </h2>
+              <p className="text-sm text-slate-500 mt-1">
+                {isProfileLoading
+                  ? 'Loading your profile from the database...'
+                  : profile?.role
+                    ? `${profile.role.charAt(0).toUpperCase() + profile.role.slice(1)} profile from the database.`
+                    : 'Your clinical intelligence overview for today.'}
+              </p>
+            </div>
+            <span className="flex items-center gap-2 bg-blue-50 text-blue-700 text-sm font-medium px-4 py-2 rounded-lg">
+              <ShieldCheck size={16} />
+              {profile?.email ? 'Profile Synced' : 'ABHA Synced'}
+            </span>
+          </div>
+
+          <div className="mb-6 flex flex-wrap gap-3">
+            <button
+              type="button"
+              onClick={() => navigate('/family-vault')}
+              className="flex items-center gap-2 rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white transition-all duration-200 hover:bg-slate-800 hover:shadow-md hover:-translate-y-0.5"
+            >
+              <Users size={16} />
+              Open Family Vault
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 mb-6">
+            {statCards.map((card) => (
+              <StatCard key={card.label} {...card} />
+            ))}
+          </div>
+
+          <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+            <div className="xl:col-span-2 space-y-6">
+              <Hba1cChart />
+              <RecentUploads />
+            </div>
+
+            <div className="space-y-6">
+              <CurrentMedications />
+            </div>
+          </div>
+        </main>
+      </div>
+
+      <SettingsModal
+        isOpen={isSettingsOpen}
+        onClose={() => setIsSettingsOpen(false)}
+      />
     </div>
   );
 }
