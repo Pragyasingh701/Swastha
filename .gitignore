@@ -56,3 +56,6 @@ docs/
 
 # Claude Code project instructions (local-only)
 CLAUDE.md
+# Database backups — contain password hashes and patient health data.
+# Never commit these.
+backups/

@@ -1,7 +1,11 @@
 import supabase from '../config/supabase.js';
 
 const REPORTS_TABLE = process.env.REPORTS_TABLE_NAME || 'reports';
-const REPORTS_USER_ID_COLUMN = process.env.REPORTS_USER_ID_COLUMN || 'user_id';
+// M5 (DB reorg, decision D8): reports.user_id was renamed to patient_id —
+// the column now points at `patients`, not the removed shared `users`
+// table. Every read/write in this file already goes through this constant,
+// so this is the only line that needed to change here.
+const REPORTS_USER_ID_COLUMN = process.env.REPORTS_USER_ID_COLUMN || 'patient_id';
 
 function normalizeText(value) {
   return typeof value === 'string' ? value.trim() : '';
