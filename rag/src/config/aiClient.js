@@ -1,0 +1,305 @@
+// Shared AI failover client — every Gemini/OpenRouter call goes through here.
+//
+// MIRRORED FILE: backend/services/aiClient.js is a byte-identical copy except
+// for the key/env resolution at the top (backend has no config/env.js). If you
+// change one, change the other. See ai-failover-design.md §1 for why this is
+// vendored rather than shared via a workspace package.
+//
+// Design contract (ai-failover-design.md):
+//   - rotate all keys before changing model, all models before changing provider
+//   - never throw to the user for generation/vision-ocr — return a degraded result
+//   - embeddings are the ONE exception: they throw, because a silently unindexed
+//     report is permanently unfindable (§9, confirmed with the user)
+//   - never log a key value; reference keys as key#N/M only
+import { GEMINI_API_KEYS, OPENROUTER_API_KEY } from './env.js';
+
+const GEMINI_BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
+const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
+const OPENROUTER_MODELS_URL = 'https://openrouter.ai/api/v1/models';
+
+export const EMBEDDING_MODEL = 'gemini-embedding-001';
+export const EMBEDDING_DIMENSIONS = 768;
+
+// Model ladders per task. Verified live 2026-08-19: gemini-2.0-flash is RETIRED
+// (404 "no longer available") and was removed — it was the cert parser's only
+// fallback. flash-lite answered 200, flash-latest answered 503, which is exactly
+// the transient case this ladder exists for.
+const MODEL_LADDER = {
+  'vision-ocr': ['gemini-flash-lite-latest', 'gemini-flash-latest', 'gemini-3.1-flash-lite'],
+  generation: ['gemini-flash-lite-latest', 'gemini-flash-latest'],
+  embedding: [EMBEDDING_MODEL],
+};
+
+// Only used if live discovery fails. Verified still present in OpenRouter's
+// catalogue; the other 4 slugs the old hardcoded chain used are all gone.
+const OPENROUTER_SAFE_DEFAULT = ['openrouter/free'];
+
+const TIMEOUT_MS = { embedding: 20000, 'vision-ocr': 45000, generation: 30000 };
+
+export const FRIENDLY_FALLBACK =
+  "Swastha couldn't process this right now. Please try again shortly.";
+
+// Keys that returned an auth-shaped error are skipped for the rest of the
+// process lifetime — no point paying a round-trip on a revoked key every call.
+const deadKeys = new Set();
+// Round-robin start offset so key#1 isn't always the one burned first.
+let keyCursor = 0;
+
+/** Classify a failure into the taxonomy in ai-failover-design.md §3. */
+function classify(status, bodyText) {
+  const body = (bodyText || '').toUpperCase();
+  if (status === 429 || body.includes('RESOURCE_EXHAUSTED')) return 'RATE_LIMIT';
+  if (status === 401 || status === 403) return 'KEY_DEAD';
+  if (status === 400 && (body.includes('API_KEY_INVALID') || body.includes('API KEY NOT VALID'))) {
+    return 'KEY_DEAD';
+  }
+  if (status === 404 || body.includes('NOT_FOUND')) return 'MODEL_GONE';
+  if (status === 0 || status >= 500) return 'TRANSIENT';
+  if (status === 400) return 'BAD_REQUEST'; // malformed/oversized — fails everywhere
+  return 'TRANSIENT';
+}
+
+function sleep(ms) {
+  return new Promise((r) => setTimeout(r, ms));
+}
+
+async function postJson(url, headers, body, timeoutMs) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...headers },
+      body: JSON.stringify(body),
+      signal: controller.signal,
+    });
+    const text = await res.text();
+    return { status: res.status, ok: res.ok, text };
+  } catch (err) {
+    // Network/DNS/abort — status 0 maps to TRANSIENT.
+    return { status: 0, ok: false, text: err.name === 'AbortError' ? 'timeout' : err.message };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/** Ordered list of usable keys, starting at the round-robin cursor. */
+function liveKeys() {
+  const all = GEMINI_API_KEYS.filter((_, i) => !deadKeys.has(i));
+  if (all.length === 0) return [];
+  const offset = keyCursor % GEMINI_API_KEYS.length;
+  const idx = GEMINI_API_KEYS.map((k, i) => i).filter((i) => !deadKeys.has(i));
+  const rotated = [...idx.slice(offset), ...idx.slice(0, offset)];
+  return rotated.map((i) => ({ key: GEMINI_API_KEYS[i], index: i }));
+}
+
+function geminiBody(task, { input, file, json, taskType }) {
+  if (task === 'embedding') {
+    return {
+      content: { parts: [{ text: input }] },
+      outputDimensionality: EMBEDDING_DIMENSIONS,
+      taskType: taskType || 'RETRIEVAL_DOCUMENT',
+    };
+  }
+  const parts = [];
+  if (file) parts.push({ inlineData: { mimeType: file.mime, data: file.data } });
+  parts.push({ text: input });
+  const body = { contents: [{ parts }] };
+  // temperature 0 preserves the deterministic/factual behaviour the previous
+  // OpenRouter path used — these are medical records, not creative writing.
+  body.generationConfig = json
+    ? { responseMimeType: 'application/json', temperature: 0 }
+    : { temperature: 0 };
+  return body;
+}
+
+function parseGemini(task, text) {
+  const json = text ? JSON.parse(text) : {};
+  if (task === 'embedding') {
+    const values = json?.embedding?.values;
+    if (!Array.isArray(values)) throw new Error('no embedding values in response');
+    if (values.length !== EMBEDDING_DIMENSIONS) {
+      // Hard fail: a silent dimension mismatch corrupts similarity search.
+      throw new Error(`got ${values.length}-dim embedding, expected ${EMBEDDING_DIMENSIONS}`);
+    }
+    return { embedding: values };
+  }
+  const candidate = json?.candidates?.[0];
+  const out = (candidate?.content?.parts || []).map((p) => p.text).join('');
+  if (!out.trim()) throw new Error(`empty text (finishReason: ${candidate?.finishReason})`);
+  return { text: out.trim() };
+}
+
+// ---- OpenRouter live free-model discovery (ai-failover-design.md §5) ----
+let orCache = { models: null, at: 0 };
+const OR_TTL_MS = 6 * 60 * 60 * 1000;
+
+async function freeOpenRouterModels() {
+  if (orCache.models && Date.now() - orCache.at < OR_TTL_MS) return orCache.models;
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 3000);
+    const res = await fetch(OPENROUTER_MODELS_URL, { signal: controller.signal });
+    clearTimeout(timer);
+    const data = (await res.json())?.data || [];
+    const free = data
+      .filter((m) => m.pricing && parseFloat(m.pricing.prompt) === 0 && parseFloat(m.pricing.completion) === 0)
+      // The :free suffix + text modality check matters: some $0 models are audio
+      // (e.g. lyria) and would otherwise be picked to write a medical summary.
+      .filter((m) => m.id.endsWith(':free'))
+      .filter((m) => (m.architecture?.output_modalities || ['text']).includes('text'))
+      .sort((a, b) => (b.context_length || 0) - (a.context_length || 0))
+      .slice(0, 3)
+      .map((m) => m.id);
+    const models = [...free, ...OPENROUTER_SAFE_DEFAULT];
+    orCache = { models, at: Date.now() };
+    return models;
+  } catch {
+    // Reuse last good list if we have one, else the safe default. Never block.
+    return orCache.models || OPENROUTER_SAFE_DEFAULT;
+  }
+}
+
+/**
+ * Single entry point for all AI work.
+ * @returns {Promise<{ok, text?, embedding?, model_used, provider, degraded, attempts}>}
+ *   Resolves even on total failure (degraded:true) — EXCEPT task 'embedding',
+ *   which throws, by design.
+ */
+export async function runAI({ task, input, file, json = false, taskType, label = task }) {
+  if (!task || !MODEL_LADDER[task]) throw new Error(`runAI: unknown task "${task}"`);
+  if (task === 'embedding' && (!input || !input.trim())) {
+    throw new Error('runAI: refusing to embed empty text');
+  }
+  if (task === 'vision-ocr' && (!file?.data || !file?.mime)) {
+    throw new Error('runAI: vision-ocr requires file {data, mime}');
+  }
+
+  const timeout = TIMEOUT_MS[task];
+  const trail = [];
+  let attempts = 0;
+
+  // ---- Provider 1: Gemini (models outer, keys inner) ----
+  for (const model of MODEL_LADDER[task]) {
+    const path = task === 'embedding' ? `${model}:embedContent` : `${model}:generateContent`;
+    let modelGone = false;
+
+    for (const { key, index } of liveKeys()) {
+      for (let tryNo = 1; tryNo <= 2; tryNo += 1) {
+        attempts += 1;
+        const r = await postJson(
+          `${GEMINI_BASE}/${path}`,
+          { 'x-goog-api-key': key },
+          geminiBody(task, { input, file, json, taskType }),
+          timeout
+        );
+
+        if (r.ok) {
+          try {
+            const parsed = parseGemini(task, r.text);
+            keyCursor += 1;
+            return { ok: true, ...parsed, model_used: model, provider: 'gemini', degraded: false, attempts };
+          } catch (err) {
+            // 200 but unusable body — treat as transient, move on.
+            trail.push(`gemini/${model} key#${index + 1}: bad body: ${err.message}`);
+            break;
+          }
+        }
+
+        const cls = classify(r.status, r.text);
+        trail.push(`gemini/${model} key#${index + 1}/${GEMINI_API_KEYS.length}: HTTP ${r.status} ${cls}`);
+
+        if (cls === 'BAD_REQUEST') {
+          // Fails identically on every key and model — don't burn the ladder.
+          logTrail(label, trail);
+          return degraded(attempts, 'BAD_REQUEST', task);
+        }
+        if (cls === 'KEY_DEAD') {
+          deadKeys.add(index);
+          break; // next key
+        }
+        if (cls === 'MODEL_GONE') {
+          modelGone = true; // every key agrees — skip to next model
+          break;
+        }
+        if (cls === 'TRANSIENT' && tryNo === 1) {
+          await sleep(800);
+          continue; // one same-key retry
+        }
+        break; // RATE_LIMIT or exhausted retries -> next key
+      }
+      if (modelGone) break;
+    }
+  }
+
+  // ---- Provider 2: OpenRouter (generation + vision-ocr only) ----
+  if (task !== 'embedding' && OPENROUTER_API_KEY) {
+    for (const model of await freeOpenRouterModels()) {
+      attempts += 1;
+      const r = await postJson(
+        OPENROUTER_URL,
+        { Authorization: `Bearer ${OPENROUTER_API_KEY}` },
+        { model, messages: [{ role: 'user', content: input }], temperature: 0 },
+        timeout
+      );
+
+      if (r.ok) {
+        try {
+          const body = JSON.parse(r.text);
+          const out = body?.choices?.[0]?.message?.content;
+          if (out && out.trim()) {
+            return { ok: true, text: out.trim(), model_used: model, provider: 'openrouter', degraded: false, attempts };
+          }
+          trail.push(`openrouter/${model}: empty content`);
+        } catch (err) {
+          trail.push(`openrouter/${model}: unparsable: ${err.message}`);
+        }
+        continue;
+      }
+      trail.push(`openrouter/${model}: HTTP ${r.status} ${classify(r.status, r.text)}`);
+    }
+  }
+
+  // ---- Everything exhausted ----
+  logTrail(label, trail);
+  if (task === 'embedding') {
+    // Deliberate: a silently unindexed report is permanently unfindable (§9).
+    throw new Error(`runAI(embedding) exhausted all keys after ${attempts} attempts: ${trail.join(' | ')}`);
+  }
+  return degraded(attempts, 'ALL_PROVIDERS_EXHAUSTED', task);
+}
+
+function degraded(attempts, code, task) {
+  return {
+    ok: false,
+    text: FRIENDLY_FALLBACK,
+    embedding: null,
+    model_used: null,
+    provider: null,
+    degraded: true,
+    attempts,
+    error_code: code,
+    task,
+  };
+}
+
+function logTrail(label, trail) {
+  // Server-side only, and never a key value — "silent to the user" is not
+  // "silent in the logs" (ai-failover-design.md §2).
+  console.error(`[aiClient:${label}] all attempts failed:\n  ${trail.join('\n  ')}`);
+}
+
+/** Convenience wrapper preserving the old embedText(text, {taskType}) shape. */
+export async function embedText(text, { taskType = 'RETRIEVAL_DOCUMENT' } = {}) {
+  const r = await runAI({ task: 'embedding', input: text, taskType, label: 'embed' });
+  return r.embedding;
+}
+
+/** Sequential by design — stays inside free-tier rate limits. */
+export async function embedTexts(texts, opts) {
+  const out = [];
+  for (const t of texts) out.push(await embedText(t, opts));
+  return out;
+}
+
+export const __testing = { classify, deadKeys, freeOpenRouterModels };

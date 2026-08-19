@@ -1,6 +1,8 @@
 import { supabase } from '../config/supabase.js';
-import { embedText } from '../config/gemini.js';
-import { generateGroundedAnswer } from '../config/openrouter.js';
+// Both AI calls route through the shared failover client (4-key rotation,
+// Gemini -> OpenRouter fallback). embedText still throws on exhaustion;
+// runAI('generation') never throws — check `.ok` before parsing.
+import { embedText, runAI } from '../config/aiClient.js';
 
 const MATCH_COUNT = 5;
 // Cosine similarity threshold below which a chunk is considered irrelevant.
@@ -93,14 +95,22 @@ export async function searchReports(query, userId) {
 
   const prompt = buildGroundedPrompt(query, excerpts);
 
-  let raw;
-  try {
-    raw = await generateGroundedAnswer(prompt);
-  } catch (err) {
-    throw new Error(`searchReports: answer generation failed: ${err.message}`);
+  const gen = await runAI({ task: 'generation', input: prompt, label: 'search' });
+
+  // Every key and provider failed. Return the friendly text in the SAME shape
+  // the UI already renders (sources still shown — the retrieval succeeded, only
+  // the phrasing step failed) rather than throwing a 500 at the user.
+  if (!gen.ok) {
+    return {
+      answer: gen.text,
+      structured: { headline: gen.text, keyFacts: [], caveat: '' },
+      sources: [],
+      noResultsFound: false,
+      degraded: true,
+    };
   }
 
-  const structured = parseStructuredAnswer(raw, excerpts);
+  const structured = parseStructuredAnswer(gen.text, excerpts);
 
   // De-duplicated source list in the order their best-matching chunk appeared.
   const sourceReports = reportIds.map((id) => reportById.get(id)).filter(Boolean);

@@ -1,5 +1,8 @@
 import { supabase } from '../config/supabase.js';
-import { embedTexts } from '../config/gemini.js';
+// Routed through the shared failover client: rotates all 4 Gemini keys on
+// quota/auth errors. Still THROWS on total exhaustion (never degrades
+// silently) — a report that is silently unindexed is permanently unfindable.
+import { embedTexts } from '../config/aiClient.js';
 import { chunkText } from '../utils/chunkText.js';
 
 // Fields folded into the embedded text alongside notes. diagnosis and
