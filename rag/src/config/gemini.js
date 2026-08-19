@@ -1,147 +1,8 @@
-// Plain REST calls to the Gemini API — no SDK, keeps this service's
-// dependency footprint tiny. Uses Node's built-in fetch (Node 18+).
-//
-// Embeddings only. Grounded answer generation lives in openrouter.js —
-// Gemini's chat models kept 404ing as "no longer available to new users"
-// for this key, so answer generation was moved to OpenRouter (routes to
-// a free model) while embeddings (a different, non-chat endpoint) stayed
-// here since gemini-embedding-001 has no OpenRouter equivalent.
-import { GEMINI_API_KEYS } from './env.js';
-
-const API_BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
-const EMBEDDING_MODEL = 'gemini-embedding-001';
-const EMBEDDING_DIMENSIONS = 768;
-// Same alias as backend/services/certificateParserService.js uses — kept in
-// sync manually since this is a separate service on purpose (see README).
-const VISION_MODEL = 'gemini-flash-latest';
-
-async function callGeminiWithKey(path, body, apiKey) {
-  const url = `${API_BASE}/${path}`;
-  let res;
-  try {
-    res = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-goog-api-key': apiKey,
-      },
-      body: JSON.stringify(body),
-    });
-  } catch (err) {
-    // Network-level failure (DNS, connection reset, etc.)
-    throw new Error(`Gemini API request to ${path} failed (network error): ${err.message}`);
-  }
-
-  const text = await res.text();
-  let json;
-  try {
-    json = text ? JSON.parse(text) : {};
-  } catch (err) {
-    throw new Error(`Gemini API returned non-JSON response from ${path}: ${text.slice(0, 300)}`);
-  }
-
-  if (!res.ok) {
-    const message = json?.error?.message || res.statusText || 'unknown error';
-    const error = new Error(`Gemini API error from ${path} (HTTP ${res.status}): ${message}`);
-    error.status = res.status;
-    throw error;
-  }
-
-  return json;
-}
-
-// Transient failures worth retrying with the next key: 429 (this key's
-// quota exhausted — a different key has its own separate quota) and 503
-// (Google's servers momentarily overloaded — not key-specific, but a
-// retry, especially against a different key, has a real chance of landing
-// on a healthy backend). Anything else (400, 401, malformed response, ...)
-// is a real error that switching keys won't fix.
-const RETRYABLE_STATUSES = new Set([429, 503]);
-
-/**
- * Calls Gemini with the first configured key; on a retryable failure (429
- * rate-limit or 503 transient overload), automatically retries the same
- * request with the next key in GEMINI_API_KEYS, and so on. Each free-tier
- * key has its own daily quota, so this multiplies effective capacity
- * without needing paid billing, and also gives a 503 extra attempts to
- * clear up. Any other error (bad request, network failure, etc.) fails
- * immediately without trying other keys.
- */
-async function callGemini(path, body) {
-  if (GEMINI_API_KEYS.length === 0) {
-    throw new Error('callGemini: no Gemini API keys configured (set GEMINI_API_KEYS or GEMINI_API_KEY)');
-  }
-
-  let lastError;
-  for (let i = 0; i < GEMINI_API_KEYS.length; i += 1) {
-    try {
-      // eslint-disable-next-line no-await-in-loop
-      return await callGeminiWithKey(path, body, GEMINI_API_KEYS[i]);
-    } catch (err) {
-      lastError = err;
-      const isLastKey = i === GEMINI_API_KEYS.length - 1;
-      if (RETRYABLE_STATUSES.has(err.status) && !isLastKey) {
-        console.warn(
-          `[gemini] key ${i + 1}/${GEMINI_API_KEYS.length} failed (HTTP ${err.status}), trying next key...`
-        );
-        continue;
-      }
-      throw err;
-    }
-  }
-  throw lastError;
-}
-
-/**
- * Embed a single piece of text with gemini-embedding-001, truncated to
- * EMBEDDING_DIMENSIONS via outputDimensionality (MRL truncation — loses
- * very little quality vs the native 3072-dim output).
- *
- * Throws on any failure or dimension mismatch — callers must not swallow
- * this, a bad embedding must never be silently stored or padded.
- */
-export async function embedText(text, { taskType = 'RETRIEVAL_DOCUMENT' } = {}) {
-  if (!text || !text.trim()) {
-    throw new Error('embedText: refusing to embed empty/blank text');
-  }
-
-  const json = await callGemini(`${EMBEDDING_MODEL}:embedContent`, {
-    content: { parts: [{ text }] },
-    outputDimensionality: EMBEDDING_DIMENSIONS,
-    taskType,
-  });
-
-  const embedding = json?.embedding?.values;
-
-  if (!Array.isArray(embedding)) {
-    throw new Error(
-      'Gemini embedContent returned no embedding values (unexpected response shape)'
-    );
-  }
-  if (embedding.length !== EMBEDDING_DIMENSIONS) {
-    // Hard fail rather than pad/truncate ourselves — a silent dimension
-    // mismatch here would corrupt similarity search results.
-    throw new Error(
-      `Gemini returned a ${embedding.length}-dim embedding, expected ${EMBEDDING_DIMENSIONS}. ` +
-        'Refusing to store — check outputDimensionality support for gemini-embedding-001.'
-    );
-  }
-
-  return embedding;
-}
-
-/**
- * Embed many chunks. Sequential by default to stay well within free-tier
- * rate limits; call sites can parallelize later if needed.
- */
-export async function embedTexts(texts, opts) {
-  const results = [];
-  for (const text of texts) {
-    // eslint-disable-next-line no-await-in-loop
-    results.push(await embedText(text, opts));
-  }
-  return results;
-}
+// Gemini Vision OCR for report auto-fill. Transport, key rotation, and model
+// fallback now all live in ./aiClient.js (the shared failover client used by
+// every AI feature in this service) — this file just owns the extraction
+// prompt and the response shaping specific to report fields.
+import { runAI } from './aiClient.js';
 
 // Fields the model is allowed to report as "unclear" — matches the keys
 // returned in `fields` below (minus `category`, which always gets a
@@ -205,27 +66,27 @@ Also return an "unclear" array listing exactly which of these field names (from:
 Respond strictly in JSON format with exactly these keys. Example:
 {"title": "Diabetes Follow-up", "doctor": "Dr. Ananya Sharma", "hospital": "", "reportDate": "2026-08-09", "category": "Prescription", "diagnosis": "Type 2 Diabetes Mellitus", "medicines": "Metformin 500mg twice daily", "notes": "Fasting blood glucose 162 mg/dL, HbA1c 7.8%. BP 138/88.", "unclear": ["hospital"]}`;
 
-  const json = await callGemini(`${VISION_MODEL}:generateContent`, {
-    contents: [
-      {
-        parts: [
-          { inlineData: { mimeType: payload.mime, data: payload.data } },
-          { text: promptText },
-        ],
-      },
-    ],
-    generationConfig: { responseMimeType: 'application/json' },
+  // Routed through the shared failover client: walks flash-lite -> flash ->
+  // 3.1-flash-lite across all 4 keys, then OpenRouter. Note gemini-2.0-flash
+  // was dropped from the ladder — it is retired (404) as of 2026-08-19.
+  const res = await runAI({
+    task: 'vision-ocr',
+    input: promptText,
+    file: { data: payload.data, mime: payload.mime },
+    json: true,
+    label: 'extract',
   });
 
-  const candidate = json?.candidates?.[0];
-  const jsonText = candidate?.content?.parts?.map((p) => p.text).join('') ?? '';
-
-  if (!jsonText.trim()) {
-    const finishReason = candidate?.finishReason;
-    throw new Error(
-      `Gemini Vision returned no text (finishReason: ${finishReason || 'unknown'})`
-    );
+  // Total exhaustion. Must be checked BEFORE JSON.parse — the degraded value
+  // is a friendly sentence, not JSON, and would throw a confusing parse error.
+  // The caller (routes/extract.js) already shows "fill the form manually".
+  if (!res.ok) {
+    const err = new Error('Report extraction unavailable: all AI providers exhausted');
+    err.degraded = true;
+    throw err;
   }
+
+  const jsonText = res.text;
 
   let parsed;
   try {
@@ -256,5 +117,3 @@ Respond strictly in JSON format with exactly these keys. Example:
 
   return { fields, unclear };
 }
-
-export { EMBEDDING_DIMENSIONS, EMBEDDING_MODEL, VISION_MODEL };

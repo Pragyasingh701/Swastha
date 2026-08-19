@@ -1,6 +1,7 @@
 import dotenv from 'dotenv';
 import fs from 'fs';
 import path from 'path';
+import { runAI } from './aiClient.js';
 
 if (fs.existsSync('./backend/.env')) {
   dotenv.config({ path: './backend/.env' });
@@ -51,11 +52,19 @@ async function fileToBase64Payload(fileInput) {
 }
 
 /**
- * Vision AI Medical Certificate Engine (Google Gemini 2.0 Flash AI - 100% Free API)
+ * Vision AI Medical Certificate Engine.
+ *
+ * Routed through the shared failover client (backend/services/aiClient.js):
+ * rotates all 4 Gemini keys, then flash-lite -> flash -> 3.1-flash-lite. The
+ * previous inline implementation had a `let lastError` declared inside an
+ * `if (geminiKey)` block but read outside it — every failure path threw a
+ * ReferenceError instead of returning `{ error }`. Fixed as part of this
+ * rewrite; runAI never throws for this task, so there's no equivalent trap
+ * here to begin with. gemini-2.0-flash (the old second fallback model) is
+ * also dropped — verified retired (404) as of 2026-08-19.
  */
 async function parseCertificateWithGeminiAI(payload, doctorData = {}) {
-  const geminiKey = process.env.GEMINI_API_KEY;
-  if (!geminiKey || !payload) return null;
+  if (!payload) return null;
 
   const promptText = `Analyze this uploaded document image. Determine if it is an official Medical Registration Certificate or Medical Council License.
 Extract the following fields:
@@ -70,60 +79,27 @@ Extract the following fields:
 Respond strictly in JSON format. Example:
 {"isMedicalCertificate": true, "regNumber": "NMC/25007", "doctorName": "Dr. Aarav Sharma", "medicalCouncil": "National Medical Commission", "qualifications": ["MBBS"], "expiryDate": null, "isExpired": false}`;
 
-  if (geminiKey) {
-    const modelsToTry = ['gemini-flash-latest', 'gemini-2.0-flash'];
-    let lastError = null;
+  const res = await runAI({
+    task: 'vision-ocr',
+    input: promptText,
+    file: { data: payload.data, mime: payload.mime },
+    json: true,
+    label: 'certificate',
+  });
 
-    for (const modelName of modelsToTry) {
-      for (let attempt = 1; attempt <= 2; attempt++) {
-        try {
-          const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${geminiKey}`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              contents: [
-                {
-                  parts: [
-                    { inlineData: { mimeType: payload.mime, data: payload.data } },
-                    { text: promptText },
-                  ],
-                },
-              ],
-              generationConfig: { responseMimeType: 'application/json' },
-            }),
-          });
-
-          const data = await response.json();
-
-          if (response.status === 429) {
-            lastError = data.error?.message || 'Quota limit exceeded for Gemini API Key.';
-            console.warn(`⏳ Gemini Vision AI Rate Limit (${modelName}):`, lastError);
-            await new Promise(r => setTimeout(r, 1000));
-            continue;
-          }
-
-          if (response.ok) {
-            const jsonText = data.candidates?.[0]?.content?.parts?.[0]?.text;
-            if (jsonText) {
-              const parsed = JSON.parse(jsonText);
-              return evaluateParsedCertificate(parsed, doctorData);
-            }
-          } else if (data.error) {
-            lastError = data.error.message;
-          }
-        } catch (gErr) {
-          lastError = gErr.message;
-          console.warn('Gemini Vision AI notice:', gErr.message);
-        }
-      }
-    }
+  if (!res.ok) {
+    // Every key/model/provider exhausted. processMedicalCertificate's caller
+    // already turns this into a friendly validationError, never a raw 500.
+    return { error: res.text };
   }
 
-  if (lastError) {
-    console.warn('Gemini Vision AI processing warning/failure:', lastError);
+  try {
+    const parsed = JSON.parse(res.text);
+    return evaluateParsedCertificate(parsed, doctorData);
+  } catch (err) {
+    console.warn('Gemini Vision AI returned non-JSON extraction result:', err.message);
+    return { error: 'Vision AI returned an unreadable response.' };
   }
-
-  return lastError ? { error: lastError } : null;
 }
 
 /**
@@ -160,7 +136,7 @@ function evaluateParsedCertificate(parsed, doctorData = {}) {
 
   return {
     success: isVerified,
-    engine: 'Google Gemini 2.0 Flash Vision AI',
+    engine: 'Google Gemini Vision AI',
     isMedicalCertificate,
     validationError,
     extractedData: {
@@ -192,7 +168,7 @@ export async function processMedicalCertificate(fileInput, doctorData = {}) {
     };
   }
 
-  if (!process.env.GEMINI_API_KEY) {
+  if (!process.env.GEMINI_API_KEY && !process.env.GEMINI_API_KEYS) {
     return {
       success: false,
       engine: 'Gemini Vision AI',
@@ -209,7 +185,7 @@ export async function processMedicalCertificate(fileInput, doctorData = {}) {
     };
   }
 
-  // 1. Process via Gemini 2.0 Flash Vision AI
+  // 1. Process via Gemini Vision AI (shared failover client)
   const aiResult = await parseCertificateWithGeminiAI(payload, doctorData);
   if (aiResult && !aiResult.error) {
     return aiResult;

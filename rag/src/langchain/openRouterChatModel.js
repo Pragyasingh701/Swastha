@@ -1,18 +1,18 @@
-// LangChain-compatible wrapper around the existing OpenRouter caller.
+// LangChain-compatible wrapper around the shared AI failover client.
 //
-// Why not @langchain/google-genai with gemini-2.5-flash: this service
-// already tried that. See the comment at the top of src/config/gemini.js —
-// Gemini's chat models returned "no longer available to new users" 404s
-// for these keys, which is why generateGroundedAnswer moved to OpenRouter
-// in the first place. Wrapping the working path keeps the conversational
-// feature on the same models (and the same 429/503 multi-model fallback)
-// that the one-shot endpoint already depends on in production.
+// Previously this called OpenRouter directly, because Gemini's chat models
+// were returning "no longer available to new users" 404s for these keys.
+// Re-probed 2026-08-19: gemini-flash-lite-latest and gemini-flash-latest
+// both answer 200 on the current keys, so runAI now tries Gemini first
+// (4 keys of headroom) and falls through to OpenRouter automatically. If
+// Gemini regresses to 404 again, MODEL_GONE handling skips it with no
+// code change needed.
 //
 // SimpleChatModel is the minimal LangChain chat-model contract: implement
 // _call(messages) -> string and the rest of the Runnable surface (invoke,
 // pipe, batch, streaming shims) comes from the base class.
 import { SimpleChatModel } from '@langchain/core/language_models/chat_models';
-import { generateGroundedAnswer } from '../config/openrouter.js';
+import { runAI } from '../config/aiClient.js';
 
 /**
  * Flattens LangChain's message array into the single-user-message prompt
@@ -43,9 +43,13 @@ export class OpenRouterChatModel extends SimpleChatModel {
   }
 
   async _call(messages) {
-    // generateGroundedAnswer already walks CHAT_MODELS in order and retries
-    // the next model on 429/503, so no retry logic is duplicated here.
-    return generateGroundedAnswer(messagesToPrompt(messages));
+    // runAI walks every key, model and provider internally, so no retry
+    // logic is duplicated here. On total exhaustion it resolves with the
+    // friendly fallback text rather than throwing — SimpleChatModel must
+    // return a string, so the degraded sentence becomes the reply and the
+    // user sees a graceful message instead of a 500.
+    const r = await runAI({ task: 'generation', input: messagesToPrompt(messages), label: 'chat' });
+    return r.text;
   }
 }
 

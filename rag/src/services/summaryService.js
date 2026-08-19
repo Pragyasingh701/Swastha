@@ -1,4 +1,8 @@
-import { generateGroundedAnswer } from '../config/openrouter.js';
+// Routed through the shared failover client: Gemini (4 keys) -> OpenRouter.
+// Never throws — on total exhaustion the friendly fallback text becomes the
+// "summary" that gets stored, which is honest (it says try again) rather
+// than leaving the summary column stuck empty with no visible cause.
+import { runAI } from '../config/aiClient.js';
 
 /**
  * Generate a plain-language AI summary of a full medical report, covering
@@ -42,6 +46,6 @@ ${lines.join('\n')}
 
 Summary:`;
 
-  const summary = await generateGroundedAnswer(prompt);
-  return summary;
+  const res = await runAI({ task: 'generation', input: prompt, label: 'summary' });
+  return res.text;
 }

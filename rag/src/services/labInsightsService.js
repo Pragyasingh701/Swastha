@@ -1,4 +1,5 @@
-import { generateGroundedAnswer } from '../config/openrouter.js';
+// Routed through the shared failover client: Gemini (4 keys) -> OpenRouter.
+import { runAI } from '../config/aiClient.js';
 
 // Lab Insights needs numbers a chart can plot, but reports only ever store
 // free text ("Key Results / Values" like "Hemoglobin 13.2 g/dL, WBC
@@ -91,11 +92,20 @@ Rules:
 - "followUps" should have 0-3 items — only suggest a follow-up if the records give a real reason (an abnormal trend, a stated upcoming need, etc). Do not invent generic advice.
 - If there isn't enough information for a field, use an empty array or null as appropriate — do not fabricate to fill it in.`;
 
-  const raw = await generateGroundedAnswer(prompt);
+  const gen = await runAI({ task: 'generation', input: prompt, label: 'lab-insights' });
+
+  // Must check `ok` BEFORE extractJson — the degraded value is a friendly
+  // sentence, not JSON, and would otherwise surface as a confusing
+  // "unparsable output" error instead of the real cause (every provider
+  // exhausted). routes/labInsights.js already turns this throw into a
+  // friendly 500, so exhaustion still degrades gracefully to the user.
+  if (!gen.ok) {
+    throw new Error(`Lab insights generation unavailable: ${gen.error_code}`);
+  }
 
   let parsed;
   try {
-    parsed = extractJson(raw);
+    parsed = extractJson(gen.text);
   } catch (err) {
     throw new Error(`Lab insights model returned unparsable output: ${err.message}`);
   }
