@@ -43,16 +43,19 @@ router.post('/link', async (req, res) => {
     return res.status(401).json({ message: 'Authentication required.' });
   }
 
-  const patientUserId = String(req.body?.patientUserId ?? req.body?.userId ?? '').trim();
+  // Accept only patientCode from the client. Do not accept raw user IDs for linking.
+  const rawPatientCode = String(req.body?.patientCode ?? '').trim();
+  // Normalize common user input such as leading '#' (users sometimes paste codes with #)
+  const patientCode = rawPatientCode.replace(/^#/, '').trim();
 
-  if (!patientUserId) {
-    return res.status(400).json({ message: 'Patient user ID is required.' });
+  if (!patientCode) {
+    return res.status(400).json({ message: 'Patient code is required.' });
   }
 
   try {
     const result = await linkDoctorToPatient({
       doctorId: authUser.userId,
-      patientUserId,
+      patientCode,
     });
 
     return res.json({

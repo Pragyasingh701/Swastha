@@ -1,3 +1,4 @@
+﻿import { getAuthHeader } from '../api/client';
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5001/api';
 
 function getStoredAuth() {
@@ -17,11 +18,8 @@ async function request(path, options = {}) {
   const headers = {
     'Content-Type': 'application/json',
     ...(options.headers || {}),
+    ...(getAuthHeader(token)),
   };
-
-  if (token) {
-    headers.Authorization = `Bearer ${token}`;
-  }
 
   const response = await fetch(`${API_BASE_URL}/doctor-patients${path}`, {
     ...options,
@@ -42,10 +40,10 @@ export async function getDoctorPatients() {
   return result.patients || [];
 }
 
-export async function linkPatientToDoctor(patientUserId) {
+export async function linkPatientToDoctor(patientCode) {
   const result = await request('/link', {
     method: 'POST',
-    body: { patientUserId },
+    body: { patientCode },
   });
   return result;
 }
