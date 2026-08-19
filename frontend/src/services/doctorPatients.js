@@ -27,9 +27,13 @@ async function request(path, options = {}) {
     ...(options.body ? { body: JSON.stringify(options.body) } : {}),
   });
 
+  // Try to parse JSON response, but tolerate non-JSON bodies
   const data = await response.json().catch(() => ({}));
+
   if (!response.ok) {
-    throw new Error(data.message || 'Doctor patients request failed');
+    const fallback = `${response.status} ${response.statusText}`;
+    const errMsg = (data && data.message) ? data.message : fallback;
+    throw new Error(errMsg);
   }
 
   return data;
