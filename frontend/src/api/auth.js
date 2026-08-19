@@ -1,1 +1,3 @@
+import { getAuthHeader } from './client';
+
 

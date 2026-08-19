@@ -1090,3 +1090,4 @@ function EventDetails({ event, onClose, onEdit, onDelete }) {
     </div>
   );
 }
+

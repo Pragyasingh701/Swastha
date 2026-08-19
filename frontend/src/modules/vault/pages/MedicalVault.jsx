@@ -979,3 +979,4 @@ function AISummaryView({ report: initialReport, token, onSummaryGenerated, onClo
     </div>
   );
 }
+

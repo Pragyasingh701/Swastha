@@ -1,3 +1,4 @@
+import { getAuthHeader } from './client';
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || `${window.location.origin}/api`;
 
 function getStoredToken() {
@@ -131,3 +132,5 @@ export default {
   generateReportSummary,
   getLabInsights,
 };
+
+

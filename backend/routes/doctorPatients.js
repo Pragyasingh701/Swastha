@@ -43,16 +43,21 @@ router.post('/link', async (req, res) => {
     return res.status(401).json({ message: 'Authentication required.' });
   }
 
-  const patientUserId = String(req.body?.patientUserId ?? req.body?.userId ?? '').trim();
+  // Accept either patientCode (preferred) or legacy patientUserId/userId
+  const rawPatientCode = String(req.body?.patientCode ?? req.body?.patientUserId ?? req.body?.userId ?? '').trim();
 
-  if (!patientUserId) {
-    return res.status(400).json({ message: 'Patient user ID is required.' });
+  if (!rawPatientCode) {
+    return res.status(400).json({ message: 'Patient code is required.' });
   }
 
+  // Normalize: strip leading '#' if present
+  const normalizedPatientCode = rawPatientCode.replace(/^#/, '').trim();
+
   try {
+    // linkDoctorToPatient accepts an identifier which may be a user id or a patient_code; forward normalizedPatientCode as patientUserId
     const result = await linkDoctorToPatient({
       doctorId: authUser.userId,
-      patientUserId,
+      patientUserId: normalizedPatientCode,
     });
 
     return res.json({
