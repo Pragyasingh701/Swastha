@@ -15,7 +15,7 @@
 import { BaseRetriever } from '@langchain/core/retrievers';
 import { Document } from '@langchain/core/documents';
 import { supabase } from '../config/supabase.js';
-import { embedText } from '../config/gemini.js';
+import { embedText } from '../config/aiClient.js';
 import { MATCH_COUNT, SIMILARITY_THRESHOLD } from '../services/searchService.js';
 
 export class ReportEmbeddingsRetriever extends BaseRetriever {

@@ -1,5 +1,8 @@
 import { supabase } from '../config/supabase.js';
-import { embedTexts } from '../config/gemini.js';
+// Routed through the shared failover client: rotates all 4 Gemini keys on
+// quota/auth errors. Still THROWS on total exhaustion (never degrades
+// silently) — a report that is silently unindexed is permanently unfindable.
+import { embedTexts } from '../config/aiClient.js';
 import { chunkText } from '../utils/chunkText.js';
 
 // Fields folded into the embedded text alongside notes. diagnosis and
@@ -82,9 +85,13 @@ export async function processReportEmbeddings(report) {
     );
   }
 
+  // M5 (DB reorg, decision D8): report_embeddings.user_id was renamed to
+  // patient_id — it points at `patients` now. The function's own parameter
+  // name (report.user_id, destructured as `userId` above) is unchanged; it
+  // is only the DB column being written to that's different.
   const rows = chunks.map((chunk_text, chunk_index) => ({
     report_id: reportId,
-    user_id: userId,
+    patient_id: userId,
     chunk_text,
     embedding: vectors[chunk_index],
     chunk_index,

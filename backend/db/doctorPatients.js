@@ -64,8 +64,12 @@ export const getDoctorPatients = async (doctorId) => {
           return null;
         }
 
+        // Post-split: doctor_patient.patient_id always points at `patients`
+        // (see db-code-crossref.md — verified patient_id resolves only to
+        // patient-role rows even before the split), so this looks up
+        // `patients` directly rather than the old shared `users` table.
         const { data: patient, error: patientError } = await supabase
-          .from('users')
+          .from('patients')
           .select('*')
           .eq('id', patientId)
           .maybeSingle();
@@ -144,8 +148,12 @@ export const linkDoctorToPatient = async ({ doctorId, patientUserId }) => {
   let patient = null;
 
   try {
+    // Post-split: searching `patients` directly (was `users` filtered by
+    // role='patient') means a doctor ID or a role-less pending ID can never
+    // match here — the old post-hoc `patient.role !== 'patient'` check is
+    // now structurally guaranteed rather than checked after the fact.
     const { data, error } = await supabase
-      .from('users')
+      .from('patients')
       .select('*')
       .or(`id.eq.${normalizedPatientId},patient_code.eq.${normalizedPatientId}`)
       .maybeSingle();
@@ -162,10 +170,6 @@ export const linkDoctorToPatient = async ({ doctorId, patientUserId }) => {
 
   if (!patient) {
     throw new Error('No patient user found with this ID.');
-  }
-
-  if ((patient.role || '').toLowerCase() !== 'patient') {
-    throw new Error('This user is not registered as a patient.');
   }
 
   const { data: existingLink, error: existingLinkError } = await supabase

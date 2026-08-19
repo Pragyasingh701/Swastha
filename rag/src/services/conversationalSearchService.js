@@ -104,13 +104,14 @@ export async function conversationalSearch({ query, userId, sessionId }) {
     };
   }
 
-  // Join to reports for citation metadata, re-scoped by user_id as defence
-  // in depth (same reasoning as searchService.js).
+  // Join to reports for citation metadata, re-scoped by patient_id as
+  // defence in depth (same reasoning as searchService.js). M5, DB reorg
+  // decision D8: reports.user_id was renamed to patient_id.
   const reportIds = [...new Set(docs.map((d) => d.metadata.reportId))];
   const { data: reports, error: reportsError } = await supabase
     .from('reports')
     .select('id, title, category, report_date, file_url')
-    .eq('user_id', userId)
+    .eq('patient_id', userId)
     .in('id', reportIds);
 
   if (reportsError) {

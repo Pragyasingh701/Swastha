@@ -6,7 +6,7 @@ import path from 'path';
 import fs from 'fs';
 import supabase from '../config/supabase.js';
 import { sendOTPEmail, sendPasswordResetEmail } from '../utils/mailer.js';
-import { findUserByEmail, findUserById, createOrUpdateUser, updateUserRole, updateUserPassword, deleteUserById, generatePatientCode } from '../db/users.js';
+import { findUserByEmail, findUserById, findUserByIdOrPatientCode, createOrUpdateUser, updateUserPassword, deleteUserById, generatePatientCode } from '../db/users.js';
 import { getFamilyVaultForUser, deleteFamilyVaultForUser } from '../db/family.js';
 import { deleteAllReportsForUser } from '../db/reports.js';
 import { processMedicalCertificate } from '../services/certificateParserService.js';
@@ -647,6 +647,14 @@ router.post('/verify-otp', async (req, res) => {
 
 /**
  * POST /api/auth/role
+ *
+ * First-time role selection out of pending_registrations (RoleSelection.jsx).
+ * NOT a role switch — role is immutable once a user has a patients/doctors
+ * row (see backend/db/users.js: createOrUpdateUser leaves `role` untouched
+ * for an already-assigned user, no matter what's sent here). This endpoint
+ * now goes through createOrUpdateUser's promotion path instead of the
+ * removed updateUserRole(), since choosing a role is a table move (pending
+ * -> patients/doctors), not a column update.
  */
 router.post('/role', async (req, res) => {
   const { userId, role } = req.body;
@@ -654,8 +662,13 @@ router.post('/role', async (req, res) => {
     return res.status(400).json({ message: 'UserId and role are required' });
   }
 
-  await updateUserRole(userId, role);
-  return res.json({ message: 'Role updated successfully', role });
+  const existingUser = await findUserById(userId);
+  if (!existingUser) {
+    return res.status(404).json({ message: 'User not found.' });
+  }
+
+  const savedUser = await createOrUpdateUser({ ...existingUser, id: userId, role });
+  return res.json({ message: 'Role updated successfully', role: savedUser.role });
 });
 
 /**
@@ -680,9 +693,17 @@ router.post('/profile', authenticateToken, async (req, res) => {
   }
 
   const isSettingsUpdate = Boolean(profileDetails.isSettingsUpdate || profileDetails.isUpdate);
+  // Role is now immutable once assigned (see backend/db/users.js —
+  // createOrUpdateUser forces role to stay put for any already-assigned
+  // user). So userToUpdate.role !== targetRole can only be true here when
+  // userToUpdate.role is 'none' — i.e. this is FIRST-TIME role selection
+  // out of pending_registrations, never a genuine switch. Kept the name
+  // isRoleSwitch (rather than renaming) to keep this diff minimal — the
+  // validation behaviour below (require full patient/doctor fields) is
+  // unchanged and still correct for that first-time-selection case.
   const isRoleSwitch = Boolean(profileDetails.isRoleSwitch || (userToUpdate && userToUpdate.role !== targetRole));
 
-  // Patient Mandatory Fields Validation (for registration OR role switch to patient)
+  // Patient Mandatory Fields Validation (for registration OR first-time role selection to patient)
   if (targetRole === 'patient' && (!isSettingsUpdate || isRoleSwitch)) {
     const { fullName, dob, bloodGroup, phone, gender } = profileDetails;
     const nameVal = fullName || profileDetails.name;
@@ -1099,20 +1120,10 @@ router.get('/users/:userId', async (req, res) => {
   }
 
   try {
-    let user = await findUserById(userId);
-
-    if (!user && supabase) {
-      const normalizedUserId = String(userId).trim();
-      const { data, error } = await supabase
-        .from('users')
-        .select('*')
-        .or(`id.eq.${normalizedUserId},patient_code.eq.${normalizedUserId}`)
-        .maybeSingle();
-
-      if (!error && data) {
-        user = data;
-      }
-    }
+    // findUserByIdOrPatientCode checks id across patients/doctors/pending
+    // first (matching the old findUserById), then falls back to patients'
+    // patient_code (the only table that has that column post-split).
+    const user = await findUserByIdOrPatientCode(userId);
 
     if (!user) {
       return res.status(404).json({ message: 'No user found with this ID.' });
