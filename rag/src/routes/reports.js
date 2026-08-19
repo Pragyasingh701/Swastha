@@ -16,12 +16,15 @@ const router = express.Router();
  * Body: the saved report as returned by backend POST /api/reports
  *   { id, title, doctor, hospital, category, reportDate, diagnosis,
  *     medicines, notes, fileUrl, ... }
- * Chunk + embed its notes so it becomes searchable. user_id comes from the
- * JWT, not the body.
+ * Chunk + embed title/diagnosis/medicines/notes so it becomes searchable —
+ * not just notes (see embeddingService.js: diagnosis/medicines used to be
+ * silently dropped here, so "what medicines was this patient prescribed?"
+ * would find the right report but the chunk had no drug names in it).
+ * user_id comes from the JWT, not the body.
  */
 router.post('/index', requireAuth, async (req, res) => {
   const userId = req.user.userId;
-  const { id, notes, reportDate, report_date } = req.body || {};
+  const { id, title, diagnosis, medicines, notes, reportDate, report_date } = req.body || {};
 
   if (!id) {
     return res.status(400).json({ error: 'id (report id) is required' });
@@ -31,6 +34,9 @@ router.post('/index', requireAuth, async (req, res) => {
     const result = await processReportEmbeddings({
       id,
       user_id: userId,
+      title,
+      diagnosis,
+      medicines,
       notes,
       report_date: report_date || reportDate,
     });

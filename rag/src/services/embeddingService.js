@@ -2,26 +2,45 @@ import { supabase } from '../config/supabase.js';
 import { embedTexts } from '../config/gemini.js';
 import { chunkText } from '../utils/chunkText.js';
 
+// Fields folded into the embedded text alongside notes. diagnosis and
+// medicines live in their own `reports` columns (shown directly in the UI
+// card) but were previously NEVER embedded — only `notes` was chunked, so
+// questions like "what medicines was this patient prescribed?" could find
+// the right report by similarity but the retrieved chunk genuinely
+// contained no drug names, and the grounded prompt correctly refused to
+// answer rather than invent one. Folding these in fixes that at the
+// source for both /api/search and /api/search/chat, which both read from
+// the same report_embeddings table.
+function buildEmbeddableText({ title, diagnosis, medicines, notes }) {
+  const lines = [];
+  if (title) lines.push(`Title: ${title}`);
+  if (diagnosis) lines.push(`Diagnosis: ${diagnosis}`);
+  if (medicines) lines.push(`Medicines: ${medicines}`);
+  if (notes) lines.push(notes);
+  return lines.join('\n');
+}
+
 /**
- * Process (or re-process) a single report's `notes` into report_embeddings.
+ * Process (or re-process) a single report's title/diagnosis/medicines/notes
+ * into report_embeddings.
  *
  * Idempotency: upserts on the (report_id, chunk_index) unique constraint,
- * so re-running on the same notes overwrites existing rows rather than
- * duplicating them. If the new notes produce FEWER chunks than a previous
- * run, the leftover higher-index rows from the old run are explicitly
- * deleted — otherwise stale chunks from a previous, longer version of the
- * notes would remain searchable forever.
+ * so re-running on the same content overwrites existing rows rather than
+ * duplicating them. If the new content produces FEWER chunks than a
+ * previous run, the leftover higher-index rows from the old run are
+ * explicitly deleted — otherwise stale chunks from a previous, longer
+ * version would remain searchable forever.
  *
- * Call this after any insert/update to `reports` that touches `notes`.
+ * Call this after any insert/update to `reports` that touches these fields.
  *
- * @param {object} report - must include id, user_id, notes (and ideally
- *   title/category/report_date/file_url are already in `reports` itself —
- *   we don't duplicate them here, the search endpoint joins back to
- *   `reports` for that).
+ * @param {object} report - must include id, user_id; title/diagnosis/
+ *   medicines/notes are folded into the embedded text if present (category/
+ *   report_date/file_url stay in `reports` itself — the search endpoint
+ *   joins back to `reports` for that).
  * @returns {{ reportId: string|number, chunksWritten: number }}
  */
 export async function processReportEmbeddings(report) {
-  const { id: reportId, user_id: userId, notes } = report || {};
+  const { id: reportId, user_id: userId, title, diagnosis, medicines, notes } = report || {};
 
   if (!reportId || !userId) {
     throw new Error(
@@ -29,7 +48,8 @@ export async function processReportEmbeddings(report) {
     );
   }
 
-  const chunks = chunkText(notes);
+  const embeddableText = buildEmbeddableText({ title, diagnosis, medicines, notes });
+  const chunks = chunkText(embeddableText);
 
   if (chunks.length === 0) {
     // Nothing to embed (e.g. notes cleared out). Remove any stale
@@ -47,7 +67,7 @@ export async function processReportEmbeddings(report) {
     }
 
     console.log(
-      `[embeddingService] report ${reportId} has no embeddable notes text; embeddings cleared, 0 chunks written`
+      `[embeddingService] report ${reportId} has no embeddable text (title/diagnosis/medicines/notes all empty); embeddings cleared, 0 chunks written`
     );
     return { reportId, chunksWritten: 0 };
   }
