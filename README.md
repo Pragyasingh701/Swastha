@@ -88,9 +88,6 @@ Run the following SQL snippets in your **Supabase Dashboard > SQL Editor** to co
 
 ```sql
 -- 1. Users Table (Patient & Doctor accounts)
--- Note: patient_code is auto-generated (unique random 6-digit string) for patient accounts
--- in backend/db/users.js and used by doctors to link a patient (see routes/auth.js). If your
--- users table predates this field, add it manually: ALTER TABLE users ADD COLUMN patient_code VARCHAR(10) UNIQUE;
 CREATE TABLE IF NOT EXISTS users (
   id VARCHAR(255) PRIMARY KEY,
   email VARCHAR(255) UNIQUE NOT NULL,
@@ -99,7 +96,6 @@ CREATE TABLE IF NOT EXISTS users (
   picture TEXT,
   role VARCHAR(50) DEFAULT 'patient',
   auth_provider VARCHAR(50) DEFAULT 'email',
-  patient_code VARCHAR(10) UNIQUE,
   specialty VARCHAR(255),
   license_number VARCHAR(255),
   created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
@@ -237,8 +233,6 @@ GEMINI_API_KEY=your_gemini_api_key_here
 # Swastha RAG microservice base URL — triggers AI summary generation on report save
 RAG_BASE_URL=http://localhost:3010/api
 ```
-
-See `backend/.env.example` for the full list, including optional overrides (email sender address, auth-token TTL, custom table/column names).
 
 ### 2. Standalone RAG Microservice Setup (`rag/.env`)
 
