@@ -119,9 +119,23 @@ export function buildPedigreeTiers(members = []) {
   return { tiers, excluded };
 }
 
+function normalizeConditionName(value) {
+  return String(value || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 function matchesCondition(conditionName, taxonomyEntry) {
-  const normalized = String(conditionName || '').toLowerCase();
-  return taxonomyEntry.keywords.some((keyword) => normalized.includes(keyword));
+  const normalized = normalizeConditionName(conditionName);
+  if (!normalized) return false;
+
+  return taxonomyEntry.keywords.some((keyword) => {
+    const normalizedKeyword = normalizeConditionName(keyword);
+    return normalizedKeyword && (normalized.includes(normalizedKeyword) || normalizedKeyword.includes(normalized));
+  });
 }
 
 export function computeHereditaryRisks(members = []) {
@@ -132,18 +146,23 @@ export function computeHereditaryRisks(members = []) {
 
   return HEREDITARY_CONDITIONS.map((entry) => {
     const contributors = [];
+    const seen = new Set();
 
     bloodRelatives.forEach((member) => {
       const matchingConditions = (Array.isArray(member.conditions) ? member.conditions : [])
         .filter((condition) => matchesCondition(condition.name, entry));
 
       matchingConditions.forEach((condition) => {
+        const key = `${member.id}:${normalizeConditionName(condition.name)}`;
+        if (seen.has(key)) return;
+        seen.add(key);
+
         contributors.push({
           memberId: member.id,
           memberName: member.name,
           relationship: member.relationship,
           degree: degreeOf(member.relationship),
-          ageOfOnset: condition.ageOfOnset ?? null,
+          ageOfOnset: Number.isFinite(Number(condition.ageOfOnset)) ? Number(condition.ageOfOnset) : null,
         });
       });
     });

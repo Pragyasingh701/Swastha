@@ -1,4 +1,4 @@
-import React, { useMemo } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar, ResponsiveContainer, Tooltip } from "recharts";
 import { Network, AlertTriangle, ShieldCheck, Users } from "lucide-react";
 import {
@@ -21,16 +21,29 @@ const SEVERITY_STYLES = {
   },
 };
 
-function MemberCard({ member, flagged }) {
+function getConditionTone(conditionName) {
+  const normalized = String(conditionName || "").toLowerCase();
+  if (normalized.includes("diabetes") || normalized.includes("hypertension") || normalized.includes("blood pressure")) {
+    return "bg-amber-100 text-amber-700";
+  }
+  if (normalized.includes("cancer") || normalized.includes("heart") || normalized.includes("coronary") || normalized.includes("stroke")) {
+    return "bg-rose-100 text-rose-700";
+  }
+  return "bg-slate-100 text-slate-700";
+}
+
+function MemberCard({ member, flagged, selected, onSelect }) {
   const styles = flagged ? SEVERITY_STYLES[flagged] : null;
 
   return (
-    <div
-      className={`min-w-[160px] rounded-xl border bg-white p-3 shadow-sm ${
+    <button
+      type="button"
+      onClick={() => onSelect?.(member.id)}
+      className={`min-w-[170px] rounded-xl border bg-white p-3 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md ${
         styles ? styles.ring : "border-slate-200"
-      } ${member.isSelf ? "bg-blue-50 border-blue-300" : ""}`}
+      } ${member.isSelf ? "border-blue-300 bg-blue-50" : ""} ${selected ? "ring-2 ring-blue-400" : ""}`}
     >
-      <p className="text-sm font-semibold text-slate-900 truncate">{member.name}</p>
+      <p className="truncate text-sm font-semibold text-slate-900">{member.name}</p>
       <p className="text-xs text-slate-500">
         {member.isSelf ? "Patient" : member.relationship}
         {member.age != null && member.age !== "" ? ` · ${member.age}y` : ""}
@@ -40,26 +53,40 @@ function MemberCard({ member, flagged }) {
       ) : null}
       {member.conditions.length > 0 ? (
         <div className="mt-2 flex flex-wrap gap-1">
-          {member.conditions.map((condition, index) => (
+          {member.conditions.slice(0, 3).map((condition, index) => (
             <span
               key={`${condition.name}-${index}`}
-              className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-600"
+              className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium ${getConditionTone(condition.name)}`}
             >
               {condition.name}
             </span>
           ))}
         </div>
       ) : null}
-    </div>
+    </button>
   );
 }
 
 export default function FamilyTreeTab({ members = [], loading = false }) {
+  const [selectedMemberId, setSelectedMemberId] = useState(null);
   const { tiers, excluded } = useMemo(() => buildPedigreeTiers(members), [members]);
   const risks = useMemo(() => computeHereditaryRisks(members), [members]);
   const roadmap = useMemo(() => buildScreeningRoadmap(risks), [risks]);
   const flaggedIds = useMemo(() => idsWithFlaggedConditions(risks), [risks]);
   const flaggedRisks = risks.filter((risk) => risk.severity === "high" || risk.severity === "moderate");
+
+  useEffect(() => {
+    if (!members.length) {
+      setSelectedMemberId(null);
+      return;
+    }
+
+    const selfMember = members.find((member) => member.isSelf || member.relationship?.toLowerCase() === "self");
+    const nextId = selfMember?.id || members[0]?.id || null;
+    setSelectedMemberId((current) => current && members.some((member) => member.id === current) ? current : nextId);
+  }, [members]);
+
+  const selectedMember = members.find((member) => member.id === selectedMemberId) || members[0] || null;
 
   if (loading) {
     return (
@@ -93,24 +120,31 @@ export default function FamilyTreeTab({ members = [], loading = false }) {
           <Network size={16} />
           Family Pedigree
         </h3>
+        <p className="mb-3 text-[11px] text-slate-500">
+          Access is limited to the verified doctor-patient relationship and should be used as decision support only.
+        </p>
         <div className="rounded-2xl border border-slate-200 bg-white p-5 overflow-x-auto">
           {tiers.map((tierGroup, idx) => (
-            <div key={tierGroup.tier}>
+            <div key={tierGroup.tier} className="relative">
               {idx > 0 ? (
-                <div className="flex justify-center py-2">
-                  <div className="w-px h-6 bg-slate-200" />
+                <div className="flex justify-center py-3">
+                  <div className="w-px h-7 bg-slate-200" />
                 </div>
               ) : null}
-              <p className="text-[10px] uppercase tracking-[0.12em] font-semibold text-slate-400 mb-2">
+              <p className="text-[10px] uppercase tracking-[0.12em] font-semibold text-slate-400 mb-3">
                 {tierGroup.label}
               </p>
-              <div className="flex flex-wrap gap-3">
+              <div className="relative flex flex-wrap gap-3">
+                <div className="absolute left-0 right-0 top-1/2 hidden h-px -translate-y-1/2 bg-slate-200 md:block" aria-hidden="true" />
                 {tierGroup.members.map((member) => (
-                  <MemberCard
-                    key={member.id}
-                    member={member}
-                    flagged={flaggedIds.has(member.id) ? risks.find((r) => r.contributors.some((c) => c.memberId === member.id))?.severity : null}
-                  />
+                  <div key={member.id} className="relative z-10">
+                    <MemberCard
+                      member={member}
+                      selected={selectedMemberId === member.id}
+                      onSelect={setSelectedMemberId}
+                      flagged={flaggedIds.has(member.id) ? risks.find((r) => r.contributors.some((c) => c.memberId === member.id))?.severity : null}
+                    />
+                  </div>
                 ))}
               </div>
             </div>
@@ -122,6 +156,50 @@ export default function FamilyTreeTab({ members = [], loading = false }) {
             </p>
           ) : null}
         </div>
+
+        {selectedMember ? (
+          <div className="mt-5 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-xs uppercase tracking-[0.12em] text-slate-400">Selected relative</p>
+                <h4 className="mt-1 text-lg font-semibold text-slate-900">{selectedMember.name}</h4>
+              </div>
+              {selectedMember.isSelf ? (
+                <span className="rounded-full bg-blue-100 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-blue-700">
+                  Patient
+                </span>
+              ) : null}
+            </div>
+
+            <div className="mt-3 flex flex-wrap gap-2 text-xs text-slate-600">
+              <span className="rounded-full bg-white px-2.5 py-1 border border-slate-200">
+                {selectedMember.isSelf ? "Patient" : selectedMember.relationship}
+              </span>
+              {selectedMember.age != null && selectedMember.age !== "" ? (
+                <span className="rounded-full bg-white px-2.5 py-1 border border-slate-200">{selectedMember.age} years</span>
+              ) : null}
+              {!selectedMember.bloodRelative && !selectedMember.isSelf ? (
+                <span className="rounded-full bg-white px-2.5 py-1 border border-slate-200">Married-in</span>
+              ) : null}
+            </div>
+
+            {selectedMember.conditions?.length ? (
+              <div className="mt-3 flex flex-wrap gap-2">
+                {selectedMember.conditions.map((condition, index) => (
+                  <span
+                    key={`${condition.name}-${index}`}
+                    className={`inline-flex items-center rounded-full px-2.5 py-1 text-[10px] font-medium ${getConditionTone(condition.name)}`}
+                  >
+                    {condition.name}
+                    {condition.ageOfOnset != null ? ` · onset ${condition.ageOfOnset}` : ""}
+                  </span>
+                ))}
+              </div>
+            ) : (
+              <p className="mt-3 text-sm text-slate-500">No diagnosed conditions recorded for this relative.</p>
+            )}
+          </div>
+        ) : null}
       </div>
 
       {/* Hereditary Risk Radar */}

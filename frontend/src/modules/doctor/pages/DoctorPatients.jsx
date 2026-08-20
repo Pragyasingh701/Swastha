@@ -294,121 +294,21 @@ export default function DoctorPatients() {
           <ProfileDropdown />
         </header>
 
-        <main className="flex-1 overflow-y-auto p-4 md:p-10 lg:px-12 py-8 space-y-8 overflow-x-hidden">
+        <main className="flex-1 overflow-y-auto p-4 md:p-10 lg:px-12 py-8 space-y-8 overflow-x-hidden bg-[#f5f6f8]">
           <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
             <div>
-              <h2 className="text-5xl font-bold tracking-tight text-[#191b23] ">Patients</h2>
-              <p className="mt-1 text-lg text-[#434655] ">Manage patient records and clinical history.</p>
+              <h2 className="text-5xl font-bold tracking-[-0.04em] text-[#1e2432]">Patients</h2>
+              <p className="mt-2 text-[1.05rem] text-[#4f586e]">Manage patient records and clinical history.</p>
             </div>
 
             <div className="flex flex-wrap items-center gap-3 relative">
               <button
                 type="button"
-                onClick={() => setShowFilterPanel(!showFilterPanel)}
-                className={`h-11 px-6 rounded-lg border transition-colors flex items-center gap-2 shadow-sm ${
-                  showFilterPanel || activeFiltersCount > 0
-                    ? 'border-blue-300 bg-blue-50 dark:bg-blue-500/10 dark:border-blue-500/40 text-blue-600 dark:text-blue-400'
-                    : 'border-[#c3c6d7] dark:border-slate-700 bg-white dark:bg-slate-900 text-[#191b23] dark:text-slate-100 hover:bg-[#f3f3fe] dark:hover:bg-slate-800'
-                }`}
-              >
-                <span className="material-symbols-outlined text-[18px]">filter_list</span>
-                Filter
-                {activeFiltersCount > 0 && (
-                  <span className="ml-1 px-2 py-0.5 bg-blue-600 dark:bg-blue-600 text-white text-xs font-semibold rounded-full">
-                    {activeFiltersCount}
-                  </span>
-                )}
-              </button>
-
-              {/* Filter Panel */}
-              {showFilterPanel && selectedPatient && (
-                <div className="absolute top-full mt-2 right-0 z-50 bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-lg p-5 w-96 max-w-[calc(100vw-2rem)]">
-                  <div className="flex items-center justify-between mb-4">
-                    <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">Filter Medical Records</h3>
-                    <button
-                      type="button"
-                      onClick={() => setShowFilterPanel(false)}
-                      className="p-1 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-colors"
-                    >
-                      <X size={16} className="text-slate-500" />
-                    </button>
-                  </div>
-
-                  <div className="space-y-4">
-                    {/* Category Filter */}
-                    {getAvailableCategories().length > 0 && (
-                      <div>
-                        <label className="text-xs font-semibold uppercase tracking-[0.08em] text-slate-600 dark:text-slate-300 mb-2 block">
-                          Category
-                        </label>
-                        <select
-                          value={categoryFilter}
-                          onChange={(e) => setCategoryFilter(e.target.value)}
-                          className="w-full px-3 py-2.5 border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                        >
-                          <option value="">All categories</option>
-                          {getAvailableCategories().map((cat) => (
-                            <option key={cat} value={cat}>
-                              {cat}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                    )}
-
-                    {/* Date Range Filter */}
-                    <div className="space-y-3">
-                      <label className="text-xs font-semibold uppercase tracking-[0.08em] text-slate-600 dark:text-slate-300 block">
-                        Date Range
-                      </label>
-                      <div>
-                        <label className="text-[10px] text-slate-500 dark:text-slate-400 mb-1 block">From</label>
-                        <input
-                          type="date"
-                          value={dateFrom}
-                          onChange={(e) => setDateFrom(e.target.value)}
-                          className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                        />
-                      </div>
-                      <div>
-                        <label className="text-[10px] text-slate-500 dark:text-slate-400 mb-1 block">To</label>
-                        <input
-                          type="date"
-                          value={dateTo}
-                          onChange={(e) => setDateTo(e.target.value)}
-                          className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                        />
-                      </div>
-                    </div>
-
-                    {/* Filter Actions */}
-                    <div className="flex gap-2 pt-3 border-t border-slate-200 dark:border-slate-700">
-                      <button
-                        type="button"
-                        onClick={handleClearAllFilters}
-                        disabled={activeFiltersCount === 0}
-                        className="flex-1 px-3 py-2 text-xs font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                      >
-                        Clear All
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setShowFilterPanel(false)}
-                        className="flex-1 px-3 py-2 text-xs font-medium bg-blue-600 text-white hover:bg-blue-700 rounded-lg transition-colors"
-                      >
-                        Apply Filters
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              )}
-              <button
-                type="button"
                 onClick={() => setIsAddPatientOpen(true)}
-                className="h-11 px-6 rounded-lg bg-[#004ac6] text-white hover:opacity-90 transition-opacity flex items-center gap-2 shadow-sm border-t border-white/20"
+                className="h-11 px-6 rounded-xl bg-[#0c62f2] text-white hover:bg-[#0959e0] transition-colors flex items-center gap-2 shadow-[0_8px_18px_rgba(12,98,242,0.22)] border border-[#0b5ce6]"
               >
                 <span className="material-symbols-outlined text-[18px]">add</span>
-                New Patient
+                <span className="font-semibold">New Patient</span>
               </button>
             </div>
           </div>
@@ -497,94 +397,88 @@ export default function DoctorPatients() {
           {selectedPatient && (
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
               {/* Profile Card */}
-              <div className="lg:col-span-1 rounded-2xl border border-slate-200 bg-white shadow-md overflow-hidden">
-                {/* Profile Header */}
-                <div className="border-b border-slate-200 bg-gradient-to-r from-blue-50 to-blue-100 p-6">
-                  <div className="flex flex-col items-center text-center gap-4 mb-4">
-                    <img
-                      alt="Selected patient"
-                      className="w-24 h-24 rounded-full object-cover border-4 border-white shadow-md"
-                      src={selectedPatient.avatar}
-                    />
-                    <div className="min-w-0 w-full">
-                      <h3 className="text-xl font-bold text-slate-900 truncate">{selectedPatient.name}</h3>
-                      <p className="text-xs text-slate-600 truncate">
-                        {selectedPatient.email || 'No email'}
-                      </p>
-                      <div className="mt-3 flex items-center justify-center gap-2">
-                        <span className="inline-flex items-center rounded-full bg-green-100 px-3 py-1 text-xs font-semibold text-green-700 ">
-                          Active Patient
-                        </span>
+              <div className="lg:col-span-1 rounded-[22px] border border-[#dfe5ef] bg-[#dfeaf6] shadow-[0_10px_30px_rgba(19,31,60,0.06)] overflow-hidden">
+                  <div className="border-b border-[#d8e1ef] bg-[#dfeaf6] p-6">
+                    <div className="flex flex-col items-center text-center gap-4 mb-5">
+                      <div className="flex h-28 w-28 items-center justify-center rounded-full bg-[#2d3a4a] text-[4rem] font-semibold text-white shadow-[inset_0_0_0_2px_rgba(255,255,255,0.18)]">
+                        {selectedPatient.name ? selectedPatient.name.charAt(0).toUpperCase() : 'P'}
+                      </div>
+                      <div className="min-w-0 w-full">
+                        <h3 className="text-[2.3rem] font-bold tracking-[-0.05em] text-[#1f2a37]">{selectedPatient.name}</h3>
+                        <p className="mt-2 text-base text-[#5a6679]">{selectedPatient.email || 'No email'}</p>
+                        <div className="mt-4 flex items-center justify-center gap-2">
+                          <span className="inline-flex items-center rounded-full bg-[#ddf7ea] px-3 py-1 text-[12px] font-semibold text-[#1d8a57]">
+                            Active Patient
+                          </span>
+                        </div>
                       </div>
                     </div>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedPatient(null)}
+                      className="w-full inline-flex items-center justify-center gap-2 rounded-xl border border-[#cfd8e5] bg-white px-3 py-2.5 text-sm font-medium text-[#374151] hover:bg-[#f7f9fc] transition-colors shadow-sm"
+                    >
+                      <XCircle size={14} />
+                      Close Profile
+                    </button>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => setSelectedPatient(null)}
-                    className="w-full inline-flex items-center justify-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 hover:bg-slate-100 transition-colors shadow-sm"
-                  >
-                    <XCircle size={14} />
-                    Close Profile
-                  </button>
-                </div>
 
-                {/* Patient Details Grid */}
-                <div className="p-6 space-y-4">
-                  <div className="rounded-xl bg-slate-50 p-3 border border-slate-200/50 ">
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="material-symbols-outlined text-slate-400 text-[14px]">badge</span>
-                      <p className="text-[9px] uppercase tracking-[0.1em] font-semibold text-slate-500 ">Patient Code</p>
-                    </div>
-                    <p className="text-xs font-bold text-slate-900 break-all ml-6">{(selectedPatient?.patientId || selectedPatient?.patient_code || selectedPatient?.patientUserId || selectedPatient?.id || '—').replace(/^#/, '')}</p>
-                  </div>
-                  <div className="rounded-xl bg-slate-50 p-3 border border-slate-200/50 ">
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="material-symbols-outlined text-slate-400 text-[14px]">phone</span>
-                      <p className="text-[9px] uppercase tracking-[0.1em] font-semibold text-slate-500 ">Phone</p>
-                    </div>
-                    <p className="text-xs font-semibold text-slate-900 ml-6">{selectedPatient.phone || selectedPatient.patient_phone || '—'}</p>
-                  </div>
-                  <div className="rounded-xl bg-slate-50 p-3 border border-slate-200/50 ">
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="material-symbols-outlined text-slate-400 text-[14px]">wc</span>
-                      <p className="text-[9px] uppercase tracking-[0.1em] font-semibold text-slate-500 ">Gender</p>
-                    </div>
-                    <p className="text-xs font-semibold text-slate-900 ml-6">{selectedPatient.gender || selectedPatient.patient_gender || '—'}</p>
-                  </div>
-                  <div className="rounded-xl bg-slate-50 p-3 border border-slate-200/50 ">
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="material-symbols-outlined text-slate-400 text-[14px]">cake</span>
-                      <p className="text-[9px] uppercase tracking-[0.1em] font-semibold text-slate-500 ">Age</p>
-                    </div>
-                    <p className="text-xs font-semibold text-slate-900 ml-6">{selectedPatient.age || '—'}</p>
-                  </div>
-                  <div className="rounded-xl bg-slate-50 p-3 border border-slate-200/50 ">
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="material-symbols-outlined text-slate-400 text-[14px]">bloodtype</span>
-                      <p className="text-[9px] uppercase tracking-[0.1em] font-semibold text-slate-500 ">Blood Type</p>
-                    </div>
-                    <p className="text-xs font-semibold text-slate-900 ml-6">{selectedPatient.blood_group || selectedPatient.patient_blood_group || '—'}</p>
-                  </div>
-                  <div className="rounded-xl bg-slate-50 p-3 border border-slate-200/50 ">
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="material-symbols-outlined text-slate-400 text-[14px]">event</span>
-                      <p className="text-[9px] uppercase tracking-[0.1em] font-semibold text-slate-500 ">DOB</p>
-                    </div>
-                    <p className="text-xs font-semibold text-slate-900 ml-6">
-                      {selectedPatient.dob || selectedPatient.patient_dob ? new Date(selectedPatient.dob || selectedPatient.patient_dob).toLocaleDateString() : '—'}
-                    </p>
-                  </div>
-                  {(selectedPatient.email) && (
-                    <div className="rounded-xl bg-blue-50 border border-blue-200 p-3">
+                  <div className="p-5 space-y-4">
+                    <div className="rounded-xl bg-white/60 p-3 border border-[#ccd9ee]">
                       <div className="flex items-center gap-2 mb-1">
-                        <span className="material-symbols-outlined text-blue-600 text-[14px]">mail</span>
-                        <p className="text-[9px] uppercase tracking-[0.1em] font-semibold text-blue-600 ">Email</p>
+                        <span className="material-symbols-outlined text-slate-500 text-[14px]">badge</span>
+                        <p className="text-[9px] uppercase tracking-[0.1em] font-semibold text-slate-500">Patient Code</p>
                       </div>
-                      <p className="text-xs text-blue-900 break-all ml-6">{selectedPatient.email}</p>
+                      <p className="text-[1.05rem] font-semibold text-slate-900 break-all ml-6">{(selectedPatient?.patientId || selectedPatient?.patient_code || selectedPatient?.patientUserId || selectedPatient?.id || '—').replace(/^#/, '')}</p>
                     </div>
-                  )}
+                    <div className="rounded-xl bg-white/60 p-3 border border-[#ccd9ee]">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="material-symbols-outlined text-slate-500 text-[14px]">phone</span>
+                        <p className="text-[9px] uppercase tracking-[0.1em] font-semibold text-slate-500">Phone</p>
+                      </div>
+                      <p className="text-[1rem] font-semibold text-slate-900 ml-6">{selectedPatient.phone || selectedPatient.patient_phone || '—'}</p>
+                    </div>
+                    <div className="rounded-xl bg-white/60 p-3 border border-[#ccd9ee]">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="material-symbols-outlined text-slate-500 text-[14px]">wc</span>
+                        <p className="text-[9px] uppercase tracking-[0.1em] font-semibold text-slate-500">Gender</p>
+                      </div>
+                      <p className="text-[1rem] font-semibold text-slate-900 ml-6">{selectedPatient.gender || selectedPatient.patient_gender || '—'}</p>
+                    </div>
+                    <div className="rounded-xl bg-white/60 p-3 border border-[#ccd9ee]">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="material-symbols-outlined text-slate-500 text-[14px]">cake</span>
+                        <p className="text-[9px] uppercase tracking-[0.1em] font-semibold text-slate-500">Age</p>
+                      </div>
+                      <p className="text-[1rem] font-semibold text-slate-900 ml-6">{selectedPatient.age || '—'}</p>
+                    </div>
+                    <div className="rounded-xl bg-white/60 p-3 border border-[#ccd9ee]">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="material-symbols-outlined text-slate-500 text-[14px]">bloodtype</span>
+                        <p className="text-[9px] uppercase tracking-[0.1em] font-semibold text-slate-500">Blood Type</p>
+                      </div>
+                      <p className="text-[1rem] font-semibold text-slate-900 ml-6">{selectedPatient.blood_group || selectedPatient.patient_blood_group || '—'}</p>
+                    </div>
+                    <div className="rounded-xl bg-white/60 p-3 border border-[#ccd9ee]">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="material-symbols-outlined text-slate-500 text-[14px]">event</span>
+                        <p className="text-[9px] uppercase tracking-[0.1em] font-semibold text-slate-500">DOB</p>
+                      </div>
+                      <p className="text-[1rem] font-semibold text-slate-900 ml-6">
+                        {selectedPatient.dob || selectedPatient.patient_dob ? new Date(selectedPatient.dob || selectedPatient.patient_dob).toLocaleDateString() : '—'}
+                      </p>
+                    </div>
+                    {(selectedPatient.email) && (
+                      <div className="rounded-xl bg-[#edf5ff] border border-[#cfe0ff] p-3">
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="material-symbols-outlined text-blue-600 text-[14px]">mail</span>
+                          <p className="text-[9px] uppercase tracking-[0.1em] font-semibold text-blue-600">Email</p>
+                        </div>
+                        <p className="text-[0.95rem] text-blue-900 break-all ml-6">{selectedPatient.email}</p>
+                      </div>
+                    )}
+                  </div>
                 </div>
-              </div>
 
               {/* Timeline & Vault Content */}
               <div className="lg:col-span-2 rounded-2xl border border-slate-200 bg-white shadow-md overflow-hidden flex flex-col max-h-[calc(100vh-200px)]">
