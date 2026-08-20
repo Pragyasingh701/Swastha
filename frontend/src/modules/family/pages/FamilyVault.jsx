@@ -680,16 +680,16 @@ export default function FamilyVault() {
         <Sidebar onOpenSettings={() => setIsSettingsOpen(true)} />
         <div className="flex-1 flex flex-col min-w-0 h-screen overflow-hidden">
           <Header userName={user?.name || user?.fullName} userEmail={user?.email} />
-          <section className="shrink-0 border-b border-slate-200 bg-gradient-to-br from-slate-950 via-slate-900 to-blue-950 px-6 py-14 text-white">
-            <div className="mx-auto flex max-w-7xl flex-col gap-8 lg:flex-row lg:items-end lg:justify-between">
-              <div className="max-w-3xl space-y-5">
-                <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm text-white/80 backdrop-blur">
-                  <ShieldCheck size={16} />
+          <section className="shrink-0 border-b border-slate-200 bg-white px-6 py-6 lg:px-8">
+            <div className="mx-auto flex max-w-7xl flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+              <div className="space-y-2">
+                <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-medium text-slate-600 ">
+                  <ShieldCheck size={14} className="text-emerald-600" />
                   Private family health workspace
                 </div>
                 <div>
-                  <h1 className="text-4xl font-bold tracking-tight md:text-5xl">Family Vault</h1>
-                  <p className="mt-4 max-w-2xl text-base leading-7 text-white/70 md:text-lg">
+                  <h1 className="text-2xl font-bold tracking-tight text-slate-900 md:text-3xl">Family Vault</h1>
+                  <p className="mt-1.5 max-w-2xl text-sm text-slate-500 ">
                     Organize family members, relationship tags, and health notes in one secure dashboard.
                   </p>
                 </div>
@@ -703,7 +703,7 @@ export default function FamilyVault() {
                     setNotice('');
                     setShowVaultModal(true);
                   }}
-                  className="inline-flex items-center justify-center gap-2 rounded-2xl border border-white/15 bg-white/10 px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-white/15"
+                  className="inline-flex items-center justify-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-slate-800 shrink-0"
                 >
                   <PlusCircle size={16} />
                   Create Family Vault
