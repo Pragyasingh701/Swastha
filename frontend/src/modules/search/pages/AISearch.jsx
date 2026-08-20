@@ -21,6 +21,9 @@ import {
   FileText,
   Loader2,
   ExternalLink,
+  Heart,
+  FlaskConical,
+  ShieldCheck,
 } from "lucide-react";
 import NotificationBell from "../../../components/Common/NotificationBell";
 
@@ -34,11 +37,27 @@ const navItems = [
   { label: "Ask Swastha", icon: Sparkles, route: "/search" },
 ];
 
+// Each example question now carries its own icon + color, matching the
+// reference design (a small colored badge next to each suggestion).
 const EXAMPLE_QUESTIONS = [
-  "What medications was I prescribed for hypertension?",
-  "When was my last blood test and what were the results?",
-  "Summarize my vaccination history.",
+  {
+    text: "What medications was I prescribed for hypertension?",
+    icon: Heart,
+    tone: "bg-rose-50 text-rose-500",
+  },
+  {
+    text: "When was my last blood test and what were the results?",
+    icon: FlaskConical,
+    tone: "bg-emerald-50 text-emerald-600",
+  },
+  {
+    text: "Summarize my vaccination history.",
+    icon: FileText,
+    tone: "bg-blue-50 text-blue-600",
+  },
 ];
+
+const MAX_QUERY_LENGTH = 250;
 
 function Sidebar({ onOpenSettings }) {
   const navigate = useNavigate();
@@ -108,6 +127,7 @@ function formatDate(value) {
 }
 
 export default function AISearch() {
+  const navigate = useNavigate();
   const { isAuthenticated } = useAuth();
   const [query, setQuery] = useState("");
   const [messages, setMessages] = useState([]); // { role: 'user'|'assistant', text, sources?, noResultsFound? }
@@ -207,66 +227,121 @@ export default function AISearch() {
           </div>
         ) : (
           <>
-            <div className="flex-1 bg-white rounded-2xl border border-slate-100 shadow-sm p-6 mb-4 overflow-y-auto min-h-[320px] max-h-[60vh]">
-              {messages.length === 0 ? (
-                <div className="h-full flex flex-col items-center justify-center text-center py-12">
-                  <div className="w-12 h-12 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center mb-4">
-                    <Sparkles size={22} />
-                  </div>
-                  <p className="text-slate-600 font-medium mb-1">Ask anything about your records</p>
-                  <p className="text-slate-400 text-sm mb-5">Try one of these:</p>
-                  <div className="flex flex-col gap-2 w-full max-w-md">
-                    {EXAMPLE_QUESTIONS.map((q) => (
-                      <button
-                        key={q}
-                        type="button"
-                        onClick={() => setQuery(q)}
-                        className="text-left text-sm px-4 py-2.5 rounded-xl border border-slate-200 text-slate-600 hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700 transition-colors"
+            {/* ============================================================
+                "Ask Swastha" box — this is the only section redesigned.
+                Empty state (no messages yet): suggestions + input + counter
+                + disclaimer, all inside one card, matching the reference.
+                Once a conversation has started, this switches to the chat
+                bubble history view (unchanged from before).
+            ============================================================ */}
+            {messages.length === 0 ? (
+              <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6 mb-4">
+                <div className="flex items-center gap-2 mb-4">
+                  <Sparkles size={16} className="text-blue-600" />
+                  <p className="text-sm font-semibold text-slate-700 ">
+                    What would you like to know?
+                  </p>
+                </div>
+
+                <div className="flex flex-col gap-2.5 mb-6">
+                  {EXAMPLE_QUESTIONS.map(({ text, icon: Icon, tone }) => (
+                    <button
+                      key={text}
+                      type="button"
+                      onClick={() => setQuery(text)}
+                      className="flex items-center gap-3 text-left text-sm px-4 py-3 rounded-xl border border-slate-200 text-slate-700 transition-all duration-200 hover:border-blue-300 hover:bg-blue-50/60 hover:-translate-y-0.5"
+                    >
+                      <span
+                        className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${tone}`}
                       >
-                        {q}
-                      </button>
+                        <Icon size={15} />
+                      </span>
+                      {text}
+                    </button>
+                  ))}
+                </div>
+
+                {error && (
+                  <div className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2 mb-3">
+                    {error}
+                  </div>
+                )}
+
+                <form onSubmit={handleSubmit} className="flex flex-col gap-3">
+                  <div className="relative">
+                    <input
+                      type="text"
+                      value={query}
+                      onChange={(e) => setQuery(e.target.value.slice(0, MAX_QUERY_LENGTH))}
+                      maxLength={MAX_QUERY_LENGTH}
+                      placeholder="e.g. What was my blood sugar level in my last report?"
+                      className="w-full rounded-xl border border-slate-200 bg-white pl-4 pr-16 py-3 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-200 focus:border-blue-400 "
+                      disabled={loading}
+                    />
+                    <span className="absolute right-4 top-1/2 -translate-y-1/2 text-[11px] text-slate-300 pointer-events-none">
+                      {query.length}/{MAX_QUERY_LENGTH}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center justify-between gap-3 flex-wrap">
+                    <p className="flex items-center gap-1.5 text-xs text-slate-400">
+                      <ShieldCheck size={13} className="text-slate-400 shrink-0" />
+                      Swastha AI answers only from your records. It does not provide medical advice.
+                    </p>
+                    <button
+                      type="submit"
+                      disabled={loading || !query.trim()}
+                      className="flex items-center justify-center gap-2 bg-blue-700 hover:bg-blue-800 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-semibold px-5 py-2.5 rounded-xl transition-colors shrink-0"
+                    >
+                      <Send size={16} />
+                      Ask
+                    </button>
+                  </div>
+                </form>
+              </div>
+            ) : (
+              <>
+                <div className="flex-1 bg-white rounded-2xl border border-slate-100 shadow-sm p-6 mb-4 overflow-y-auto min-h-[320px] max-h-[60vh]">
+                  <div className="space-y-4">
+                    {messages.map((m, i) => (
+                      <ChatBubble key={i} message={m} />
                     ))}
+                    {loading && (
+                      <div className="flex items-center gap-2 text-slate-400 text-sm">
+                        <Loader2 size={16} className="animate-spin" />
+                        Searching your records...
+                      </div>
+                    )}
                   </div>
                 </div>
-              ) : (
-                <div className="space-y-4">
-                  {messages.map((m, i) => (
-                    <ChatBubble key={i} message={m} />
-                  ))}
-                  {loading && (
-                    <div className="flex items-center gap-2 text-slate-400 text-sm">
-                      <Loader2 size={16} className="animate-spin" />
-                      Searching your records...
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
 
-            {error && (
-              <div className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2 mb-3">
-                {error}
-              </div>
+                {error && (
+                  <div className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2 mb-3">
+                    {error}
+                  </div>
+                )}
+
+                <form onSubmit={handleSubmit} className="flex items-center gap-3">
+                  <input
+                    type="text"
+                    value={query}
+                    onChange={(e) => setQuery(e.target.value.slice(0, MAX_QUERY_LENGTH))}
+                    maxLength={MAX_QUERY_LENGTH}
+                    placeholder="e.g. What was my blood sugar level in my last report?"
+                    className="flex-1 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-200 focus:border-blue-400 "
+                    disabled={loading}
+                  />
+                  <button
+                    type="submit"
+                    disabled={loading || !query.trim()}
+                    className="flex items-center justify-center gap-2 bg-blue-700 hover:bg-blue-800 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-semibold px-5 py-3 rounded-xl transition-colors"
+                  >
+                    <Send size={16} />
+                    Ask
+                  </button>
+                </form>
+              </>
             )}
-
-            <form onSubmit={handleSubmit} className="flex items-center gap-3">
-              <input
-                type="text"
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder="e.g. What was my blood sugar level in my last report?"
-                className="flex-1 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-200 focus:border-blue-400 "
-                disabled={loading}
-              />
-              <button
-                type="submit"
-                disabled={loading || !query.trim()}
-                className="flex items-center justify-center gap-2 bg-blue-700 hover:bg-blue-800 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-semibold px-5 py-3 rounded-xl transition-colors"
-              >
-                <Send size={16} />
-                Ask
-              </button>
-            </form>
           </>
         )}
       </main>
