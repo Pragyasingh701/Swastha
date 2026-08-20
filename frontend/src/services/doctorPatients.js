@@ -56,7 +56,41 @@ export async function deletePatientFromDoctor(patientId, linkId = null) {
   return result;
 }
 
+/**
+ * Doctor-facing single-patient detail. The server enforces status ===
+ * 'accepted' and returns 403 otherwise — this call must only ever be
+ * triggered for a card the UI already knows is accepted (never for a
+ * pending/declined card), so a 403 here would indicate a UI bug, not an
+ * expected outcome.
+ */
+export async function getDoctorPatientDetail(patientId) {
+  return request(`/${patientId}`);
+}
+
+/**
+ * PATIENT-facing: doctor link requests awaiting this patient's response.
+ */
+export async function getPendingDoctorRequests() {
+  const result = await request('/pending-requests');
+  return result.requests || [];
+}
+
+/** PATIENT-facing: accept a pending doctor link request. */
+export async function acceptDoctorRequest(linkId) {
+  return request(`/requests/${linkId}/accept`, { method: 'POST' });
+}
+
+/** PATIENT-facing: decline a pending doctor link request. */
+export async function declineDoctorRequest(linkId) {
+  return request(`/requests/${linkId}/decline`, { method: 'POST' });
+}
+
 export default {
   getDoctorPatients,
   linkPatientToDoctor,
+  deletePatientFromDoctor,
+  getDoctorPatientDetail,
+  getPendingDoctorRequests,
+  acceptDoctorRequest,
+  declineDoctorRequest,
 };

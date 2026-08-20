@@ -53,7 +53,11 @@ export default function DoctorPatients() {
   }, []);
 
   useEffect(() => {
-    if (!selectedPatient) {
+    // Defense in depth: LockedPatientCard never calls setSelectedPatient
+    // (no such prop is wired to it), so this branch should be unreachable
+    // for a pending/declined patient — but guard it explicitly anyway so a
+    // future code path can't accidentally trigger a detail fetch for one.
+    if (!selectedPatient || (selectedPatient.linkStatus && selectedPatient.linkStatus !== 'accepted')) {
       setPatientTimeline([]);
       setPatientVault([]);
       setPatientFamilyMembers([]);
@@ -940,7 +944,29 @@ export default function DoctorPatients() {
               </div>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-                {patients.map((patient) => (
+                {patients.map((patient) => {
+                  // linkStatus is only present on cards returned for
+                  // pending/declined links (backend/db/doctorPatients.js's
+                  // minimalDoctorPatientCard) — accepted cards carry no
+                  // linkStatus field at all today, so default to
+                  // 'accepted' for backward compatibility with any card
+                  // shape that predates this field.
+                  const linkStatus = patient.linkStatus || 'accepted';
+                  if (linkStatus !== 'accepted') {
+                    return (
+                      <LockedPatientCard
+                        key={patient.linkId}
+                        patient={patient}
+                        linkStatus={linkStatus}
+                        openMenuId={openMenuId}
+                        setOpenMenuId={setOpenMenuId}
+                        deletingPatientId={deletingPatientId}
+                        onDelete={() => handleDeletePatient(patient)}
+                      />
+                    );
+                  }
+
+                  return (
                   <div
                     key={`${patient.patientUserId || patient.id}-${patient.name}`}
                     className="bg-white rounded-2xl p-6 shadow-[0_4px_12px_rgba(15,23,42,0.05)] border border-[#c3c6d7]/20 hover:shadow-[0_8px_24px_rgba(15,23,42,0.08)] transition-all"
@@ -1022,7 +1048,8 @@ export default function DoctorPatients() {
                       <span className="material-symbols-outlined text-[16px]">arrow_forward</span>
                     </button>
                   </div>
-                ))}
+                  );
+                })}
               </div>
             )}
             </section>
@@ -1036,6 +1063,97 @@ export default function DoctorPatients() {
           onClose={() => setSelectedEvent(null)}
         />
       )}
+    </div>
+  );
+}
+
+/* ==================== Locked Patient Card (pending/declined) ==================== */
+
+// Renders for a link that isn't 'accepted' yet. Deliberately does NOT
+// accept an onClick-to-detail handler — there is no prop wiring it to
+// setSelectedPatient anywhere, so no detail/timeline/vault/family API
+// call can ever fire from this card, matching the requirement that
+// clicking a pending card must not trigger a fetch at all. Only the name
+// and status badge are rendered; the card's own `patient` prop already
+// carries nothing else (see minimalDoctorPatientCard on the backend).
+function LockedPatientCard({ patient, linkStatus, openMenuId, setOpenMenuId, deletingPatientId, onDelete }) {
+  const isPending = linkStatus === 'pending';
+  const badgeText = isPending ? 'Pending Verification' : 'Declined';
+  const badgeTone = isPending
+    ? 'bg-amber-50 text-amber-700 border-amber-200'
+    : 'bg-slate-100 text-slate-500 border-slate-200';
+
+  return (
+    <div
+      className={`rounded-2xl p-6 border transition-all ${
+        isPending
+          ? 'bg-white border-[#c3c6d7]/20 shadow-[0_4px_12px_rgba(15,23,42,0.05)]'
+          : 'bg-slate-50 border-slate-200 opacity-70'
+      }`}
+      onClick={() => {
+        if (openMenuId === patient.linkId) setOpenMenuId(null);
+      }}
+    >
+      <div className="flex justify-between items-start mb-4">
+        <div className="flex items-center gap-4">
+          <div
+            className={`w-14 h-14 rounded-full flex items-center justify-center border ${
+              isPending ? 'bg-amber-50 border-amber-100 text-amber-600' : 'bg-slate-200 border-slate-300 text-slate-400'
+            }`}
+          >
+            <span className="material-symbols-outlined text-[24px]">
+              {isPending ? 'hourglass_top' : 'block'}
+            </span>
+          </div>
+          <div>
+            <h3 className={`font-semibold text-lg ${isPending ? 'text-[#191b23]' : 'text-slate-500'}`}>
+              {patient.patient_name}
+            </h3>
+            <span className={`inline-block mt-1 px-2 py-0.5 rounded-full text-xs font-semibold border ${badgeTone}`}>
+              {badgeText}
+            </span>
+          </div>
+        </div>
+
+        <div className="relative">
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              setOpenMenuId(openMenuId === patient.linkId ? null : patient.linkId);
+            }}
+            className="material-symbols-outlined text-[#737686] cursor-pointer hover:text-[#004ac6] transition-colors"
+          >
+            more_vert
+          </button>
+          {openMenuId === patient.linkId && (
+            <div className="absolute right-0 top-8 bg-white rounded-lg shadow-lg border border-slate-200 z-20 min-w-[160px]">
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onDelete();
+                }}
+                disabled={deletingPatientId === patient.patientUserId}
+                className="w-full text-left px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 flex items-center gap-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <XCircle size={16} />
+                {deletingPatientId === patient.patientUserId ? 'Removing...' : 'Cancel Request'}
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* No "View Profile" button — a pending/declined card is not
+          clickable-through to any detail view. This message replaces it
+          rather than a disabled button, so there's no interactive-looking
+          element that a doctor might expect to do something. */}
+      <p className="text-sm text-[#737686] text-center py-2 border-t border-dashed border-[#c3c6d7]/40">
+        {isPending
+          ? 'Waiting for patient to accept your request.'
+          : 'This patient has declined your request.'}
+      </p>
     </div>
   );
 }
