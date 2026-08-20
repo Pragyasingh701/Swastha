@@ -85,6 +85,17 @@ export async function declineDoctorRequest(linkId) {
   return request(`/requests/${linkId}/decline`, { method: 'POST' });
 }
 
+/**
+ * Bell-icon notification feed for whichever side the logged-in user is on
+ * (server dispatches on the caller's own JWT role — see
+ * backend/routes/doctorPatients.js's GET /notifications). Each entry:
+ * { id, linkId, type, at, doctorName? , patientName? }.
+ */
+export async function getDoctorPatientNotifications() {
+  const result = await request('/notifications');
+  return result.notifications || [];
+}
+
 export default {
   getDoctorPatients,
   linkPatientToDoctor,
@@ -93,4 +104,5 @@ export default {
   getPendingDoctorRequests,
   acceptDoctorRequest,
   declineDoctorRequest,
+  getDoctorPatientNotifications,
 };

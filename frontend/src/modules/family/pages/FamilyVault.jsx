@@ -15,7 +15,9 @@ import {
   TrendingUp,
   Users,
   LogOut,
+  Stethoscope,
 } from 'lucide-react';
+import NotificationBell from "../../../components/Common/NotificationBell";
 import { useAuth } from '../../../context/AuthContext';
 import ProfileDropdown from '../../settings/components/ProfileDropdown';
 import PatientIdBadge from '../../../components/Common/PatientIdBadge';
@@ -176,6 +178,7 @@ const navItems = [
   { label: 'Health Timeline', icon: TrendingUp, route: '/timeline' },
   { label: 'Medical Vault', icon: Folder, route: '/vault' },
   { label: 'Family Records', icon: Users, route: '/family-vault' },
+  { label: 'Doctor Requests', icon: Stethoscope, route: '/doctor-requests' },
   { label: 'Lab Insights', icon: TrendingUp, route: '/lab-trends' },
   { label: 'Ask Swastha', icon: Sparkles, route: '/search' },
 ];
@@ -274,10 +277,7 @@ function Header({ userName, userEmail }) {
         Ask Swastha about your health records...
       </button>
 
-      <button type="button" className="relative rounded-lg p-2 hover:bg-slate-100 shrink-0">
-        <Bell size={20} className="text-slate-600 " />
-        <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-red-500" />
-      </button>
+      <NotificationBell />
 
       <PatientIdBadge />
 
