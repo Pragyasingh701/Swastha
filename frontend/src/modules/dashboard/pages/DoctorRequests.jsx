@@ -4,6 +4,7 @@ import Logo from "../../../components/Common/Logo";
 import ProfileDropdown from "../../settings/components/ProfileDropdown";
 import PatientIdBadge from "../../../components/Common/PatientIdBadge";
 import { useAuth } from "../../../context/AuthContext";
+import { usePolling } from "../../../hooks/usePolling";
 import {
   getPendingDoctorRequests,
   acceptDoctorRequest,
@@ -169,23 +170,50 @@ export default function DoctorRequests() {
   const [busyLinkId, setBusyLinkId] = useState(null);
   const [error, setError] = useState(null);
 
-  async function loadRequests() {
-    setIsLoading(true);
+  // showSpinner=false for background polls/focus-refetches — only the
+  // very first load (and a manual retry) should show the full "Loading
+  // requests..." state. A poll tick flashing that on top of an already-
+  // rendered list every 20s would be exactly the jarring, non-live-feeling
+  // update the fix is meant to avoid.
+  async function loadRequests({ showSpinner = true } = {}) {
+    if (showSpinner) setIsLoading(true);
     setError(null);
     try {
       const result = await getPendingDoctorRequests();
-      setRequests(result);
+      // Don't stomp a request the user is actively accepting/declining if
+      // a poll tick's response happens to land mid-action — the busy
+      // request's own handler owns removing it from state once its call
+      // resolves, so skip that one id here if it's still in flight.
+      setRequests((prev) => {
+        if (!busyLinkId) return result;
+        const stillBusy = prev.find((r) => r.linkId === busyLinkId);
+        const fresh = result.filter((r) => r.linkId !== busyLinkId);
+        return stillBusy ? [stillBusy, ...fresh] : result;
+      });
     } catch (err) {
-      setError(err.message || "Could not load doctor requests.");
-      setRequests([]);
+      if (showSpinner) {
+        setError(err.message || "Could not load doctor requests.");
+        setRequests([]);
+      }
+      // Silent on background poll failures — a transient network blip
+      // every 20s shouldn't surface an error banner over an otherwise-fine
+      // page; the next successful poll or focus refetch just corrects it.
     } finally {
-      setIsLoading(false);
+      if (showSpinner) setIsLoading(false);
     }
   }
 
   useEffect(() => {
     loadRequests();
   }, []);
+
+  // This page has no other live-update mechanism (no websocket/realtime in
+  // the app — see usePolling.js for why), so without this a new incoming
+  // request, or one accepted/declined from another tab/device, never shows
+  // up until a hard refresh. Polls every 20s while visible, plus an
+  // immediate refetch on window focus — background refreshes never show
+  // the loading spinner (see loadRequests).
+  usePolling(() => loadRequests({ showSpinner: false }), { intervalMs: 20000 });
 
   async function handleAccept(linkId) {
     setBusyLinkId(linkId);

@@ -8,6 +8,7 @@ import { getDoctorPatients, linkPatientToDoctor, deletePatientFromDoctor } from 
 import { getTimelineReports } from "../../../api/reports";
 import { getPatientFamilyMembers } from "../../../api/family";
 import { useAuth } from "../../../context/AuthContext";
+import { usePolling } from "../../../hooks/usePolling";
 import FamilyTreeTab from "../components/FamilyTreeTab";
 
 export default function DoctorPatients() {
@@ -37,21 +38,37 @@ export default function DoctorPatients() {
   const [vaultCategoryFilter, setVaultCategoryFilter] = useState(null);
   const [vaultSearchQuery, setVaultSearchQuery] = useState('');
 
-  useEffect(() => {
-    const fetchPatients = async () => {
-      setIsFetchingPatients(true);
-      try {
-        const linkedPatients = await getDoctorPatients();
-        setPatients(linkedPatients);
-      } catch (err) {
-        setPatients([]);
-      } finally {
-        setIsFetchingPatients(false);
-      }
-    };
+  // showSpinner=false for background polls/focus-refetches — only the
+  // very first load should show "Loading patient list...". This is also
+  // what makes a pending card's locked→unlocked transition (once the
+  // patient accepts) happen without a full-page loading flash: the poll
+  // just quietly swaps in the newly-accepted card's full data.
+  const fetchPatients = async ({ showSpinner = true } = {}) => {
+    if (showSpinner) setIsFetchingPatients(true);
+    try {
+      const linkedPatients = await getDoctorPatients();
+      setPatients(linkedPatients);
+    } catch (err) {
+      if (showSpinner) setPatients([]);
+      // Silent on background poll failures — see DoctorRequests.jsx for
+      // the same reasoning: a transient blip shouldn't blank out an
+      // already-rendered list every 20s.
+    } finally {
+      if (showSpinner) setIsFetchingPatients(false);
+    }
+  };
 
+  useEffect(() => {
     fetchPatients();
   }, []);
+
+  // No websocket/realtime elsewhere in this app (see
+  // frontend/src/hooks/usePolling.js for why that wasn't introduced here) —
+  // without this, a patient accepting/declining a request, or a doctor
+  // sending a new one from another tab, never reflects here until a hard
+  // refresh. This is specifically what turns a locked (pending) card into
+  // a full unlocked card automatically once the patient responds.
+  usePolling(() => fetchPatients({ showSpinner: false }), { intervalMs: 20000 });
 
   useEffect(() => {
     // Defense in depth: LockedPatientCard never calls setSelectedPatient
