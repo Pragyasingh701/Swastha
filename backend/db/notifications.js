@@ -9,6 +9,13 @@ const VALID_EVENT_TYPES = [
   'family_member_added',
   'family_member_updated',
   'family_member_deleted',
+  // Doctor <-> patient link workflow (see backend/db/doctorPatients.js).
+  // 'doctor_request' carries { linkId } in metadata so the notification
+  // row itself can render Accept/Decline — the notifications system has
+  // no other awareness of doctor_patient, this is the only coupling point.
+  'doctor_request',
+  'doctor_request_accepted',
+  'doctor_request_declined',
 ];
 const VALID_ACTOR_ROLES = ['patient', 'doctor', 'family_admin', 'system'];
 

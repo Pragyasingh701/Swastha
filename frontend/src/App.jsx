@@ -24,7 +24,6 @@ import DoctorMessages from "./modules/doctor/pages/DoctorMessages";
 
 // Dashboard
 import Dashboard from "./modules/dashboard/pages/Dashboard";
-import DoctorRequests from "./modules/dashboard/pages/DoctorRequests";
 
 // Family
 import FamilyVault from "./modules/family/pages/FamilyVault";
@@ -235,14 +234,6 @@ export default function App() {
           }
         />
 
-        <Route
-          path="/doctor-requests"
-          element={
-            <ProtectedRoute>
-              <DoctorRequests />
-            </ProtectedRoute>
-          }
-        />
         <Route
   path="/doctor-dashboard"
   element={

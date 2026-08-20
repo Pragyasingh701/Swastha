@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Bell } from 'lucide-react';
+import { Bell, Check, X } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { usePolling } from '../../hooks/usePolling';
 import {
@@ -7,6 +7,7 @@ import {
   markAllNotificationsRead,
   markNotificationRead,
 } from '../../utils/notifications';
+import { acceptDoctorRequest, declineDoctorRequest } from '../../services/doctorPatients';
 
 function formatNotificationDate(value) {
   const date = new Date(value);
@@ -26,6 +27,15 @@ export default function PatientNotifications() {
   const [isOpen, setIsOpen] = useState(false);
   const [notifications, setNotifications] = useState([]);
   const [selectedNotification, setSelectedNotification] = useState(null);
+  // linkIds already accepted/declined THIS session — a 'doctor_request'
+  // notification row itself never changes type after the patient acts on
+  // it (accept/decline creates a SEPARATE notification for the doctor,
+  // not an edit of this one), so this is what hides the Accept/Decline
+  // buttons immediately without waiting for a poll, and keeps them hidden
+  // across subsequent polls for the same linkId.
+  const [resolvedLinkIds, setResolvedLinkIds] = useState(() => new Set());
+  const [busyLinkId, setBusyLinkId] = useState(null);
+  const [requestError, setRequestError] = useState(null);
 
   async function loadNotifications() {
     if (!token || user?.role === 'doctor') {
@@ -98,6 +108,34 @@ export default function PatientNotifications() {
     }
   }
 
+  async function handleAcceptRequest(event, linkId) {
+    event.stopPropagation(); // don't also trigger the row's mark-read click
+    setBusyLinkId(linkId);
+    setRequestError(null);
+    try {
+      await acceptDoctorRequest(linkId);
+      setResolvedLinkIds((prev) => new Set(prev).add(linkId));
+    } catch (err) {
+      setRequestError(err.message || 'Could not accept this request.');
+    } finally {
+      setBusyLinkId(null);
+    }
+  }
+
+  async function handleDeclineRequest(event, linkId) {
+    event.stopPropagation();
+    setBusyLinkId(linkId);
+    setRequestError(null);
+    try {
+      await declineDoctorRequest(linkId);
+      setResolvedLinkIds((prev) => new Set(prev).add(linkId));
+    } catch (err) {
+      setRequestError(err.message || 'Could not decline this request.');
+    } finally {
+      setBusyLinkId(null);
+    }
+  }
+
   return (
     <div className="relative shrink-0" ref={menuRef}>
       <button
@@ -125,32 +163,82 @@ export default function PatientNotifications() {
             </button>
           </div>
 
+          {requestError && (
+            <p className="px-4 py-2 text-xs text-red-600 bg-red-50 border-b border-red-100">{requestError}</p>
+          )}
+
           <div className="max-h-80 overflow-y-auto">
             {notifications.length === 0 ? (
               <p className="px-4 py-5 text-sm text-slate-500">No activity yet.</p>
             ) : (
-              notifications.map((notification) => (
-                <button
-                  key={notification.id}
-                  type="button"
-                  onClick={() => handleMarkRead(notification)}
-                  className="flex w-full items-start gap-3 border-b border-slate-100 px-4 py-3 text-left transition-colors hover:bg-slate-50 last:border-b-0"
-                >
-                  <span
-                    title={notification.read ? 'Read' : 'Unread'}
-                    aria-label={notification.read ? 'Read notification' : 'Unread notification'}
-                    className={`mt-2 h-2.5 w-2.5 rounded-full ${notification.read ? 'bg-slate-300' : 'bg-red-500'}`}
-                  />
-                  <span className="min-w-0 flex-1">
-                    <span className="flex items-center justify-between gap-3">
-                      <span className="truncate text-sm font-medium text-slate-800">{notification.title}</span>
-                      {!notification.read && <span className="rounded-full bg-blue-50 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-blue-600">New</span>}
+              notifications.map((notification) => {
+                const linkId = notification.metadata?.linkId;
+                // Show Accept/Decline only on a still-actionable doctor
+                // request: not resolved locally this session
+                // (resolvedLinkIds — the immediate click-response case),
+                // and not resolved on the SERVER either (metadata.linkStatus,
+                // stamped fresh on every fetch by backend/routes/
+                // notifications.js) — that second check is what makes a
+                // request accepted/declined via the EMAIL link stop showing
+                // buttons here too, without waiting on anything but the
+                // next poll.
+                const linkStatus = notification.metadata?.linkStatus;
+                const isActionableRequest =
+                  notification.eventType === 'doctor_request' &&
+                  linkId &&
+                  !resolvedLinkIds.has(linkId) &&
+                  (!linkStatus || linkStatus === 'pending');
+
+                return (
+                  <div
+                    key={notification.id}
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => handleMarkRead(notification)}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter' || event.key === ' ') handleMarkRead(notification);
+                    }}
+                    className="flex w-full items-start gap-3 border-b border-slate-100 px-4 py-3 text-left transition-colors hover:bg-slate-50 last:border-b-0 cursor-pointer"
+                  >
+                    <span
+                      title={notification.read ? 'Read' : 'Unread'}
+                      aria-label={notification.read ? 'Read notification' : 'Unread notification'}
+                      className={`mt-2 h-2.5 w-2.5 rounded-full shrink-0 ${notification.read ? 'bg-slate-300' : 'bg-red-500'}`}
+                    />
+                    <span className="min-w-0 flex-1">
+                      <span className="flex items-center justify-between gap-3">
+                        <span className="truncate text-sm font-medium text-slate-800">{notification.title}</span>
+                        {!notification.read && <span className="rounded-full bg-blue-50 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-blue-600">New</span>}
+                      </span>
+                      <span className="mt-1 block text-xs leading-5 text-slate-600">{notification.message}</span>
+                      <span className="mt-1 block text-[11px] text-slate-400">{formatNotificationDate(notification.createdAt)}</span>
+
+                      {isActionableRequest && (
+                        <span className="mt-2 flex gap-2">
+                          <button
+                            type="button"
+                            disabled={busyLinkId === linkId}
+                            onClick={(event) => handleAcceptRequest(event, linkId)}
+                            className="flex items-center gap-1 rounded-lg bg-blue-700 px-2.5 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-blue-800 disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            <Check size={12} />
+                            Accept
+                          </button>
+                          <button
+                            type="button"
+                            disabled={busyLinkId === linkId}
+                            onClick={(event) => handleDeclineRequest(event, linkId)}
+                            className="flex items-center gap-1 rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs font-semibold text-slate-600 transition-colors hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            <X size={12} />
+                            Decline
+                          </button>
+                        </span>
+                      )}
                     </span>
-                    <span className="mt-1 block text-xs leading-5 text-slate-600">{notification.message}</span>
-                    <span className="mt-1 block text-[11px] text-slate-400">{formatNotificationDate(notification.createdAt)}</span>
-                  </span>
-                </button>
-              ))
+                  </div>
+                );
+              })
             )}
           </div>
         </div>
