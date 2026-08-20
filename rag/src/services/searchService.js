@@ -15,6 +15,87 @@ const SIMILARITY_THRESHOLD = 0.65;
 const NO_RESULTS_MESSAGE =
   'No relevant records found in your health history for this question.';
 
+// Questions ABOUT the whole record set (counts, "list everything", "how
+// many files/reports/diagnoses", or complaints like "why only 5?") cannot
+// be answered by top-K similarity search: MATCH_COUNT caps retrieval at 5
+// chunks, so a patient with 10 uploaded reports only ever gets facts from
+// (at most) 5 of them, and a literal count question has no single chunk of
+// text that states it. This is exactly the "I uploaded 10 files but was
+// only told about 5" complaint — the fix is to detect this class of
+// question and answer it directly from `reports` metadata (every row, not
+// a similarity-ranked subset) instead of routing it through the embeddings
+// retriever at all.
+const AGGREGATE_QUESTION_PATTERN =
+  /\b(how many|count|total|number of)\b.*\b(report|file|record|upload|document|diagnos|disease|condition|prescription|visit)|\b(all|every|list)\b.*\b(report|file|record|upload|document|diagnos|disease|condition|prescription|visit)/i;
+const WHY_ONLY_PATTERN = /\bonly\b.*\bwhy\b|\bwhy\b.*\bonly\b/i;
+
+function isAggregateQuestion(query) {
+  return AGGREGATE_QUESTION_PATTERN.test(query) || WHY_ONLY_PATTERN.test(query);
+}
+
+/**
+ * Answers a question about the whole record set (counts, full listings)
+ * directly from `reports` metadata — every row belonging to the user, not
+ * a similarity-ranked top-K subset. This is deliberately NOT grounded via
+ * embeddings: the point is completeness, and report count/title/diagnosis
+ * are already plain columns, so no vector search is needed to see all of
+ * them.
+ */
+async function answerAggregateQuestion(query, userId) {
+  const { data: reports, error } = await supabase
+    .from('reports')
+    .select('id, title, category, report_date, diagnosis, file_url')
+    .eq('patient_id', userId)
+    .order('report_date', { ascending: false });
+
+  if (error) {
+    throw new Error(`answerAggregateQuestion: failed to load reports: ${error.message}`);
+  }
+
+  if (!reports || reports.length === 0) {
+    return {
+      answer: NO_RESULTS_MESSAGE,
+      structured: { headline: NO_RESULTS_MESSAGE, keyFacts: [], caveat: '' },
+      sources: [],
+      noResultsFound: true,
+    };
+  }
+
+  const excerpts = reports.map((r, i) => ({
+    index: i + 1,
+    reportId: r.id,
+    title: r.title || 'Untitled report',
+    reportDate: r.report_date || null,
+    text: `Title: ${r.title || 'Untitled'}\nCategory: ${r.category || 'Unspecified'}${r.diagnosis ? `\nDiagnosis: ${r.diagnosis}` : ''}${r.report_date ? `\nDate: ${r.report_date}` : ''}`,
+    similarity: 1,
+  }));
+
+  const prompt = buildGroundedPrompt(query, excerpts);
+  const gen = await runAI({ task: 'generation', input: prompt, label: 'search-aggregate' });
+
+  if (!gen.ok) {
+    return {
+      answer: gen.text,
+      structured: { headline: gen.text, keyFacts: [], caveat: '' },
+      sources: [],
+      noResultsFound: false,
+      degraded: true,
+    };
+  }
+
+  const structured = parseStructuredAnswer(gen.text, excerpts);
+  const verifiedUrls = await Promise.all(reports.map((r) => verifyFileUrl(r.file_url)));
+  const sources = reports.map((r, i) => ({
+    report_id: r.id,
+    title: r.title,
+    category: r.category,
+    report_date: r.report_date,
+    file_url: verifiedUrls[i],
+  }));
+
+  return { answer: structured.headline, structured, sources, noResultsFound: false };
+}
+
 /**
  * Full RAG search: embed the query, run pgvector similarity search scoped
  * to user_id, ground gemini-2.5-flash strictly in the retrieved excerpts,
@@ -30,6 +111,10 @@ export async function searchReports(query, userId) {
   if (!userId) {
     // Hard requirement: never search without a user scope.
     throw new Error('searchReports: user_id is required');
+  }
+
+  if (isAggregateQuestion(query)) {
+    return answerAggregateQuestion(query, userId);
   }
 
   let queryEmbedding;
@@ -252,4 +337,6 @@ export {
   parseStructuredAnswer,
   verifyFileUrl,
   buildGroundedPrompt,
+  isAggregateQuestion,
+  answerAggregateQuestion,
 };

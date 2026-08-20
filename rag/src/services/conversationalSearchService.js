@@ -14,6 +14,8 @@ import {
   parseStructuredAnswer,
   verifyFileUrl,
   buildGroundedPrompt,
+  isAggregateQuestion,
+  answerAggregateQuestion,
 } from './searchService.js';
 
 /**
@@ -83,6 +85,19 @@ export async function conversationalSearch({ query, userId, sessionId }) {
     console.log(
       `[conversationalSearch] session ${sessionId}: condensed "${query.trim()}" -> "${standaloneQuestion}"`
     );
+  }
+
+  // Questions ABOUT the whole record set ("how many reports", "list all my
+  // diagnoses", "why only 5?") can't be answered by top-K similarity search
+  // — see searchService.js's isAggregateQuestion for why. Handle those
+  // directly from full `reports` metadata instead of the embeddings
+  // retriever, same as the one-shot /api/search endpoint.
+  if (isAggregateQuestion(standaloneQuestion)) {
+    const result = await answerAggregateQuestion(standaloneQuestion, userId);
+    if (!result.noResultsFound) {
+      await appendTurn(sessionId, userId, query.trim(), result.structured.headline);
+    }
+    return { ...result, standaloneQuestion, sessionId };
   }
 
   // userId comes from the JWT (see routes/searchChat.js) and is applied
