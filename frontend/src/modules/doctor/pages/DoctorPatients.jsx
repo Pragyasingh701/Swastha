@@ -11,6 +11,23 @@ import { useAuth } from "../../../context/AuthContext";
 import { usePolling } from "../../../hooks/usePolling";
 import FamilyTreeTab from "../components/FamilyTreeTab";
 
+// Diagnosis/Medicines are stored under the same column names for every
+// category, but what they actually MEAN differs by category — mirrors
+// UploadReports.jsx's CATEGORY_FIELD_CONFIG so a patient event popup here
+// uses the same labels the manual entry form showed when the report was
+// saved (e.g. a Lab Report shows "Test / Panel Name", not "Diagnosis").
+const CATEGORY_FIELD_LABELS = {
+  Prescription: { diagnosis: "Diagnosis", medicines: "Medicines" },
+  "Lab Report": { diagnosis: "Test / Panel Name", medicines: "Key Results / Values" },
+  Imaging: { diagnosis: "Findings", medicines: "Body Part / Scan Type" },
+  Vaccination: { diagnosis: "Vaccine Name", medicines: "Dose / Batch Info" },
+  Consultation: { diagnosis: "Reason for Visit", medicines: "Medicines" },
+};
+
+function categoryFieldLabels(category) {
+  return CATEGORY_FIELD_LABELS[category] || CATEGORY_FIELD_LABELS.Prescription;
+}
+
 export default function DoctorPatients() {
   const navigate = useNavigate();
   const { token } = useAuth();
@@ -1311,14 +1328,14 @@ function EventDetails({ event, onClose }) {
 
               {event.diagnosis && (
                 <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
-                  <p className="text-sm text-slate-500 ">Diagnosis</p>
+                  <p className="text-sm text-slate-500 ">{categoryFieldLabels(event.category).diagnosis}</p>
                   <p className="mt-2 text-base font-semibold text-slate-900 ">{event.diagnosis}</p>
                 </div>
               )}
 
               {event.medicines && (
                 <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
-                  <p className="text-sm text-slate-500 ">Medicines</p>
+                  <p className="text-sm text-slate-500 ">{categoryFieldLabels(event.category).medicines}</p>
                   <p className="mt-2 text-base font-semibold text-slate-900 whitespace-pre-line">{event.medicines}</p>
                 </div>
               )}
