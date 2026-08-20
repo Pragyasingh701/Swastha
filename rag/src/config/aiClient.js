@@ -132,10 +132,23 @@ function parseGemini(task, text) {
 
 // ---- OpenRouter live free-model discovery (ai-failover-design.md §5) ----
 let orCache = { models: null, at: 0 };
+// Separate cache for vision-capable free models — a vision-ocr task (e.g.
+// prescription/report extraction) must never fall back to a text-only
+// model, since that silently drops the uploaded image and the model then
+// either hallucinates fields or returns non-JSON prose that fails
+// JSON.parse in gemini.js, surfacing as a generic 500 to the user with no
+// indication the real cause was "no vision-capable fallback was used".
+let orVisionCache = { models: null, at: 0 };
 const OR_TTL_MS = 6 * 60 * 60 * 1000;
+// No known free vision-capable model as of writing this comment — if
+// discovery finds none, vision-ocr has nowhere left to go after Gemini is
+// exhausted and correctly returns degraded() rather than silently guessing
+// with a text-only model.
+const OPENROUTER_VISION_SAFE_DEFAULT = [];
 
-async function freeOpenRouterModels() {
-  if (orCache.models && Date.now() - orCache.at < OR_TTL_MS) return orCache.models;
+async function freeOpenRouterModels({ vision = false } = {}) {
+  const cache = vision ? orVisionCache : orCache;
+  if (cache.models && Date.now() - cache.at < OR_TTL_MS) return cache.models;
   try {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 3000);
@@ -148,15 +161,20 @@ async function freeOpenRouterModels() {
       // (e.g. lyria) and would otherwise be picked to write a medical summary.
       .filter((m) => m.id.endsWith(':free'))
       .filter((m) => (m.architecture?.output_modalities || ['text']).includes('text'))
+      .filter((m) => !vision || (m.architecture?.input_modalities || []).includes('image'))
       .sort((a, b) => (b.context_length || 0) - (a.context_length || 0))
       .slice(0, 3)
       .map((m) => m.id);
-    const models = [...free, ...OPENROUTER_SAFE_DEFAULT];
-    orCache = { models, at: Date.now() };
+    const models = vision ? free : [...free, ...OPENROUTER_SAFE_DEFAULT];
+    if (vision) {
+      orVisionCache = { models, at: Date.now() };
+    } else {
+      orCache = { models, at: Date.now() };
+    }
     return models;
   } catch {
     // Reuse last good list if we have one, else the safe default. Never block.
-    return orCache.models || OPENROUTER_SAFE_DEFAULT;
+    return cache.models || (vision ? OPENROUTER_VISION_SAFE_DEFAULT : OPENROUTER_SAFE_DEFAULT);
   }
 }
 
@@ -234,12 +252,32 @@ export async function runAI({ task, input, file, json = false, taskType, label =
 
   // ---- Provider 2: OpenRouter (generation + vision-ocr only) ----
   if (task !== 'embedding' && OPENROUTER_API_KEY) {
-    for (const model of await freeOpenRouterModels()) {
+    const isVision = task === 'vision-ocr' && file?.data && file?.mime;
+    // A vision-ocr task MUST use a vision-capable model here — sending the
+    // image to a text-only free model silently drops it, and the model
+    // then either hallucinates fields or returns non-JSON prose that fails
+    // JSON.parse upstream (surfacing as an opaque 500 with no clue this was
+    // the cause). If no free vision model is available, openRouterModels
+    // returns [] for vision and this loop simply does nothing, falling
+    // through to "everything exhausted" below — which is the honest result.
+    const openRouterModels = await freeOpenRouterModels({ vision: isVision });
+    // OpenAI-compatible multimodal content: an array of text/image_url
+    // parts instead of a bare string. Only built when there's actually an
+    // image to send — a plain generation/summarize call keeps the simple
+    // string content it always used.
+    const content = isVision
+      ? [
+          { type: 'text', text: input },
+          { type: 'image_url', image_url: { url: `data:${file.mime};base64,${file.data}` } },
+        ]
+      : input;
+
+    for (const model of openRouterModels) {
       attempts += 1;
       const r = await postJson(
         OPENROUTER_URL,
         { Authorization: `Bearer ${OPENROUTER_API_KEY}` },
-        { model, messages: [{ role: 'user', content: input }], temperature: 0 },
+        { model, messages: [{ role: 'user', content }], temperature: 0 },
         timeout
       );
 

@@ -49,8 +49,16 @@ router.post('/', requireAuth, (req, res) => {
       return res.status(200).json({ fields, unclear });
     } catch (extractErr) {
       console.error(`[POST /api/extract] failed for user ${req.user.userId}:`, extractErr);
-      return res.status(500).json({
-        error: 'Could not extract report details from this file. Please fill the form manually.',
+      // Distinguish "every AI provider is temporarily out" (transient,
+      // worth retrying — see aiClient.js's degraded()/runAI exhaustion)
+      // from a genuine per-file problem (bad OCR output, unreadable scan),
+      // so the user isn't told to give up on a file that just needs a retry
+      // in a minute.
+      const isTransient = Boolean(extractErr?.degraded);
+      return res.status(503).json({
+        error: isTransient
+          ? 'Our AI reader is temporarily busy. Please wait a moment and try again — the form can also be filled in manually below.'
+          : 'Could not extract report details from this file. Please fill the form manually.',
       });
     }
   });
