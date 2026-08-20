@@ -716,15 +716,8 @@ export default function FamilyVault() {
             {error ? (
               <div className="mb-6 flex items-start gap-3 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-rose-700 ">
                 <AlertCircle className="mt-0.5 shrink-0" size={18} />
-                <div className="text-sm space-y-1">
+                <div className="text-sm">
                   <p>{error}</p>
-                  {serverErrorMeta?.code || serverErrorMeta?.hint || serverErrorMeta?.details ? (
-                    <div className="rounded-xl bg-white/70 p-3 text-rose-700/90 ">
-                      {serverErrorMeta?.code ? <p><span className="font-semibold">Code:</span> {serverErrorMeta.code}</p> : null}
-                      {serverErrorMeta?.hint ? <p><span className="font-semibold">Hint:</span> {serverErrorMeta.hint}</p> : null}
-                      {serverErrorMeta?.details ? <p><span className="font-semibold">Details:</span> {serverErrorMeta.details}</p> : null}
-                    </div>
-                  ) : null}
                 </div>
               </div>
             ) : null}

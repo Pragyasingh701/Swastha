@@ -2,6 +2,8 @@ import React, { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../../../context/AuthContext";
 import { authService } from "../../../services/auth";
+import { getFamilyDashboard } from "../../../api/family";
+import { getTimelineReports } from "../../../api/reports";
 import ProfileDropdown from "../../settings/components/ProfileDropdown";
 import SettingsModal from "../../settings/components/SettingsModal";
 import Logo from "../../../components/Common/Logo";
@@ -34,24 +36,6 @@ import {
   Check,
   X,
 } from "lucide-react";
-import {
-  LineChart,
-  Line,
-  XAxis,
-  ResponsiveContainer,
-  Tooltip,
-} from "recharts";
-
-
-// ---- Mock data (swap with real API data later) ----
-const hba1cData = [
-  { month: "Jan", value: 6.9 },
-  { month: "Feb", value: 6.7 },
-  { month: "Mar", value: 6.5 },
-  { month: "Apr", value: 6.6 },
-  { month: "May", value: 6.5 },
-  { month: "Jun", value: 6.8 },
-];
 
 const navItems = [
   { label: "Dashboard", icon: LayoutGrid, active: true, route: "/dashboard" },
@@ -62,65 +46,50 @@ const navItems = [
   { label: "Ask Swastha", icon: Sparkles, route: "/search" },
 ];
 
-const recentUploads = [
-  {
-    icon: FileText,
-    title: "Complete Blood Count (CBC)",
-    subtitle: "Apollo Diagnostics • Oct 12, 2024",
-    status: "AI Processed",
-  },
-  {
-    icon: ClipboardList,
-    title: "Cardiology Prescription",
-    subtitle: "Dr. Sarah Williams • Oct 10, 2024",
-    status: "AI Processed",
-  },
-];
+function parseMedicationEntries(reports = []) {
+  const meds = [];
+  const seen = new Set();
 
-const medications = [
-  {
-    name: "Telmisartan 40mg",
-    schedule: "Daily • After Breakfast",
-    color: "bg-blue-600",
-  },
-  {
-    name: "Metformin 500mg",
-    schedule: "Twice Daily • With Meals",
-    color: "bg-orange-500",
-  },
-];
+  const normalizeMedicationKey = (value = '') => {
+    return String(value || '')
+      .toLowerCase()
+      .replace(/[^a-z0-9\s]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+  };
 
-const statCards = [
-  {
-    icon: FileText,
-    tag: "+3 this week",
-    value: "24",
-    label: "Total Reports",
-    iconBg: "bg-blue-50 text-blue-600",
-  },
-  {
-    icon: Users,
-    tag: null,
-    value: "4",
-    label: "Family Members",
-    iconBg: "bg-blue-50 text-blue-600",
-  },
-  {
-    icon: AlertTriangle,
-    tag: "Action Required",
-    tagColor: "text-orange-600",
-    value: "2",
-    label: "Medicine Alerts",
-    iconBg: "bg-orange-50 text-orange-600",
-  },
-  {
-    icon: ClipboardList,
-    tag: "In 2 days",
-    value: "1",
-    label: "Upcoming Checkups",
-    iconBg: "bg-blue-50 text-blue-600",
-  },
-];
+  for (const report of reports) {
+    const sourceText = String(report?.medicines || '').trim();
+    if (!sourceText) continue;
+
+    const lines = sourceText
+      .split(/\r?\n|\s*;\s*/)
+      .map((line) => line.trim())
+      .filter(Boolean);
+
+    for (const line of lines) {
+      const cleaned = line.replace(/^[•*\-\d.\s]+/, '').trim();
+      if (!cleaned) continue;
+
+      const separatorIndex = cleaned.search(/\s*[-–—]\s*/);
+      const name = separatorIndex >= 0 ? cleaned.slice(0, separatorIndex).trim() : cleaned;
+      const schedule = separatorIndex >= 0 ? cleaned.slice(separatorIndex + 1).trim() : 'As prescribed';
+      const finalName = name || cleaned;
+      const cleanedName = finalName.replace(/\s+\d+(?:\.\d+)?\s*(?:mg|mcg|g|ml|iu|%|tablet|tablets|capsule|capsules)\s*$/i, '').trim();
+      const key = normalizeMedicationKey(cleanedName || finalName);
+
+      if (seen.has(key)) continue;
+      seen.add(key);
+      meds.push({
+        name: cleanedName || finalName,
+        schedule: schedule || 'As prescribed',
+        color: meds.length % 2 === 0 ? 'bg-blue-600' : 'bg-orange-500',
+      });
+    }
+  }
+
+  return meds;
+}
 
 function Sidebar({ onOpenSettings }) {
   const navigate = useNavigate();
@@ -380,83 +349,55 @@ function StatCard({ icon: Icon, tag, tagColor, value, label, iconBg }) {
   );
 }
 
-function Hba1cChart() {
-  return (
-    <div className="bg-white border border-slate-200 rounded-2xl p-6 transition-all duration-300 hover:shadow-lg hover:border-slate-300 ">
-      <div className="flex items-start justify-between mb-1">
-        <div>
-          <h3 className="text-lg font-semibold text-slate-900 ">
-            HbA1c Lab Trends
-          </h3>
-          <p className="text-sm text-slate-400 mt-0.5">
-            Clinical tracking over last 6 months
-          </p>
-        </div>
-        <span className="text-xs font-medium bg-emerald-50 text-emerald-600 px-3 py-1.5 rounded-full">
-          Normal Range
-        </span>
-      </div>
+function formatReportDate(value) {
+  if (!value) return 'Date not available';
 
-      <div className="h-56 mt-4 -ml-2">
-        <ResponsiveContainer width="100%" height="100%">
-          <LineChart data={hba1cData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
-            <XAxis
-              dataKey="month"
-              axisLine={false}
-              tickLine={false}
-              tick={{ fill: "#94a3b8", fontSize: 12 }}
-            />
-            <Tooltip
-              cursor={{ stroke: "#cbd5e1", strokeDasharray: "4 4" }}
-              contentStyle={{
-                borderRadius: 10,
-                border: "1px solid #e2e8f0",
-                boxShadow: "0 4px 12px rgba(15,23,42,0.08)",
-                fontSize: 12,
-              }}
-            />
-            <Line
-              type="monotone"
-              dataKey="value"
-              stroke="#2563eb"
-              strokeWidth={2.5}
-              dot={{ r: 4, fill: "#2563eb", strokeWidth: 0 }}
-              activeDot={{ r: 7, fill: "#2563eb", stroke: "#fff", strokeWidth: 3 }}
-              isAnimationActive
-              animationDuration={600}
-            />
-          </LineChart>
-        </ResponsiveContainer>
-      </div>
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return 'Date not available';
 
-      <div className="flex gap-3 bg-slate-50 border border-slate-100 rounded-xl p-4 mt-2 transition-colors duration-200 hover:bg-slate-100/70 ">
-        <Sparkles size={18} className="text-blue-600 shrink-0 mt-0.5" />
-        <p className="text-sm text-slate-600 ">
-          <span className="font-semibold text-slate-800 ">AI Observation: </span>
-          Your HbA1c has decreased by 0.4% since last quarter. This indicates
-          excellent glycemic control through your recent dietary changes.
-        </p>
-      </div>
-    </div>
-  );
+  return date.toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
-function RecentUploads() {
+function RecentUploads({ reports = [] }) {
+  const navigate = useNavigate();
+  const recentReports = reports.slice(0, 5);
+
   return (
     <div className="bg-white border border-slate-200 rounded-xl p-6">
       <div className="flex items-center justify-between mb-4">
         <h3 className="text-lg font-semibold text-slate-900 ">
           Recent Uploads
         </h3>
-        <button className="text-sm font-medium text-blue-600 hover:underline">
+        <button
+          type="button"
+          onClick={() => navigate('/vault')}
+          className="text-sm font-medium text-blue-600 hover:underline"
+        >
           View All
         </button>
       </div>
 
       <div className="space-y-3">
-        {recentUploads.map(({ icon: Icon, title, subtitle, status }) => (
+        {recentReports.length === 0 ? (
+          <p className="text-sm text-slate-500">No documents uploaded yet.</p>
+        ) : recentReports.map((report) => {
+          const Icon = report.category?.toLowerCase().includes('prescription') ? ClipboardList : FileText;
+          const subtitle = [report.doctor, report.hospital, formatReportDate(report.reportDate || report.createdAt)]
+            .filter(Boolean)
+            .join(' • ');
+
+          return (
           <div
-            key={title}
+            key={report.id}
+            role="button"
+            tabIndex={0}
+            onClick={() => navigate(`/vault?document=${encodeURIComponent(report.id)}`)}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault();
+                navigate(`/vault?document=${encodeURIComponent(report.id)}`);
+              }
+            }}
             className="flex items-center gap-4 border border-slate-100 rounded-lg p-4 hover:bg-slate-50 transition-colors cursor-pointer"
           >
             <div className="w-10 h-10 rounded-lg bg-slate-100 flex items-center justify-center text-slate-500 shrink-0">
@@ -464,45 +405,87 @@ function RecentUploads() {
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-sm font-semibold text-slate-800 truncate">
-                {title}
+                {report.title || report.category || 'Medical document'}
               </p>
-              <p className="text-xs text-slate-400 mt-0.5">{subtitle}</p>
+              <p className="text-xs text-slate-400 mt-0.5">{subtitle || formatReportDate(report.reportDate || report.createdAt)}</p>
             </div>
             <span className="text-xs font-medium bg-emerald-50 text-emerald-600 px-3 py-1.5 rounded-full whitespace-nowrap">
-              {status}
+              {report.analysis ? 'AI Processed' : 'Uploaded'}
             </span>
             <ChevronRight size={16} className="text-slate-300 shrink-0" />
           </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );
 }
 
-function CurrentMedications() {
+function CurrentMedications({ medications = [] }) {
+  const [isMedicationModalOpen, setIsMedicationModalOpen] = useState(false);
+  const visibleMedications = medications.slice(0, 5);
+
   return (
     <div className="bg-white border border-slate-200 rounded-xl p-5">
       <div className="flex items-center justify-between mb-4">
         <h3 className="text-base font-semibold text-slate-900 ">
           Current Medications
         </h3>
-        <button className="text-xs font-semibold text-blue-600 hover:underline">
-          REFILL ALL
+        <button
+          type="button"
+          onClick={() => setIsMedicationModalOpen(true)}
+          disabled={medications.length === 0}
+          className="text-xs font-semibold text-blue-600 hover:underline disabled:text-slate-300 disabled:no-underline"
+        >
+          VIEW ALL
         </button>
       </div>
 
       <div className="space-y-3">
-        {medications.map(({ name, schedule, color }) => (
-          <div key={name} className="flex items-center gap-3">
-            <span className={`w-1.5 h-10 rounded-full ${color}`} />
-            <div className="flex-1">
-              <p className="text-sm font-semibold text-slate-800 ">{name}</p>
-              <p className="text-xs text-slate-400 mt-0.5">{schedule}</p>
+        {medications.length === 0 ? (
+          <p className="text-sm text-slate-500">No active medications found in your uploaded reports.</p>
+        ) : (
+          visibleMedications.map(({ name, schedule, color }) => (
+            <div key={name} className="flex items-center gap-3">
+              <span className={`w-1.5 h-10 rounded-full ${color}`} />
+              <div className="flex-1">
+                <p className="text-sm font-semibold text-slate-800">{name}</p>
+                <p className="text-xs text-slate-400 mt-0.5">{schedule}</p>
+              </div>
             </div>
-            <span className="w-5 h-5 rounded-full border-2 border-slate-300 " />
-          </div>
-        ))}
+          ))
+        )}
       </div>
+
+      {isMedicationModalOpen && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/40 px-4" onClick={() => setIsMedicationModalOpen(false)}>
+          <div className="w-full max-w-lg rounded-2xl border border-slate-200 bg-white p-6 text-left shadow-2xl" onClick={(event) => event.stopPropagation()}>
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wide text-blue-600">Medication list</p>
+                <h2 className="mt-2 text-xl font-semibold text-slate-900">All medications</h2>
+              </div>
+              <button type="button" onClick={() => setIsMedicationModalOpen(false)} className="rounded-lg px-2 py-1 text-2xl leading-none text-slate-400 hover:bg-slate-100 hover:text-slate-700" aria-label="Close medication list">&times;</button>
+            </div>
+
+            <div className="mt-5 max-h-[60vh] space-y-3 overflow-y-auto pr-1">
+              {medications.length === 0 ? (
+                <p className="text-sm text-slate-500">No active medications found in your uploaded reports.</p>
+              ) : (
+                medications.map(({ name, schedule, color }) => (
+                  <div key={`${name}-modal`} className="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
+                    <span className={`h-8 w-1.5 rounded-full ${color}`} />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold text-slate-800">{name}</p>
+                      <p className="text-xs text-slate-500 mt-0.5">{schedule}</p>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -515,6 +498,13 @@ export default function Dashboard() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const [notifications, setNotifications] = useState([]);
+  const [vaultReports, setVaultReports] = useState([]);
+  const [familySummary, setFamilySummary] = useState({
+    totalMembers: 0,
+    upcomingCheckups: 0,
+    relationshipTagCount: 0,
+    membersWithHealthNotes: 0,
+  });
   // linkIds accepted/declined this session — see PatientNotifications.jsx
   // for why this (not the notification row itself) is what hides the
   // Accept/Decline buttons: accepting/declining creates a SEPARATE
@@ -549,6 +539,69 @@ export default function Dashboard() {
       window.removeEventListener('patientNotification', onNotificationUpdate);
     };
   }, [profile, token]);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    async function loadFamilySummary() {
+      if (!isAuthenticated || !token) {
+        setFamilySummary({
+          totalMembers: 0,
+          upcomingCheckups: 0,
+          relationshipTagCount: 0,
+          membersWithHealthNotes: 0,
+        });
+        return;
+      }
+
+      try {
+        const result = await getFamilyDashboard(token);
+        if (!isMounted) return;
+        setFamilySummary(result?.summary || {
+          totalMembers: 0,
+          upcomingCheckups: 0,
+          relationshipTagCount: 0,
+          membersWithHealthNotes: 0,
+        });
+      } catch {
+        if (isMounted) {
+          setFamilySummary({
+            totalMembers: 0,
+            upcomingCheckups: 0,
+            relationshipTagCount: 0,
+            membersWithHealthNotes: 0,
+          });
+        }
+      }
+    }
+
+    async function loadVaultReports() {
+      if (!isAuthenticated || !token) {
+        setVaultReports([]);
+        return;
+      }
+
+      try {
+        const result = await getTimelineReports(token);
+        if (!isMounted) return;
+        const list = Array.isArray(result?.reports) ? result.reports : [];
+        setVaultReports(list);
+      } catch {
+        if (isMounted) {
+          setVaultReports([]);
+        }
+      }
+    }
+
+    loadVaultReports();
+    loadFamilySummary();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [isAuthenticated, token]);
+
+  const medications = useMemo(() => parseMedicationEntries(vaultReports), [vaultReports]);
 
   // The 'patientNotification' event above only fires from code running in
   // THIS tab (see PatientNotifications.jsx for the full reasoning) — this
@@ -628,6 +681,38 @@ export default function Dashboard() {
     };
   }, [cachedUser, isAuthenticated, token]);
 
+  const statCards = [
+    {
+      icon: FileText,
+      tag: null,
+      value: String(vaultReports.length || 0),
+      label: "Total Documents",
+      iconBg: "bg-blue-50 text-blue-600",
+    },
+    {
+      icon: Users,
+      tag: null,
+      value: String(familySummary.totalMembers || 0),
+      label: "Family Members",
+      iconBg: "bg-blue-50 text-blue-600",
+    },
+    {
+      icon: AlertTriangle,
+      tag: medications.length > 0 ? "Active meds" : "No alerts",
+      tagColor: "text-orange-600",
+      value: String(medications.length || 0),
+      label: "Medicine Alerts",
+      iconBg: "bg-orange-50 text-orange-600",
+    },
+    {
+      icon: ClipboardList,
+      tag: familySummary.upcomingCheckups > 0 ? "In next 30 days" : null,
+      value: String(familySummary.upcomingCheckups || 0),
+      label: "Upcoming Checkups",
+      iconBg: "bg-blue-50 text-blue-600",
+    },
+  ];
+
   return (
     <div className="flex h-screen overflow-hidden bg-slate-50 text-slate-900 ">
       <Sidebar onOpenSettings={() => setIsSettingsOpen(true)} />
@@ -704,12 +789,11 @@ export default function Dashboard() {
 
           <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
             <div className="xl:col-span-2 space-y-6">
-              <Hba1cChart />
-              <RecentUploads />
+              <RecentUploads reports={vaultReports} />
             </div>
 
             <div className="space-y-6">
-              <CurrentMedications />
+              <CurrentMedications medications={medications} />
             </div>
           </div>
         </main>

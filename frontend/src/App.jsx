@@ -56,8 +56,15 @@ function hasCompletedRole(user) {
 }
 
 // Helper function to route a fully-onboarded user to the correct dashboard for their role
+function getUserRole(user) {
+  const role = String(user?.role || '').trim().toLowerCase();
+  if (role === 'doctor') return 'doctor';
+  if (role === 'patient') return 'patient';
+  return 'patient';
+}
+
 function getHomeRoute(user) {
-  return user?.role === "doctor" ? "/doctor-dashboard" : "/dashboard";
+  return getUserRole(user) === "doctor" ? "/doctor-dashboard" : "/dashboard";
 }
 
 // GuestRoute: Restricted to unauthenticated users (or users who haven't completed role setup yet).
@@ -138,6 +145,31 @@ function ProtectedRoute({ children }) {
 
   return children;
 }
+// PatientRoute: same as ProtectedRoute, but also requires the user to be a patient.
+// Doctors who are logged in and try to access this get bounced to /doctor-dashboard.
+function PatientRoute({ children }) {
+  const { isAuthenticated, user, authReady } = useAuth();
+  const location = useLocation();
+
+  if (!authReady) {
+    return <LoadingSpinner />;
+  }
+
+  if (!isAuthenticated) {
+    return <Navigate to="/login" state={{ from: location }} replace />;
+  }
+
+  if (!hasCompletedRole(user)) {
+    return <Navigate to="/role-selection" replace />;
+  }
+
+  if (getUserRole(user) !== "patient") {
+    return <Navigate to="/doctor-dashboard" replace />;
+  }
+
+  return children;
+}
+
 // DoctorRoute: same as ProtectedRoute, but also requires role === "doctor".
 // Patients who are logged in and try to access this get bounced to /dashboard.
 function DoctorRoute({ children }) {
@@ -156,7 +188,7 @@ function DoctorRoute({ children }) {
     return <Navigate to="/role-selection" replace />;
   }
 
-  if (user.role !== "doctor") {
+  if (getUserRole(user) !== "doctor") {
     return <Navigate to="/dashboard" replace />;
   }
 
@@ -201,9 +233,9 @@ export default function App() {
         <Route
           path="/dashboard"
           element={
-            <ProtectedRoute>
+            <PatientRoute>
               <Dashboard />
-            </ProtectedRoute>
+            </PatientRoute>
           }
         />
 

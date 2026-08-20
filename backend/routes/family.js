@@ -13,7 +13,7 @@ import {
   confirmPendingFamilyMemberAuthorizationRequest,
 } from '../db/family.js';
 import { sendFamilyMemberAuthorizationEmail } from '../utils/mailer.js';
-import { findUserById } from '../db/users.js';
+import { findUserByEmail, findUserById } from '../db/users.js';
 import { isDoctorLinkedToPatient } from '../db/doctorPatients.js';
 import { createNotification } from '../db/notifications.js';
 
@@ -423,6 +423,15 @@ router.post('/members/authorize', async (req, res) => {
     const inviterEmail = normalizeText(payload.inviterEmail) || user?.email || null;
     const memberName = normalizeText(payload.name);
 
+    const patientAccount = await findUserByEmail(recipientEmail);
+    if (!patientAccount || patientAccount.role !== 'patient') {
+      return res.status(400).json({
+        message: 'This email is not registered as a patient account. Authorization email was not sent.',
+        errorCode: 'PATIENT_ACCOUNT_NOT_FOUND',
+        errorHint: 'Ask the family member to create a patient account first, then invite them again.',
+      });
+    }
+
     const { member, authorizationToken } = await createPendingFamilyMemberAuthorizationRequest({
       ...payload,
       userId: user.userId,
@@ -433,7 +442,6 @@ router.post('/members/authorize', async (req, res) => {
 
     if (!sent) {
       console.error('Failed to send family authorization email to', recipientEmail);
-      // rollback the pending member to avoid stale pending rows
       try {
         if (member?.id) {
           await deleteFamilyMember(member.id, { userId: user.userId });

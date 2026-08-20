@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "../../../context/AuthContext";
 import { getTimelineReports, generateReportSummary } from "../../../api/reports";
 import Logo from "../../../components/Common/Logo";
@@ -120,6 +120,8 @@ function getPreviewUrl(fileUrl) {
 export default function MedicalVault() {
   const { token, user, isAuthenticated } = useAuth();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const requestedDocumentId = searchParams.get('document');
 
   const [reports, setReports] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -132,6 +134,15 @@ export default function MedicalVault() {
   const [detailsReport, setDetailsReport] = useState(null);
   const [summaryReport, setSummaryReport] = useState(null);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+
+  useEffect(() => {
+    if (!requestedDocumentId || reports.length === 0) return;
+
+    const requestedReport = reports.find((report) => String(report.id) === requestedDocumentId);
+    if (requestedReport) {
+      setDetailsReport(requestedReport);
+    }
+  }, [reports, requestedDocumentId]);
 
   useEffect(() => {
     if (!isAuthenticated || !token) {
