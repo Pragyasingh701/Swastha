@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Bell } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
+import { usePolling } from '../../hooks/usePolling';
 import {
   fetchNotifications,
   markAllNotificationsRead,
@@ -48,6 +49,15 @@ export default function PatientNotifications() {
 
     return () => window.removeEventListener('patientNotification', handleNotificationUpdate);
   }, [token, user?.role]);
+
+  // The 'patientNotification' event above only fires from code running in
+  // THIS tab — it does nothing for a new request from a doctor elsewhere,
+  // or an accept/decline done on another device/tab. Same root cause and
+  // fix as NotificationBell.jsx / DoctorRequests.jsx / DoctorPatients.jsx:
+  // no realtime/websocket exists in this app (see
+  // frontend/src/hooks/usePolling.js), so this polls every 20s while
+  // visible plus refetches immediately on window focus.
+  usePolling(loadNotifications, { intervalMs: 20000 });
 
   useEffect(() => {
     function handleClickOutside(event) {

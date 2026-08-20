@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState, useCallback } from "react";
 import { Bell, Stethoscope, CheckCircle2, XCircle } from "lucide-react";
 import { getDoctorPatientNotifications } from "../../services/doctorPatients";
+import { usePolling } from "../../hooks/usePolling";
 
 /**
  * Shared bell icon + dropdown for BOTH doctor and patient headers.
@@ -35,6 +36,13 @@ export default function NotificationBell() {
   useEffect(() => {
     load();
   }, [load]);
+
+  // The bell is mounted on every page, so its badge count must stay
+  // correct even while the dropdown is closed — not just refresh when
+  // opened. Polls every 20s while the tab is visible, and immediately on
+  // window focus / tab-visibility regain (covers "accepted via email in
+  // another tab, switched back here").
+  usePolling(load, { intervalMs: 20000 });
 
   useEffect(() => {
     function handleClickOutside(event) {
