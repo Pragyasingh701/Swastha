@@ -88,15 +88,65 @@ router.post('/link', async (req, res) => {
     }
 
     return res.json({
-      message: 'Patient linked successfully.',
+      message: result.link.status === 'pending' ? 'Request sent to patient.' : 'Patient linked successfully.',
       patient: result.patient,
-      link: result.link,
+      // Deliberately NOT the raw doctor_patient row — it carries a
+      // denormalized snapshot of patient_dob/patient_blood_group/
+      // patient_phone etc., which would leak health-adjacent data
+      // through this field even though `patient` above is already
+      // correctly minimal for a pending link.
+      link: { id: result.link.id, status: result.link.status },
     });
   } catch (error) {
     console.error('Doctor patient link error:', error);
     return res.status(400).json({
       message: error?.message || 'Unable to link patient.',
     });
+  }
+});
+
+/**
+ * GET /api/doctor-patients/:patientId
+ * DOCTOR-facing patient detail. THE security boundary for patient detail:
+ * returns 403 unless the doctor_patient link for this pair is 'accepted',
+ * even if the doctor hits this directly with a valid patient id. Never
+ * relies on the frontend hiding a pending card.
+ */
+router.get('/:patientId', async (req, res) => {
+  const authUser = getAuthUser(req);
+
+  if (!authUser?.userId) {
+    return res.status(401).json({ message: 'Authentication required.' });
+  }
+
+  const patientId = String(req.params?.patientId ?? '').trim();
+  if (!patientId) {
+    return res.status(400).json({ message: 'Patient ID is required.' });
+  }
+
+  try {
+    // isDoctorLinkedToPatient requires status = 'accepted' (see
+    // backend/db/doctorPatients.js) — pending/declined/absent all fail here.
+    const allowed = await isDoctorLinkedToPatient(authUser.userId, patientId);
+    if (!allowed) {
+      return res.status(403).json({
+        message: 'You do not have access to this patient. The patient must accept your request first.',
+      });
+    }
+
+    const patients = await getDoctorPatients(authUser.userId);
+    const patient = patients.find(
+      (p) => p.patientUserId === patientId && p.linkStatus === 'accepted'
+    );
+
+    if (!patient) {
+      return res.status(404).json({ message: 'Patient not found.' });
+    }
+
+    return res.json({ patient });
+  } catch (error) {
+    console.error('Doctor patient detail error:', error);
+    return res.status(500).json({ message: 'Unable to load patient.' });
   }
 });
 

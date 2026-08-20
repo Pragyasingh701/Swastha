@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Mail, Phone, ShieldCheck, Sparkles, Stethoscope } from "lucide-react";
+import { Mail, Phone, ShieldCheck, Sparkles, Stethoscope, Bell } from "lucide-react";
 import DoctorSidebar from "../components/DoctorSidebar";
 import ProfileDropdown from "../../settings/components/ProfileDropdown";
 import SettingsModal from "../../settings/components/SettingsModal";

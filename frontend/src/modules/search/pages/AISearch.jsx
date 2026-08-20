@@ -21,6 +21,7 @@ import {
   FileText,
   Loader2,
   ExternalLink,
+  Stethoscope,
 } from "lucide-react";
 
 // Same nav list as Dashboard.jsx / Timeline.jsx / etc.
@@ -29,6 +30,7 @@ const navItems = [
   { label: "Health Timeline", icon: TrendingUp, route: "/timeline" },
   { label: "Medical Vault", icon: Folder, route: "/vault" },
   { label: "Family Records", icon: Users, route: "/family-vault" },
+  { label: "Doctor Requests", icon: Stethoscope, route: "/doctor-requests" },
   { label: "Lab Insights", icon: TrendingUp, route: "/lab-trends" },
   { label: "Ask Swastha", icon: Sparkles, route: "/search" },
 ];
