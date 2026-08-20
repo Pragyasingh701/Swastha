@@ -104,3 +104,25 @@ export const sendFamilyMemberAuthorizationEmail = async (email, inviterEmail, me
   return await sendEmailViaBrevo(email, subject, html);
 };
 
+export const sendDoctorRequestEmail = async (email, doctorName, acceptUrl, declineUrl) => {
+  const subject = 'Swastha — A doctor requested access to your health records';
+  const html = `
+    <div style="font-family: Arial, sans-serif; max-width: 540px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 12px; background-color: #ffffff;">
+      <h2 style="color: #004ac6; margin-bottom: 10px;">Doctor access request</h2>
+      <p style="font-size: 14px; color: #434655;">${doctorName ? `Dr. ${doctorName}` : 'A doctor'} has requested access to your health records on Swastha.</p>
+      <p style="font-size: 14px; color: #434655;">You can respond right from this email, or from the notification bell in the app — whichever you use first, the other will show the same result.</p>
+      <div style="text-align: center; margin: 25px 0;">
+        <a href="${acceptUrl}" style="background-color: #2563eb; color: #ffffff; padding: 12px 24px; text-decoration: none; border-radius: 8px; font-weight: bold; display: inline-block; margin: 0 8px;">
+          Accept
+        </a>
+        <a href="${declineUrl}" style="background-color: #ffffff; color: #475569; padding: 12px 24px; text-decoration: none; border-radius: 8px; font-weight: bold; display: inline-block; margin: 0 8px; border: 1px solid #cbd5e1;">
+          Decline
+        </a>
+      </div>
+      <p style="font-size: 12px; color: #737686;">If you did not expect this request, you can safely decline it or ignore this email.</p>
+    </div>
+  `;
+
+  return await sendEmailViaBrevo(email, subject, html);
+};
+
