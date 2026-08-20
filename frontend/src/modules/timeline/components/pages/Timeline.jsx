@@ -20,7 +20,6 @@ import {
   Settings,
   HelpCircle,
   UploadCloud,
-  SlidersHorizontal,
   ChevronDown,
   ChevronRight,
   X,
@@ -669,11 +668,6 @@ function FilterBar({ categoryFilter, setCategoryFilter, categories, dateFrom, da
         })}
       </div>
 
-      <div className="flex items-center gap-2">
-        <button className="w-9 h-9 rounded-xl flex items-center justify-center text-slate-400 transition-all duration-200 hover:bg-slate-50 hover:text-blue-600 ">
-          <SlidersHorizontal size={17} />
-        </button>
-      </div>
     </div>
   );
 }
