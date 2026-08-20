@@ -6,10 +6,16 @@
 import { supabase } from '../config/supabase.js';
 
 /**
- * True only if a doctor_patient link row exists for this doctor+patient
- * pair. This is the sole gate that lets a doctor's JWT read a DIFFERENT
- * user's report_embeddings/reports — without a link, a doctor can only
- * ever search their own data (id === req.user.userId).
+ * True only if a doctor_patient link row exists AND is 'accepted' for this
+ * doctor+patient pair. This is the sole gate that lets a doctor's JWT read
+ * a DIFFERENT user's report_embeddings/reports via Ask Swastha — without
+ * an accepted link, a doctor can only ever search their own data
+ * (id === req.user.userId).
+ *
+ * status = 'accepted' is required, not just "a row exists" — a pending
+ * link means the patient hasn't approved the doctor yet, so no health
+ * data (including via search) may be exposed, matching
+ * backend/db/doctorPatients.js's isDoctorLinkedToPatient exactly.
  */
 export async function isDoctorLinkedToPatient(doctorId, patientUserId) {
   if (!doctorId || !patientUserId) return false;
@@ -19,6 +25,7 @@ export async function isDoctorLinkedToPatient(doctorId, patientUserId) {
     .select('id')
     .eq('doctor_id', doctorId)
     .eq('patient_id', patientUserId)
+    .eq('status', 'accepted')
     .maybeSingle();
 
   if (error && error.code !== 'PGRST116') {

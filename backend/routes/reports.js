@@ -2,6 +2,7 @@ import express from 'express';
 import jwt from 'jsonwebtoken';
 import { listTimelineReports, getTimelineReport, createTimelineReport, updateTimelineReport, deleteTimelineReport } from '../db/reports.js';
 import { findUserByEmail } from '../db/users.js';
+import { isDoctorLinkedToPatient } from '../db/doctorPatients.js';
 import { validateTimelineReportPayload } from '../utils/timelineValidation.js';
 import { uploadMemory, uploadFileToSupabase } from '../config/supabaseStorage.js';
 import supabase from '../config/supabase.js';
@@ -218,6 +219,25 @@ router.get('/', async (req, res) => {
         return res.status(404).json({ message: 'No account found for that email.' });
       }
       targetUserId = targetUser.id;
+    }
+
+    // SECURITY: a DOCTOR requesting someone ELSE's reports (targetUserId
+    // !== the caller's own id) requires an accepted doctor_patient link.
+    // This was previously unchecked for doctors — any doctor could read
+    // any patient's reports by passing their id/email as a query param,
+    // link or no link. Scoped to role === 'doctor' only: this same query
+    // param shape is also used by the family-vault "view a family
+    // member's timeline" feature (Timeline.jsx), which has its own,
+    // separate authorization workflow (see backend/routes/family.js) that
+    // this route does not check — narrowing to doctors avoids breaking
+    // that path while still closing the doctor-side hole.
+    if (targetUserId !== user.userId && user.role === 'doctor') {
+      const allowed = await isDoctorLinkedToPatient(user.userId, targetUserId);
+      if (!allowed) {
+        return res.status(403).json({
+          message: 'You do not have access to this patient. The patient must accept your request first.',
+        });
+      }
     }
 
     const reports = await listTimelineReports(targetUserId);

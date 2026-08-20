@@ -25,6 +25,7 @@ import DoctorSettings from "./modules/doctor/pages/DoctorSettings";
 
 // Dashboard
 import Dashboard from "./modules/dashboard/pages/Dashboard";
+import DoctorRequests from "./modules/dashboard/pages/DoctorRequests";
 
 // Family
 import FamilyVault from "./modules/family/pages/FamilyVault";
@@ -231,6 +232,15 @@ export default function App() {
           element={
             <ProtectedRoute>
               <Timeline />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/doctor-requests"
+          element={
+            <ProtectedRoute>
+              <DoctorRequests />
             </ProtectedRoute>
           }
         />
