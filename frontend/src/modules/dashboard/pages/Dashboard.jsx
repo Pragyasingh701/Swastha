@@ -6,12 +6,14 @@ import ProfileDropdown from "../../settings/components/ProfileDropdown";
 import SettingsModal from "../../settings/components/SettingsModal";
 import Logo from "../../../components/Common/Logo";
 import PatientIdBadge from "../../../components/Common/PatientIdBadge";
+import { usePolling } from "../../../hooks/usePolling";
 import {
   fetchNotifications,
   markAllNotificationsRead,
   markNotificationRead,
   readNotifications,
 } from "../../../utils/notifications";
+import { acceptDoctorRequest, declineDoctorRequest } from "../../../services/doctorPatients";
 
 import {
   LayoutGrid,
@@ -29,9 +31,9 @@ import {
   Sparkles,
   ChevronRight,
   LogOut,
-  Stethoscope,
+  Check,
+  X,
 } from "lucide-react";
-import NotificationBell from "../../../components/Common/NotificationBell";
 import {
   LineChart,
   Line,
@@ -56,7 +58,6 @@ const navItems = [
   { label: "Health Timeline", icon: TrendingUp, route: "/timeline" },
   { label: "Medical Vault", icon: Folder, route: "/vault" },
   { label: "Family Records", icon: Users, route: "/family-vault" },
-  { label: "Doctor Requests", icon: Stethoscope, route: "/doctor-requests" },
   { label: "Lab Insights", icon: TrendingUp, route: "/lab-trends" },
   { label: "Ask Swastha", icon: Sparkles, route: "/search" },
 ];
@@ -191,6 +192,11 @@ function Header({
   notifications,
   onMarkRead,
   onMarkAllRead,
+  resolvedLinkIds,
+  busyLinkId,
+  requestError,
+  onAcceptRequest,
+  onDeclineRequest,
 }) {
   const navigate = useNavigate();
   const [selectedNotification, setSelectedNotification] = useState(null);
@@ -232,39 +238,83 @@ function Header({
               </button>
             </div>
 
+            {requestError && (
+              <p className="px-4 py-2 text-xs text-red-600 bg-red-50 border-b border-red-100">{requestError}</p>
+            )}
+
             <div className="max-h-80 overflow-y-auto">
               {notifications.length === 0 ? (
                 <p className="px-4 py-5 text-sm text-slate-500">No activity yet.</p>
               ) : (
-                notifications.map((item) => (
-                  <button
-                    key={item.id}
-                    type="button"
-                    onClick={() => {
-                      setSelectedNotification(item);
-                      onMarkRead(item);
-                    }}
-                    className="w-full flex items-start gap-3 border-b border-slate-100 px-4 py-3 text-left transition-colors hover:bg-slate-50 last:border-b-0"
-                  >
-                    <span
-                      title={item.read ? "Read" : "Unread"}
-                      aria-label={item.read ? "Read notification" : "Unread notification"}
-                      className={`mt-2 h-2.5 w-2.5 rounded-full ${item.read ? "bg-slate-300" : "bg-red-500"}`}
-                    />
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center justify-between gap-3">
-                        <p className="text-sm font-medium text-slate-800">{item.title}</p>
-                        {!item.read && (
-                          <span className="rounded-full bg-blue-50 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-blue-600">
-                            New
-                          </span>
+                notifications.map((item) => {
+                  const linkId = item.metadata?.linkId;
+                  // See PatientNotifications.jsx for why resolvedLinkIds
+                  // (not the notification's own fields) gates this — an
+                  // accept/decline creates a NEW notification for the
+                  // doctor, it doesn't change this one.
+                  const isActionableRequest =
+                    item.eventType === 'doctor_request' && linkId && !resolvedLinkIds.has(linkId);
+
+                  return (
+                    <div
+                      key={item.id}
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => {
+                        setSelectedNotification(item);
+                        onMarkRead(item);
+                      }}
+                      onKeyDown={(event) => {
+                        if (event.key === 'Enter' || event.key === ' ') {
+                          setSelectedNotification(item);
+                          onMarkRead(item);
+                        }
+                      }}
+                      className="w-full flex items-start gap-3 border-b border-slate-100 px-4 py-3 text-left transition-colors hover:bg-slate-50 last:border-b-0 cursor-pointer"
+                    >
+                      <span
+                        title={item.read ? "Read" : "Unread"}
+                        aria-label={item.read ? "Read notification" : "Unread notification"}
+                        className={`mt-2 h-2.5 w-2.5 rounded-full shrink-0 ${item.read ? "bg-slate-300" : "bg-red-500"}`}
+                      />
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center justify-between gap-3">
+                          <p className="text-sm font-medium text-slate-800">{item.title}</p>
+                          {!item.read && (
+                            <span className="rounded-full bg-blue-50 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-blue-600">
+                              New
+                            </span>
+                          )}
+                        </div>
+                        <p className="mt-1 text-xs leading-5 text-slate-600">{item.message}</p>
+                        <p className="mt-1 text-[11px] text-slate-400">{new Date(item.createdAt).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}</p>
+
+                        {isActionableRequest && (
+                          <div className="mt-2 flex gap-2">
+                            <button
+                              type="button"
+                              disabled={busyLinkId === linkId}
+                              onClick={(event) => onAcceptRequest(event, linkId)}
+                              className="flex items-center gap-1 rounded-lg bg-blue-700 px-2.5 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-blue-800 disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                              <Check size={12} />
+                              Accept
+                            </button>
+                            <button
+                              type="button"
+                              disabled={busyLinkId === linkId}
+                              onClick={(event) => onDeclineRequest(event, linkId)}
+                              className="flex items-center gap-1 rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs font-semibold text-slate-600 transition-colors hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                              <X size={12} />
+                              Decline
+                            </button>
+                          </div>
                         )}
                       </div>
-                      <p className="mt-1 text-xs leading-5 text-slate-600">{item.message}</p>
-                      <p className="mt-1 text-[11px] text-slate-400">{new Date(item.createdAt).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}</p>
                     </div>
-                  </button>
-                ))
+                  );
+                })
               )}
             </div>
 
@@ -460,28 +510,29 @@ export default function Dashboard() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const [notifications, setNotifications] = useState([]);
+  // linkIds accepted/declined this session — see PatientNotifications.jsx
+  // for why this (not the notification row itself) is what hides the
+  // Accept/Decline buttons: accepting/declining creates a SEPARATE
+  // notification for the doctor, it doesn't change this notification.
+  const [resolvedLinkIds, setResolvedLinkIds] = useState(() => new Set());
+  const [busyLinkId, setBusyLinkId] = useState(null);
+  const [requestError, setRequestError] = useState(null);
 
-  useEffect(() => {
-    let isMounted = true;
-
-    async function loadNotifications() {
-      if (!profile || !token || profile.role === 'doctor') {
-        if (isMounted) setNotifications([]);
-        return;
-      }
-
-      try {
-        const result = await fetchNotifications(token);
-        if (isMounted) {
-          setNotifications(result.notifications);
-        }
-      } catch {
-        if (isMounted) {
-          setNotifications(readNotifications(profile));
-        }
-      }
+  async function loadNotifications() {
+    if (!profile || !token || profile.role === 'doctor') {
+      setNotifications([]);
+      return;
     }
 
+    try {
+      const result = await fetchNotifications(token);
+      setNotifications(result.notifications);
+    } catch {
+      setNotifications(readNotifications(profile));
+    }
+  }
+
+  useEffect(() => {
     loadNotifications();
 
     const onNotificationUpdate = () => {
@@ -490,10 +541,43 @@ export default function Dashboard() {
 
     window.addEventListener('patientNotification', onNotificationUpdate);
     return () => {
-      isMounted = false;
       window.removeEventListener('patientNotification', onNotificationUpdate);
     };
   }, [profile, token]);
+
+  // The 'patientNotification' event above only fires from code running in
+  // THIS tab (see PatientNotifications.jsx for the full reasoning) — this
+  // is what makes a new doctor request, or an accept/decline from another
+  // tab/device, actually show up here without a hard refresh.
+  usePolling(loadNotifications, { intervalMs: 20000 });
+
+  async function handleAcceptDoctorRequest(event, linkId) {
+    event.stopPropagation();
+    setBusyLinkId(linkId);
+    setRequestError(null);
+    try {
+      await acceptDoctorRequest(linkId);
+      setResolvedLinkIds((prev) => new Set(prev).add(linkId));
+    } catch (err) {
+      setRequestError(err.message || 'Could not accept this request.');
+    } finally {
+      setBusyLinkId(null);
+    }
+  }
+
+  async function handleDeclineDoctorRequest(event, linkId) {
+    event.stopPropagation();
+    setBusyLinkId(linkId);
+    setRequestError(null);
+    try {
+      await declineDoctorRequest(linkId);
+      setResolvedLinkIds((prev) => new Set(prev).add(linkId));
+    } catch (err) {
+      setRequestError(err.message || 'Could not decline this request.');
+    } finally {
+      setBusyLinkId(null);
+    }
+  }
 
   useEffect(() => {
     function handleClickOutside(event) {
@@ -569,6 +653,11 @@ export default function Dashboard() {
               // Keep the current state if the API is temporarily unavailable.
             }
           }}
+          resolvedLinkIds={resolvedLinkIds}
+          busyLinkId={busyLinkId}
+          requestError={requestError}
+          onAcceptRequest={handleAcceptDoctorRequest}
+          onDeclineRequest={handleDeclineDoctorRequest}
         />
 
         <main className="flex-1 overflow-y-auto px-6 lg:px-8 py-8">

@@ -1,4 +1,17 @@
 import supabase from '../config/supabase.js';
+import { createNotification } from './notifications.js';
+
+// Pushing a notification is best-effort from a linking action's point of
+// view — a doctor's request/patient's response must NOT fail just because
+// the notifications table had a hiccup. Every call site below awaits this
+// but swallows its own error (logged, not thrown) for exactly that reason.
+async function notifySafely(args) {
+  try {
+    await createNotification(args);
+  } catch (error) {
+    console.warn('doctorPatients notification warning:', error?.message || error);
+  }
+}
 
 // Doctor -> patient linking is now request-based (status column, added in
 // supabase/migrations/20260820051121_add_status_to_doctor_patient.sql):
@@ -270,6 +283,27 @@ export const linkDoctorToPatient = async ({ doctorId, patientCode }) => {
     throw error;
   }
 
+  // Notify the patient — this is the ONLY place a doctor's access request
+  // becomes visible to them (there is no separate "Doctor Requests" page
+  // anymore; it lives entirely in the notification bell). metadata.linkId
+  // is what lets the bell render Accept/Decline buttons directly on this
+  // notification and call the right endpoint.
+  const { data: doctor } = await supabase
+    .from('doctors')
+    .select('name')
+    .eq('id', doctorId)
+    .maybeSingle();
+  const doctorName = doctor?.name || 'A doctor';
+  await notifySafely({
+    recipientId: patient.id,
+    actorId: doctorId,
+    actorRole: 'doctor',
+    eventType: 'doctor_request',
+    title: 'New doctor access request',
+    message: `Dr. ${doctorName} requested access to your health records.`,
+    metadata: { linkId: data.id, doctorName },
+  });
+
   return {
     link: data,
     // Pending: return the minimal shape, not the full patient object —
@@ -474,6 +508,17 @@ export const acceptDoctorLinkRequest = async ({ patientUserId, linkId }) => {
     .single();
 
   if (error) throw error;
+
+  await notifySafely({
+    recipientId: data.doctor_id,
+    actorId: patientUserId,
+    actorRole: 'patient',
+    eventType: 'doctor_request_accepted',
+    title: 'Request accepted',
+    message: `${data.patient_name || 'A patient'} accepted your access request.`,
+    metadata: { linkId: data.id },
+  });
+
   return data;
 };
 
@@ -511,6 +556,17 @@ export const declineDoctorLinkRequest = async ({ patientUserId, linkId }) => {
     .single();
 
   if (error) throw error;
+
+  await notifySafely({
+    recipientId: data.doctor_id,
+    actorId: patientUserId,
+    actorRole: 'patient',
+    eventType: 'doctor_request_declined',
+    title: 'Request declined',
+    message: `${data.patient_name || 'A patient'} declined your access request.`,
+    metadata: { linkId: data.id },
+  });
+
   return data;
 };
 
