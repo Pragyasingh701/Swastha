@@ -27,6 +27,7 @@ import {
   Stethoscope,
   Activity,
 } from "lucide-react";
+import NotificationBell from "../../../components/Common/NotificationBell";
 
 /* -----------------------------------------------------------
    Sidebar nav — Appointments, Consultations, and Schedule
@@ -142,10 +143,7 @@ function Sidebar() {
 function TopBar() {
   return (
     <header className="shrink-0 flex items-center justify-end gap-4 px-6 lg:px-8 py-5 border-b border-slate-200 bg-white ">
-      <button className="relative p-2 rounded-lg hover:bg-slate-100 shrink-0">
-        <Bell size={20} className="text-slate-600 " />
-        <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full" />
-      </button>
+      <NotificationBell />
 
       <ProfileDropdown />
     </header>

@@ -8,6 +8,8 @@ import {
   acceptDoctorLinkRequest,
   declineDoctorLinkRequest,
   isDoctorLinkedToPatient,
+  getDoctorNotifications,
+  getPatientNotifications,
 } from '../db/doctorPatients.js';
 
 const router = express.Router();
@@ -41,6 +43,36 @@ router.get('/', async (req, res) => {
   } catch (error) {
     console.error('Doctor patient list error:', error);
     return res.status(500).json({ message: 'Unable to load doctor patients.' });
+  }
+});
+
+/**
+ * GET /api/doctor-patients/notifications
+ * Bell-icon feed for BOTH sides — dispatches on the caller's own role
+ * (from the verified JWT, not a query param) so a doctor always gets
+ * getDoctorNotifications and a patient always gets getPatientNotifications;
+ * there is no way to ask for the other side's feed by changing a param.
+ * Each entry has { id, linkId, type, at, doctorName|patientName }.
+ *
+ * Declared before any '/:param' route so Express doesn't match
+ * "notifications" as a :patientId.
+ */
+router.get('/notifications', async (req, res) => {
+  const authUser = getAuthUser(req);
+
+  if (!authUser?.userId) {
+    return res.status(401).json({ message: 'Authentication required.' });
+  }
+
+  try {
+    const notifications =
+      authUser.role === 'doctor'
+        ? await getDoctorNotifications(authUser.userId)
+        : await getPatientNotifications(authUser.userId);
+    return res.json({ notifications });
+  } catch (error) {
+    console.error('Notifications fetch error:', error);
+    return res.status(500).json({ message: 'Unable to load notifications.' });
   }
 });
 

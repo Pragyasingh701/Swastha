@@ -327,6 +327,120 @@ export const getPendingRequestsForPatient = async (patientUserId) => {
 };
 
 /**
+ * Notification feed for a PATIENT's bell icon: one event per doctor_patient
+ * row for "a doctor requested access" (created_at), plus a second event
+ * for "you accepted/declined" if responded_at is set. Sorted newest first.
+ * type is one of 'request' | 'accepted' | 'declined' so the frontend can
+ * render each distinctly without re-deriving it from status.
+ */
+export const getPatientNotifications = async (patientUserId) => {
+  if (!patientUserId || !supabase) return [];
+
+  try {
+    const { data: links, error } = await supabase
+      .from('doctor_patient')
+      .select('*')
+      .eq('patient_id', patientUserId)
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+    if (!Array.isArray(links) || links.length === 0) return [];
+
+    const doctorIds = [...new Set(links.map((l) => l.doctor_id).filter(Boolean))];
+    const { data: doctors, error: doctorsError } = await supabase
+      .from('doctors')
+      .select('id, name')
+      .in('id', doctorIds);
+
+    if (doctorsError) throw doctorsError;
+    const doctorNameById = new Map((doctors || []).map((d) => [d.id, d.name || 'Unknown Doctor']));
+
+    const notifications = [];
+    for (const link of links) {
+      const doctorName = doctorNameById.get(link.doctor_id) || 'Unknown Doctor';
+
+      notifications.push({
+        id: `${link.id}-request`,
+        linkId: link.id,
+        type: 'request',
+        doctorName,
+        at: link.created_at,
+      });
+
+      if (link.responded_at && (link.status === 'accepted' || link.status === 'declined')) {
+        notifications.push({
+          id: `${link.id}-${link.status}`,
+          linkId: link.id,
+          type: link.status, // 'accepted' | 'declined'
+          doctorName,
+          at: link.responded_at,
+        });
+      }
+    }
+
+    notifications.sort((a, b) => new Date(b.at) - new Date(a.at));
+    return notifications;
+  } catch (error) {
+    console.warn('Patient notifications fetch warning:', error?.message || error);
+    return [];
+  }
+};
+
+/**
+ * Notification feed for a DOCTOR's bell icon: one event per doctor_patient
+ * row for "you sent a request" (created_at), plus a second event for "the
+ * patient accepted/declined" if responded_at is set. Same shape as
+ * getPatientNotifications but from the doctor's side.
+ */
+export const getDoctorNotifications = async (doctorId) => {
+  if (!doctorId || !supabase) return [];
+
+  try {
+    const { data: links, error } = await supabase
+      .from('doctor_patient')
+      .select('*')
+      .eq('doctor_id', doctorId)
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+    if (!Array.isArray(links) || links.length === 0) return [];
+
+    const notifications = [];
+    for (const link of links) {
+      const patientName = link.patient_name || 'Patient';
+
+      notifications.push({
+        id: `${link.id}-request`,
+        linkId: link.id,
+        type: 'request-sent',
+        patientName,
+        at: link.created_at,
+      });
+
+      if (link.responded_at && (link.status === 'accepted' || link.status === 'declined')) {
+        notifications.push({
+          id: `${link.id}-${link.status}`,
+          linkId: link.id,
+          // 'patient-accepted' | 'patient-declined' — distinct from the
+          // patient-side 'accepted'/'declined' types so a shared bell
+          // component can tell which side it's rendering for from the
+          // type alone.
+          type: `patient-${link.status}`,
+          patientName,
+          at: link.responded_at,
+        });
+      }
+    }
+
+    notifications.sort((a, b) => new Date(b.at) - new Date(a.at));
+    return notifications;
+  } catch (error) {
+    console.warn('Doctor notifications fetch warning:', error?.message || error);
+    return [];
+  }
+};
+
+/**
  * Patient accepts a pending request. Only the patient the link belongs to
  * may accept it — patientUserId must match the link's patient_id, checked
  * server-side, not trusted from the request body/params alone.
@@ -354,7 +468,7 @@ export const acceptDoctorLinkRequest = async ({ patientUserId, linkId }) => {
 
   const { data, error } = await supabase
     .from('doctor_patient')
-    .update({ status: 'accepted' })
+    .update({ status: 'accepted', responded_at: new Date().toISOString() })
     .eq('id', linkId)
     .select()
     .single();
@@ -391,7 +505,7 @@ export const declineDoctorLinkRequest = async ({ patientUserId, linkId }) => {
 
   const { data, error } = await supabase
     .from('doctor_patient')
-    .update({ status: 'declined' })
+    .update({ status: 'declined', responded_at: new Date().toISOString() })
     .eq('id', linkId)
     .select()
     .single();

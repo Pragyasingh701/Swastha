@@ -31,6 +31,7 @@ import {
   CalendarDays,
   Bell,
 } from "lucide-react";
+import NotificationBell from "../../../components/Common/NotificationBell";
 
 /* -----------------------------------------------------------
    Nav + category config — same shape as Timeline.jsx so a report's
@@ -42,6 +43,7 @@ const navItems = [
   { label: "Health Timeline", icon: TrendingUp, route: "/timeline" },
   { label: "Medical Vault", icon: Folder, active: true, route: "/vault" },
   { label: "Family Records", icon: Users, route: "/family-vault" },
+  { label: "Doctor Requests", icon: Stethoscope, route: "/doctor-requests" },
   { label: "Lab Insights", icon: TrendingUp, route: "/lab-trends" },
   { label: "Ask Swastha", icon: Sparkles, route: "/search" },
 ];
@@ -355,10 +357,7 @@ function Header({ profile }) {
         Ask Swastha about your health records...
       </button>
 
-      <button className="relative p-2 rounded-lg hover:bg-slate-100 shrink-0">
-        <Bell size={20} className="text-slate-600 " />
-        <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full" />
-      </button>
+      <NotificationBell />
 
       <PatientIdBadge customProfile={profile} />
 
