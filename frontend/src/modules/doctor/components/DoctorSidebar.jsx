@@ -1,7 +1,8 @@
-import React from "react";
+import React, { useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { Bell, Settings } from "lucide-react";
 import Logo from "../../../components/Common/Logo";
+import SettingsModal from "../../settings/components/SettingsModal";
 
 const navItems = [
   { label: "Dashboard", icon: "dashboard", route: "/doctor-dashboard" },
@@ -13,6 +14,7 @@ const navItems = [
 export default function DoctorSidebar() {
   const navigate = useNavigate();
   const location = useLocation();
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
   return (
     <aside className="hidden lg:flex lg:flex-col w-64 shrink-0 bg-white border-r border-slate-200 h-screen overflow-y-auto px-4 py-6">
@@ -22,7 +24,7 @@ export default function DoctorSidebar() {
 
       <nav className="flex-1 space-y-1">
         {navItems.map(({ label, icon, route }) => {
-          const isActive = location.pathname === route;
+          const isActive = location.pathname === route || location.pathname.startsWith(`${route}/`);
           return (
             <button
               key={label}
@@ -46,21 +48,15 @@ export default function DoctorSidebar() {
       <div className="space-y-1 pt-4 border-t border-slate-100 ">
         <button
           type="button"
-          onClick={() => navigate("/doctor/messages")}
-          className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors duration-200"
-        >
-          <Bell size={18} />
-          Notifications
-        </button>
-        <button
-          type="button"
-          onClick={() => navigate("/doctor/settings")}
+          onClick={() => setIsSettingsOpen(true)}
           className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors duration-200"
         >
           <Settings size={18} />
           Settings
         </button>
       </div>
+
+      <SettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} />
     </aside>
   );
 }

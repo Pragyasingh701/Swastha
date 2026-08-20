@@ -5,7 +5,6 @@ import { getDoctorPatients } from "../../../services/doctorPatients";
 import { searchReportsConversational, clearConversation } from "../../../api/search";
 import {
   Sparkles,
-  Bell,
   Send,
   FileText,
   Loader2,
@@ -189,10 +188,6 @@ export default function DoctorAskSwastha() {
           </div>
 
           <div className="flex items-center gap-3 shrink-0">
-            <button className="relative p-2 rounded-lg hover:bg-slate-100">
-              <Bell size={20} className="text-slate-600" />
-              <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full" />
-            </button>
             <ProfileDropdown />
           </div>
         </header>

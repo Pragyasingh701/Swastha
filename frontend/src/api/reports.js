@@ -97,8 +97,13 @@ export async function updateTimelineReport(reportId, reportData, token, file) {
   }, token);
 }
 
-export async function deleteTimelineReport(reportId, token) {
-  return request(`/${encodeURIComponent(reportId)}`, {
+export async function deleteTimelineReport(reportId, token, targetUserId, targetEmail) {
+  const params = new URLSearchParams();
+  if (targetUserId) params.set('userId', targetUserId);
+  if (targetEmail) params.set('email', targetEmail);
+  const query = params.toString() ? `?${params.toString()}` : '';
+
+  return request(`/${encodeURIComponent(reportId)}${query}`, {
     method: 'DELETE',
   }, token);
 }

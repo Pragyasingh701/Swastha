@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../../../context/AuthContext";
 import { authService } from "../../../services/auth";
@@ -6,6 +6,12 @@ import ProfileDropdown from "../../settings/components/ProfileDropdown";
 import SettingsModal from "../../settings/components/SettingsModal";
 import Logo from "../../../components/Common/Logo";
 import PatientIdBadge from "../../../components/Common/PatientIdBadge";
+import {
+  fetchNotifications,
+  markAllNotificationsRead,
+  markNotificationRead,
+  readNotifications,
+} from "../../../utils/notifications";
 
 import {
   LayoutGrid,
@@ -174,8 +180,18 @@ function Sidebar({ onOpenSettings }) {
   );
 }
 
-function Header({ profile }) {
+function Header({
+  profile,
+  token,
+  isNotificationsOpen,
+  setIsNotificationsOpen,
+  notifications,
+  onMarkRead,
+  onMarkAllRead,
+}) {
   const navigate = useNavigate();
+  const [selectedNotification, setSelectedNotification] = useState(null);
+  const unreadCount = notifications.filter((item) => !item.read).length;
 
   return (
     <header className="shrink-0 flex items-center gap-4 px-6 lg:px-8 py-5 border-b border-slate-200 bg-white ">
@@ -188,10 +204,95 @@ function Header({ profile }) {
         Ask Swastha about your health records...
       </button>
 
-      <button className="relative p-2 rounded-lg hover:bg-slate-100 shrink-0">
-        <Bell size={20} className="text-slate-600 " />
-        <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full" />
-      </button>
+      <div className="relative" data-notification-menu>
+        <button
+          type="button"
+          onClick={() => setIsNotificationsOpen((value) => !value)}
+          className="relative p-2 rounded-lg hover:bg-slate-100 shrink-0 transition-colors"
+          aria-label="Open notifications"
+        >
+          <Bell size={20} className="text-slate-600" />
+          {unreadCount > 0 && <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full" />}
+        </button>
+
+        {isNotificationsOpen && (
+          <div className="absolute right-0 top-full mt-3 w-80 rounded-2xl border border-slate-200 bg-white shadow-xl z-50">
+            <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
+              <h3 className="text-sm font-semibold text-slate-900">Notifications</h3>
+              <button
+                type="button"
+                onClick={onMarkAllRead}
+                disabled={unreadCount === 0}
+                className="text-xs font-medium text-blue-600 hover:text-blue-700 disabled:text-slate-400"
+              >
+                {unreadCount > 0 ? `${unreadCount} new` : 'All read'}
+              </button>
+            </div>
+
+            <div className="max-h-80 overflow-y-auto">
+              {notifications.length === 0 ? (
+                <p className="px-4 py-5 text-sm text-slate-500">No activity yet.</p>
+              ) : (
+                notifications.map((item) => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => {
+                      setSelectedNotification(item);
+                      onMarkRead(item);
+                    }}
+                    className="w-full flex items-start gap-3 border-b border-slate-100 px-4 py-3 text-left transition-colors hover:bg-slate-50 last:border-b-0"
+                  >
+                    <span
+                      title={item.read ? "Read" : "Unread"}
+                      aria-label={item.read ? "Read notification" : "Unread notification"}
+                      className={`mt-2 h-2.5 w-2.5 rounded-full ${item.read ? "bg-slate-300" : "bg-red-500"}`}
+                    />
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center justify-between gap-3">
+                        <p className="text-sm font-medium text-slate-800">{item.title}</p>
+                        {!item.read && (
+                          <span className="rounded-full bg-blue-50 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-blue-600">
+                            New
+                          </span>
+                        )}
+                      </div>
+                      <p className="mt-1 text-xs leading-5 text-slate-600">{item.message}</p>
+                      <p className="mt-1 text-[11px] text-slate-400">{new Date(item.createdAt).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}</p>
+                    </div>
+                  </button>
+                ))
+              )}
+            </div>
+
+            <button
+              type="button"
+              className="w-full border-t border-slate-100 px-4 py-3 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50"
+            >
+              View all activity
+            </button>
+          </div>
+        )}
+
+        {selectedNotification && (
+          <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/40 px-4" onClick={() => setSelectedNotification(null)}>
+            <div className="w-full max-w-lg rounded-2xl border border-slate-200 bg-white p-6 text-left shadow-2xl" onClick={(event) => event.stopPropagation()}>
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-blue-600">Notification details</p>
+                  <h2 className="mt-2 text-xl font-semibold text-slate-900">{selectedNotification.title}</h2>
+                </div>
+                <button type="button" onClick={() => setSelectedNotification(null)} className="rounded-lg px-2 py-1 text-2xl leading-none text-slate-400 hover:bg-slate-100 hover:text-slate-700" aria-label="Close notification details">&times;</button>
+              </div>
+              <p className="mt-5 text-sm leading-6 text-slate-700">{selectedNotification.message}</p>
+              <div className="mt-5 grid gap-3 rounded-xl bg-slate-50 p-4 text-sm text-slate-600">
+                <div className="flex justify-between gap-4"><span>Received</span><span className="text-right font-medium text-slate-800">{new Date(selectedNotification.createdAt).toLocaleString()}</span></div>
+                <div className="flex justify-between gap-4"><span>Event</span><span className="text-right font-medium text-slate-800">{selectedNotification.eventType || selectedNotification.type || 'Activity'}</span></div>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
 
       <PatientIdBadge customProfile={profile} />
 
@@ -354,6 +455,53 @@ export default function Dashboard() {
   const [profile, setProfile] = useState(cachedUser);
   const [isProfileLoading, setIsProfileLoading] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
+  const [notifications, setNotifications] = useState([]);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    async function loadNotifications() {
+      if (!profile || !token || profile.role === 'doctor') {
+        if (isMounted) setNotifications([]);
+        return;
+      }
+
+      try {
+        const result = await fetchNotifications(token);
+        if (isMounted) {
+          setNotifications(result.notifications);
+        }
+      } catch {
+        if (isMounted) {
+          setNotifications(readNotifications(profile));
+        }
+      }
+    }
+
+    loadNotifications();
+
+    const onNotificationUpdate = () => {
+      loadNotifications();
+    };
+
+    window.addEventListener('patientNotification', onNotificationUpdate);
+    return () => {
+      isMounted = false;
+      window.removeEventListener('patientNotification', onNotificationUpdate);
+    };
+  }, [profile, token]);
+
+  useEffect(() => {
+    function handleClickOutside(event) {
+      if (!event.target.closest("[data-notification-menu]")) {
+        setIsNotificationsOpen(false);
+      }
+    }
+
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
   useEffect(() => {
     let isMounted = true;
@@ -393,7 +541,32 @@ export default function Dashboard() {
       <Sidebar onOpenSettings={() => setIsSettingsOpen(true)} />
 
       <div className="flex-1 flex flex-col min-w-0 h-screen overflow-hidden">
-        <Header profile={profile} />
+        <Header
+          profile={profile}
+          token={token}
+          isNotificationsOpen={isNotificationsOpen}
+          setIsNotificationsOpen={setIsNotificationsOpen}
+          notifications={notifications}
+          onMarkRead={async (item) => {
+            if (item.read || !item.id) return;
+            try {
+              const updated = await markNotificationRead(token, item.id);
+              if (updated) {
+                setNotifications((current) => current.map((entry) => entry.id === item.id ? updated : entry));
+              }
+            } catch {
+              // Keep the notification visible if the API is temporarily unavailable.
+            }
+          }}
+          onMarkAllRead={async () => {
+            try {
+              await markAllNotificationsRead(token);
+              setNotifications((current) => current.map((item) => ({ ...item, read: true })));
+            } catch {
+              // Keep the current state if the API is temporarily unavailable.
+            }
+          }}
+        />
 
         <main className="flex-1 overflow-y-auto px-6 lg:px-8 py-8">
           <div className="flex items-center justify-between mb-6">

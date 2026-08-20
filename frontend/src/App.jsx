@@ -21,7 +21,6 @@ import ClinicalIntelligence from "./modules/doctor/pages/ClinicalIntelligence";
 import DoctorAskSwastha from "./modules/doctor/pages/DoctorAskSwastha";
 import DoctorReports from "./modules/doctor/pages/DoctorReports";
 import DoctorMessages from "./modules/doctor/pages/DoctorMessages";
-import DoctorSettings from "./modules/doctor/pages/DoctorSettings";
 
 // Dashboard
 import Dashboard from "./modules/dashboard/pages/Dashboard";
@@ -288,14 +287,6 @@ export default function App() {
           }
         />
 
-        <Route
-          path="/doctor/settings"
-          element={
-            <DoctorRoute>
-              <DoctorSettings />
-            </DoctorRoute>
-          }
-        />
 
         <Route
           path="/lab-trends"

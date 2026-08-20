@@ -1,10 +1,13 @@
 import express from 'express';
 import jwt from 'jsonwebtoken';
 import { listTimelineReports, getTimelineReport, createTimelineReport, updateTimelineReport, deleteTimelineReport } from '../db/reports.js';
-import { findUserByEmail } from '../db/users.js';
+import { findUserByEmail, findUserById } from '../db/users.js';
+import { isDoctorLinkedToPatient } from '../db/doctorPatients.js';
+import { listFamilyMembers } from '../db/family.js';
 import { validateTimelineReportPayload } from '../utils/timelineValidation.js';
 import { uploadMemory, uploadFileToSupabase } from '../config/supabaseStorage.js';
 import supabase from '../config/supabase.js';
+import { createNotification } from '../db/notifications.js';
 
 const router = express.Router();
 const JWT_SECRET = process.env.JWT_SECRET || 'swastha_dev_secret_key_2026';
@@ -62,6 +65,51 @@ function getAuthUser(req) {
   } catch {
     return null;
   }
+}
+
+function getMemberEmail(member = {}) {
+  const directEmail = String(member.email || '').trim().toLowerCase();
+  if (directEmail) return directEmail;
+
+  const notes = String(member.notes || '');
+  const emailMatch = notes.match(/\[Email:\s*([^\]]+)\]/i);
+  return String(emailMatch?.[1] || '').trim().toLowerCase();
+}
+
+async function resolveTargetUser(req, authUser) {
+  const requestedUserId = String(req.body?.userId || req.query?.userId || '').trim();
+  const requestedEmail = String(req.body?.targetEmail || req.query?.email || '').trim().toLowerCase();
+  let targetUser = null;
+
+  if (requestedUserId) {
+    targetUser = await findUserById(requestedUserId);
+  } else if (requestedEmail) {
+    targetUser = await findUserByEmail(requestedEmail);
+  }
+
+  const targetUserId = targetUser?.id || authUser.userId;
+  if (targetUserId === authUser.userId) {
+    return targetUserId;
+  }
+
+  if (authUser.role === 'doctor') {
+    const linked = await isDoctorLinkedToPatient(authUser.userId, targetUserId);
+    if (!linked) {
+      throw new Error('You are not linked to this patient.');
+    }
+    return targetUserId;
+  }
+
+  if (authUser.role === 'patient' && targetUser?.email) {
+    const members = await listFamilyMembers({ userId: authUser.userId });
+    const targetEmail = String(targetUser.email).trim().toLowerCase();
+    const isFamilyMember = members.some((member) => getMemberEmail(member) === targetEmail);
+    if (isFamilyMember) {
+      return targetUserId;
+    }
+  }
+
+  throw new Error('You do not have permission to edit this timeline.');
 }
 
 // Multer middleware wrapper with error handling
@@ -235,6 +283,13 @@ router.post('/', handleReportFileUpload, async (req, res) => {
       return res.status(401).json({ message: 'Authentication required to save timeline reports.' });
     }
 
+    let targetUserId;
+    try {
+      targetUserId = await resolveTargetUser(req, user);
+    } catch (targetError) {
+      return res.status(403).json({ message: targetError.message });
+    }
+
     const validation = validateTimelineReportPayload(req.body);
     if (!validation.valid) {
       return res.status(400).json({ message: validation.message });
@@ -246,7 +301,7 @@ router.post('/', handleReportFileUpload, async (req, res) => {
       : String(req.body?.fileUrl || '').trim() || null;
 
     let report = await createTimelineReport({
-      userId: user.userId,
+      userId: targetUserId,
       title: sanitized.title,
       doctor: sanitized.doctor,
       hospital: sanitized.hospital,
@@ -266,8 +321,31 @@ router.post('/', handleReportFileUpload, async (req, res) => {
     // fail the save; the report just has no summary yet.
     const summary = await generateSummary(req.headers.authorization, report);
     if (summary) {
-      const updated = await updateTimelineReport(user.userId, report.id, { ...report, analysis: summary });
+      const updated = await updateTimelineReport(targetUserId, report.id, { ...report, analysis: summary });
       if (updated) report = updated;
+    }
+
+    const targetPatientId = targetUserId;
+    const isFamilyAdminChange = user.role === 'patient' && targetPatientId !== user.userId;
+    if ((user.role === 'doctor' || isFamilyAdminChange) && targetPatientId) {
+      try {
+        await createNotification({
+          recipientId: targetPatientId,
+          actorId: user.userId,
+          actorRole: isFamilyAdminChange ? 'family_admin' : 'doctor',
+          eventType: isFamilyAdminChange ? 'family_member_updated' : 'doctor_timeline_update',
+          title: 'Medical timeline updated',
+          message: isFamilyAdminChange
+            ? 'A family admin updated a medical timeline entry associated with your profile.'
+            : 'A doctor updated a medical timeline entry associated with your profile.',
+          metadata: {
+            source: 'timeline_create',
+            reportId: report.id,
+          },
+        });
+      } catch (notificationError) {
+        console.warn('Timeline create notification warning:', notificationError?.message || notificationError);
+      }
     }
 
     return res.status(201).json({ report });
@@ -282,6 +360,13 @@ router.put('/:id', handleReportFileUpload, async (req, res) => {
     const user = getAuthUser(req);
     if (!user?.userId) {
       return res.status(401).json({ message: 'Authentication required to update timeline reports.' });
+    }
+
+    let targetUserId;
+    try {
+      targetUserId = await resolveTargetUser(req, user);
+    } catch (targetError) {
+      return res.status(403).json({ message: targetError.message });
     }
 
     const reportId = req.params.id?.trim();
@@ -299,7 +384,7 @@ router.put('/:id', handleReportFileUpload, async (req, res) => {
       ? await uploadFileToSupabase(req.file)
       : String(req.body?.fileUrl || '').trim() || null;
 
-    let report = await updateTimelineReport(user.userId, reportId, {
+    let report = await updateTimelineReport(targetUserId, reportId, {
       title: sanitized.title,
       doctor: sanitized.doctor,
       hospital: sanitized.hospital,
@@ -321,8 +406,31 @@ router.put('/:id', handleReportFileUpload, async (req, res) => {
     // same as on create, so it's instant on click and never stale.
     const summary = await generateSummary(req.headers.authorization, report);
     if (summary) {
-      const updated = await updateTimelineReport(user.userId, report.id, { ...report, analysis: summary });
+      const updated = await updateTimelineReport(targetUserId, report.id, { ...report, analysis: summary });
       if (updated) report = updated;
+    }
+
+    const targetPatientId = targetUserId;
+    const isFamilyAdminChange = user.role === 'patient' && targetPatientId !== user.userId;
+    if ((user.role === 'doctor' || isFamilyAdminChange) && targetPatientId) {
+      try {
+        await createNotification({
+          recipientId: targetPatientId,
+          actorId: user.userId,
+          actorRole: isFamilyAdminChange ? 'family_admin' : 'doctor',
+          eventType: isFamilyAdminChange ? 'family_member_updated' : 'doctor_timeline_update',
+          title: 'Medical timeline updated',
+          message: isFamilyAdminChange
+            ? 'A family admin updated a medical timeline entry associated with your profile.'
+            : 'A doctor updated a medical timeline entry associated with your profile.',
+          metadata: {
+            source: 'timeline_update',
+            reportId: report.id,
+          },
+        });
+      } catch (notificationError) {
+        console.warn('Timeline update notification warning:', notificationError?.message || notificationError);
+      }
     }
 
     return res.json({ report });
@@ -383,12 +491,43 @@ router.delete('/:id', async (req, res) => {
       return res.status(401).json({ message: 'Authentication required to delete timeline reports.' });
     }
 
+    let targetUserId;
+    try {
+      targetUserId = await resolveTargetUser(req, user);
+    } catch (targetError) {
+      return res.status(403).json({ message: targetError.message });
+    }
+
     const reportId = req.params.id?.trim();
     if (!reportId) {
       return res.status(400).json({ message: 'Report ID is required.' });
     }
 
-    const deletedReport = await deleteTimelineReport(user.userId, reportId);
+    const deletedReport = await deleteTimelineReport(targetUserId, reportId);
+
+    const targetPatientId = targetUserId;
+    const isFamilyAdminChange = user.role === 'patient' && targetPatientId !== user.userId;
+    if ((user.role === 'doctor' || isFamilyAdminChange) && targetPatientId) {
+      try {
+        await createNotification({
+          recipientId: targetPatientId,
+          actorId: user.userId,
+          actorRole: isFamilyAdminChange ? 'family_admin' : 'doctor',
+          eventType: isFamilyAdminChange ? 'family_member_updated' : 'doctor_timeline_update',
+          title: 'Medical timeline updated',
+          message: isFamilyAdminChange
+            ? 'A family admin updated a medical timeline entry associated with your profile.'
+            : 'A doctor updated a medical timeline entry associated with your profile.',
+          metadata: {
+            source: 'timeline_delete',
+            reportId,
+          },
+        });
+      } catch (notificationError) {
+        console.warn('Timeline delete notification warning:', notificationError?.message || notificationError);
+      }
+    }
+
     return res.json({ report: deletedReport });
   } catch (error) {
     console.error('Timeline report delete error:', error);

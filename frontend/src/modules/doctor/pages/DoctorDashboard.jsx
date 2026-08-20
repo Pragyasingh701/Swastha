@@ -11,7 +11,6 @@ import {
   BarChart3,
   Mail,
   TrendingUp,
-  Bell,
   Settings,
   Search,
   HelpCircle,
@@ -114,16 +113,8 @@ export default function DoctorDashboard() {
         <main className="flex-1 overflow-y-auto px-6 md:px-10 py-8">
           <PageHeader />
 
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-            <div className="lg:col-span-8 flex flex-col gap-6">
-              <StatGrid />
-              <TodaySchedule />
-            </div>
-
-            <div className="lg:col-span-4 flex flex-col gap-6">
-              <QuickActions />
-              <ClinicalInsight />
-            </div>
+          <div className="grid grid-cols-1 gap-6">
+            <StatGrid />
           </div>
         </main>
       </div>
@@ -142,11 +133,6 @@ function Sidebar() {
 function TopBar() {
   return (
     <header className="shrink-0 flex items-center justify-end gap-4 px-6 lg:px-8 py-5 border-b border-slate-200 bg-white ">
-      <button className="relative p-2 rounded-lg hover:bg-slate-100 shrink-0">
-        <Bell size={20} className="text-slate-600 " />
-        <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full" />
-      </button>
-
       <ProfileDropdown />
     </header>
   );
@@ -165,10 +151,6 @@ function PageHeader() {
           Here is your clinical overview for today, October 24.
         </p>
       </div>
-      <button className="flex items-center gap-2 bg-blue-600 text-white px-5 py-2.5 rounded-xl text-sm font-semibold transition-all duration-200 hover:bg-blue-700 hover:shadow-md hover:-translate-y-0.5">
-        <Plus size={18} />
-        New Consultation
-      </button>
     </div>
   );
 }

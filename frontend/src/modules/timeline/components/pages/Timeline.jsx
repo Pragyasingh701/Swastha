@@ -9,6 +9,7 @@ import { indexReport, removeReportFromIndex } from "../../../../api/search";
 import SettingsModal from "../../../settings/components/SettingsModal";
 import ProfileDropdown from "../../../settings/components/ProfileDropdown";
 import PatientIdBadge from "../../../../components/Common/PatientIdBadge";
+import PatientNotifications from "../../../../components/Common/PatientNotifications";
 import Logo from "../../../../components/Common/Logo";
 import {
   LayoutGrid,
@@ -23,7 +24,6 @@ import {
   ChevronDown,
   ChevronRight,
   X,
-  Bell,
   ExternalLink,
   Sparkles,
   FlaskConical,
@@ -246,6 +246,8 @@ export default function Timeline() {
       reportDate: newEvent.date || newEvent.reportDate || new Date().toISOString(),
       category: newEvent.category || 'Consultation',
       fileUrl: newEvent.fileUrl || null,
+      ...(targetUserId ? { userId: targetUserId } : {}),
+      ...(targetEmail ? { targetEmail } : {}),
     };
 
     if (!newEvent?.id || newEvent.id.toString().startsWith('temp-')) {
@@ -278,6 +280,8 @@ export default function Timeline() {
       reportDate: updatedFields.date || updatedFields.reportDate || new Date().toISOString(),
       category: updatedFields.category || 'Consultation',
       fileUrl: updatedFields.fileUrl || null,
+      ...(targetUserId ? { userId: targetUserId } : {}),
+      ...(targetEmail ? { targetEmail } : {}),
     };
 
     try {
@@ -300,7 +304,7 @@ export default function Timeline() {
 
   async function handleDeleteEvent(reportId) {
     try {
-      await reportService.deleteTimelineReport(reportId, token);
+      await reportService.deleteTimelineReport(reportId, token, targetUserId, targetEmail);
       setEvents((prev) => prev.filter((event) => String(event.id) !== String(reportId)));
       setSelectedEvent(null);
 
@@ -346,10 +350,7 @@ export default function Timeline() {
             Ask Swastha about your health records...
           </button>
 
-          <button className="relative p-2 rounded-lg hover:bg-slate-100 shrink-0">
-            <Bell size={20} className="text-slate-600 " />
-            <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full" />
-          </button>
+          <PatientNotifications />
 
           <PatientIdBadge />
 

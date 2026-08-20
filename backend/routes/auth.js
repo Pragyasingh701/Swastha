@@ -10,6 +10,7 @@ import { findUserByEmail, findUserById, findUserByIdOrPatientCode, createOrUpdat
 import { getFamilyVaultForUser, deleteFamilyVaultForUser } from '../db/family.js';
 import { deleteAllReportsForUser } from '../db/reports.js';
 import { processMedicalCertificate } from '../services/certificateParserService.js';
+import { createNotification } from '../db/notifications.js';
 
 const router = express.Router();
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || '771272691038-s9h707grr3b4ojkgp48aa5vb9tej2sjh.apps.googleusercontent.com';
@@ -707,7 +708,7 @@ router.post('/verify-otp', async (req, res) => {
     expiresIn: '7d',
   });
 
-  return res.json({
+  const response = {
     message: 'Verification successful',
     token,
     vaultId: vault?.vaultId || null,
@@ -716,7 +717,25 @@ router.post('/verify-otp', async (req, res) => {
       vaultId: vault?.vaultId || null,
       hasSelectedRole: !!(user.role && user.role !== 'none'),
     },
-  });
+  };
+
+  if (user?.role === 'patient') {
+    try {
+      await createNotification({
+        recipientId: user.id,
+        actorId: user.id,
+        actorRole: 'system',
+        eventType: 'login',
+        title: 'Welcome back',
+        message: 'You signed in successfully and your dashboard is ready.',
+        metadata: { source: 'login' },
+      });
+    } catch (notificationError) {
+      console.warn('Login notification persist warning:', notificationError?.message || notificationError);
+    }
+  }
+
+  return res.json(response);
 });
 
 /**
