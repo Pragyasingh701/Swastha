@@ -34,6 +34,7 @@ import { useAuth } from "../../../../context/AuthContext";
 import { getLabInsights } from "../../../../api/reports";
 import SettingsModal from "../../../settings/components/SettingsModal";
 import ProfileDropdown from "../../../settings/components/ProfileDropdown";
+import PatientIdBadge from "../../../../components/Common/PatientIdBadge";
 
 // Same nav list as Dashboard.jsx, with Lab Insights marked active
 const navItems = [
@@ -167,6 +168,7 @@ export default function LabInsights() {
             <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full" />
           </button>
 
+          <PatientIdBadge />
 
           <ProfileDropdown />
         </header>

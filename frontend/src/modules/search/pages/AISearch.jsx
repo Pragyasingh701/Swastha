@@ -4,6 +4,7 @@ import { useAuth } from "../../../context/AuthContext";
 import { searchReports } from "../../../api/search";
 import Logo from "../../../components/Common/Logo";
 import ProfileDropdown from "../../settings/components/ProfileDropdown";
+import PatientIdBadge from "../../../components/Common/PatientIdBadge";
 import SettingsModal from "../../settings/components/SettingsModal";
 import {
   LayoutGrid,
@@ -185,6 +186,7 @@ export default function AISearch() {
             <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full" />
           </button>
 
+          <PatientIdBadge />
 
           <ProfileDropdown />
         </header>

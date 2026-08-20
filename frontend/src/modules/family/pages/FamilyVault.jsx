@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../../../context/AuthContext';
 import ProfileDropdown from '../../settings/components/ProfileDropdown';
+import PatientIdBadge from '../../../components/Common/PatientIdBadge';
 import SettingsModal from '../../settings/components/SettingsModal';
 import Logo from '../../../components/Common/Logo';
 import {
@@ -278,6 +279,7 @@ function Header({ userName, userEmail }) {
         <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-red-500" />
       </button>
 
+      <PatientIdBadge />
 
       <ProfileDropdown />
     </header>
