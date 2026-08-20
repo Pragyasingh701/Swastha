@@ -11,6 +11,7 @@ import {
   getDoctorNotifications,
   getPatientNotifications,
 } from '../db/doctorPatients.js';
+import { createNotification } from '../db/notifications.js';
 
 const router = express.Router();
 const JWT_SECRET = process.env.JWT_SECRET || 'swastha_dev_secret_key_2026';
@@ -187,6 +188,27 @@ router.post('/link', async (req, res) => {
       doctorId: authUser.userId,
       patientCode,
     });
+
+    const recipientId = result?.patient?.patientUserId || result?.patient?.patientId || null;
+    if (recipientId) {
+      try {
+        await createNotification({
+          recipientId,
+          actorId: authUser.userId,
+          actorRole: 'doctor',
+          eventType: 'doctor_profile_view',
+          title: 'Doctor viewed your profile',
+          message: 'A doctor accessed your profile using the patient code.',
+          metadata: {
+            source: 'doctor_patient_link',
+            doctorId: authUser.userId,
+            patientCode,
+          },
+        });
+      } catch (notificationError) {
+        console.warn('Doctor profile notification warning:', notificationError?.message || notificationError);
+      }
+    }
 
     return res.json({
       message: result.link.status === 'pending' ? 'Request sent to patient.' : 'Patient linked successfully.',

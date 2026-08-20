@@ -24,8 +24,6 @@ export default function DoctorMessages() {
           </button>
 
           <NotificationBell />
-
-
           <ProfileDropdown />
         </header>
 

@@ -2,7 +2,6 @@ import React, { useEffect, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import {
   AlertCircle,
-  Bell,
   ClipboardList,
   Folder,
   HelpCircle,
@@ -21,6 +20,7 @@ import NotificationBell from "../../../components/Common/NotificationBell";
 import { useAuth } from '../../../context/AuthContext';
 import ProfileDropdown from '../../settings/components/ProfileDropdown';
 import PatientIdBadge from '../../../components/Common/PatientIdBadge';
+import PatientNotifications from '../../../components/Common/PatientNotifications';
 import SettingsModal from '../../settings/components/SettingsModal';
 import Logo from '../../../components/Common/Logo';
 import {
@@ -277,7 +277,7 @@ function Header({ userName, userEmail }) {
         Ask Swastha about your health records...
       </button>
 
-      <NotificationBell />
+      <PatientNotifications />
 
       <PatientIdBadge />
 
@@ -333,7 +333,7 @@ export default function FamilyVault() {
     setLoading(true);
 
     try {
-      const data = await getFamilyDashboard();
+      const data = await getFamilyDashboard(token);
       setMembers(data.members || []);
       setSummary(data.summary || {});
       setRelationshipTags(data.relationshipTags || []);
@@ -364,7 +364,7 @@ export default function FamilyVault() {
     }
 
     try {
-      const data = await getFamilyVault();
+      const data = await getFamilyVault(token);
       const vault = data?.vault || null;
       setFamilyVault(vault);
 
@@ -390,7 +390,7 @@ export default function FamilyVault() {
     setError('');
 
     try {
-      const data = await createFamilyVault();
+      const data = await createFamilyVault(token);
       const vault = data?.vault || null;
       setFamilyVault(vault);
       setShowVaultModal(false);
@@ -540,7 +540,7 @@ export default function FamilyVault() {
       const shouldNotify = Boolean(editingMemberId || !form.email?.trim());
 
       if (editingMemberId) {
-        await updateFamilyMember(editingMemberId, payload);
+        await updateFamilyMember(editingMemberId, payload, token);
         setNotice('Family member updated successfully.');
       } else if (form.email?.trim()) {
         await sendFamilyMemberAuthorization({
@@ -555,10 +555,10 @@ export default function FamilyVault() {
           age: payload.age,
           lastVisitDate: payload.lastVisitDate,
           nextCheckupDate: payload.nextCheckupDate,
-        });
+        }, token);
         setNotice('Authorization request sent. The member will be added after they approve it.');
       } else {
-        await createFamilyMember(payload);
+        await createFamilyMember(payload, token);
         setNotice('Family member added successfully.');
       }
 
@@ -598,7 +598,7 @@ export default function FamilyVault() {
     setNotice('');
 
     try {
-      await deleteFamilyMember(member.id);
+      await deleteFamilyMember(member.id, token);
       if (editingMemberId === member.id) {
         resetForm();
       }

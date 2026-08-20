@@ -43,8 +43,6 @@ export default function ClinicalIntelligence() {
           </button>
 
           <NotificationBell />
-
-
           <ProfileDropdown />
         </header>
 

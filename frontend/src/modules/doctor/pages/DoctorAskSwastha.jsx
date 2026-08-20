@@ -5,7 +5,6 @@ import { getDoctorPatients } from "../../../services/doctorPatients";
 import { searchReportsConversational, clearConversation } from "../../../api/search";
 import {
   Sparkles,
-  Bell,
   Send,
   FileText,
   Loader2,

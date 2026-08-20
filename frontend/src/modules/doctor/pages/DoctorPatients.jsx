@@ -291,8 +291,6 @@ export default function DoctorPatients() {
           </button>
 
           <NotificationBell />
-
-
           <ProfileDropdown />
         </header>
 

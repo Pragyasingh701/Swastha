@@ -24,8 +24,6 @@ export default function DoctorReports() {
           </button>
 
           <NotificationBell />
-
-
           <ProfileDropdown />
         </header>
 

@@ -5,6 +5,7 @@ import { searchReports } from "../../../api/search";
 import Logo from "../../../components/Common/Logo";
 import ProfileDropdown from "../../settings/components/ProfileDropdown";
 import PatientIdBadge from "../../../components/Common/PatientIdBadge";
+import PatientNotifications from "../../../components/Common/PatientNotifications";
 import SettingsModal from "../../settings/components/SettingsModal";
 import {
   LayoutGrid,
@@ -16,7 +17,6 @@ import {
   HelpCircle,
   UploadCloud,
   Sparkles,
-  Bell,
   Send,
   FileText,
   Loader2,
@@ -184,7 +184,7 @@ export default function AISearch() {
             Ask Swastha about your health records...
           </button>
 
-          <NotificationBell />
+          <PatientNotifications />
 
           <PatientIdBadge />
 

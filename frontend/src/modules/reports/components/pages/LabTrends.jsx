@@ -15,7 +15,6 @@ import {
   TrendingUp,
   Folder,
   Users,
-  Bell,
   Settings,
   HelpCircle,
   PlusCircle,
@@ -37,6 +36,7 @@ import { getLabInsights } from "../../../../api/reports";
 import SettingsModal from "../../../settings/components/SettingsModal";
 import ProfileDropdown from "../../../settings/components/ProfileDropdown";
 import PatientIdBadge from "../../../../components/Common/PatientIdBadge";
+import PatientNotifications from "../../../../components/Common/PatientNotifications";
 
 // Same nav list as Dashboard.jsx, with Lab Insights marked active
 const navItems = [
@@ -166,7 +166,7 @@ export default function LabInsights() {
             Ask Swastha about your health records...
           </button>
 
-          <NotificationBell />
+          <PatientNotifications />
 
           <PatientIdBadge />
 

@@ -6,6 +6,7 @@ import Logo from "../../../components/Common/Logo";
 import SettingsModal from "../../settings/components/SettingsModal";
 import ProfileDropdown from "../../settings/components/ProfileDropdown";
 import PatientIdBadge from "../../../components/Common/PatientIdBadge";
+import PatientNotifications from "../../../components/Common/PatientNotifications";
 import {
   LayoutGrid,
   TrendingUp,
@@ -29,7 +30,6 @@ import {
   Stethoscope,
   Building2,
   CalendarDays,
-  Bell,
 } from "lucide-react";
 import NotificationBell from "../../../components/Common/NotificationBell";
 
@@ -357,7 +357,7 @@ function Header({ profile }) {
         Ask Swastha about your health records...
       </button>
 
-      <NotificationBell />
+      <PatientNotifications />
 
       <PatientIdBadge customProfile={profile} />
 

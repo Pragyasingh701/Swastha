@@ -5,6 +5,7 @@ import authRoutes from './routes/auth.js';
 import familyRoutes from './routes/family.js';
 import reportsRoutes from './routes/reports.js';
 import doctorPatientsRoutes from './routes/doctorPatients.js';
+import notificationsRoutes from './routes/notifications.js';
 
 import fs from 'fs';
 import path from 'path';
@@ -37,6 +38,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/family', familyRoutes);
 app.use('/api/reports', reportsRoutes);
 app.use('/api/doctor-patients', doctorPatientsRoutes);
+app.use('/api/notifications', notificationsRoutes);
 
 // Health check / Keep-alive endpoints for Render & cron-job.org
 app.get('/', (req, res) => res.status(200).send('OK'));

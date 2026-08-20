@@ -16,8 +16,9 @@ function getStoredAuth() {
   }
 }
 
-async function request(path, options = {}) {
-  const { token } = getStoredAuth();
+async function request(path, options = {}, explicitToken = null) {
+  const { token: storedToken } = getStoredAuth();
+  const token = explicitToken || storedToken;
   const headers = {
     'Content-Type': 'application/json',
     ...(options.headers || {}),
@@ -42,49 +43,49 @@ async function request(path, options = {}) {
   return data;
 }
 
-export async function getFamilyDashboard() {
-  return request('/summary');
+export async function getFamilyDashboard(token) {
+  return request('/summary', {}, token);
 }
 
-export async function getFamilyVault() {
-  return request('/vault');
+export async function getFamilyVault(token) {
+  return request('/vault', {}, token);
 }
 
-export async function createFamilyVault() {
+export async function createFamilyVault(token) {
   return request('/vault', {
     method: 'POST',
-  });
+  }, token);
 }
 
-export async function getFamilyMembers() {
-  return request('/members');
+export async function getFamilyMembers(token) {
+  return request('/members', {}, token);
 }
 
-export async function createFamilyMember(memberData) {
+export async function createFamilyMember(memberData, token) {
   return request('/members', {
     method: 'POST',
     body: JSON.stringify(memberData),
-  });
+  }, token);
 }
 
-export async function sendFamilyMemberAuthorization(memberData) {
+export async function sendFamilyMemberAuthorization(memberData, token) {
   return request('/members/authorize', {
     method: 'POST',
     body: JSON.stringify(memberData),
-  });
+  }, token);
 }
 
-export async function updateFamilyMember(memberId, memberData) {
+export async function updateFamilyMember(memberId, memberData, token) {
   return request(`/members/${memberId}`, {
     method: 'PATCH',
     body: JSON.stringify(memberData),
-  });
+  }, token);
 }
 
-export async function deleteFamilyMember(memberId) {
+export async function deleteFamilyMember(memberId, token) {
   return request(`/members/${memberId}/delete`, {
     method: 'DELETE',
-  });
+  }, token);
 }
 
 export async function getPatientFamilyMembers(patientUserId) {

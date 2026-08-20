@@ -36,6 +36,8 @@ export default function Login() {
       }
 
       setIsSuccess(true);
+      if (result?.user && result.user.role === 'patient') {
+      }
       setTimeout(() => {
         if (result?.user?.hasSelectedRole || (result?.user?.role && result?.user?.role !== 'none')) {
           navigate(result?.user?.role === "doctor" ? "/doctor-dashboard" : "/dashboard", { replace: true });
