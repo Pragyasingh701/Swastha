@@ -4,7 +4,13 @@ const MAX_LENGTHS = {
   doctor: 120,
   hospital: 120,
   diagnosis: 500,
-  medicines: 1000,
+  // Raised from 1000: rag/src/config/gemini.js now extracts one full,
+  // detailed line per medicine (name, dosage, frequency, duration, route)
+  // instead of a terse comma list — a prescription with 8-10 medicines can
+  // easily clear 1000 chars, and the old limit made the save silently fail
+  // for exactly the kind of long AI-extracted prescription this field
+  // exists for.
+  medicines: 4000,
   notes: 5000,
 };
 

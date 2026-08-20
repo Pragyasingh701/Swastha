@@ -123,6 +123,11 @@ export default function UploadReports({ onClose, onSubmit, token, initialEvent }
   );
 
   const [formData, setFormData] = useState(() => formDataFromEvent(initialEvent));
+  // Saving is async (uploads the file, then writes the report) — the modal
+  // must stay open and show the real error if that fails, rather than
+  // closing immediately and silently dropping the report. See handleSubmit.
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState(null);
 
   // Field labels/placeholders/visibility for the Diagnosis and Medicines
   // slots change based on the selected category (e.g. a Lab Report needs
@@ -205,7 +210,7 @@ export default function UploadReports({ onClose, onSubmit, token, initialEvent }
     }
   }
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (activeTab === 'upload' && !formData.file && !formData.fileUrl) {
       alert('Please upload your prescription or report file.');
       return;
@@ -232,16 +237,29 @@ export default function UploadReports({ onClose, onSubmit, token, initialEvent }
       return;
     }
 
-    onSubmit({
-      id: isEditing ? initialEvent.id : `temp-${Date.now()}`,
-      ...formData,
-      // Field names still unclear/unfilled at save time — surfaced on the
-      // saved report so a doctor viewing it later knows to check the
-      // original document rather than trust an empty field as "nothing".
-      unclearFields: Array.from(unclearFields).filter((key) => !String(formData[key] || '').trim()),
-    });
-
-    onClose();
+    setSaveError(null);
+    setSaving(true);
+    try {
+      // onSubmit (Timeline's handleAddEvent/handleEditEvent) uploads the
+      // file and saves the report via the backend — this must be awaited
+      // and its rejection handled here. Previously the modal closed
+      // immediately without waiting, so a save that failed server-side
+      // (e.g. a field too long, a network error) closed the modal with no
+      // error shown and the report simply never appeared in the timeline.
+      await onSubmit({
+        id: isEditing ? initialEvent.id : `temp-${Date.now()}`,
+        ...formData,
+        // Field names still unclear/unfilled at save time — surfaced on the
+        // saved report so a doctor viewing it later knows to check the
+        // original document rather than trust an empty field as "nothing".
+        unclearFields: Array.from(unclearFields).filter((key) => !String(formData[key] || '').trim()),
+      });
+      onClose();
+    } catch (err) {
+      setSaveError(err?.details?.message || err?.message || 'Failed to save the report. Please try again.');
+    } finally {
+      setSaving(false);
+    }
   };
 
 
@@ -509,20 +527,30 @@ export default function UploadReports({ onClose, onSubmit, token, initialEvent }
 
           {/* Buttons */}
 
+          {saveError && (
+            <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-left">
+              <p className="font-semibold text-red-700">Couldn't save this report</p>
+              <p className="text-sm text-gray-600 mt-1">{saveError}</p>
+            </div>
+          )}
+
           <div className="flex justify-end gap-4 pt-4">
 
             <button
               onClick={onClose}
-              className="px-6 py-3 rounded-lg border"
+              disabled={saving}
+              className="px-6 py-3 rounded-lg border disabled:opacity-50"
             >
               Cancel
             </button>
 
             <button
               onClick={handleSubmit}
-              className="bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700"
+              disabled={saving}
+              className="bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 disabled:opacity-60 inline-flex items-center gap-2"
             >
-              {isEditing ? "Save Changes" : "Save Report"}
+              {saving && <Loader2 className="w-4 h-4 animate-spin" />}
+              {saving ? "Saving..." : isEditing ? "Save Changes" : "Save Report"}
             </button>
 
           </div>
