@@ -682,6 +682,7 @@ function DocRow({ doc, onViewDetails, onViewSummary }) {
 function ReportPreview({ report, onClose }) {
   const meta = categoryMeta(report.category);
   const Icon = meta.icon;
+  const fieldLabels = summaryFieldLabels(report.category);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 px-4 py-6">
@@ -731,8 +732,14 @@ function ReportPreview({ report, onClose }) {
               )}
               {report.diagnosis && (
                 <div className="rounded-xl border border-slate-100 bg-slate-50 p-3">
-                  <p className="text-xs text-slate-500 ">Diagnosis</p>
+                  <p className="text-xs text-slate-500 ">{fieldLabels.diagnosis}</p>
                   <p className="mt-1 text-sm font-semibold text-slate-900 ">{report.diagnosis}</p>
+                </div>
+              )}
+              {report.medicines && (
+                <div className="rounded-xl border border-slate-100 bg-slate-50 p-3">
+                  <p className="text-xs text-slate-500 ">{fieldLabels.medicines}</p>
+                  <p className="mt-1 text-sm font-semibold text-slate-900 whitespace-pre-line">{report.medicines}</p>
                 </div>
               )}
             </div>
