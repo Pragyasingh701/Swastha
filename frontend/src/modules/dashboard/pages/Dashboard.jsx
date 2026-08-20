@@ -192,6 +192,15 @@ function Header({ profile }) {
         <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full" />
       </button>
 
+      {profile?.patient_code && (
+        <span
+          className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-50 border border-slate-200 text-xs font-medium text-slate-600 shrink-0"
+          title="Your Patient ID — share this with a doctor to let them link your records"
+        >
+          <span className="text-slate-400">Patient ID</span>
+          <span className="font-mono text-slate-700">{profile.patient_code}</span>
+        </span>
+      )}
 
       <ProfileDropdown customProfile={profile} />
     </header>
