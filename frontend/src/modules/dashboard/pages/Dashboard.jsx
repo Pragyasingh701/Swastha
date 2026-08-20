@@ -59,6 +59,11 @@ function parseMedicationEntries(reports = []) {
   };
 
   for (const report of reports) {
+    const category = String(report?.category || '').toLowerCase();
+    if (category && category !== 'prescription' && category !== 'prescriptions' && category !== 'consultation') {
+      continue;
+    }
+
     const sourceText = String(report?.medicines || '').trim();
     if (!sourceText) continue;
 
