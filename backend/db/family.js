@@ -66,6 +66,8 @@ function normalizeMember(row) {
     dob: row.dob || row.date_of_birth || null,
     relationship: row.relationship,
     relationshipTag: row.relationship_tag,
+    parentMemberId: row.parent_member_id || row.parentMemberId || null,
+    consentGivenAt: row.consent_given_at || row.consentGivenAt || null,
     healthOverview: row.health_overview,
     notes: row.notes,
     conditions: Array.isArray(row.conditions) ? row.conditions : [],
@@ -103,6 +105,8 @@ function buildMemberPayload(memberData = {}) {
     age: computedAge ?? memberData.age ?? null,
     relationship: memberData.relationship?.trim() || null,
     relationship_tag: memberData.relationshipTag?.trim() || memberData.relationship_tag || null,
+    parent_member_id: memberData.parentMemberId || memberData.parent_member_id || null,
+    consent_given_at: memberData.consentGivenAt || memberData.consent_given_at || null,
     health_overview: memberData.healthOverview?.trim() || memberData.health_overview || null,
     notes: memberData.notes?.trim() || null,
     conditions: sanitizeConditions(memberData.conditions),
@@ -139,6 +143,8 @@ function buildMemberUpdatePayload(memberData = {}) {
   if (has('age') && !has('dob') && !has('date_of_birth')) payload.age = memberData.age ?? null;
   if (has('relationship')) payload.relationship = memberData.relationship?.trim() || null;
   if (has('relationshipTag') || has('relationship_tag')) payload.relationship_tag = memberData.relationshipTag?.trim() || memberData.relationship_tag || null;
+  if (has('parentMemberId') || has('parent_member_id')) payload.parent_member_id = memberData.parentMemberId || memberData.parent_member_id || null;
+  if (has('consentGivenAt') || has('consent_given_at')) payload.consent_given_at = memberData.consentGivenAt || memberData.consent_given_at || null;
   if (has('healthOverview') || has('health_overview')) payload.health_overview = memberData.healthOverview?.trim() || memberData.health_overview || null;
   if (has('notes')) payload.notes = memberData.notes?.trim() || null;
   if (has('conditions')) payload.conditions = sanitizeConditions(memberData.conditions);

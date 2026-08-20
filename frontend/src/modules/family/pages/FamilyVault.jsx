@@ -39,6 +39,7 @@ const emptyForm = {
   dob: '',
   relationship: '',
   relationshipTag: '',
+  parentMemberId: '',
   healthOverview: '',
   notes: '',
   conditions: [],
@@ -476,6 +477,7 @@ export default function FamilyVault() {
       })() : ''),
       relationship: member.relationship || '',
       relationshipTag: member.relationshipTag || member.relationship_tag || '',
+      parentMemberId: member.parentMemberId || member.parent_member_id || '',
       healthOverview: member.healthOverview || member.health_overview || '',
       notes: cleanedNotes,
       conditions: Array.isArray(member.conditions) ? member.conditions : [],
@@ -528,6 +530,7 @@ export default function FamilyVault() {
       age: calculateAgeFromDob(form.dob),
       relationship: form.relationship.trim(),
       relationshipTag: form.relationshipTag.trim(),
+      parentMemberId: form.parentMemberId || null,
       healthOverview: form.healthOverview.trim(),
       notes: finalNotes,
       conditions: form.conditions || [],
@@ -631,6 +634,11 @@ export default function FamilyVault() {
     }
 
     return { key: tag?.label || `tag-${index}`, label: tag?.label || 'Tag', count: tag?.count };
+  });
+
+  const parentMemberOptions = (members || []).filter((member) => {
+    const normalizedRelationship = String(member?.relationship || '').trim().toLowerCase();
+    return member.id !== editingMemberId && member.id !== form.parentMemberId && normalizedRelationship !== 'self';
   });
 
   return (
@@ -861,6 +869,21 @@ export default function FamilyVault() {
                       {fieldErrors.relationshipTag ? <p className="text-sm text-rose-600 ">{fieldErrors.relationshipTag}</p> : null}
                     </label>
                   </div>
+
+                  <label className="space-y-2 block">
+                    <span className="text-sm font-medium text-slate-700 ">Parent / linked relative (optional)</span>
+                    <select
+                      value={form.parentMemberId}
+                      onChange={(event) => setForm({ ...form, parentMemberId: event.target.value })}
+                      className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900 outline-none transition-colors focus:border-blue-400 focus:bg-white "
+                    >
+                      <option value="">No parent linked</option>
+                      {parentMemberOptions.map((member) => (
+                        <option key={member.id} value={member.id}>{member.name} ({member.relationship || 'relative'})</option>
+                      ))}
+                    </select>
+                    <p className="text-xs text-slate-500">This link helps the doctor see a more accurate family pedigree.</p>
+                  </label>
 
                   <label className="space-y-2 block">
                     <span className="text-sm font-medium text-slate-700 ">Recipient email <span className="text-rose-500">*</span></span>
