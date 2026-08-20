@@ -42,9 +42,20 @@ router.post('/', requireAuth, (req, res) => {
     }
 
     try {
+      // req.file.mimetype is whatever the browser/OS reported at select
+      // time — reliable for images, but PDF mimetype reporting is
+      // inconsistent (some browsers/OS send "", "application/octet-stream",
+      // etc.). fileFilter above already accepts those via isPdfByName, but
+      // forwarding the untrusted value on to Gemini as inlineData.mimeType
+      // gets it rejected identically on every model/key, exhausting the
+      // whole failover ladder and surfacing as a 503 "temporarily busy"
+      // even though nothing is actually down. Trust the filename for PDFs.
+      const isPdfByName = (req.file.originalname || '').toLowerCase().endsWith('.pdf');
+      const mime = isPdfByName ? 'application/pdf' : req.file.mimetype;
+
       const { fields, unclear } = await extractReportFromImage({
         data: req.file.buffer.toString('base64'),
-        mime: req.file.mimetype,
+        mime,
       });
       return res.status(200).json({ fields, unclear });
     } catch (extractErr) {

@@ -121,6 +121,16 @@ function geminiBody(task, { input, file, json, taskType }) {
   body.generationConfig = json
     ? { responseMimeType: 'application/json', temperature: 0 }
     : { temperature: 0 };
+  // vision-ocr with a multi-page/dense PDF (vs. a single-page JPG/PNG photo)
+  // produces much longer transcriptions — numbered medicine/notes lists for
+  // every page. Without an explicit cap, the model default was truncating
+  // mid-JSON on these, which JSON.parse then threw on downstream, always as
+  // a non-transient failure (never hit the retry/failover path since every
+  // model+key truncates the same real document identically). Gemini 2.x/3.x
+  // flash models support up to 8192 output tokens.
+  if (task === 'vision-ocr') {
+    body.generationConfig.maxOutputTokens = 8192;
+  }
   return body;
 }
 
@@ -138,6 +148,15 @@ function parseGemini(task, text) {
   const candidate = json?.candidates?.[0];
   const out = (candidate?.content?.parts || []).map((p) => p.text).join('');
   if (!out.trim()) throw new Error(`empty text (finishReason: ${candidate?.finishReason})`);
+  // Any finishReason other than STOP means `out` may be incomplete —
+  // MAX_TOKENS is the common case (length cap hit) but treat any non-STOP
+  // reason as suspect for a json:true caller, since a json:true caller
+  // (e.g. vision-ocr) will otherwise fail JSON.parse downstream with a
+  // confusing "non-JSON extraction result" error that gives no hint this
+  // was actually a cutoff.
+  if (candidate?.finishReason && candidate.finishReason !== 'STOP') {
+    throw new Error(`response incomplete (finishReason: ${candidate.finishReason}, ${out.length} chars)`);
+  }
   return { text: out.trim() };
 }
 
