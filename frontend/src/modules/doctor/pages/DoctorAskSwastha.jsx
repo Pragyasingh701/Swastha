@@ -13,6 +13,7 @@ import {
   User,
   RotateCcw,
 } from "lucide-react";
+import NotificationBell from "../../../components/Common/NotificationBell";
 
 const EXAMPLE_QUESTIONS = [
   "Has this patient had any drug allergies or reactions?",
@@ -188,6 +189,7 @@ export default function DoctorAskSwastha() {
           </div>
 
           <div className="flex items-center gap-3 shrink-0">
+            <NotificationBell />
             <ProfileDropdown />
           </div>
         </header>

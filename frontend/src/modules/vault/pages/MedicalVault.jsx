@@ -31,6 +31,7 @@ import {
   Building2,
   CalendarDays,
 } from "lucide-react";
+import NotificationBell from "../../../components/Common/NotificationBell";
 
 /* -----------------------------------------------------------
    Nav + category config — same shape as Timeline.jsx so a report's

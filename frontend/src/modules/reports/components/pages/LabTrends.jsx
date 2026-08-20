@@ -30,6 +30,7 @@ import {
   Beaker,
   Stethoscope,
 } from "lucide-react";
+import NotificationBell from "../../../../components/Common/NotificationBell";
 import { useAuth } from "../../../../context/AuthContext";
 import { getLabInsights } from "../../../../api/reports";
 import SettingsModal from "../../../settings/components/SettingsModal";

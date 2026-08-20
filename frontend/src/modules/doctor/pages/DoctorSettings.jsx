@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Mail, Phone, ShieldCheck, Sparkles, Stethoscope, Bell } from "lucide-react";
+import NotificationBell from "../../../components/Common/NotificationBell";
 import DoctorSidebar from "../components/DoctorSidebar";
 import ProfileDropdown from "../../settings/components/ProfileDropdown";
 import SettingsModal from "../../settings/components/SettingsModal";
@@ -46,6 +47,7 @@ export default function DoctorSettings() {
             Ask Swastha about your health records...
           </button>
 
+          <NotificationBell />
           <ProfileDropdown />
         </header>
 

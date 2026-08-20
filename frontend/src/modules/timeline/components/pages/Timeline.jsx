@@ -33,6 +33,7 @@ import {
   AlertTriangle,
   Stethoscope,
 } from "lucide-react";
+import NotificationBell from "../../../../components/Common/NotificationBell";
 
 /* -----------------------------------------------------------
    Nav + category config.

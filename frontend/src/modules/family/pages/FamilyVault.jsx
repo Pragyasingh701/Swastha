@@ -16,6 +16,7 @@ import {
   LogOut,
   Stethoscope,
 } from 'lucide-react';
+import NotificationBell from "../../../components/Common/NotificationBell";
 import { useAuth } from '../../../context/AuthContext';
 import ProfileDropdown from '../../settings/components/ProfileDropdown';
 import PatientIdBadge from '../../../components/Common/PatientIdBadge';

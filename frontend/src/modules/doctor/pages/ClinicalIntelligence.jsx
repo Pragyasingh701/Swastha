@@ -1,6 +1,7 @@
 import React from "react";
 import { useNavigate } from "react-router-dom";
 import { Sparkles, Bell } from "lucide-react";
+import NotificationBell from "../../../components/Common/NotificationBell";
 import DoctorSidebar from "../components/DoctorSidebar";
 import ProfileDropdown from "../../settings/components/ProfileDropdown";
 
@@ -41,6 +42,7 @@ export default function ClinicalIntelligence() {
             Ask Swastha about your health records...
           </button>
 
+          <NotificationBell />
           <ProfileDropdown />
         </header>
 

@@ -1,6 +1,16 @@
 import express from 'express';
 import jwt from 'jsonwebtoken';
-import { getDoctorPatients, linkDoctorToPatient, deleteDoctorPatient } from '../db/doctorPatients.js';
+import {
+  getDoctorPatients,
+  linkDoctorToPatient,
+  deleteDoctorPatient,
+  getPendingRequestsForPatient,
+  acceptDoctorLinkRequest,
+  declineDoctorLinkRequest,
+  isDoctorLinkedToPatient,
+  getDoctorNotifications,
+  getPatientNotifications,
+} from '../db/doctorPatients.js';
 import { createNotification } from '../db/notifications.js';
 
 const router = express.Router();
@@ -34,6 +44,119 @@ router.get('/', async (req, res) => {
   } catch (error) {
     console.error('Doctor patient list error:', error);
     return res.status(500).json({ message: 'Unable to load doctor patients.' });
+  }
+});
+
+/**
+ * GET /api/doctor-patients/notifications
+ * Bell-icon feed for BOTH sides — dispatches on the caller's own role
+ * (from the verified JWT, not a query param) so a doctor always gets
+ * getDoctorNotifications and a patient always gets getPatientNotifications;
+ * there is no way to ask for the other side's feed by changing a param.
+ * Each entry has { id, linkId, type, at, doctorName|patientName }.
+ *
+ * Declared before any '/:param' route so Express doesn't match
+ * "notifications" as a :patientId.
+ */
+router.get('/notifications', async (req, res) => {
+  const authUser = getAuthUser(req);
+
+  if (!authUser?.userId) {
+    return res.status(401).json({ message: 'Authentication required.' });
+  }
+
+  try {
+    const notifications =
+      authUser.role === 'doctor'
+        ? await getDoctorNotifications(authUser.userId)
+        : await getPatientNotifications(authUser.userId);
+    return res.json({ notifications });
+  } catch (error) {
+    console.error('Notifications fetch error:', error);
+    return res.status(500).json({ message: 'Unable to load notifications.' });
+  }
+});
+
+/**
+ * GET /api/doctor-patients/pending-requests
+ * PATIENT-facing: lists doctor link requests awaiting this patient's
+ * response. Scoped to req.user — a patient can only ever see their own
+ * pending requests.
+ *
+ * Declared before any '/:param' route so Express doesn't match
+ * "pending-requests" as a :patientId.
+ */
+router.get('/pending-requests', async (req, res) => {
+  const authUser = getAuthUser(req);
+
+  if (!authUser?.userId) {
+    return res.status(401).json({ message: 'Authentication required.' });
+  }
+
+  try {
+    const requests = await getPendingRequestsForPatient(authUser.userId);
+    return res.json({ requests });
+  } catch (error) {
+    console.error('Pending requests list error:', error);
+    return res.status(500).json({ message: 'Unable to load doctor requests.' });
+  }
+});
+
+/**
+ * POST /api/doctor-patients/requests/:linkId/accept
+ * PATIENT-facing. Ownership (link.patient_id === req.user.userId) is
+ * verified inside acceptDoctorLinkRequest, server-side — a patient
+ * cannot accept a request belonging to someone else by guessing a linkId.
+ */
+router.post('/requests/:linkId/accept', async (req, res) => {
+  const authUser = getAuthUser(req);
+
+  if (!authUser?.userId) {
+    return res.status(401).json({ message: 'Authentication required.' });
+  }
+
+  const linkId = String(req.params?.linkId ?? '').trim();
+  if (!linkId) {
+    return res.status(400).json({ message: 'Request ID is required.' });
+  }
+
+  try {
+    const link = await acceptDoctorLinkRequest({ patientUserId: authUser.userId, linkId });
+    return res.json({ message: 'Request accepted.', link });
+  } catch (error) {
+    console.error('Accept doctor request error:', error);
+    const notYours = /does not belong to you/i.test(error?.message || '');
+    return res.status(notYours ? 403 : 400).json({
+      message: error?.message || 'Unable to accept request.',
+    });
+  }
+});
+
+/**
+ * POST /api/doctor-patients/requests/:linkId/decline
+ * PATIENT-facing. Same ownership enforcement as accept.
+ */
+router.post('/requests/:linkId/decline', async (req, res) => {
+  const authUser = getAuthUser(req);
+
+  if (!authUser?.userId) {
+    return res.status(401).json({ message: 'Authentication required.' });
+  }
+
+  const linkId = String(req.params?.linkId ?? '').trim();
+  if (!linkId) {
+    return res.status(400).json({ message: 'Request ID is required.' });
+  }
+
+  try {
+    const link = await declineDoctorLinkRequest({ patientUserId: authUser.userId, linkId });
+    return res.json({ message: 'Request declined.', link });
+  } catch (error) {
+    console.error('Decline doctor request error:', error);
+    const notYours = /does not belong to you/i.test(error?.message || '');
+    return res.status(notYours ? 403 : 400).json({
+      message: error?.message || 'Unable to decline request.',
+    });
   }
 });
 

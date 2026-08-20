@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { Sparkles, Bell, X, CalendarDays, Stethoscope, XCircle, ChevronDown, ChevronRight, AlertTriangle, FlaskConical, ClipboardList, ScanLine, Syringe, FileText } from "lucide-react";
+import NotificationBell from "../../../components/Common/NotificationBell";
 import DoctorSidebar from "../components/DoctorSidebar";
 import ProfileDropdown from "../../settings/components/ProfileDropdown";
 import { getDoctorPatients, linkPatientToDoctor, deletePatientFromDoctor } from "../../../services/doctorPatients";
@@ -289,6 +290,7 @@ export default function DoctorPatients() {
             Ask Swastha about your health records...
           </button>
 
+          <NotificationBell />
           <ProfileDropdown />
         </header>
 

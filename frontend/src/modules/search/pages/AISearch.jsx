@@ -23,6 +23,7 @@ import {
   ExternalLink,
   Stethoscope,
 } from "lucide-react";
+import NotificationBell from "../../../components/Common/NotificationBell";
 
 // Same nav list as Dashboard.jsx / Timeline.jsx / etc.
 const navItems = [
