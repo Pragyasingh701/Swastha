@@ -36,6 +36,8 @@ export async function extractReportFromImage(payload) {
 
   const promptText = `Analyze this uploaded medical document image (prescription, lab report, scan, or similar). This is very often a HANDWRITTEN doctor's prescription — handwriting can be genuinely illegible, and that is expected and fine.
 
+The document may be printed/written in any language or script (e.g. Bengali, Hindi, Tamil, Telugu, Devanagari, Arabic, etc.). Regardless of the script/language, every text field you extract below MUST be transliterated/translated into English (Latin script) in your output — never return non-English/non-Latin script text. For example, a Bengali doctor name printed as "ডাঃ এস.কে. এম. জয়নাউল আবেদীন" must be returned as "Dr. S.K.M. Zainaul Abedin". Medicine names should use their standard English/Latin pharmaceutical spelling.
+
 Extract the following fields:
 
 1. title (string: a short descriptive title, e.g. "Diabetes Follow-up" or "CBC Lab Report")
@@ -63,7 +65,7 @@ CRITICAL RULE: for fields 2, 3, 4, 6, 7, 8 — if the relevant handwriting or te
 
 Also return an "unclear" array listing exactly which of these field names (from: doctor, hospital, reportDate, diagnosis, medicines, notes) you left blank or are genuinely unsure about, even if you provided a low-confidence guess for it anyway. If everything was clearly legible, return an empty array.
 
-Respond strictly in JSON format with exactly these keys. Example:
+Respond strictly in JSON format with exactly these keys, with all text fields in English only. Example:
 {"title": "Diabetes Follow-up", "doctor": "Dr. Ananya Sharma", "hospital": "", "reportDate": "2026-08-09", "category": "Prescription", "diagnosis": "Type 2 Diabetes Mellitus", "medicines": "Metformin 500mg twice daily", "notes": "Fasting blood glucose 162 mg/dL, HbA1c 7.8%. BP 138/88.", "unclear": ["hospital"]}`;
 
   // Routed through the shared failover client: walks flash-lite -> flash ->
