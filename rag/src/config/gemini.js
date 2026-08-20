@@ -9,6 +9,39 @@ import { runAI } from './aiClient.js';
 // best-guess default rather than being left blank).
 const EXTRACTABLE_FIELD_KEYS = ['title', 'doctor', 'hospital', 'reportDate', 'diagnosis', 'medicines', 'notes'];
 
+// Common Indian prescription drug-form abbreviations. Used only as a
+// fallback split point when the model fails to follow the "one numbered
+// line per medicine" instruction and instead returns everything crammed
+// into one paragraph — this happens occasionally with vision models on
+// dense handwritten scripts. Matched at a word boundary so it doesn't fire
+// on plain English words that happen to contain these letters.
+const DRUG_FORM_SPLIT_REGEX = /(?=\b(?:Tab\.|Cap\.|Inj\.|Syp\.|Syrup|Oint\.|Drops|Susp\.)\s)/g;
+
+/**
+ * Defensive re-formatter: if the model already used real newlines (the
+ * instructed format), this is a no-op. If it instead ran every medicine
+ * together in one line/paragraph, split on drug-form prefixes (Tab./Cap./
+ * Inj./etc.) so the UI still renders a proper one-item-per-line list
+ * instead of one unreadable run-on paragraph.
+ */
+function normalizeMedicinesFormatting(raw) {
+  if (!raw || typeof raw !== 'string') return raw || '';
+  const text = raw.trim();
+  if (!text) return '';
+
+  // Already multi-line (model followed instructions) — leave as-is.
+  if (text.includes('\n')) return text;
+
+  const parts = text.split(DRUG_FORM_SPLIT_REGEX).map((p) => p.trim()).filter(Boolean);
+
+  // Only reformat if the split actually found multiple drug-form items —
+  // otherwise this is a single medicine, a non-drug field (e.g. Imaging's
+  // "body part" text), or content this heuristic doesn't apply to.
+  if (parts.length <= 1) return text;
+
+  return parts.map((part, i) => `${i + 1}. ${part.replace(/^\d+\.\s*/, '')}`).join('\n');
+}
+
 /**
  * Extract structured medical report fields from an uploaded image/PDF using
  * Gemini Vision — same pattern as backend's certificateParserService.js,
@@ -52,24 +85,24 @@ Extract the following fields:
    - Vaccination: the vaccine name (e.g. "Influenza Vaccine")
    - Consultation: the reason for the visit
    Leave blank if not legible.)
-7. medicines (string: what goes here also depends on category, and must be fully structured — one item per line, NOT a flat comma-separated run-on —
-   - Prescription: one line per medicine, each line giving every detail that is legible for that medicine, in the form "Name — Dosage, Frequency, Duration, Route/Instructions" (omit only the parts that are genuinely illegible or not written; never merge multiple medicines onto one line or drop a medicine's dose/frequency just to save space). Example of the expected shape:
-     "Tab. Metformin 500mg — 1 tablet twice daily, 30 days, after food
-     Tab. Amlodipine 5mg — 1 tablet once daily (morning), 30 days
-     Cap. Omeprazole 20mg — 1 capsule once daily, before breakfast, 15 days"
-   - Lab Report: one line per test/parameter with its result, unit, and reference range if present (e.g. "Hemoglobin: 13.2 g/dL (Ref: 13-17)\nWBC: 7,200/µL (Ref: 4000-11000)")
-   - Imaging: the body part / scan type / technique (e.g. "MRI Lumbar Spine, with contrast")
-   - Vaccination: dose number / batch info, one line per dose if multiple (e.g. "Dose 2 of 2, Batch #A1234, given IM left deltoid")
+7. medicines (string: what goes here also depends on category, and must be a NUMBERED LIST — one medicine/item per numbered line, with a REAL newline character ("\n" in the JSON string) between every numbered line. NEVER run items together in one paragraph separated only by spaces — that is the single most common mistake to avoid here. Each numbered line is fully self-contained: number, period, space, then the item.
+   - Prescription: one numbered line per medicine, each giving every detail that is legible for that medicine, in the form "N. Name — Dosage, Frequency, Duration, Route/Instructions" (omit only the parts that are genuinely illegible or not written; never merge multiple medicines onto one line or drop a medicine's dose/frequency just to save space). The exact required shape (note the real line breaks between items):
+     "1. Tab. Metformin 500mg — 1 tablet twice daily, 30 days, after food
+     2. Tab. Amlodipine 5mg — 1 tablet once daily (morning), 30 days
+     3. Cap. Omeprazole 20mg — 1 capsule once daily, before breakfast, 15 days"
+   - Lab Report: one numbered line per test/parameter with its result, unit, and reference range if present (e.g. "1. Hemoglobin: 13.2 g/dL (Ref: 13-17)\n2. WBC: 7,200/µL (Ref: 4000-11000)")
+   - Imaging: the body part / scan type / technique (e.g. "MRI Lumbar Spine, with contrast") — no numbering needed for a single item
+   - Vaccination: dose number / batch info, one numbered line per dose if multiple (e.g. "1. Dose 2 of 2, Batch #A1234, given IM left deltoid")
    - Consultation: leave blank, usually not applicable
-   Leave blank if not legible. Read and transcribe every medicine/line item present in the document — do not stop after the first few or summarize a long list; if there are eight medicines, return all eight.)
-8. notes (string: a thorough, organized plain-text transcription of every OTHER clinically relevant detail visible in the document that isn't already captured in the fields above — vitals (BP, pulse, weight, temperature, SpO2), lab values, follow-up instructions, dietary/lifestyle advice, referrals, allergies noted, next visit date, or anything else legible. Use one item per line rather than a run-on comma list. Do not skip content just because it doesn't fit neatly into a category — capture everything else that is written and legible.)
+   Leave blank if not legible. Read and transcribe every medicine/line item present in the document as its own numbered line — do not stop after the first few, do not summarize a long list, and do not concatenate multiple medicines into one line; if there are eight medicines, return all eight as lines "1." through "8.".)
+8. notes (string: a thorough, organized transcription of every OTHER clinically relevant detail visible in the document that isn't already captured in the fields above — vitals (BP, pulse, weight, temperature, SpO2), lab values, follow-up instructions, dietary/lifestyle advice, referrals, allergies noted, next visit date, or anything else legible. Same formatting rule as medicines: one item per line as a bulleted list using "- " at the start of each line, joined with real newline characters ("\n") — never a run-on comma/space-separated paragraph. Do not skip content just because it doesn't fit neatly into a category — capture everything else that is written and legible. Example: "- BP 138/88, Weight 78kg\n- Advised low-carb diet and daily walk\n- Follow-up in 4 weeks")
 
 CRITICAL RULE: for fields 2, 3, 4, 6, 7, 8 — if the relevant handwriting or text is genuinely illegible, ambiguous, or absent, return an empty string "" (or null for reportDate) for that field or line item. Do NOT guess, do NOT invent a plausible-sounding value, do NOT fill in what a typical prescription "probably" says. A blank field the patient can fill in themselves is far better than a confident-looking wrong answer on a medical document — getting a medicine name or dosage wrong could be dangerous. Only report what you can actually read. This rule applies per line item, not just per field: transcribe every medicine/test/line you can read, and simply omit the details you can't read for that specific line rather than dropping the whole line or guessing.
 
 Also return an "unclear" array listing exactly which of these field names (from: doctor, hospital, reportDate, diagnosis, medicines, notes) you left blank, or where you were only able to read some of the line items/details and are genuinely unsure about the rest. If everything was clearly legible, return an empty array.
 
-Respond strictly in JSON format with exactly these keys, with all text fields in English only. Use \n within a string value for line breaks between items. Example:
-{"title": "Diabetes Follow-up", "doctor": "Dr. Ananya Sharma", "hospital": "", "reportDate": "2026-08-09", "category": "Prescription", "diagnosis": "Type 2 Diabetes Mellitus", "medicines": "Tab. Metformin 500mg — 1 tablet twice daily, 30 days, after food\nTab. Glimepiride 1mg — 1 tablet once daily, 30 days, before breakfast", "notes": "BP 138/88, Weight 78kg\nFasting blood glucose 162 mg/dL, HbA1c 7.8%\nAdvised low-carb diet and daily walk\nFollow-up in 4 weeks", "unclear": ["hospital"]}`;
+Respond strictly in JSON format with exactly these keys, with all text fields in English only. The "medicines" and "notes" strings MUST contain literal "\n" escape sequences between every line — this is not optional. Example:
+{"title": "Diabetes Follow-up", "doctor": "Dr. Ananya Sharma", "hospital": "", "reportDate": "2026-08-09", "category": "Prescription", "diagnosis": "Type 2 Diabetes Mellitus", "medicines": "1. Tab. Metformin 500mg — 1 tablet twice daily, 30 days, after food\n2. Tab. Glimepiride 1mg — 1 tablet once daily, 30 days, before breakfast", "notes": "- BP 138/88, Weight 78kg\n- Fasting blood glucose 162 mg/dL, HbA1c 7.8%\n- Advised low-carb diet and daily walk\n- Follow-up in 4 weeks", "unclear": ["hospital"]}`;
 
   // Routed through the shared failover client: walks flash-lite -> flash ->
   // 3.1-flash-lite across all 4 keys, then OpenRouter. Note gemini-2.0-flash
@@ -107,7 +140,7 @@ Respond strictly in JSON format with exactly these keys, with all text fields in
     reportDate: parsed.reportDate || null,
     category: parsed.category || 'Consultation',
     diagnosis: parsed.diagnosis || '',
-    medicines: parsed.medicines || '',
+    medicines: normalizeMedicinesFormatting(parsed.medicines),
     notes: parsed.notes || '',
   };
 
