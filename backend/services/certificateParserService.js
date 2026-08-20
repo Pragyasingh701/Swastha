@@ -67,16 +67,18 @@ async function parseCertificateWithGeminiAI(payload, doctorData = {}) {
   if (!payload) return null;
 
   const promptText = `Analyze this uploaded document image. Determine if it is an official Medical Registration Certificate or Medical Council License.
+The document may be printed in any language or script (e.g. Bengali, Hindi, Tamil, Telugu, Devanagari, Arabic, etc.).
+IMPORTANT: Regardless of the script/language the document is printed in, all extracted text fields below (doctorName, medicalCouncil, qualifications) MUST be transliterated/translated into English (Latin script). Never return non-English/non-Latin script text in the output — always give the standard English rendering of the name and council (e.g. a Bengali name printed as "ডাঃ অরুণ শর্মা" must be returned as "Dr. Arun Sharma").
 Extract the following fields:
 1. isMedicalCertificate (boolean: true if it is a medical registration certificate/license, false if it is a cat/pet photo, resume, ID card, invoice, or non-medical document)
 2. regNumber (string: Medical registration number e.g. MCI-12345, 25007, or NMC/2024/98765 if present on the document, or null if no registration number exists)
-3. doctorName (string: Doctor's name on certificate if present)
-4. medicalCouncil (string: Issuing council name if present)
-5. qualifications (array of strings: e.g. ["MBBS", "MD"])
+3. doctorName (string: Doctor's name on certificate if present, transliterated/translated into English)
+4. medicalCouncil (string: Issuing council name if present, transliterated/translated into English)
+5. qualifications (array of strings: e.g. ["MBBS", "MD"], transliterated/translated into English)
 6. expiryDate (string: YYYY-MM-DD format if date found, or null)
 7. isExpired (boolean: true if validTill date is in the past)
 
-Respond strictly in JSON format. Example:
+Respond strictly in JSON format, with all text fields in English only. Example:
 {"isMedicalCertificate": true, "regNumber": "NMC/25007", "doctorName": "Dr. Aarav Sharma", "medicalCouncil": "National Medical Commission", "qualifications": ["MBBS"], "expiryDate": null, "isExpired": false}`;
 
   const res = await runAI({
