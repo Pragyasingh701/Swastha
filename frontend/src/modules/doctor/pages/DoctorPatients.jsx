@@ -1294,7 +1294,7 @@ function EventDetails({ event, onClose }) {
               {event.medicines && (
                 <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
                   <p className="text-sm text-slate-500 ">Medicines</p>
-                  <p className="mt-2 text-base font-semibold text-slate-900 ">{event.medicines}</p>
+                  <p className="mt-2 text-base font-semibold text-slate-900 whitespace-pre-line">{event.medicines}</p>
                 </div>
               )}
             </div>

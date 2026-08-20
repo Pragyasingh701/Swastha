@@ -910,7 +910,7 @@ function AISummaryView({ report: initialReport, token, onSummaryGenerated, onClo
                           <HighlightIcon size={13} />
                           {label}
                         </p>
-                        <p className="mt-1 text-sm font-semibold text-slate-900 ">{value}</p>
+                        <p className="mt-1 text-sm font-semibold text-slate-900 whitespace-pre-line">{value}</p>
                       </div>
                     ))}
                   </div>

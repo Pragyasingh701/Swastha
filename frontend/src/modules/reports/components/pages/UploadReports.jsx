@@ -45,7 +45,7 @@ function toDateInputValue(value) {
 const CATEGORY_FIELD_CONFIG = {
   Prescription: {
     diagnosis: { label: "Diagnosis", placeholder: "e.g. Type 2 Diabetes Mellitus" },
-    medicines: { label: "Medicines", placeholder: "e.g. Metformin 500mg twice daily" },
+    medicines: { label: "Medicines", placeholder: "e.g.\nTab. Metformin 500mg — 1 tablet twice daily, 30 days, after food\nTab. Amlodipine 5mg — 1 tablet once daily, 30 days" },
   },
   "Lab Report": {
     diagnosis: { label: "Test / Panel Name", placeholder: "e.g. Complete Blood Count (CBC)" },
@@ -478,15 +478,18 @@ export default function UploadReports({ onClose, onSubmit, token, initialEvent }
               )}
 
               {categoryFields.medicines && (
-                <FormField
-                  label={categoryFields.medicines.label}
-                  placeholder={categoryFields.medicines.placeholder}
-                  name="medicines"
-                  value={formData.medicines}
-                  onChange={handleChange}
-                  unclear={unclearFields.has('medicines')}
-                  textarea
-                />
+                <div className="col-span-2">
+                  <FormField
+                    label={categoryFields.medicines.label}
+                    placeholder={categoryFields.medicines.placeholder}
+                    name="medicines"
+                    value={formData.medicines}
+                    onChange={handleChange}
+                    unclear={unclearFields.has('medicines')}
+                    textarea
+                    rows={5}
+                  />
+                </div>
               )}
 
               <div className="col-span-2">
@@ -532,7 +535,7 @@ export default function UploadReports({ onClose, onSubmit, token, initialEvent }
   );
 }
 
-function FormField({ label, name, value, onChange, unclear, textarea, placeholder }) {
+function FormField({ label, name, value, onChange, unclear, textarea, placeholder, rows = 3 }) {
   const Tag = textarea ? "textarea" : "input";
   return (
     <div>
@@ -545,12 +548,12 @@ function FormField({ label, name, value, onChange, unclear, textarea, placeholde
         )}
       </label>
       <Tag
-        {...(textarea ? { rows: 3 } : {})}
+        {...(textarea ? { rows } : {})}
         name={name}
         value={value}
         onChange={onChange}
         placeholder={unclear ? "Fill in if you know it, or leave blank" : placeholder}
-        className={`w-full border rounded-lg p-3 mt-1 ${unclear ? 'border-amber-400 bg-amber-50' : ''}`}
+        className={`w-full border rounded-lg p-3 mt-1 whitespace-pre-wrap ${unclear ? 'border-amber-400 bg-amber-50' : ''}`}
       />
     </div>
   );
