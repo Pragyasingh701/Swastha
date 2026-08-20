@@ -17,8 +17,8 @@ const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET || '';
 const JWT_SECRET = process.env.JWT_SECRET || 'swastha_dev_secret_key_2026';
 const googleClient = new OAuth2Client(GOOGLE_CLIENT_ID);
 
-if (!global.__otpStore) {
-  global.__otpStore = new Map();
+if (!global.__otpStoreRaw) {
+  global.__otpStoreRaw = new Map();
 }
 if (!global.__resetTokenStore) {
   global.__resetTokenStore = new Map();
@@ -27,7 +27,78 @@ if (!global.__passwordChangeTokenStore) {
   global.__passwordChangeTokenStore = new Map();
 }
 
-const otpStore = global.__otpStore; // email => { code, expiresAt }
+// otpStoreRaw: email/key => [{ code, expiresAt }, ...] — a LIST, not a
+// single entry. Fixes a real bug: two logins to the SAME email close
+// together (e.g. two people/devices logging into one shared doctor
+// account) used to silently overwrite each other's OTP via a plain
+// `.set(email, {code, expiresAt})`. Whoever's OTP landed second in the
+// Map invalidated the first person's in-flight code, so their
+// verify-otp call failed unpredictably depending on request timing —
+// not a security issue (both still need the real code from their own
+// inbox), but a confusing race. Keeping a small array of active codes
+// per key means concurrent logins to the same email each get their own
+// still-valid entry; verifying one only removes that one.
+//
+// otpStore below is a thin get/set/delete wrapper matching the Map API
+// every existing call site already uses (`.get(key)`, `.set(key, val)`,
+// `.delete(key)`) — no call site elsewhere in this file needed to change.
+const otpStoreRaw = global.__otpStoreRaw;
+const MAX_ACTIVE_CODES_PER_KEY = 5; // hard cap so a burst of requests can't grow this unbounded
+
+const otpStore = {
+  // Returns the most recently issued still-unexpired entry for `key`, or
+  // undefined. Existing callers only ever compare against ONE stored code,
+  // so `.get` needs to hand back a single {code, expiresAt} — it picks the
+  // newest match for `otpCode` at verify time via a dedicated check instead
+  // (see `verify` below); plain `.get` stays for the few read-only touches
+  // (none currently), kept for API compatibility.
+  get(key) {
+    const list = otpStoreRaw.get(key);
+    if (!list || list.length === 0) return undefined;
+    return list[list.length - 1];
+  },
+  // Appends a new code rather than replacing the whole entry, so a
+  // concurrent login for the same key doesn't clobber an unverified one.
+  set(key, value) {
+    const list = otpStoreRaw.get(key) || [];
+    list.push(value);
+    if (list.length > MAX_ACTIVE_CODES_PER_KEY) list.splice(0, list.length - MAX_ACTIVE_CODES_PER_KEY);
+    otpStoreRaw.set(key, list);
+  },
+  // Removes every active code for `key`. Kept for callers that genuinely
+  // want to invalidate the whole key (none currently — see deleteCode
+  // below for the send-failure cleanup, which must only remove the ONE
+  // code that failed to send, not a concurrent login's still-good one).
+  delete(key) {
+    otpStoreRaw.delete(key);
+  },
+  // Removes exactly one code for `key` — used when sendOTPEmail throws
+  // right after issuing a code, so only that failed attempt's entry is
+  // cleared. Using the broad `.delete(key)` here would also wipe out a
+  // concurrent login's already-sent, still-valid code for the same email.
+  deleteCode(key, code) {
+    const list = otpStoreRaw.get(key);
+    if (!list) return;
+    const next = list.filter((e) => e.code !== code);
+    if (next.length === 0) otpStoreRaw.delete(key);
+    else otpStoreRaw.set(key, next);
+  },
+  // Checks `submittedCode` against ANY still-unexpired entry for `key`
+  // (not just the most recent), and removes only that one entry —
+  // verifying one concurrent login's code no longer invalidates another
+  // still-pending login for the same email.
+  verify(key, submittedCode) {
+    const list = otpStoreRaw.get(key);
+    if (!list || list.length === 0) return false;
+    const now = Date.now();
+    const idx = list.findIndex((e) => e.code === submittedCode && e.expiresAt > now);
+    if (idx === -1) return false;
+    list.splice(idx, 1);
+    if (list.length === 0) otpStoreRaw.delete(key);
+    else otpStoreRaw.set(key, list);
+    return true;
+  },
+};
 const resetTokenStore = global.__resetTokenStore; // token => { email, expiresAt }
 const passwordChangeTokenStore = global.__passwordChangeTokenStore; // token => { email, expiresAt }
 
@@ -35,8 +106,10 @@ const passwordChangeTokenStore = global.__passwordChangeTokenStore; // token => 
 if (!global.__storeCleanupInterval) {
   global.__storeCleanupInterval = setInterval(() => {
     const now = Date.now();
-    for (const [key, data] of otpStore.entries()) {
-      if (data.expiresAt < now) otpStore.delete(key);
+    for (const [key, list] of otpStoreRaw.entries()) {
+      const fresh = list.filter((e) => e.expiresAt >= now);
+      if (fresh.length === 0) otpStoreRaw.delete(key);
+      else if (fresh.length !== list.length) otpStoreRaw.set(key, fresh);
     }
     for (const [key, data] of resetTokenStore.entries()) {
       if (data.expiresAt < now) resetTokenStore.delete(key);
@@ -295,7 +368,7 @@ router.post('/login', async (req, res) => {
       message: 'Verification code sent to your email.',
     });
   } catch (error) {
-    otpStore.delete(normalizedEmail);
+    otpStore.deleteCode(normalizedEmail, otpCode);
     return res.status(500).json({
       message: 'Failed to send verification email.',
       error: error.message,
@@ -408,7 +481,7 @@ router.post('/register', async (req, res) => {
       message: 'Account created! Verification code sent to your email.',
     });
   } catch (error) {
-    otpStore.delete(normalizedEmail);
+    otpStore.deleteCode(normalizedEmail, otpCode);
     return res.status(500).json({
       message: 'Account created, but the verification email could not be sent.',
       error: error.message,
@@ -449,7 +522,7 @@ async function completeGoogleAuth(res, { email, name, picture, sub }, { role } =
       message: 'Verification code sent to your Google email address.',
     });
   } catch (error) {
-    otpStore.delete(normalizedEmail);
+    otpStore.deleteCode(normalizedEmail, otpCode);
     return res.status(500).json({
       message: 'Could not send the verification email to your Google address.',
       error: error.message,
@@ -601,14 +674,15 @@ router.post('/verify-otp', async (req, res) => {
   }
 
   const key = email ? email.toLowerCase().trim() : '';
-  const stored = otpStore.get(key);
-  const isValid = stored && stored.code === otpCode && stored.expiresAt > Date.now();
+  // .verify() checks against ANY still-active code for this email, not
+  // just the most recently issued one — a second concurrent login to the
+  // same email no longer invalidates a still-pending first login's code.
+  const isValid = otpStore.verify(key, otpCode);
 
   if (!isValid) {
     return res.status(400).json({ message: 'Invalid or expired OTP verification code.' });
   }
 
-  otpStore.delete(key);
   let user = await findUserByEmail(key);
 
   if (!user) {
@@ -860,7 +934,7 @@ router.post('/send-otp', async (req, res) => {
       message: `Verification code sent to ${normalizedEmail}`,
     });
   } catch (error) {
-    otpStore.delete(normalizedEmail);
+    otpStore.deleteCode(normalizedEmail, otpCode);
     return res.status(500).json({
       message: 'Failed to send verification code.',
       error: error.message,
@@ -936,7 +1010,7 @@ router.post('/change-password/send-otp', authenticateToken, async (req, res) => 
       await sendOTPEmail(email, otpCode);
       return res.json({ message: `Verification code sent to ${email}` });
     } catch (error) {
-      otpStore.delete(`changepwd:${email}`);
+      otpStore.deleteCode(`changepwd:${email}`, otpCode);
       return res.status(500).json({
         message: 'Failed to send verification code to your email.',
         error: error.message,
@@ -961,14 +1035,11 @@ router.post('/change-password/verify-otp', authenticateToken, async (req, res) =
 
   const email = (req.user.email || '').toLowerCase().trim();
   const key = `changepwd:${email}`;
-  const stored = otpStore.get(key);
-  const isValid = stored && stored.code === otpCode && stored.expiresAt > Date.now();
+  const isValid = otpStore.verify(key, otpCode);
 
   if (!isValid) {
     return res.status(400).json({ message: 'Invalid or expired verification code.' });
   }
-
-  otpStore.delete(key);
 
   const changeToken = 'chg_' + Math.random().toString(36).substring(2) + Date.now().toString(36);
   passwordChangeTokenStore.set(changeToken, { email, expiresAt: Date.now() + 10 * 60 * 1000 });
