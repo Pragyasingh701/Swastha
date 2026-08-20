@@ -8,6 +8,7 @@ import * as familyService from "../../../../api/family";
 import { indexReport, removeReportFromIndex } from "../../../../api/search";
 import SettingsModal from "../../../settings/components/SettingsModal";
 import ProfileDropdown from "../../../settings/components/ProfileDropdown";
+import PatientIdBadge from "../../../../components/Common/PatientIdBadge";
 import Logo from "../../../../components/Common/Logo";
 import {
   LayoutGrid,
@@ -350,6 +351,7 @@ export default function Timeline() {
             <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full" />
           </button>
 
+          <PatientIdBadge />
 
           <ProfileDropdown />
         </header>

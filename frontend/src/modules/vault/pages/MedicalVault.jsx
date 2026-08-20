@@ -5,6 +5,7 @@ import { getTimelineReports, generateReportSummary } from "../../../api/reports"
 import Logo from "../../../components/Common/Logo";
 import SettingsModal from "../../settings/components/SettingsModal";
 import ProfileDropdown from "../../settings/components/ProfileDropdown";
+import PatientIdBadge from "../../../components/Common/PatientIdBadge";
 import {
   LayoutGrid,
   TrendingUp,
@@ -359,6 +360,7 @@ function Header({ profile }) {
         <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full" />
       </button>
 
+      <PatientIdBadge customProfile={profile} />
 
       <ProfileDropdown customProfile={profile} />
     </header>
