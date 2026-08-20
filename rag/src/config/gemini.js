@@ -52,21 +52,24 @@ Extract the following fields:
    - Vaccination: the vaccine name (e.g. "Influenza Vaccine")
    - Consultation: the reason for the visit
    Leave blank if not legible.)
-7. medicines (string: what goes here also depends on category —
-   - Prescription: medicines/dosages, comma-separated
-   - Lab Report: key result values (e.g. "Hemoglobin 13.2 g/dL, WBC 7,200/µL")
-   - Imaging: the body part / scan type (e.g. "MRI Lumbar Spine")
-   - Vaccination: dose number / batch info (e.g. "Dose 2 of 2, Batch #A1234")
+7. medicines (string: what goes here also depends on category, and must be fully structured — one item per line, NOT a flat comma-separated run-on —
+   - Prescription: one line per medicine, each line giving every detail that is legible for that medicine, in the form "Name — Dosage, Frequency, Duration, Route/Instructions" (omit only the parts that are genuinely illegible or not written; never merge multiple medicines onto one line or drop a medicine's dose/frequency just to save space). Example of the expected shape:
+     "Tab. Metformin 500mg — 1 tablet twice daily, 30 days, after food
+     Tab. Amlodipine 5mg — 1 tablet once daily (morning), 30 days
+     Cap. Omeprazole 20mg — 1 capsule once daily, before breakfast, 15 days"
+   - Lab Report: one line per test/parameter with its result, unit, and reference range if present (e.g. "Hemoglobin: 13.2 g/dL (Ref: 13-17)\nWBC: 7,200/µL (Ref: 4000-11000)")
+   - Imaging: the body part / scan type / technique (e.g. "MRI Lumbar Spine, with contrast")
+   - Vaccination: dose number / batch info, one line per dose if multiple (e.g. "Dose 2 of 2, Batch #A1234, given IM left deltoid")
    - Consultation: leave blank, usually not applicable
-   Leave blank if not legible.)
-8. notes (string: plain-text transcription of all other clinically relevant text that IS legible — additional values, instructions, observations not captured above)
+   Leave blank if not legible. Read and transcribe every medicine/line item present in the document — do not stop after the first few or summarize a long list; if there are eight medicines, return all eight.)
+8. notes (string: a thorough, organized plain-text transcription of every OTHER clinically relevant detail visible in the document that isn't already captured in the fields above — vitals (BP, pulse, weight, temperature, SpO2), lab values, follow-up instructions, dietary/lifestyle advice, referrals, allergies noted, next visit date, or anything else legible. Use one item per line rather than a run-on comma list. Do not skip content just because it doesn't fit neatly into a category — capture everything else that is written and legible.)
 
-CRITICAL RULE: for fields 2, 3, 4, 6, 7, 8 — if the relevant handwriting or text is genuinely illegible, ambiguous, or absent, return an empty string "" (or null for reportDate) for that field. Do NOT guess, do NOT invent a plausible-sounding value, do NOT fill in what a typical prescription "probably" says. A blank field the patient can fill in themselves is far better than a confident-looking wrong answer on a medical document — getting a medicine name or dosage wrong could be dangerous. Only report what you can actually read.
+CRITICAL RULE: for fields 2, 3, 4, 6, 7, 8 — if the relevant handwriting or text is genuinely illegible, ambiguous, or absent, return an empty string "" (or null for reportDate) for that field or line item. Do NOT guess, do NOT invent a plausible-sounding value, do NOT fill in what a typical prescription "probably" says. A blank field the patient can fill in themselves is far better than a confident-looking wrong answer on a medical document — getting a medicine name or dosage wrong could be dangerous. Only report what you can actually read. This rule applies per line item, not just per field: transcribe every medicine/test/line you can read, and simply omit the details you can't read for that specific line rather than dropping the whole line or guessing.
 
-Also return an "unclear" array listing exactly which of these field names (from: doctor, hospital, reportDate, diagnosis, medicines, notes) you left blank or are genuinely unsure about, even if you provided a low-confidence guess for it anyway. If everything was clearly legible, return an empty array.
+Also return an "unclear" array listing exactly which of these field names (from: doctor, hospital, reportDate, diagnosis, medicines, notes) you left blank, or where you were only able to read some of the line items/details and are genuinely unsure about the rest. If everything was clearly legible, return an empty array.
 
-Respond strictly in JSON format with exactly these keys, with all text fields in English only. Example:
-{"title": "Diabetes Follow-up", "doctor": "Dr. Ananya Sharma", "hospital": "", "reportDate": "2026-08-09", "category": "Prescription", "diagnosis": "Type 2 Diabetes Mellitus", "medicines": "Metformin 500mg twice daily", "notes": "Fasting blood glucose 162 mg/dL, HbA1c 7.8%. BP 138/88.", "unclear": ["hospital"]}`;
+Respond strictly in JSON format with exactly these keys, with all text fields in English only. Use \n within a string value for line breaks between items. Example:
+{"title": "Diabetes Follow-up", "doctor": "Dr. Ananya Sharma", "hospital": "", "reportDate": "2026-08-09", "category": "Prescription", "diagnosis": "Type 2 Diabetes Mellitus", "medicines": "Tab. Metformin 500mg — 1 tablet twice daily, 30 days, after food\nTab. Glimepiride 1mg — 1 tablet once daily, 30 days, before breakfast", "notes": "BP 138/88, Weight 78kg\nFasting blood glucose 162 mg/dL, HbA1c 7.8%\nAdvised low-carb diet and daily walk\nFollow-up in 4 weeks", "unclear": ["hospital"]}`;
 
   // Routed through the shared failover client: walks flash-lite -> flash ->
   // 3.1-flash-lite across all 4 keys, then OpenRouter. Note gemini-2.0-flash
