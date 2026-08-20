@@ -28,9 +28,16 @@ const NO_RESULTS_MESSAGE =
 const AGGREGATE_QUESTION_PATTERN =
   /\b(how many|count|total|number of)\b.*\b(report|file|record|upload|document|diagnos|disease|condition|prescription|visit)|\b(all|every|list)\b.*\b(report|file|record|upload|document|diagnos|disease|condition|prescription|visit)/i;
 const WHY_ONLY_PATTERN = /\bonly\b.*\bwhy\b|\bwhy\b.*\bonly\b/i;
+// Catches "brief/summary/overview of all/my whole/entire medical history"
+// style phrasing that AGGREGATE_QUESTION_PATTERN's noun list misses (no
+// "report"/"file"/etc. word, just "medical history" as a whole). Same
+// reasoning as above: a broad ask across the whole history has no business
+// being answered from 5 similarity-ranked chunks.
+const WHOLE_HISTORY_PATTERN =
+  /\b(brief|summary|summarize|overview|everything)\b.*\b(medical history|health (history|record)|records?)\b|\b(all|whole|entire)\b.*\b(medical history|health (history|record)|records?)\b/i;
 
 function isAggregateQuestion(query) {
-  return AGGREGATE_QUESTION_PATTERN.test(query) || WHY_ONLY_PATTERN.test(query);
+  return AGGREGATE_QUESTION_PATTERN.test(query) || WHY_ONLY_PATTERN.test(query) || WHOLE_HISTORY_PATTERN.test(query);
 }
 
 /**
