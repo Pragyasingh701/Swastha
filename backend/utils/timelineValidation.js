@@ -33,9 +33,23 @@ function normalizeText(value) {
   return typeof value === 'string' ? value.trim() : '';
 }
 
-function hasUnsupportedCharacters(value) {
-  return /[<>]/.test(value);
-}
+// Previously this field was rejected outright ("Input contains unsupported
+// characters.") if it contained a literal < or >. That's overly broad for
+// medical text: legitimate clinical notation routinely uses < and > for
+// comparisons — "BP < 140/90", "temp > 101°F", lab reference ranges like
+// "WBC > 11,000/µL" — all of which the AI extraction prompt in
+// rag/src/config/gemini.js explicitly asks for (vitals, lab values,
+// reference ranges). Rejecting the whole save on these characters silently
+// blocked normal AI-extracted or manually-typed prescriptions/lab reports.
+//
+// Not HTML-escaping instead of rejecting: the frontend renders all of this
+// as plain React text (no dangerouslySetInnerHTML anywhere in the app), so
+// React already escapes on render and there's no XSS gap to close here.
+// Escaping at write time was tried and reverted — a saved report gets
+// loaded back into the edit form and resubmitted on every edit, so
+// "&lt;" already in a field would become "&amp;lt;" on the next save,
+// compounding indefinitely. Simply allowing the characters through
+// unmodified is both simpler and correct given React's own escaping.
 
 export function validateTimelineReportPayload(payload) {
   const title = normalizeText(payload?.title);
@@ -121,13 +135,6 @@ export function validateTimelineReportPayload(payload) {
     return {
       valid: false,
       message: 'Notes are too long.',
-    };
-  }
-
-  if (hasUnsupportedCharacters(title) || hasUnsupportedCharacters(doctor) || hasUnsupportedCharacters(hospital) || hasUnsupportedCharacters(diagnosis) || hasUnsupportedCharacters(medicines) || hasUnsupportedCharacters(notes)) {
-    return {
-      valid: false,
-      message: 'Input contains unsupported characters.',
     };
   }
 
