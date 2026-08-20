@@ -1,3 +1,4 @@
+import crypto from 'crypto';
 import supabase from '../config/supabase.js';
 import { createNotification } from './notifications.js';
 
@@ -260,6 +261,13 @@ export const linkDoctorToPatient = async ({ doctorId, patientCode }) => {
     };
   }
 
+  // One-shot token for the "Accept" / "Decline" links in the request email
+  // (see backend/utils/mailer.js sendDoctorRequestEmail and the
+  // /email-action/* routes in backend/routes/doctorPatients.js). Cleared
+  // the moment the request is resolved by EITHER channel, so a reused or
+  // stale email link fails safely instead of silently re-applying.
+  const emailActionToken = crypto.randomBytes(20).toString('hex');
+
   const payload = {
     doctor_id: doctorId,
     patient_id: patient.id,
@@ -271,6 +279,7 @@ export const linkDoctorToPatient = async ({ doctorId, patientCode }) => {
     patient_blood_group: patient.blood_group || patient.bloodGroup || patient.blood_type || null,
     status: 'pending', // explicit — not relying on the column default alone
     created_at: new Date().toISOString(),
+    email_action_token: emailActionToken,
   };
 
   const { data, error } = await supabase
@@ -474,6 +483,47 @@ export const getDoctorNotifications = async (doctorId) => {
   }
 };
 
+// Shared core for resolving a pending request, regardless of which channel
+// (in-app bell or the email Accept/Decline link) triggered it. Both
+// channels ultimately race to flip the SAME row's status from 'pending' to
+// 'accepted'/'declined', guarded by the `.eq('status', 'pending')` in the
+// update below — whichever channel gets there first wins, and the loser
+// gets a clean "already accepted/declined" error rather than silently
+// double-applying. email_action_token is cleared on resolution so a
+// reused/stale email link can no longer act on this row either.
+async function resolveDoctorLinkRequest({ link, newStatus, resolvedByRole, resolvedByUserId }) {
+  const { data, error } = await supabase
+    .from('doctor_patient')
+    .update({ status: newStatus, responded_at: new Date().toISOString(), email_action_token: null })
+    .eq('id', link.id)
+    .eq('status', 'pending') // re-check at write time, not just at the read above — closes the race window between the two.
+    .select()
+    .single();
+
+  if (error) {
+    if (error.code === 'PGRST116') {
+      // No row matched id+status='pending' — someone else (the other
+      // channel) already resolved it between our read and this write.
+      throw new Error('This request has already been responded to.');
+    }
+    throw error;
+  }
+
+  const eventType = newStatus === 'accepted' ? 'doctor_request_accepted' : 'doctor_request_declined';
+  const verb = newStatus === 'accepted' ? 'accepted' : 'declined';
+  await notifySafely({
+    recipientId: data.doctor_id,
+    actorId: resolvedByUserId,
+    actorRole: resolvedByRole,
+    eventType,
+    title: `Request ${verb}`,
+    message: `${data.patient_name || 'A patient'} ${verb} your access request.`,
+    metadata: { linkId: data.id },
+  });
+
+  return data;
+}
+
 /**
  * Patient accepts a pending request. Only the patient the link belongs to
  * may accept it — patientUserId must match the link's patient_id, checked
@@ -500,26 +550,7 @@ export const acceptDoctorLinkRequest = async ({ patientUserId, linkId }) => {
     throw new Error(`This request is already ${link.status}.`);
   }
 
-  const { data, error } = await supabase
-    .from('doctor_patient')
-    .update({ status: 'accepted', responded_at: new Date().toISOString() })
-    .eq('id', linkId)
-    .select()
-    .single();
-
-  if (error) throw error;
-
-  await notifySafely({
-    recipientId: data.doctor_id,
-    actorId: patientUserId,
-    actorRole: 'patient',
-    eventType: 'doctor_request_accepted',
-    title: 'Request accepted',
-    message: `${data.patient_name || 'A patient'} accepted your access request.`,
-    metadata: { linkId: data.id },
-  });
-
-  return data;
+  return resolveDoctorLinkRequest({ link, newStatus: 'accepted', resolvedByRole: 'patient', resolvedByUserId: patientUserId });
 };
 
 /**
@@ -548,26 +579,63 @@ export const declineDoctorLinkRequest = async ({ patientUserId, linkId }) => {
     throw new Error(`This request is already ${link.status}.`);
   }
 
-  const { data, error } = await supabase
+  return resolveDoctorLinkRequest({ link, newStatus: 'declined', resolvedByRole: 'patient', resolvedByUserId: patientUserId });
+};
+
+/**
+ * Resolve a pending request via the token from the email Accept/Decline
+ * link — no login required, so ownership is proven by possession of the
+ * token itself (mailed only to the patient's own registered address)
+ * rather than a JWT. Same shared resolveDoctorLinkRequest core as the
+ * in-app accept/decline, so the race-safety and notification behavior are
+ * identical regardless of channel.
+ */
+export const resolveDoctorLinkRequestByToken = async (emailActionToken, newStatus) => {
+  if (!emailActionToken) throw new Error('Missing action token.');
+  if (!supabase) throw new Error('Database connection is unavailable.');
+
+  const { data: link, error: linkError } = await supabase
     .from('doctor_patient')
-    .update({ status: 'declined', responded_at: new Date().toISOString() })
-    .eq('id', linkId)
-    .select()
-    .single();
+    .select('*')
+    .eq('email_action_token', emailActionToken)
+    .maybeSingle();
 
-  if (error) throw error;
+  if (linkError && linkError.code !== 'PGRST116') throw linkError;
+  if (!link) throw new Error('This link is invalid or has already been used.');
+  if (link.status !== 'pending') throw new Error(`This request is already ${link.status}.`);
 
-  await notifySafely({
-    recipientId: data.doctor_id,
-    actorId: patientUserId,
-    actorRole: 'patient',
-    eventType: 'doctor_request_declined',
-    title: 'Request declined',
-    message: `${data.patient_name || 'A patient'} declined your access request.`,
-    metadata: { linkId: data.id },
-  });
+  return resolveDoctorLinkRequest({ link, newStatus, resolvedByRole: 'patient', resolvedByUserId: link.patient_id });
+};
 
-  return data;
+/**
+ * Cross-channel sync for the notification bell: a 'doctor_request'
+ * notification row never changes after it's created (accept/decline
+ * creates a SEPARATE notification for the doctor, see
+ * resolveDoctorLinkRequest above) — so on its own, the bell has no way to
+ * know a request shown as "pending" was actually already resolved via the
+ * OTHER channel (the email Accept/Decline link). This looks up the real,
+ * current status for a batch of linkIds in one query, so the caller
+ * (backend/routes/notifications.js) can stamp live status onto each
+ * notification's metadata before sending it to the frontend — the bell
+ * then hides Accept/Decline the moment status stops being 'pending',
+ * regardless of which channel resolved it.
+ */
+export const getDoctorLinkStatuses = async (linkIds) => {
+  const ids = [...new Set((linkIds || []).filter(Boolean))];
+  if (ids.length === 0 || !supabase) return {};
+
+  try {
+    const { data, error } = await supabase
+      .from('doctor_patient')
+      .select('id, status')
+      .in('id', ids);
+
+    if (error) throw error;
+    return Object.fromEntries((data || []).map((row) => [row.id, row.status]));
+  } catch (error) {
+    console.warn('Doctor link status lookup warning:', error?.message || error);
+    return {};
+  }
 };
 
 export const deleteDoctorPatient = async ({ doctorId, patientUserId, linkId }) => {

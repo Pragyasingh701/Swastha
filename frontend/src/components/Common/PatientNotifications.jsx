@@ -174,14 +174,20 @@ export default function PatientNotifications() {
               notifications.map((notification) => {
                 const linkId = notification.metadata?.linkId;
                 // Show Accept/Decline only on a still-actionable doctor
-                // request — not once this session has already resolved it
-                // (resolvedLinkIds), and not on the accepted/declined
-                // notifications themselves (those are a record of the
-                // outcome, not a new actionable request).
+                // request: not resolved locally this session
+                // (resolvedLinkIds — the immediate click-response case),
+                // and not resolved on the SERVER either (metadata.linkStatus,
+                // stamped fresh on every fetch by backend/routes/
+                // notifications.js) — that second check is what makes a
+                // request accepted/declined via the EMAIL link stop showing
+                // buttons here too, without waiting on anything but the
+                // next poll.
+                const linkStatus = notification.metadata?.linkStatus;
                 const isActionableRequest =
                   notification.eventType === 'doctor_request' &&
                   linkId &&
-                  !resolvedLinkIds.has(linkId);
+                  !resolvedLinkIds.has(linkId) &&
+                  (!linkStatus || linkStatus === 'pending');
 
                 return (
                   <div

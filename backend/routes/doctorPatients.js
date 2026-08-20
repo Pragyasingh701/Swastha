@@ -7,11 +7,13 @@ import {
   getPendingRequestsForPatient,
   acceptDoctorLinkRequest,
   declineDoctorLinkRequest,
+  resolveDoctorLinkRequestByToken,
   isDoctorLinkedToPatient,
   getDoctorNotifications,
   getPatientNotifications,
 } from '../db/doctorPatients.js';
 import { createNotification } from '../db/notifications.js';
+import { sendDoctorRequestEmail } from '../utils/mailer.js';
 
 const router = express.Router();
 const JWT_SECRET = process.env.JWT_SECRET || 'swastha_dev_secret_key_2026';
@@ -160,6 +162,85 @@ router.post('/requests/:linkId/decline', async (req, res) => {
   }
 });
 
+/**
+ * GET /api/doctor-patients/email-action/accept
+ * GET /api/doctor-patients/email-action/decline
+ * Clicked directly from the request email — deliberately NO auth check
+ * (a patient reading email isn't logged into the app). Ownership is
+ * proven by possession of the mailed token instead of a JWT; see
+ * resolveDoctorLinkRequestByToken for the token lookup + the SAME
+ * status='pending' race guard the in-app accept/decline buttons use, so
+ * whichever channel (this link or the bell) acts first wins cleanly.
+ * Renders a plain confirmation page — there's nothing else to browse to
+ * from an email client.
+ *
+ * Declared before '/:patientId' so Express doesn't swallow this path.
+ */
+function renderEmailActionPage(res, { heading, message, isError = false }) {
+  return res.send(`<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Doctor Access Request</title>
+    <style>
+      body { font-family: Arial, sans-serif; background: #f8fafc; color: #0f172a; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; }
+      .card { background: white; border-radius: 16px; padding: 32px; box-shadow: 0 12px 30px rgba(15, 23, 42, 0.08); max-width: 560px; text-align: center; }
+      h2 { margin-top: 0; color: ${isError ? '#dc2626' : '#2563eb'}; }
+      p { line-height: 1.6; color: #475569; }
+    </style>
+  </head>
+  <body>
+    <div class="card">
+      <h2>${heading}</h2>
+      <p>${message}</p>
+    </div>
+  </body>
+</html>`);
+}
+
+router.get('/email-action/accept', async (req, res) => {
+  const token = String(req.query?.token ?? '').trim();
+  if (!token) {
+    return renderEmailActionPage(res, { heading: 'Missing token', message: 'This link is missing its access token.', isError: true });
+  }
+
+  try {
+    await resolveDoctorLinkRequestByToken(token, 'accepted');
+    return renderEmailActionPage(res, {
+      heading: 'Request accepted',
+      message: 'You have granted this doctor access to your health records. You can revoke access at any time from the Swastha app.',
+    });
+  } catch (error) {
+    return renderEmailActionPage(res, {
+      heading: 'Unable to accept',
+      message: error?.message || 'This link is invalid or has already been used.',
+      isError: true,
+    });
+  }
+});
+
+router.get('/email-action/decline', async (req, res) => {
+  const token = String(req.query?.token ?? '').trim();
+  if (!token) {
+    return renderEmailActionPage(res, { heading: 'Missing token', message: 'This link is missing its access token.', isError: true });
+  }
+
+  try {
+    await resolveDoctorLinkRequestByToken(token, 'declined');
+    return renderEmailActionPage(res, {
+      heading: 'Request declined',
+      message: 'This doctor has not been granted access to your health records.',
+    });
+  } catch (error) {
+    return renderEmailActionPage(res, {
+      heading: 'Unable to decline',
+      message: error?.message || 'This link is invalid or has already been used.',
+      isError: true,
+    });
+  }
+});
+
 router.post('/link', async (req, res) => {
   const authUser = getAuthUser(req);
 
@@ -188,6 +269,23 @@ router.post('/link', async (req, res) => {
       doctorId: authUser.userId,
       patientCode,
     });
+
+    // Email confirmation with Accept/Decline links — only for a genuinely
+    // NEW pending request. linkDoctorToPatient returns the existing link
+    // as-is (no fresh email_action_token) when one already exists, so this
+    // naturally skips re-emailing on a repeat/idempotent call.
+    if (result.link.status === 'pending' && result.link.email_action_token && result.link.patient_email) {
+      try {
+        const backendUrl = process.env.BACKEND_URL || 'http://localhost:5001';
+        const acceptUrl = `${backendUrl}/api/doctor-patients/email-action/accept?token=${result.link.email_action_token}`;
+        const declineUrl = `${backendUrl}/api/doctor-patients/email-action/decline?token=${result.link.email_action_token}`;
+        await sendDoctorRequestEmail(result.link.patient_email, result.link.patient_name, acceptUrl, declineUrl);
+      } catch (emailError) {
+        // Best-effort — the request itself already succeeded and is
+        // visible in the notification bell regardless of email delivery.
+        console.warn('Doctor request email warning:', emailError?.message || emailError);
+      }
+    }
 
     const recipientId = result?.patient?.patientUserId || result?.patient?.patientId || null;
     if (recipientId) {

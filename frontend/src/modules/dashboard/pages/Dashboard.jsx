@@ -248,12 +248,17 @@ function Header({
               ) : (
                 notifications.map((item) => {
                   const linkId = item.metadata?.linkId;
-                  // See PatientNotifications.jsx for why resolvedLinkIds
-                  // (not the notification's own fields) gates this — an
-                  // accept/decline creates a NEW notification for the
-                  // doctor, it doesn't change this one.
+                  // See PatientNotifications.jsx for the full explanation.
+                  // resolvedLinkIds covers this-session clicks in THIS
+                  // bell; metadata.linkStatus (stamped server-side on every
+                  // fetch) covers a request already resolved via the OTHER
+                  // channel — the email Accept/Decline link.
+                  const linkStatus = item.metadata?.linkStatus;
                   const isActionableRequest =
-                    item.eventType === 'doctor_request' && linkId && !resolvedLinkIds.has(linkId);
+                    item.eventType === 'doctor_request' &&
+                    linkId &&
+                    !resolvedLinkIds.has(linkId) &&
+                    (!linkStatus || linkStatus === 'pending');
 
                   return (
                     <div
