@@ -14,9 +14,11 @@ import {
 } from '../db/doctorPatients.js';
 import { createNotification } from '../db/notifications.js';
 import { sendDoctorRequestEmail } from '../utils/mailer.js';
+import { listTimelineReports } from '../db/reports.js';
 
 const router = express.Router();
 const JWT_SECRET = process.env.JWT_SECRET || 'swastha_dev_secret_key_2026';
+const RAG_BASE_URL = process.env.RAG_BASE_URL || 'http://localhost:3010/api';
 
 function getAuthUser(req) {
   const authHeader = req.headers.authorization || '';
@@ -368,6 +370,87 @@ router.get('/:patientId', async (req, res) => {
   } catch (error) {
     console.error('Doctor patient detail error:', error);
     return res.status(500).json({ message: 'Unable to load patient.' });
+  }
+});
+
+/**
+ * GET /api/doctor-patients/:patientId/summary
+ * DOCTOR-facing AI summary of a patient's full record timeline, for the
+ * Clinical Intelligence page. Same 'accepted' link gate as the detail
+ * route above — never generated (or even fetched) for a pending/declined
+ * pair. Declared before the '/:patientId' DELETE (order doesn't matter
+ * for DELETE, but keeping every :patientId route together for clarity).
+ *
+ * There's no summary caching/storage here by design: the timeline can
+ * change between visits (new reports added), so this always regenerates
+ * from the CURRENT report set rather than risk serving a stale summary —
+ * mirrors the "regenerate on edit" behavior in reports.js's PUT handler.
+ */
+router.get('/:patientId/summary', async (req, res) => {
+  const authUser = getAuthUser(req);
+
+  if (!authUser?.userId) {
+    return res.status(401).json({ message: 'Authentication required.' });
+  }
+
+  const patientId = String(req.params?.patientId ?? '').trim();
+  if (!patientId) {
+    return res.status(400).json({ message: 'Patient ID is required.' });
+  }
+
+  try {
+    const allowed = await isDoctorLinkedToPatient(authUser.userId, patientId);
+    if (!allowed) {
+      return res.status(403).json({
+        message: 'You do not have access to this patient. The patient must accept your request first.',
+      });
+    }
+
+    const patients = await getDoctorPatients(authUser.userId);
+    const patient = patients.find(
+      (p) => p.patientUserId === patientId && p.linkStatus === 'accepted'
+    );
+    if (!patient) {
+      return res.status(404).json({ message: 'Patient not found.' });
+    }
+
+    const reports = await listTimelineReports(patientId);
+    if (!reports || reports.length === 0) {
+      return res.json({ summary: null, reportCount: 0 });
+    }
+
+    const ragRes = await fetch(`${RAG_BASE_URL}/patient-summary`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: req.headers.authorization,
+      },
+      body: JSON.stringify({
+        patientName: patient.name,
+        reports: reports.map((r) => ({
+          title: r.title,
+          category: r.category,
+          doctor: r.doctor,
+          hospital: r.hospital,
+          reportDate: r.reportDate,
+          diagnosis: r.diagnosis,
+          medicines: r.medicines,
+          notes: r.notes,
+          analysis: r.analysis,
+        })),
+      }),
+    });
+
+    const data = await ragRes.json();
+    if (!ragRes.ok) {
+      console.error('Patient summary generation failed:', data?.error || ragRes.status);
+      return res.status(502).json({ message: data?.error || 'Could not generate patient summary.' });
+    }
+
+    return res.json({ summary: data.summary, reportCount: reports.length });
+  } catch (error) {
+    console.error('Doctor patient summary error:', error);
+    return res.status(500).json({ message: 'Failed to load patient summary', error: error.message });
   }
 });
 

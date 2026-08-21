@@ -68,6 +68,16 @@ export async function getDoctorPatientDetail(patientId) {
 }
 
 /**
+ * DOCTOR-facing: AI summary of a patient's full record timeline (Clinical
+ * Intelligence page). Regenerated fresh on every call — see
+ * backend/routes/doctorPatients.js's GET /:patientId/summary for why
+ * there's no caching here.
+ */
+export async function getDoctorPatientSummary(patientId) {
+  return request(`/${patientId}/summary`);
+}
+
+/**
  * PATIENT-facing: doctor link requests awaiting this patient's response.
  */
 export async function getPendingDoctorRequests() {
@@ -101,6 +111,7 @@ export default {
   linkPatientToDoctor,
   deletePatientFromDoctor,
   getDoctorPatientDetail,
+  getDoctorPatientSummary,
   getPendingDoctorRequests,
   acceptDoctorRequest,
   declineDoctorRequest,
