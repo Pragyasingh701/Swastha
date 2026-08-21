@@ -433,7 +433,7 @@ function Header({ profile }) {
   const navigate = useNavigate();
 
   return (
-    <header className="shrink-0 flex items-center gap-4 px-6 lg:px-8 py-5 border-b border-slate-200 bg-white ">
+    <header className="shrink-0 flex items-center justify-end gap-4 px-6 lg:px-8 py-5 border-b border-slate-200 bg-white ">
       <PatientNotifications />
 
       <PatientIdBadge customProfile={profile} />
