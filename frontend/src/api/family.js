@@ -88,11 +88,6 @@ export async function deleteFamilyMember(memberId, token) {
   }, token);
 }
 
-export async function getPatientFamilyMembers(patientUserId) {
-  const result = await request(`/doctor/${patientUserId}/members`);
-  return result.members || [];
-}
-
 export default {
   getFamilyDashboard,
   getFamilyVault,
@@ -100,6 +95,4 @@ export default {
   getFamilyMembers,
   createFamilyMember,
   updateFamilyMember,
-  deleteFamilyMember,
-  getPatientFamilyMembers,
 };
