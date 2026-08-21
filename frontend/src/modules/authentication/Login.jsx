@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 import { startGoogleAuth } from "../../utils/googleAuth";
+import Logo from "../../components/Common/Logo";
 
 export default function Login() {
   const navigate = useNavigate();
@@ -61,12 +62,8 @@ export default function Login() {
         <div className="absolute -bottom-24 -right-24 w-96 h-96 bg-secondary-container/10 rounded-full blur-3xl"></div>
 
         <div className="relative z-10 max-w-2xl w-full flex flex-col items-center text-center">
-          <div className="w-full mb-12 animate-float">
-            <img
-              alt="Swastha Healthcare AI Dashboard"
-              className="w-full h-auto drop-shadow-2xl rounded-2xl"
-              src="https://lh3.googleusercontent.com/aida/AP1WRLuDIwvGiKVVfWRy9nrLbB1tB-F2hMnLJmOF5Uk8i9UmRObLrHe0tE5Sh2kchdPdADaUei6YUcasoIjZB6ZkJbMt8_Gh88Rjv0Rd8dwzCpzCoFiPQcKRXZXYNHh4a7N4u3jH8eG8vfUCdGyv95Eg7S89twb05dz9w_kTT_3StrxqdTcClQrOl65BWyQ4-C-TfxJVSxqAllN1xQjWdTofpsMVjLBLLLgbPURPUgEj9DuSC6RPDnqO_kU_vSw"
-            />
+          <div className="mb-8 flex justify-center">
+            <Logo className="w-[620px] max-w-full h-auto" />
           </div>
 
           <div className="space-y-md">
@@ -98,29 +95,11 @@ export default function Login() {
 
       {/* RIGHT SIDE: Login Form */}
       <section className="flex-1 flex flex-col items-center justify-center p-6 md:p-12 xl:p-24 bg-surface lg:bg-background">
-        <div className="lg:hidden mb-8">
-          <img
-            alt="Swastha Logo"
-            className="h-12 w-auto"
-            src="https://lh3.googleusercontent.com/aida-public/AB6AXuAJoSkUGc0Hv6hSwIbvCI4jXqfw51IEzG1-YtxI6ZPVQAgKF2gkF9bZKnreKdmbtKhGGVqaqifsmWUgklpWmQ5HOc8wCuxt1qRATJ_Lh2di1I5X4T6NAM789pr-DkSrLSej3v9HOhj7ZqEGyH6HQ8WcLrklNBJCzOHWE8w-F08fLnZHhFij-XNf_1_6ZyvNho1amapTks9-HG-P_KngfQr2YcLy_0llXOm7YKhNMA02JRcuWLpa7xSq"
-          />
-        </div>
-
         <div className="w-full max-w-[440px] flex flex-col">
           <div className="bg-white lg:shadow-[0_8px_40px_-12px_rgba(15,23,42,0.08)] rounded-[16px] p-8 lg:p-10 border border-outline-variant/20 lg:border-none">
-            <div className="text-center mb-10 hidden lg:block">
-              <img
-                alt="Swastha Logo"
-                className="h-14 w-auto mx-auto mb-6"
-                src="https://lh3.googleusercontent.com/aida-public/AB6AXuAJoSkUGc0Hv6hSwIbvCI4jXqfw51IEzG1-YtxI6ZPVQAgKF2gkF9bZKnreKdmbtKhGGVqaqifsmWUgklpWmQ5HOc8wCuxt1qRATJ_Lh2di1I5X4T6NAM789pr-DkSrLSej3v9HOhj7ZqEGyH6HQ8WcLrklNBJCzOHWE8w-F08fLnZHhFij-XNf_1_6ZyvNho1amapTks9-HG-P_KngfQr2YcLy_0llXOm7YKhNMA02JRcuWLpa7xSq"
-              />
+            <div className="text-center mb-10">
               <h2 className="font-headline-md text-headline-md text-on-surface ">Welcome Back</h2>
               <p className="font-body-sm text-body-sm text-on-surface-variant mt-2">Log in to manage your clinical data</p>
-            </div>
-
-            <div className="lg:hidden mb-10 text-center">
-              <h2 className="font-headline-lg-mobile text-headline-lg-mobile text-on-surface ">Welcome Back</h2>
-              <p className="font-body-sm text-body-sm text-on-surface-variant mt-1">Access your family&apos;s health reports</p>
             </div>
 
             {/* Error Banner */}
@@ -134,7 +113,7 @@ export default function Login() {
             )}
 
             {/* Social Logins */}
-            <div className="space-y-3 mb-8">
+            <div className="mb-8">
               <button
                 type="button"
                 onClick={handleGoogleAuth}
@@ -147,13 +126,6 @@ export default function Login() {
                   <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"></path>
                 </svg>
                 Continue with Google
-              </button>
-              <button
-                className="w-full flex items-center justify-center gap-3 px-6 py-3 bg-surface-container-low border border-outline-variant/30 rounded-xl font-label-md text-label-md text-outline cursor-not-allowed"
-                disabled
-              >
-                <span className="material-symbols-outlined text-[20px]">badge</span>
-                Continue with ABHA(Coming Soon)
               </button>
             </div>
 
