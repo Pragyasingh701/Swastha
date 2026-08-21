@@ -78,12 +78,12 @@ export default function Login() {
           {/* Trust Badges */}
           <div className="mt-xl flex flex-wrap justify-center gap-md">
             <div className="flex items-center gap-2 px-4 py-2 bg-white/50 border border-outline-variant/30 rounded-xl">
-              <span className="material-symbols-outlined text-primary text-[20px]" style={{ fontVariationSettings: "'FILL' 1" }}>enhanced_encryption</span>
-              <span className="font-label-md text-label-md text-on-surface-variant ">End-to-End Encryption</span>
+              <span className="material-symbols-outlined text-primary text-[20px]" style={{ fontVariationSettings: "'FILL' 1" }}>verified_user</span>
+              <span className="font-label-md text-label-md text-on-surface-variant ">Verified Doctors</span>
             </div>
             <div className="flex items-center gap-2 px-4 py-2 bg-white/50 border border-outline-variant/30 rounded-xl">
-              <span className="material-symbols-outlined text-primary text-[20px]" style={{ fontVariationSettings: "'FILL' 1" }}>verified</span>
-              <span className="font-label-md text-label-md text-on-surface-variant ">ABHA Ecosystem</span>
+              <span className="material-symbols-outlined text-primary text-[20px]" style={{ fontVariationSettings: "'FILL' 1" }}>mail</span>
+              <span className="font-label-md text-label-md text-on-surface-variant ">OTP-Verified Signup</span>
             </div>
             <div className="flex items-center gap-2 px-4 py-2 bg-white/50 border border-outline-variant/30 rounded-xl">
               <span className="material-symbols-outlined text-primary text-[20px]" style={{ fontVariationSettings: "'FILL' 1" }}>auto_awesome</span>

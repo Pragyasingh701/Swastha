@@ -96,9 +96,9 @@ export default function RoleSelection({ onSelectRole }) {
                 Patient
               </h2>
               <p className="font-body-md text-body-md text-on-surface-variant mb-8 flex-grow">
-                Access your health records, sync ABHA records, and receive
-                AI-driven insights to manage your personal health journey
-                with clinical precision.
+                Access your health records, search your history with AI,
+                and receive AI-driven insights to manage your personal
+                health journey with clinical precision.
               </p>
               <button
                 type="button"
