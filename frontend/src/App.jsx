@@ -228,6 +228,7 @@ export default function App() {
         <Route path="/role-selection" element={<OnboardingRoute><RoleSelection /></OnboardingRoute>} />
         <Route path="/doctor-register" element={<OnboardingRoute><DoctorRegister /></OnboardingRoute>} />
         <Route path="/patient-register" element={<OnboardingRoute><PatientRegister /></OnboardingRoute>} />
+        
 
         {/* Protected Main Application Routes */}
         <Route

@@ -12,6 +12,9 @@ import {
   ChevronDown,
   User,
   RotateCcw,
+  Search,
+  ShieldCheck,
+  Clock,
 } from "lucide-react";
 import NotificationBell from "../../../components/Common/NotificationBell";
 
@@ -19,6 +22,26 @@ const EXAMPLE_QUESTIONS = [
   "Has this patient had any drug allergies or reactions?",
   "What medicines are they currently prescribed?",
   "Summarize their most recent lab results.",
+];
+
+// Feature highlights shown in the empty state before a patient is picked —
+// matches the reference design's three-column callouts.
+const FEATURE_HIGHLIGHTS = [
+  {
+    icon: ShieldCheck,
+    title: "100% Private & Secure",
+    description: "Your data is safe and always protected.",
+  },
+  {
+    icon: FileText,
+    title: "Grounded Answers",
+    description: "AI answers are based only on uploaded records.",
+  },
+  {
+    icon: Clock,
+    title: "Save Time",
+    description: "Get quick insights and make better decisions.",
+  },
 ];
 
 function formatDate(value) {
@@ -43,6 +66,7 @@ export default function DoctorAskSwastha() {
   const [isFetchingPatients, setIsFetchingPatients] = useState(true);
   const [isPickerOpen, setIsPickerOpen] = useState(false);
   const [selectedPatient, setSelectedPatient] = useState(null);
+  const [patientSearch, setPatientSearch] = useState("");
 
   // patientUserId -> { sessionId, messages }
   const [threads, setThreads] = useState({});
@@ -87,9 +111,20 @@ export default function DoctorAskSwastha() {
   const thread = patientUserId ? threads[patientUserId] : null;
   const messages = thread?.messages || [];
 
+  const filteredPatients = useMemo(() => {
+    const q = patientSearch.trim().toLowerCase();
+    if (!q) return patients;
+    return patients.filter((p) => {
+      const name = (p.patient_name || p.name || "").toLowerCase();
+      const email = (p.patient_email || "").toLowerCase();
+      return name.includes(q) || email.includes(q);
+    });
+  }, [patients, patientSearch]);
+
   function selectPatient(patient) {
     setSelectedPatient(patient);
     setIsPickerOpen(false);
+    setPatientSearch("");
     setError(null);
     const pid = patient.patientUserId || patient.patientId || patient.id;
     // First time asking about this patient in this tab: open a fresh
@@ -177,100 +212,141 @@ export default function DoctorAskSwastha() {
       <DoctorSidebar />
 
       <div className="flex-1 flex flex-col min-w-0 h-screen overflow-hidden">
-        <header className="shrink-0 flex items-center justify-between gap-4 px-6 lg:px-8 py-5 border-b border-slate-200 bg-white">
-          <div>
+        <header className="shrink-0 flex items-center justify-end gap-4 px-6 lg:px-8 py-5 border-b border-slate-200 bg-white">
+          <NotificationBell />
+          <ProfileDropdown />
+        </header>
+
+        <main className="flex-1 overflow-y-auto px-10 py-8 flex flex-col max-w-4xl mx-auto w-full">
+          {/* Gradient banner — title/subtitle, no illustration per request */}
+          <div className="rounded-2xl bg-gradient-to-br from-blue-50 to-indigo-50 border border-blue-100/60 px-6 py-6 mb-5">
             <h1 className="text-xl font-semibold text-slate-900 flex items-center gap-2">
               <Sparkles className="text-blue-600" size={22} />
               Ask Swastha
             </h1>
-            <p className="text-sm text-slate-500 mt-0.5">
-              Ask about a patient's records — answers are grounded only in what they've uploaded.
-            </p>
           </div>
 
-          <div className="flex items-center gap-3 shrink-0">
-            <NotificationBell />
-            <ProfileDropdown />
-          </div>
-        </header>
-
-        <main className="flex-1 overflow-y-auto px-10 py-8 flex flex-col max-w-4xl mx-auto w-full">
-          {/* Patient picker */}
-          <div className="mb-6 flex items-center gap-3">
-            <div className="relative flex-1 max-w-sm" ref={pickerRef}>
-              <button
-                type="button"
-                onClick={() => setIsPickerOpen((v) => !v)}
-                disabled={isFetchingPatients}
-                className="w-full flex items-center justify-between gap-2 bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-700 hover:border-blue-300 transition-colors disabled:opacity-60"
-              >
-                <span className="flex items-center gap-2 min-w-0">
-                  <User size={16} className="text-slate-400 shrink-0" />
-                  <span className="truncate">
-                    {isFetchingPatients
-                      ? "Loading patients..."
-                      : selectedPatient
-                      ? selectedPatient.patient_name || selectedPatient.name
-                      : "Select a patient"}
+          {/* Patient picker card */}
+          <div className="bg-white border border-slate-100 shadow-sm rounded-2xl p-5 mb-5">
+            <div className="flex flex-col lg:flex-row lg:items-end gap-4">
+              <div className="flex-1 relative" ref={pickerRef}>
+                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">
+                  Select a patient
+                </label>
+                <button
+                  type="button"
+                  onClick={() => setIsPickerOpen((v) => !v)}
+                  disabled={isFetchingPatients}
+                  className="w-full flex items-center justify-between gap-2 bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-700 hover:border-blue-300 transition-colors disabled:opacity-60"
+                >
+                  <span className="flex items-center gap-2 min-w-0">
+                    <Search size={16} className="text-slate-400 shrink-0" />
+                    <span className={`truncate ${selectedPatient ? "" : "text-slate-400"}`}>
+                      {isFetchingPatients
+                        ? "Loading patients..."
+                        : selectedPatient
+                        ? selectedPatient.patient_name || selectedPatient.name
+                        : "Search or select a patient"}
+                    </span>
                   </span>
-                </span>
-                <ChevronDown size={16} className="text-slate-400 shrink-0" />
-              </button>
+                  <ChevronDown size={16} className="text-slate-400 shrink-0" />
+                </button>
 
-              {isPickerOpen && (
-                <div className="absolute z-10 mt-2 w-full bg-white border border-slate-200 rounded-xl shadow-lg max-h-72 overflow-y-auto">
-                  {patients.length === 0 ? (
-                    <p className="px-4 py-3 text-sm text-slate-400">
-                      No linked patients yet — add one from the Patients page.
-                    </p>
-                  ) : (
-                    patients.map((p) => {
-                      const pid = p.patientUserId || p.patientId || p.id;
-                      const isSelected = pid === patientUserId;
-                      return (
-                        <button
-                          key={pid}
-                          type="button"
-                          onClick={() => selectPatient(p)}
-                          className={`w-full flex items-center gap-2 text-left px-4 py-2.5 text-sm transition-colors ${
-                            isSelected ? "bg-blue-50 text-blue-700" : "text-slate-700 hover:bg-slate-50"
-                          }`}
-                        >
-                          <User size={14} className="shrink-0 text-slate-400" />
-                          <span className="truncate">{p.patient_name || p.name}</span>
-                          {p.patient_email && (
-                            <span className="text-xs text-slate-400 truncate">· {p.patient_email}</span>
-                          )}
-                        </button>
-                      );
-                    })
-                  )}
+                {isPickerOpen && (
+                  <div className="absolute z-10 mt-2 w-full bg-white border border-slate-200 rounded-xl shadow-lg overflow-hidden">
+                    <div className="p-2 border-b border-slate-100">
+                      <div className="relative">
+                        <Search
+                          size={14}
+                          className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
+                        />
+                        <input
+                          type="text"
+                          autoFocus
+                          value={patientSearch}
+                          onChange={(e) => setPatientSearch(e.target.value)}
+                          placeholder="Search by name or email..."
+                          className="w-full pl-9 pr-3 py-2 text-sm rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-200 focus:border-blue-400"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="max-h-64 overflow-y-auto">
+                      {filteredPatients.length === 0 ? (
+                        <p className="px-4 py-3 text-sm text-slate-400">
+                          {patients.length === 0
+                            ? "No linked patients yet — add one from the Patients page."
+                            : "No patients match your search."}
+                        </p>
+                      ) : (
+                        filteredPatients.map((p) => {
+                          const pid = p.patientUserId || p.patientId || p.id;
+                          const isSelected = pid === patientUserId;
+                          return (
+                            <button
+                              key={pid}
+                              type="button"
+                              onClick={() => selectPatient(p)}
+                              className={`w-full flex items-center gap-2 text-left px-4 py-2.5 text-sm transition-colors ${
+                                isSelected ? "bg-blue-50 text-blue-700" : "text-slate-700 hover:bg-slate-50"
+                              }`}
+                            >
+                              <User size={14} className="shrink-0 text-slate-400" />
+                              <span className="truncate">{p.patient_name || p.name}</span>
+                              {p.patient_email && (
+                                <span className="text-xs text-slate-400 truncate">· {p.patient_email}</span>
+                              )}
+                            </button>
+                          );
+                        })
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div className="flex items-center gap-2 shrink-0">
+                <div className="flex items-center gap-2.5 bg-blue-50/80 border border-blue-100 rounded-xl px-3.5 py-3 text-xs text-blue-700 max-w-xs">
+                  <Clock size={16} className="text-blue-500 shrink-0" />
+                  <span>Answers are based only on the selected patient's uploaded records.</span>
                 </div>
-              )}
-            </div>
 
-            {selectedPatient && (
-              <button
-                type="button"
-                onClick={handleNewChat}
-                className="flex items-center gap-1.5 text-sm text-slate-500 hover:text-blue-700 px-3 py-2 rounded-lg hover:bg-blue-50 transition-colors shrink-0"
-                title="Clear this conversation and start fresh"
-              >
-                <RotateCcw size={14} />
-                New chat
-              </button>
-            )}
+                {selectedPatient && (
+                  <button
+                    type="button"
+                    onClick={handleNewChat}
+                    className="flex items-center gap-1.5 text-sm text-slate-500 hover:text-blue-700 px-3 py-3 rounded-xl hover:bg-blue-50 transition-colors shrink-0 whitespace-nowrap"
+                    title="Clear this conversation and start fresh"
+                  >
+                    <RotateCcw size={14} />
+                    New chat
+                  </button>
+                )}
+              </div>
+            </div>
           </div>
 
           {!selectedPatient ? (
-            <div className="flex-1 bg-white rounded-2xl border border-slate-100 shadow-sm p-6 flex flex-col items-center justify-center text-center min-h-[320px]">
-              <div className="w-12 h-12 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center mb-4">
-                <User size={22} />
+            <div className="flex-1 bg-white rounded-2xl border border-slate-100 shadow-sm p-8 flex flex-col items-center justify-center text-center min-h-[320px]">
+              <div className="w-14 h-14 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center mb-4">
+                <User size={24} />
               </div>
-              <p className="text-slate-600 font-medium mb-1">Choose a patient to get started</p>
-              <p className="text-slate-400 text-sm">
-                Answers are scoped strictly to that patient's uploaded records.
+              <p className="text-slate-900 font-semibold text-lg mb-1.5">Choose a patient to get started</p>
+              <p className="text-slate-400 text-sm mb-8">
+                Select a patient above to ask questions about their records.
               </p>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 w-full max-w-2xl pt-6 border-t border-slate-100">
+                {FEATURE_HIGHLIGHTS.map(({ icon: Icon, title, description }) => (
+                  <div key={title} className="flex flex-col items-center text-center gap-2">
+                    <div className="w-10 h-10 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center">
+                      <Icon size={18} />
+                    </div>
+                    <p className="text-sm font-semibold text-slate-800">{title}</p>
+                    <p className="text-xs text-slate-400 leading-relaxed">{description}</p>
+                  </div>
+                ))}
+              </div>
             </div>
           ) : (
             <>
