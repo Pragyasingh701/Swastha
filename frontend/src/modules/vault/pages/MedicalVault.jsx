@@ -255,7 +255,6 @@ export default function MedicalVault() {
             onClearFilter={() => setCategoryFilter(null)}
             onViewDetails={setDetailsReport}
             onViewSummary={setSummaryReport}
-            onViewAll={() => navigate("/timeline")}
           />
         </main>
       </div>
@@ -503,8 +502,8 @@ function SmartCategorization({ categoryCounts, activeCategory, onSelectCategory 
 
 /* --------------------------- Recent activity --------------------------- */
 
-function RecentActivity({ reports, loading, error, activeCategory, onClearFilter, onViewDetails, onViewSummary, onViewAll }) {
-  const visibleDocs = reports.slice(0, 8);
+function RecentActivity({ reports, loading, error, activeCategory, onClearFilter, onViewDetails, onViewSummary }) {
+  const visibleDocs = reports;
 
   return (
     <div className="bg-white border border-slate-200 rounded-2xl p-6 transition-shadow duration-300 hover:shadow-lg ">
@@ -571,14 +570,6 @@ function RecentActivity({ reports, loading, error, activeCategory, onClearFilter
           </div>
         </>
       )}
-
-      <button
-        type="button"
-        onClick={onViewAll}
-        className="w-full text-center text-sm font-medium text-blue-600 mt-5 pt-4 border-t border-slate-100 transition-colors duration-200 hover:text-blue-700 "
-      >
-        View All Documents
-      </button>
     </div>
   );
 }
