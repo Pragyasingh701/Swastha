@@ -366,8 +366,8 @@ export default function Register() {
                   <span className="font-label-sm text-label-sm">Secure SSL Encryption</span>
                 </div>
                 <div className="flex items-center gap-1.5 text-on-surface ">
-                  <span className="material-symbols-outlined !text-[18px]">health_and_safety</span>
-                  <span className="font-label-sm text-label-sm">HIPAA Compliant</span>
+                  <span className="material-symbols-outlined !text-[18px]">verified_user</span>
+                  <span className="font-label-sm text-label-sm">Verified Doctors</span>
                 </div>
               </div>
               <div className="flex items-center gap-1.5 px-3 py-1 bg-surface-container rounded-full opacity-70">
@@ -375,10 +375,10 @@ export default function Register() {
                   className="material-symbols-outlined !text-[14px] text-primary"
                   style={{ fontVariationSettings: "'FILL' 1" }}
                 >
-                  shield
+                  mail
                 </span>
                 <span className="font-label-sm text-[10px] uppercase tracking-widest font-bold text-on-surface ">
-                  Encrypted &amp; Anonymous
+                  OTP-Verified Signup
                 </span>
               </div>
             </div>
@@ -390,7 +390,7 @@ export default function Register() {
       <footer className="fixed bottom-0 left-0 right-0 p-4 flex justify-between items-center z-50 pointer-events-none">
         <div className="pointer-events-auto">
           <span className="font-label-sm text-label-sm text-on-surface-variant/50 ">
-            © 2024 Swastha Healthcare SaaS. HIPAA &amp; ABHA Compliant.
+            © 2026 Swastha Healthcare SaaS.
           </span>
         </div>
         <div className="pointer-events-auto flex gap-6">

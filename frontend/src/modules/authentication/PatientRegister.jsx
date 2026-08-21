@@ -317,7 +317,7 @@ export default function PatientRegister() {
                     <a className="text-primary hover:underline font-medium" href="#">Terms of Service</a>{" "}
                     and{" "}
                     <a className="text-primary hover:underline font-medium" href="#">Privacy Policy</a>
-                    . I understand how my health data is encrypted.
+                    . I understand how my health data is stored and used.
                   </label>
                 </div>
 
@@ -360,12 +360,12 @@ export default function PatientRegister() {
 
           <div className="mt-8 flex justify-center gap-8 opacity-40 grayscale pointer-events-none">
             <div className="flex items-center gap-1">
-              <span className="material-symbols-outlined text-[16px]">shield</span>
-              <span className="text-[10px] font-bold uppercase tracking-widest">Secure TLS 1.3</span>
+              <span className="material-symbols-outlined text-[16px]">mail</span>
+              <span className="text-[10px] font-bold uppercase tracking-widest">OTP-Verified Signup</span>
             </div>
             <div className="flex items-center gap-1">
-              <span className="material-symbols-outlined text-[16px]">verified</span>
-              <span className="text-[10px] font-bold uppercase tracking-widest">ISO 27001</span>
+              <span className="material-symbols-outlined text-[16px]">verified_user</span>
+              <span className="text-[10px] font-bold uppercase tracking-widest">Verified Doctors</span>
             </div>
           </div>
         </div>

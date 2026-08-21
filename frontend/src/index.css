@@ -44,3 +44,36 @@ html, body, #root {
 .animate-float {
   animation: float 6s ease-in-out infinite;
 }
+
+@keyframes float-slow {
+  0%, 100% { transform: translateY(0px) rotate(0deg); }
+  50% { transform: translateY(-8px) rotate(2deg); }
+}
+.animate-float-slow {
+  animation: float-slow 5s ease-in-out infinite;
+}
+
+/* Slow-drifting gradient blobs used behind hero/CTA sections */
+@keyframes blob {
+  0%, 100% { transform: translate(0px, 0px) scale(1); }
+  33% { transform: translate(24px, -32px) scale(1.08); }
+  66% { transform: translate(-18px, 18px) scale(0.95); }
+}
+.animate-blob {
+  animation: blob 14s ease-in-out infinite;
+}
+
+/* Flowing gradient background for the CTA banner — makes the blue read as
+   moving/alive rather than a static flat fill */
+.cta-gradient {
+  background-image: linear-gradient(115deg, #0f172a 0%, #1e3a8a 25%, #0f172a 50%, #1d4ed8 75%, #0f172a 100%);
+  background-size: 300% 300%;
+}
+@keyframes gradient-flow {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+.animate-gradient-flow {
+  animation: gradient-flow 9s ease infinite;
+}

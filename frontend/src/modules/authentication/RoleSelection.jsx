@@ -101,9 +101,9 @@ export default function RoleSelection({ onSelectRole }) {
                 Patient
               </h2>
               <p className="font-body-md text-body-md text-on-surface-variant mb-8 flex-grow">
-                Access your health records, sync ABHA records, and receive
-                AI-driven insights to manage your personal health journey
-                with clinical precision.
+                Access your health records, search your history with AI,
+                and receive AI-driven insights to manage your personal
+                health journey with clinical precision.
               </p>
               <button
                 type="button"
@@ -175,23 +175,23 @@ export default function RoleSelection({ onSelectRole }) {
                 verified_user
               </span>
               <span className="font-label-sm text-label-sm">
-                HIPAA Compliant
+                Verified Doctors
               </span>
             </div>
             <div className="flex items-center gap-2">
               <span className="material-symbols-outlined text-[20px]">
-                security
+                auto_awesome
               </span>
               <span className="font-label-sm text-label-sm">
-                ABHA Integrated
+                Grounded AI Search
               </span>
             </div>
             <div className="flex items-center gap-2">
               <span className="material-symbols-outlined text-[20px]">
-                lock
+                mail
               </span>
               <span className="font-label-sm text-label-sm">
-                End-to-End Encrypted
+                OTP-Verified Signup
               </span>
             </div>
           </div>
@@ -258,7 +258,7 @@ export default function RoleSelection({ onSelectRole }) {
         </div>
         <div className="max-w-7xl mx-auto mt-12 pt-8 border-t border-outline-variant/30 flex justify-between items-center">
           <span className="font-label-sm text-label-sm text-on-surface-variant ">
-            © 2026 Swastha Healthcare SaaS. HIPAA &amp; ABHA Compliant.
+            © 2026 Swastha Healthcare SaaS.
           </span>
           <div className="flex gap-4">
             <div className="w-8 h-8 rounded-full bg-surface-container flex items-center justify-center hover:bg-surface-container-high transition-colors">
