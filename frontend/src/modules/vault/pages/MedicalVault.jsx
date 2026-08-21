@@ -14,7 +14,6 @@ import {
   Users,
   ClipboardList,
   Settings,
-  HelpCircle,
   PlusCircle,
   Search,
   ShieldCheck,
@@ -95,6 +94,93 @@ function formatDate(value) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "Unknown date";
   return date.toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" });
+}
+
+function flattenSearchableValues(value, values = []) {
+  if (value === null || value === undefined) return values;
+
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (trimmed) values.push(trimmed);
+    return values;
+  }
+
+  if (Array.isArray(value)) {
+    value.forEach((item) => flattenSearchableValues(item, values));
+    return values;
+  }
+
+  if (typeof value === "object") {
+    Object.values(value).forEach((item) => flattenSearchableValues(item, values));
+    return values;
+  }
+
+  values.push(String(value));
+  return values;
+}
+
+function collectDateSearchVariants(report) {
+  const dateFields = [report.reportDate, report.createdAt, report.updatedAt, report.date];
+  const variants = [];
+
+  dateFields.forEach((fieldValue) => {
+    if (!fieldValue) return;
+
+    const date = new Date(fieldValue);
+    if (Number.isNaN(date.getTime())) {
+      variants.push(String(fieldValue));
+      return;
+    }
+
+    variants.push(
+      fieldValue,
+      date.toISOString(),
+      date.toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" }),
+      date.toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" }),
+      date.toLocaleDateString("en-US", { month: "long", year: "numeric" }),
+      date.toLocaleDateString("en-US", { month: "short", year: "numeric" }),
+      date.toLocaleDateString("en-US", { month: "long" }),
+      date.toLocaleDateString("en-US", { month: "short" }),
+      String(date.getFullYear())
+    );
+  });
+
+  return variants;
+}
+
+function matchesReportSearch(report, query) {
+  const normalizedQuery = query.trim().toLowerCase();
+  if (!normalizedQuery) return true;
+
+  const explicitFields = [
+    report.title,
+    report.doctor,
+    report.hospital,
+    report.category,
+    report.categoryName,
+    report.category_label,
+    report.subcategory,
+    report.diagnosis,
+    report.medicines,
+    report.notes,
+    report.symptoms,
+    report.type,
+    report.fileName,
+    report.file?.name,
+    report.hospitalName,
+    report.provider,
+    ...(Array.isArray(report.categories) ? report.categories : []),
+  ];
+
+  const searchableText = [
+    ...flattenSearchableValues(explicitFields),
+    ...flattenSearchableValues(report),
+    ...collectDateSearchVariants(report),
+  ]
+    .join(" ")
+    .toLowerCase();
+
+  return searchableText.includes(normalizedQuery);
 }
 
 function getPreviewType(fileUrl) {
@@ -194,13 +280,8 @@ export default function MedicalVault() {
       if (card) list = list.filter((r) => card.match.includes(r.category));
     }
 
-    const q = searchQuery.trim().toLowerCase();
-    if (q) {
-      list = list.filter((r) =>
-        [r.title, r.doctor, r.hospital, r.category]
-          .filter(Boolean)
-          .some((field) => field.toLowerCase().includes(q))
-      );
+    if (searchQuery.trim()) {
+      list = list.filter((report) => matchesReportSearch(report, searchQuery));
     }
 
     return list;
@@ -241,7 +322,7 @@ export default function MedicalVault() {
             />
           </div>
 
-          <SummaryRow reports={reports} loading={loading} />
+          <SummaryRow reports={reports} loading={loading} onViewDetails={setDetailsReport} />
           <SmartCategorization
             categoryCounts={categoryCounts}
             activeCategory={categoryFilter}
@@ -341,10 +422,6 @@ function Sidebar({ onOpenSettings }) {
             <Settings size={18} />
             Settings
           </button>
-          <button className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-100 ">
-            <HelpCircle size={18} />
-            Support
-          </button>
         </div>
       </div>
     </aside>
@@ -378,7 +455,7 @@ function Header({ profile }) {
 
 /* --------------------------- Summary cards --------------------------- */
 
-function SummaryRow({ reports, loading }) {
+function SummaryRow({ reports, loading, onViewDetails }) {
   const total = reports.length;
   const now = new Date();
   const thisMonth = reports.filter((r) => {
@@ -387,9 +464,11 @@ function SummaryRow({ reports, loading }) {
   }).length;
 
   const recentDocs = [...reports]
-    .filter((r) => r.fileUrl)
-    .sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0))
+    .filter((r) => r.fileUrl || r.title)
+    .sort((a, b) => new Date(b.createdAt || b.reportDate || 0) - new Date(a.createdAt || a.reportDate || 0))
     .slice(0, 3);
+
+  const latestDoc = recentDocs[0];
 
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 mb-8">
@@ -413,22 +492,19 @@ function SummaryRow({ reports, loading }) {
             <PlusCircle size={16} />
           </div>
         </div>
-        {recentDocs.length > 0 ? (
-          <div className="flex items-center -space-x-2 mt-1">
-            {recentDocs.map((doc) => {
-              const meta = categoryMeta(doc.category);
-              const Icon = meta.icon;
-              return (
-                <span
-                  key={doc.id}
-                  title={doc.title}
-                  className="w-8 h-8 rounded-full bg-slate-100 border-2 border-white flex items-center justify-center text-slate-500 "
-                >
-                  <Icon size={13} />
-                </span>
-              );
-            })}
-          </div>
+        {latestDoc ? (
+          <button
+            type="button"
+            onClick={() => onViewDetails?.(latestDoc)}
+            className="mt-1 w-full text-left rounded-lg border border-slate-100 bg-slate-50 px-3 py-2 transition-all duration-200 hover:border-blue-200 hover:bg-blue-50"
+          >
+            <p className="text-sm font-semibold text-slate-900 line-clamp-2">
+              {latestDoc.title || "Untitled report"}
+            </p>
+            <p className="text-xs text-slate-500 mt-1">
+              {formatDate(latestDoc.reportDate || latestDoc.createdAt)}
+            </p>
+          </button>
         ) : (
           <p className="text-sm text-slate-400 mt-1">No uploads yet</p>
         )}
