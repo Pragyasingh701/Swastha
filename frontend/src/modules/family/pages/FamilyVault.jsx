@@ -733,51 +733,8 @@ export default function FamilyVault() {
             </div>
 
             <div className="mt-8 grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
-              <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-                <div className="flex items-center justify-between gap-4">
-                  <div>
-                    <h2 className="text-xl font-semibold text-slate-900 ">Health Overview</h2>
-                    <p className="mt-1 text-sm text-slate-500 ">At-a-glance metrics pulled from Family Vault data.</p>
-                  </div>
-                  <div className="flex items-center gap-2 rounded-full bg-blue-50 px-3 py-2 text-sm font-medium text-blue-700 ">
-                    <Users size={16} />
-                    {members.length} members
-                  </div>
-                </div>
-
-                <div className="mt-5 grid gap-4 sm:grid-cols-2">
-                  {healthOverviewCards.length > 0 ? (
-                    healthOverviewCards.map((item) => (
-                      <div key={item.label} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                        <p className="text-sm font-medium text-slate-500 ">{item.label}</p>
-                        <p className="mt-2 text-sm font-semibold uppercase tracking-wide text-blue-700 ">Tag: {item.tag}</p>
-                        <p className="mt-1 text-sm text-slate-600 ">Relationship: {item.relationship}</p>
-                        <p className="mt-2 text-sm text-slate-500 ">{item.detail}</p>
-                      </div>
-                    ))
-                  ) : (
-                    <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-5 text-sm text-slate-500 sm:col-span-2">
-                      Add family members to populate the dashboard summary.
-                    </div>
-                  )}
-                </div>
-
-                <div className="mt-6">
-                  <div className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-400 ">Relationship Tags</div>
-                  <div className="flex flex-wrap gap-2">
-                    {relationshipTagChips.length > 0 ? (
-                      relationshipTagChips.map((tag) => (
-                        <span key={tag.key} className="rounded-full border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 ">
-                          {tag.label} {tag.count !== undefined ? <span className="text-slate-400 ">({tag.count})</span> : null}
-                        </span>
-                      ))
-                    ) : (
-                      <span className="rounded-full border border-dashed border-slate-200 px-3 py-2 text-sm text-slate-400 ">
-                        No tags yet
-                      </span>
-                    )}
-                  </div>
-                </div>
+              <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm min-h-[420px]">
+                <div className="h-full w-full rounded-2xl border border-dashed border-slate-200 bg-slate-50" />
               </section>
 
               <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
@@ -858,21 +815,6 @@ export default function FamilyVault() {
                   </div>
 
                   <label className="space-y-2 block">
-                    <span className="text-sm font-medium text-slate-700 ">Parent / linked relative (optional)</span>
-                    <select
-                      value={form.parentMemberId}
-                      onChange={(event) => setForm({ ...form, parentMemberId: event.target.value })}
-                      className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900 outline-none transition-colors focus:border-blue-400 focus:bg-white "
-                    >
-                      <option value="">No parent linked</option>
-                      {parentMemberOptions.map((member) => (
-                        <option key={member.id} value={member.id}>{member.name} ({member.relationship || 'relative'})</option>
-                      ))}
-                    </select>
-                    <p className="text-xs text-slate-500">This link helps the doctor see a more accurate family pedigree.</p>
-                  </label>
-
-                  <label className="space-y-2 block">
                     <span className="text-sm font-medium text-slate-700 ">Recipient email <span className="text-rose-500">*</span></span>
                     <input
                       type="email"
@@ -898,65 +840,6 @@ export default function FamilyVault() {
                     />
                     {fieldErrors.healthOverview ? <p className="text-sm text-rose-600 ">{fieldErrors.healthOverview}</p> : null}
                   </label>
-
-                  <div className="space-y-2">
-                    <span className="text-sm font-medium text-slate-700 ">
-                      Known Conditions <span className="text-slate-400 font-normal">(used for hereditary risk in the doctor view)</span>
-                    </span>
-                    <div className="flex flex-wrap gap-2">
-                      <input
-                        type="text"
-                        value={conditionDraft.name}
-                        onChange={(event) => setConditionDraft({ ...conditionDraft, name: event.target.value })}
-                        onKeyDown={(event) => {
-                          if (event.key === 'Enter') {
-                            event.preventDefault();
-                            addConditionDraft();
-                          }
-                        }}
-                        maxLength={100}
-                        placeholder="e.g. Type 2 Diabetes"
-                        className="flex-1 min-w-[160px] rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-900 outline-none transition-colors focus:border-blue-400 focus:bg-white "
-                      />
-                      <input
-                        type="number"
-                        min="0"
-                        max="150"
-                        value={conditionDraft.ageOfOnset}
-                        onChange={(event) => setConditionDraft({ ...conditionDraft, ageOfOnset: event.target.value })}
-                        placeholder="Age of onset"
-                        className="w-36 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-900 outline-none transition-colors focus:border-blue-400 focus:bg-white "
-                      />
-                      <button
-                        type="button"
-                        onClick={addConditionDraft}
-                        className="rounded-2xl border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-700 transition-colors hover:bg-slate-50 "
-                      >
-                        Add
-                      </button>
-                    </div>
-                    {(form.conditions || []).length > 0 ? (
-                      <div className="flex flex-wrap gap-2 pt-1">
-                        {form.conditions.map((condition, index) => (
-                          <span
-                            key={`${condition.name}-${index}`}
-                            className="inline-flex items-center gap-2 rounded-full bg-blue-50 px-3 py-1.5 text-xs font-medium text-blue-700 "
-                          >
-                            {condition.name}
-                            {condition.ageOfOnset != null ? ` · onset ${condition.ageOfOnset}` : ''}
-                            <button
-                              type="button"
-                              onClick={() => removeConditionDraft(index)}
-                              className="text-blue-400 hover:text-blue-700"
-                              aria-label={`Remove ${condition.name}`}
-                            >
-                              ×
-                            </button>
-                          </span>
-                        ))}
-                      </div>
-                    ) : null}
-                  </div>
 
                   <label className="space-y-2 block">
                     <span className="text-sm font-medium text-slate-700 ">Notes</span>
