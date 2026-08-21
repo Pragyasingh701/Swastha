@@ -172,7 +172,7 @@ function Header({
   const unreadCount = notifications.filter((item) => !item.read).length;
 
   return (
-    <header className="shrink-0 flex items-center gap-4 px-6 lg:px-8 py-5 border-b border-slate-200 bg-white ">
+    <header className="shrink-0 flex items-center justify-end gap-4 px-6 lg:px-8 py-5 border-b border-slate-200 bg-white ">
       <div className="relative" data-notification-menu>
         <button
           type="button"

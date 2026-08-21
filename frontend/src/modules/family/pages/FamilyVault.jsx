@@ -262,7 +262,7 @@ function Header({ userName, userEmail }) {
   const navigate = useNavigate();
 
   return (
-    <header className="shrink-0 flex items-center gap-4 border-b border-slate-200 bg-white px-6 py-5 lg:px-8">
+    <header className="shrink-0 flex items-center justify-end gap-4 border-b border-slate-200 bg-white px-6 py-5 lg:px-8">
       <PatientNotifications />
 
       <PatientIdBadge />
