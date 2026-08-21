@@ -242,10 +242,6 @@ function Sidebar({ onOpenSettings }) {
             <Settings size={18} />
             Settings
           </button>
-          <button type="button" className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-100 " title="Support" aria-label="Support">
-            <HelpCircle size={18} />
-            Support
-          </button>
         </div>
       </div>
     </aside>

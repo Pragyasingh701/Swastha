@@ -18,7 +18,6 @@ import {
   Users,
   ClipboardList,
   Settings,
-  HelpCircle,
   UploadCloud,
   ChevronDown,
   ChevronRight,
@@ -582,10 +581,6 @@ function Sidebar({ onUploadClick, onOpenSettings }) {
           >
             <Settings size={18} />
             Settings
-          </button>
-          <button className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-100 ">
-            <HelpCircle size={18} />
-            Support
           </button>
         </div>
       </div>
