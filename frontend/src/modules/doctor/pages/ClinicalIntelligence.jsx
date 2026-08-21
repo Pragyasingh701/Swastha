@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Sparkles, Search, ChevronDown, User, ClipboardList, FlaskConical, ScanLine, Syringe, FileText, RefreshCw } from "lucide-react";
+import { Sparkles, Search, ChevronDown, User, ClipboardList, FlaskConical, ScanLine, Syringe, FileText, RefreshCw, Stethoscope, Pill, TrendingUp, CalendarClock } from "lucide-react";
 import NotificationBell from "../../../components/Common/NotificationBell";
 import DoctorSidebar from "../components/DoctorSidebar";
 import ProfileDropdown from "../../settings/components/ProfileDropdown";
@@ -368,7 +368,7 @@ export default function ClinicalIntelligence() {
                 ) : summaryError ? (
                   <p className="text-sm text-red-600">{summaryError}</p>
                 ) : summary ? (
-                  <p className="text-sm leading-relaxed text-slate-700 whitespace-pre-line">{summary}</p>
+                  <StructuredSummary summary={summary} />
                 ) : (
                   <p className="text-sm text-slate-400">Summary unavailable.</p>
                 )}
@@ -420,6 +420,54 @@ export default function ClinicalIntelligence() {
           )}
         </main>
       </div>
+    </div>
+  );
+}
+
+/* --------------------------- Structured AI summary --------------------------- */
+
+const SUMMARY_SECTIONS = [
+  { key: "diagnoses", label: "Diagnoses & Findings", icon: Stethoscope },
+  { key: "medications", label: "Medications", icon: Pill },
+  { key: "trends", label: "Trends & Recurring Patterns", icon: TrendingUp },
+  { key: "followUps", label: "Suggested Follow-ups", icon: CalendarClock },
+];
+
+function StructuredSummary({ summary }) {
+  const hasAnySection = SUMMARY_SECTIONS.some((s) => (summary[s.key] || []).length > 0);
+
+  return (
+    <div className="space-y-5">
+      {summary.overview && (
+        <p className="text-sm leading-relaxed text-slate-700">{summary.overview}</p>
+      )}
+
+      {hasAnySection ? (
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          {SUMMARY_SECTIONS.map(({ key, label, icon: Icon }) => {
+            const items = summary[key] || [];
+            if (items.length === 0) return null;
+            return (
+              <div key={key} className="rounded-xl bg-[#f3f3fe] p-4">
+                <div className="flex items-center gap-2 mb-2.5">
+                  <Icon size={15} className="text-[#004ac6]" />
+                  <p className="text-xs font-semibold uppercase tracking-wide text-[#434655]">{label}</p>
+                </div>
+                <ul className="space-y-1.5">
+                  {items.map((item, idx) => (
+                    <li key={idx} className="text-sm text-slate-700 flex items-start gap-2">
+                      <span className="mt-1.5 w-1 h-1 rounded-full bg-[#004ac6] shrink-0" />
+                      <span>{item}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            );
+          })}
+        </div>
+      ) : !summary.overview ? (
+        <p className="text-sm text-slate-400">Summary unavailable.</p>
+      ) : null}
     </div>
   );
 }
