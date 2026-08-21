@@ -118,7 +118,12 @@ export default function FamilyMember({ member, onEdit, onDelete }) {
         <div className="flex flex-wrap gap-2">
           <button
             type="button"
-            onClick={() => navigate('/timeline', { state: { memberEmail: email || '' } })}
+            onClick={() => navigate('/timeline', {
+              state: {
+                memberEmail: email || '',
+                ...(isSelfRelationship && member.user_id ? { patientUserId: member.user_id } : {}),
+              },
+            })}
             className="inline-flex items-center gap-1.5 rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-sm font-medium text-blue-700 transition-colors hover:bg-blue-100"
           >
             <CalendarDays size={16} />
