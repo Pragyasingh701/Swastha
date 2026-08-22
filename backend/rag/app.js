@@ -1,7 +1,9 @@
+// Mounted as a sub-app inside backend/server.js (at /rag) as of the
+// backend+rag merge — same process, same port, one Render service. CORS
+// and the JSON body parser are applied once by the parent app (with a
+// 2mb limit sized for this sub-app's OCR'd report text), not here.
 import express from 'express';
-import cors from 'cors';
 import './config/env.js'; // validates required env vars at startup, exits if missing
-import { CORS_ORIGIN } from './config/env.js';
 
 import reportsRouter from './routes/reports.js';
 import searchRouter from './routes/search.js';
@@ -12,9 +14,6 @@ import labInsightsRouter from './routes/labInsights.js';
 import patientSummaryRouter from './routes/patientSummary.js';
 
 const app = express();
-
-app.use(cors({ origin: CORS_ORIGIN }));
-app.use(express.json({ limit: '2mb' })); // OCR'd notes can be long
 
 app.get('/health', (req, res) => res.json({ ok: true, service: 'swastha-rag' }));
 
