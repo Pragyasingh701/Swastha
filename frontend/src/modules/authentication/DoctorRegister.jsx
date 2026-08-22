@@ -172,7 +172,6 @@ export default function DoctorRegister() {
             <span className="font-headline-md text-headline-md font-bold text-primary tracking-tight">Swastha</span>
             <div className="hidden md:flex gap-6 items-center">
               <span className="text-on-surface-variant hover:text-primary transition-colors font-body-md text-body-md cursor-pointer">Features</span>
-              <span className="text-on-surface-variant hover:text-primary transition-colors font-body-md text-body-md cursor-pointer">ABHA Sync</span>
               <span className="text-on-surface-variant hover:text-primary transition-colors font-body-md text-body-md cursor-pointer">Vault</span>
               <span className="text-on-surface-variant hover:text-primary transition-colors font-body-md text-body-md cursor-pointer">Timeline</span>
             </div>

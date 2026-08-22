@@ -6,10 +6,8 @@ import DoctorSidebar from "../components/DoctorSidebar";
 import ProfileDropdown from "../../settings/components/ProfileDropdown";
 import { getDoctorPatients, linkPatientToDoctor, deletePatientFromDoctor } from "../../../services/doctorPatients";
 import { getTimelineReports } from "../../../api/reports";
-import { getPatientFamilyMembers } from "../../../api/family";
 import { useAuth } from "../../../context/AuthContext";
 import { usePolling } from "../../../hooks/usePolling";
-import FamilyTreeTab from "../components/FamilyTreeTab";
 
 // Diagnosis/Medicines are stored under the same column names for every
 // category, but what they actually MEAN differs by category — mirrors
@@ -36,7 +34,6 @@ export default function DoctorPatients() {
   const [selectedTab, setSelectedTab] = useState('timeline');
   const [patientTimeline, setPatientTimeline] = useState([]);
   const [patientVault, setPatientVault] = useState([]);
-  const [patientFamilyMembers, setPatientFamilyMembers] = useState([]);
   const [timelineLoading, setTimelineLoading] = useState(false);
   const [isAddPatientOpen, setIsAddPatientOpen] = useState(false);
   const [patientCode, setPatientCode] = useState("");
@@ -95,7 +92,6 @@ export default function DoctorPatients() {
     if (!selectedPatient || (selectedPatient.linkStatus && selectedPatient.linkStatus !== 'accepted')) {
       setPatientTimeline([]);
       setPatientVault([]);
-      setPatientFamilyMembers([]);
       return;
     }
 
@@ -103,26 +99,22 @@ export default function DoctorPatients() {
       if (!token) {
         setPatientTimeline([]);
         setPatientVault([]);
-        setPatientFamilyMembers([]);
         return;
       }
 
       setTimelineLoading(true);
       try {
         const patientUserId = selectedPatient.patientUserId || selectedPatient.patientId || selectedPatient.id;
-        const [timelineResponse, vaultResponse, familyMembers] = await Promise.all([
+        const [timelineResponse, vaultResponse] = await Promise.all([
           getTimelineReports(token, selectedPatient.email || '', patientUserId),
           getTimelineReports(token, '', patientUserId),
-          getPatientFamilyMembers(patientUserId).catch(() => []),
         ]);
 
         setPatientTimeline(timelineResponse.reports || []);
         setPatientVault(vaultResponse.reports || []);
-        setPatientFamilyMembers(familyMembers || []);
       } catch (err) {
         setPatientTimeline([]);
         setPatientVault([]);
-        setPatientFamilyMembers([]);
       } finally {
         setTimelineLoading(false);
       }
@@ -314,16 +306,7 @@ export default function DoctorPatients() {
       <DoctorSidebar />
 
       <div className="flex-1 flex flex-col h-screen overflow-hidden min-w-0">
-        <header className="shrink-0 flex items-center gap-4 px-6 lg:px-8 py-5 border-b border-slate-200 bg-white ">
-          <button
-            type="button"
-            onClick={() => navigate('/doctor/clinical-intelligence')}
-            className="flex-1 flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-lg px-4 py-2.5 text-sm text-slate-400 transition-colors hover:border-blue-300 hover:text-blue-600 "
-          >
-            <Sparkles size={16} />
-            Ask Swastha about your health records...
-          </button>
-
+        <header className="shrink-0 flex items-center justify-end gap-4 px-6 lg:px-8 py-5 border-b border-slate-200 bg-white ">
           <NotificationBell />
           <ProfileDropdown />
         </header>
@@ -549,17 +532,6 @@ export default function DoctorPatients() {
                   }`}
                 >
                   Medical Vault
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setSelectedTab('family')}
-                  className={`rounded-lg px-4 py-2.5 text-sm font-semibold transition-all ${
-                    selectedTab === 'family'
-                      ? 'bg-blue-600 text-white shadow-md'
-                      : 'border border-slate-200 text-slate-600 hover:bg-slate-50 '
-                  }`}
-                >
-                  Family Tree
                 </button>
               </div>
 
@@ -848,8 +820,6 @@ export default function DoctorPatients() {
                     </div>
                   )}
                 </div>
-              ) : selectedTab === 'family' ? (
-                <FamilyTreeTab members={patientFamilyMembers} loading={timelineLoading} />
               ) : null}
               </div>
             </div>

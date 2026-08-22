@@ -14,7 +14,6 @@ import {
 } from '../db/family.js';
 import { sendFamilyMemberAuthorizationEmail } from '../utils/mailer.js';
 import { findUserByEmail, findUserById } from '../db/users.js';
-import { isDoctorLinkedToPatient } from '../db/doctorPatients.js';
 import { createNotification } from '../db/notifications.js';
 
 const router = express.Router();
@@ -541,35 +540,6 @@ async function listMembersHandler(req, res) {
 }
 
 router.get('/members', listMembersHandler);
-
-router.get('/doctor/:patientUserId/members', async (req, res) => {
-  try {
-    const user = getAuthUser(req);
-    if (!user?.userId) {
-      return res.status(401).json({ message: 'Authentication required for Family Vault requests.' });
-    }
-
-    if (user.role !== 'doctor') {
-      return res.status(403).json({ message: 'Only doctors can view a patient family tree.' });
-    }
-
-    const patientUserId = String(req.params?.patientUserId || '').trim();
-    if (!patientUserId) {
-      return res.status(400).json({ message: 'Patient user ID is required.' });
-    }
-
-    const linked = await isDoctorLinkedToPatient(user.userId, patientUserId);
-    if (!linked) {
-      return res.status(403).json({ message: 'You are not linked to this patient.' });
-    }
-
-    const members = await listFamilyMembers({ userId: patientUserId });
-    return res.json({ members });
-  } catch (error) {
-    console.error('Doctor family tree lookup error:', error);
-    return res.status(500).json({ message: 'Failed to load patient family tree', error: error.message });
-  }
-});
 
 async function updateMemberHandler(req, res) {
   try {

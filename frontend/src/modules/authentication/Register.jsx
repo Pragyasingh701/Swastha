@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 import { startGoogleAuth } from "../../utils/googleAuth";
 import { sanitizePhoneInput, isValidIndianPhone, isValidEmail, isValidFullName } from "../../utils/formValidation";
+import swasthaLogo from "../../assets/swastha-logo.png"; // adjust this path to wherever you keep the logo asset
 
 export default function Register() {
   const navigate = useNavigate();
@@ -115,65 +116,19 @@ export default function Register() {
             />
           </div>
           <div className="relative z-10 glass-panel p-12 rounded-[2rem] max-w-lg border-white/20 shadow-2xl">
-            <div className="flex items-center gap-3 mb-8">
-              <div className="bg-primary p-2 rounded-xl text-white">
-                <span
-                  className="material-symbols-outlined !text-3xl"
-                  style={{ fontVariationSettings: "'FILL' 1" }}
-                >
-                  health_metrics
-                </span>
-              </div>
-              <span className="font-headline-md text-headline-md font-extrabold text-primary tracking-tight">
-                Swastha AI
-              </span>
+            <div className="flex items-center mb-8">
+              <img src={swasthaLogo} alt="Swastha AI" className="h-10 w-auto" />
             </div>
-            <h1 className="font-headline-lg text-headline-lg text-on-surface mb-6 leading-tight">
+            <h1 className="font-headline-lg text-headline-lg text-on-surface mb-4 leading-tight">
               Your entire medical journey,{" "}
               <span className="text-primary">unified by intelligence.</span>
             </h1>
-
-            <ul className="space-y-6">
-              <li className="flex items-start gap-4">
-                <span className="material-symbols-outlined text-primary bg-primary/10 p-1.5 rounded-lg">
-                  verified
-                </span>
-                <div>
-                  <p className="font-body-md text-body-md font-semibold text-on-surface">
-                    ABHA Integrated
-                  </p>
-                  <p className="font-body-sm text-body-sm text-on-surface-variant">
-                    Seamless synchronization with national health accounts.
-                  </p>
-                </div>
-              </li>
-              <li className="flex items-start gap-4">
-                <span className="material-symbols-outlined text-primary bg-primary/10 p-1.5 rounded-lg">
-                  security
-                </span>
-                <div>
-                  <p className="font-body-md text-body-md font-semibold text-on-surface">
-                    HIPAA Compliant
-                  </p>
-                  <p className="font-body-sm text-body-sm text-on-surface-variant">
-                    Military-grade encryption for your most sensitive data.
-                  </p>
-                </div>
-              </li>
-              <li className="flex items-start gap-4">
-                <span className="material-symbols-outlined text-primary bg-primary/10 p-1.5 rounded-lg">
-                  auto_awesome
-                </span>
-                <div>
-                  <p className="font-body-md text-body-md font-semibold text-on-surface">
-                    AI Diagnostics
-                  </p>
-                  <p className="font-body-sm text-body-sm text-on-surface-variant">
-                    Clinical insights extracted from your medical reports instantly.
-                  </p>
-                </div>
-              </li>
-            </ul>
+            <p className="font-label-md text-label-md text-primary font-bold tracking-[0.12em] uppercase mb-1.5">
+              AI-Powered Clinical Intelligence Platform
+            </p>
+            <p className="font-body-md text-body-md text-on-surface-variant">
+              Smarter Insights. Better Decisions. Improved Outcomes.
+            </p>
             <div className="mt-12 pt-8 border-t border-outline-variant/30 flex items-center gap-4">
               <div className="flex -space-x-3">
                 <div className="w-10 h-10 rounded-full border-2 border-white bg-surface-dim"></div>
@@ -191,11 +146,8 @@ export default function Register() {
         <section className="w-full lg:w-1/2 flex flex-col p-8 md:p-16 lg:p-20 bg-surface-container-lowest justify-center">
           <div className="max-w-md mx-auto w-full">
             {/* Mobile Branding */}
-            <div className="lg:hidden flex items-center gap-2 mb-10">
-              <span className="material-symbols-outlined text-primary !text-3xl">health_metrics</span>
-              <span className="font-headline-md text-headline-md font-bold text-primary tracking-tighter">
-                Swastha
-              </span>
+            <div className="lg:hidden flex items-center mb-10">
+              <img src={swasthaLogo} alt="Swastha AI" className="h-8 w-auto" />
             </div>
 
             <div className="mb-10">
@@ -414,8 +366,8 @@ export default function Register() {
                   <span className="font-label-sm text-label-sm">Secure SSL Encryption</span>
                 </div>
                 <div className="flex items-center gap-1.5 text-on-surface ">
-                  <span className="material-symbols-outlined !text-[18px]">health_and_safety</span>
-                  <span className="font-label-sm text-label-sm">HIPAA Compliant</span>
+                  <span className="material-symbols-outlined !text-[18px]">verified_user</span>
+                  <span className="font-label-sm text-label-sm">Verified Doctors</span>
                 </div>
               </div>
               <div className="flex items-center gap-1.5 px-3 py-1 bg-surface-container rounded-full opacity-70">
@@ -423,10 +375,10 @@ export default function Register() {
                   className="material-symbols-outlined !text-[14px] text-primary"
                   style={{ fontVariationSettings: "'FILL' 1" }}
                 >
-                  shield
+                  mail
                 </span>
                 <span className="font-label-sm text-[10px] uppercase tracking-widest font-bold text-on-surface ">
-                  Encrypted &amp; Anonymous
+                  OTP-Verified Signup
                 </span>
               </div>
             </div>
@@ -438,7 +390,7 @@ export default function Register() {
       <footer className="fixed bottom-0 left-0 right-0 p-4 flex justify-between items-center z-50 pointer-events-none">
         <div className="pointer-events-auto">
           <span className="font-label-sm text-label-sm text-on-surface-variant/50 ">
-            © 2024 Swastha Healthcare SaaS. HIPAA &amp; ABHA Compliant.
+            © 2026 Swastha Healthcare SaaS.
           </span>
         </div>
         <div className="pointer-events-auto flex gap-6">
