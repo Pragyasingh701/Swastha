@@ -6,6 +6,7 @@ import SettingsModal from "../../settings/components/SettingsModal";
 
 const navItems = [
   { label: "Dashboard", icon: "dashboard", route: "/doctor-dashboard" },
+  { label: "Intake Queue", icon: "assignment", route: "/doctor/intake-queue" },
   { label: "Patients", icon: "groups", route: "/doctor/patients" },
   { label: "AI Insights", icon: "smart_toy", route: "/doctor/clinical-intelligence" },
   { label: "Ask Swastha", icon: "auto_awesome", route: "/doctor/ask-swastha" },

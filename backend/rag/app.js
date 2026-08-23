@@ -12,6 +12,7 @@ import extractRouter from './routes/extract.js';
 import summarizeRouter from './routes/summarize.js';
 import labInsightsRouter from './routes/labInsights.js';
 import patientSummaryRouter from './routes/patientSummary.js';
+import intakeRouter from './routes/intake.js';
 
 const app = express();
 
@@ -26,6 +27,10 @@ app.use('/api/extract', extractRouter);
 app.use('/api/summarize', summarizeRouter);
 app.use('/api/lab-insights', labInsightsRouter);
 app.use('/api/patient-summary', patientSummaryRouter);
+// Module A (Conversational History Engine), Phase 1+2 only: session
+// start/turn/finalize. Priority queue (GET /api/intake/queue) is a
+// separate later task — not mounted here yet.
+app.use('/api/intake', intakeRouter);
 
 // Central error handler as a last resort net — routes already catch and
 // respond themselves, but this guards against anything unhandled.
