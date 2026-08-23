@@ -106,6 +106,25 @@ export async function getDoctorPatientNotifications() {
   return result.notifications || [];
 }
 
+/**
+ * DOCTOR-facing: Module A intake queue (GET /api/doctor-patients/intake-queue).
+ * Sessions for every 'accepted'-linked patient, sorted priority desc
+ * (flagged first) then created_at asc — same order the server enforces,
+ * not re-sorted here.
+ */
+export async function getIntakeQueue() {
+  const result = await request('/intake-queue');
+  return result.sessions || [];
+}
+
+/**
+ * DOCTOR-facing: full detail for one intake session (structured_history
+ * included) — GET /api/doctor-patients/intake-queue/:sessionId.
+ */
+export async function getIntakeSessionDetail(sessionId) {
+  return request(`/intake-queue/${sessionId}`);
+}
+
 export default {
   getDoctorPatients,
   linkPatientToDoctor,
@@ -116,4 +135,6 @@ export default {
   acceptDoctorRequest,
   declineDoctorRequest,
   getDoctorPatientNotifications,
+  getIntakeQueue,
+  getIntakeSessionDetail,
 };
