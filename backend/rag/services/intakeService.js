@@ -303,7 +303,7 @@ function buildSystemPrompt(section, structuredHistory, intakeMethod, lastQuestio
 
   const sectionRules = [
     `- "chief_complaint": ask the patient to state their main complaint if not yet captured. One short question. Once you have a clear chief complaint, move to "hpi".`,
-    `- "hpi": ask SOCRATES-style follow-ups (Site, Onset, Character, Radiation, Associated symptoms, Timing, Exacerbating/relieving factors, Severity) ONE OR TWO AT A TIME — never ask all 8 in one question. Only ask about fields still empty in hpi above. Offer more than a minimal set of short quick_reply_options where a patient would naturally pick from a small set (more than 2 closed options where the option set supports it — e.g. severity 1-10 buttons, or 3+ options for a symptom quality rather than a bare yes/no where richer options make sense). When every hpi field is filled, set section_complete: true for this turn and the caller will advance to "${isAyurvedic ? 'ayurveda_profile' : 'drug_allergy'}".`,
+    `- "hpi": ask SOCRATES-style follow-ups (Site, Onset, Character, Radiation, Associated symptoms, Timing, Exacerbating/relieving factors, Severity) ONE OR TWO AT A TIME — never ask all 8 in one question. Only ask about fields still empty in hpi above. Phrase each question short and direct, clinical-questionnaire style (e.g. "How is your pain normally?" / "How would you describe X?"), NOT a long or casual sentence with asides. Offer more than a minimal set of short quick_reply_options where a patient would naturally pick from a small set (more than 2 closed options where the option set supports it — e.g. severity 1-10 buttons, or 3+ options for a symptom quality rather than a bare yes/no where richer options make sense), each option a single short phrase (one attribute, not several stacked together). When every hpi field is filled, set section_complete: true for this turn and the caller will advance to "${isAyurvedic ? 'ayurveda_profile' : 'drug_allergy'}".`,
   ];
   if (isAyurvedic) {
     sectionRules.push(buildAyurvedaSectionRules(structuredHistory));
@@ -616,6 +616,19 @@ export async function runIntakeTurn({ section, structuredHistory, patientMessage
         ''
       ).trim() || nextQuestionText;
 
+  // Last-resort fallback: the model occasionally returns a genuinely empty
+  // next_question (blank string, or a field that's missing/non-string) —
+  // observed in testing as a blank chat bubble the patient can't act on,
+  // silently stalling the session. Never surface that; ask a safe generic
+  // follow-up for whichever section is still open so the conversation can
+  // always continue. finalize is excluded — an empty closing message there
+  // is harmless and shouldn't get a "please continue" prompt.
+  const finalNextQuestion = cleanedNextQuestion || (
+    resolvedSection === 'finalize'
+      ? "Thanks, that's everything the doctor needs — please have a seat."
+      : 'Could you tell me a bit more about that?'
+  );
+
   const rawOptions = parsed.quick_reply_options;
   const quickReplyOptions = rawOptions && typeof rawOptions === 'object' && !Array.isArray(rawOptions)
     ? {
@@ -628,7 +641,7 @@ export async function runIntakeTurn({ section, structuredHistory, patientMessage
 
   return {
     ok: true,
-    next_question: cleanedNextQuestion,
+    next_question: finalNextQuestion,
     quick_reply_options: quickReplyOptions,
     structured_history: mergedHistory,
     section: resolvedSection,
