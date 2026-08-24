@@ -96,7 +96,7 @@ function Sidebar({ onOpenSettings }) {
 // Section labels shown in the progress strip — order matches the backend
 // state machine (intakeService.js SECTIONS).
 const SECTION_LABELS = {
-  chief_complaint: "Tell us your problem",
+  chief_complaint: "Main complaint",
   hpi: "About your symptoms",
   drug_allergy: "Medications & allergies",
   finalize: "Done",
@@ -601,14 +601,6 @@ export default function IntakeChat() {
                   {messages.map((m, i) => (
                     <ChatBubble key={i} message={m} />
                   ))}
-                  {/* "Tell Us Your Problem" helper hint — shown only on the
-                      very first turn (nothing from the patient yet) so it
-                      reads as an invitation, not a permanent fixture. */}
-                  {section === "chief_complaint" && messages.length === 1 && (
-                    <p className="text-xs text-slate-400 -mt-2">
-                      Aap apni problem apni language mein bata sakte hain — type or tap an option below.
-                    </p>
-                  )}
                   {sending && (
                     <div className="flex items-center gap-2 text-slate-400 text-sm">
                       <Loader2 size={16} className="animate-spin" />

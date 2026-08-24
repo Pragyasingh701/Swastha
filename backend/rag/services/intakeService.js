@@ -148,6 +148,19 @@ function hpiComplete(hpi) {
   });
 }
 
+// Same belt-and-braces role as hpiComplete()/ayurvedaComplete() below —
+// current_medications and allergies both being asked-and-answered (even
+// with an explicit "none") IS the completion criterion for this section;
+// notes is free text and not required. Added because drug_allergy had no
+// deterministic check at all before, letting the model's own
+// section_complete (often unreliable — see runIntakeTurn's repeat-guard
+// comment) loop the same question turn after turn.
+function drugAllergyComplete(drugAllergy) {
+  if (!drugAllergy) return false;
+  return Array.isArray(drugAllergy.current_medications) && drugAllergy.current_medications.length > 0
+    && Array.isArray(drugAllergy.allergies) && drugAllergy.allergies.length > 0;
+}
+
 // Mirrors hpiComplete()'s pattern exactly: deterministic, field-by-field
 // verification that every ayurveda_profile leaf has been asked about,
 // independent of whatever the model itself reports for section_complete
@@ -302,14 +315,14 @@ function buildSystemPrompt(section, structuredHistory, intakeMethod, lastQuestio
     : 'chief_complaint -> hpi (SOCRATES-style follow-ups) -> drug_allergy -> finalize';
 
   const sectionRules = [
-    `- "chief_complaint": this is the patient's very first turn — "Tell Us Your Problem". Ask ONE open, welcoming question inviting them to describe what's wrong in their own words (any language they use is fine) — e.g. "What's bothering you today? Tell me in your own words." Do NOT ask a narrow/closed question here. Once they answer, extract chief_complaint (a short clinical phrase for what's wrong) AND, only if the patient actually volunteered them in this same message, also capture duration into hpi.onset and any aggravating/relieving factor into hpi.exacerbating_relieving — never ask separate follow-up questions for those here, only capture what they already said unprompted. Once chief_complaint is captured, move to "hpi" for everything else.`,
+    `- "chief_complaint": ask the patient to state their main complaint if not yet captured. One short question. Once they answer, extract chief_complaint (a short clinical phrase for what's wrong) AND, only if the patient actually volunteered them in this same message, also capture duration into hpi.onset and any aggravating/relieving factor into hpi.exacerbating_relieving — never ask separate follow-up questions for those here, only capture what they already said unprompted (this avoids re-asking the same thing again once "hpi" starts). Once chief_complaint is captured, move to "hpi".`,
     `- "hpi": ask SOCRATES-style follow-ups (Site, Onset, Character, Radiation, Associated symptoms, Timing, Exacerbating/relieving factors, Severity) ONE OR TWO AT A TIME — never ask all 8 in one question. Only ask about fields still empty in hpi above (skip any already filled from chief_complaint's extraction). Only ask what's clinically relevant to THIS chief_complaint — do not ask a generic fixed checklist. Tailor which fields you probe and how to the complaint type, for example: pain/ache complaints -> site, character, radiation, severity, aggravating/relieving factors; headache -> location, duration, severity, triggers, vision changes, nausea/vomiting; cough -> duration, dry vs productive, fever, breathing difficulty, blood in sputum; skin complaints -> location, itching, duration, rash appearance, triggers; joint complaints -> which joint(s), duration, swelling, stiffness, pain on movement. Always also check associated_symptoms relevant to that complaint type (e.g. vomiting/fever/loose motion/constipation/bloating/loss of appetite for abdominal complaints). Phrase each question short and direct, clinical-questionnaire style (e.g. "How is your pain normally?" / "How would you describe X?"), NOT a long or casual sentence with asides. Offer more than a minimal set of short quick_reply_options where a patient would naturally pick from a small set (more than 2 closed options where the option set supports it — e.g. severity 1-10 buttons, or 3+ options for a symptom quality rather than a bare yes/no where richer options make sense), each option a single short phrase (one attribute, not several stacked together). When every hpi field is filled, set section_complete: true for this turn and the caller will advance to "${isAyurvedic ? 'ayurveda_profile' : 'drug_allergy'}".`,
   ];
   if (isAyurvedic) {
     sectionRules.push(buildAyurvedaSectionRules(structuredHistory));
   }
   sectionRules.push(
-    `- "drug_allergy": ask about current medications and known drug/food allergies. Once captured (even if the answer is "none"), set section_complete: true.`,
+    `- "drug_allergy": ask about current medications and known drug/food allergies — TWO separate questions (medications first, then allergies), never bundled into one, and never ask either one more than once. When the patient answers "none"/"no" to either, still write a non-empty array for it — e.g. current_medications: ["None"] or allergies: ["None"] — NEVER leave it as an empty array or omit it, since an empty array cannot be distinguished from "not asked yet". Once BOTH current_medications and allergies are each a non-empty array, set section_complete: true.`,
     `- "finalize": no more questions — the session is being closed. Return next_question as a short closing message (e.g. "Thanks, that's everything the doctor needs — please have a seat.") and quick_reply_options as { "options": [], "allow_multiple": false }.`
   );
 
@@ -569,6 +582,31 @@ export async function runIntakeTurn({ section, structuredHistory, patientMessage
         }
       }
     }
+
+    // "drug_allergy" only has two turn-worthy questions — medications, then
+    // allergies — so the field to target is inferred straight from what the
+    // repeated question is actually about (word match), not from field
+    // order. current_medications/allergies are arrays (backend stores the
+    // raw answer as a single-item list rather than attempting to split it —
+    // same "imperfect but honest capture" tradeoff as the hpi/ayurveda
+    // fallbacks above), and only fills in if the model genuinely left that
+    // field untouched (observed in testing: "What medications are you
+    // currently taking?" asked twice back to back, dropping "None").
+    if (repeatedQuestion && section === 'drug_allergy') {
+      const isAboutAllergies = /allerg/i.test(repeatedQuestion);
+      const isAboutMedications = /medicat/i.test(repeatedQuestion);
+      if (isAboutMedications && mergedHistory.drug_allergy.current_medications.length === 0) {
+        mergedHistory = {
+          ...mergedHistory,
+          drug_allergy: { ...mergedHistory.drug_allergy, current_medications: [patientMessage.trim()] },
+        };
+      } else if (isAboutAllergies && mergedHistory.drug_allergy.allergies.length === 0) {
+        mergedHistory = {
+          ...mergedHistory,
+          drug_allergy: { ...mergedHistory.drug_allergy, allergies: [patientMessage.trim()] },
+        };
+      }
+    }
   }
 
   // Section completion is trusted from the model turn-by-turn, but verified
@@ -595,6 +633,14 @@ export async function runIntakeTurn({ section, structuredHistory, patientMessage
     // section_complete is never trusted alone for advancing out of
     // ayurveda_profile.
     sectionComplete = ayurvedaComplete(mergedHistory.ayurveda_profile);
+  }
+  if (section === 'drug_allergy' && sectionComplete && !drugAllergyComplete(mergedHistory.drug_allergy)) {
+    // Same belt-and-braces as hpi/ayurveda_profile above — this section had
+    // no deterministic check at all before, and the model was observed
+    // reporting section_complete: false turn after turn even once both
+    // fields were captured (or genuinely dropping "None" on extraction),
+    // looping "What medications are you currently taking?" indefinitely.
+    sectionComplete = false;
   }
 
   const resolvedSection = nextSection(section, sectionComplete, intakeMethod);
