@@ -23,6 +23,7 @@ import {
   CheckCircle2,
   Building2,
   ArrowRight,
+  AlertTriangle,
 } from "lucide-react";
 
 // Same nav list as Dashboard.jsx / AISearch.jsx / Timeline.jsx / etc.
@@ -95,7 +96,7 @@ function Sidebar({ onOpenSettings }) {
 // Section labels shown in the progress strip — order matches the backend
 // state machine (intakeService.js SECTIONS).
 const SECTION_LABELS = {
-  chief_complaint: "Main complaint",
+  chief_complaint: "Tell us your problem",
   hpi: "About your symptoms",
   drug_allergy: "Medications & allergies",
   finalize: "Done",
@@ -187,6 +188,12 @@ export default function IntakeChat() {
   const [sending, setSending] = useState(false);
   const [done, setDone] = useState(false);
   const [error, setError] = useState(null);
+  // Set once a turn's red_flag_is_new comes back true (backend: intakeService.js's
+  // sticky red_flag, surfaced as a one-time signal) — shown as a persistent
+  // banner, but deliberately does NOT block further chat input (confirmed
+  // with the user: keep collecting the full history in parallel with
+  // notifying staff, rather than a hard stop).
+  const [priorityAlert, setPriorityAlert] = useState(false);
 
   const scrollRef = useRef(null);
   const startedRef = useRef(!!preStarted);
@@ -334,10 +341,11 @@ export default function IntakeChat() {
         await finalizeIntake(sessionId);
         setDone(true);
       }
-      // red_flag intentionally has NO visible effect here — it only affects
-      // the doctor's queue sort/badge (already built), never surfaced to
-      // the patient mid-intake (confirmed with the user: avoid alarming
-      // someone before a clinician has actually looked at it).
+      // Priority Alert: shown once, the turn red_flag first flips true —
+      // still also affects the doctor's queue sort/badge (unchanged).
+      if (res.red_flag_is_new) {
+        setPriorityAlert(true);
+      }
     } catch (err) {
       setError(err.message || "Something went wrong. Please try again.");
       setMessages((prev) => [
@@ -537,6 +545,23 @@ export default function IntakeChat() {
             </div>
           ) : (
             <>
+          {/* Priority Alert — shown once red_flag first fires (backend:
+              intakeService.js red_flag_is_new), stays visible for the rest
+              of the session but deliberately does not block the chat below
+              (confirmed with the user: keep collecting history in parallel
+              with notifying staff). */}
+          {priorityAlert && (
+            <div className="mb-4 flex items-start gap-3 rounded-2xl border border-red-200 bg-red-50 px-4 py-3.5 text-red-800">
+              <AlertTriangle size={20} className="shrink-0 mt-0.5 text-red-600" />
+              <div className="text-sm">
+                <p className="font-semibold">Priority Alert</p>
+                <p className="mt-0.5 text-red-700">
+                  Your response may require immediate medical attention. Please wait while our staff reviews your case — you can continue answering below in the meantime.
+                </p>
+              </div>
+            </div>
+          )}
+
           {/* Progress strip — section labels, current one highlighted. */}
           <div className="flex items-center gap-2 mb-4 flex-wrap">
             {SECTION_ORDER.filter((s) => s !== "finalize").map((s, i) => (
@@ -576,6 +601,14 @@ export default function IntakeChat() {
                   {messages.map((m, i) => (
                     <ChatBubble key={i} message={m} />
                   ))}
+                  {/* "Tell Us Your Problem" helper hint — shown only on the
+                      very first turn (nothing from the patient yet) so it
+                      reads as an invitation, not a permanent fixture. */}
+                  {section === "chief_complaint" && messages.length === 1 && (
+                    <p className="text-xs text-slate-400 -mt-2">
+                      Aap apni problem apni language mein bata sakte hain — type or tap an option below.
+                    </p>
+                  )}
                   {sending && (
                     <div className="flex items-center gap-2 text-slate-400 text-sm">
                       <Loader2 size={16} className="animate-spin" />

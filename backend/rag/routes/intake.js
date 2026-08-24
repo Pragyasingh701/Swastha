@@ -66,6 +66,7 @@ router.post('/turn', requireAuth, async (req, res) => {
       section_complete: turn.section_complete,
       red_flag: turn.red_flag,
       red_flag_reason: turn.red_flag_reason,
+      red_flag_is_new: turn.red_flag_is_new,
     });
   } catch (err) {
     console.error(`[POST /api/intake/turn] failed for patient ${patientId}, session ${sessionId}:`, err);
