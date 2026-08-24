@@ -9,6 +9,15 @@
 // language patient-facing copy, per PRD §4.5's "Sanskrit terms used only as
 // internal field names; patient-facing copy stays plain-language."
 //
+// Wording style (reworded from the reference MediKiosk Ayurveda/AYUSH
+// Dashavidha Pariksha questionnaire — a standard clinical Prakriti/Vikriti
+// intake format): short, direct "How is your X?" / "How is your X
+// normally/usually?" framing, single-attribute options (one adjective/
+// phrase per choice, not stacked "A/B/C" compounds), neutral clinical tone
+// — no casual asides or parentheticals. Schema (fields, sub-section
+// grouping, free-text/skippable/multi-select flags) is unchanged; only the
+// phrasing moved closer to that reference.
+//
 // Delivered one sub-section per turn, 2-3 related fields bundled (PRD §4.5),
 // in this fixed order: prakriti -> agni_ahara -> nidra_dinacharya -> manas
 // -> vikruti -> history_ayurvedic.
@@ -20,32 +29,32 @@ export const AYURVEDA_SUBSECTIONS = [
     fields: [
       {
         field: 'body_frame',
-        question: 'How would you describe your natural body frame, even before any weight changes?',
-        options: ['Thin/light-boned', 'Medium/athletic', 'Broad/heavy-set'],
+        question: 'How is your natural body frame?',
+        options: ['Thin and light', 'Medium and well-built', 'Broad and heavy'],
         allowMultiple: false,
       },
       {
         field: 'skin_type',
-        question: 'How would you describe your skin, most of the time?',
-        options: ['Dry, rough, thin', 'Warm, sensitive, breakout-prone', 'Oily, smooth, cool'],
+        question: 'How is your skin usually?',
+        options: ['Dry and rough', 'Warm and sensitive', 'Oily and smooth'],
         allowMultiple: false,
       },
       {
         field: 'appetite_pattern',
-        question: 'How would you describe your usual appetite?',
-        options: ['Irregular, forget to eat', 'Strong, irritable if I skip meals', 'Steady but slow'],
+        question: 'How is your appetite normally?',
+        options: ['Irregular — sometimes hungry, sometimes not', 'Strong — I get hungry regularly', 'Moderate — I can easily skip meals'],
         allowMultiple: false,
       },
       {
         field: 'temperament',
-        question: 'Which best describe how you tend to react under pressure?',
-        options: ['Anxious/quick-thinking', 'Driven/irritable', 'Calm/slow to react', 'Overwhelmed/withdraw'],
+        question: 'How is your usual temperament?',
+        options: ['Quick, active, sometimes anxious', 'Focused, ambitious, sometimes irritable', 'Calm, patient, relaxed', 'Overwhelmed, tends to withdraw'],
         allowMultiple: true,
       },
       {
         field: 'sleep_tendency',
-        question: 'How would you describe your usual sleep?',
-        options: ['Light, wake easily', 'Moderate, deep', 'Very heavy, groggy on waking'],
+        question: 'How is your sleep normally?',
+        options: ['Light — easily disturbed', 'Moderate', 'Deep and long'],
         allowMultiple: false,
       },
     ],
@@ -56,20 +65,20 @@ export const AYURVEDA_SUBSECTIONS = [
     fields: [
       {
         field: 'digestion_strength',
-        question: "How's your digestion generally?",
-        options: ['Weak, bloats easily', 'Strong, irregular', 'Slow but steady', 'Variable, unpredictable'],
+        question: 'How is your digestion generally?',
+        options: ['Weak — bloats easily', 'Strong but irregular', 'Slow but steady', 'Variable — unpredictable'],
         allowMultiple: false,
       },
       {
         field: 'bowel_pattern',
         question: 'How would you describe your bowel habits?',
-        options: ['Constipated/irregular', 'Loose/frequent', 'Regular', 'Alternating'],
+        options: ['Constipated or irregular', 'Loose or frequent', 'Regular', 'Alternating'],
         allowMultiple: false,
       },
       {
         field: 'thirst_level',
-        question: "How's your thirst?",
-        options: ['Low/rarely thirsty', 'High/frequently thirsty', 'Moderate'],
+        question: 'How is your thirst?',
+        options: ['Low — rarely thirsty', 'High — frequently thirsty', 'Moderate'],
         allowMultiple: false,
       },
       {
@@ -80,7 +89,7 @@ export const AYURVEDA_SUBSECTIONS = [
       },
       {
         field: 'food_intolerances',
-        question: "Any foods that consistently don't agree with you?",
+        question: 'Are there foods that consistently cause you discomfort?',
         options: [],
         allowMultiple: false,
         freeText: true,
@@ -94,14 +103,14 @@ export const AYURVEDA_SUBSECTIONS = [
     fields: [
       {
         field: 'sleep_hours',
-        question: 'How many hours do you usually sleep?',
-        options: ['<5', '5-6', '6-8', '8+'],
+        question: 'What is your usual sleep duration?',
+        options: ['Less than 5 hours', '5–6 hours', '6–8 hours', 'More than 8 hours'],
         allowMultiple: false,
       },
       {
         field: 'sleep_quality',
-        question: 'How would you describe your sleep quality?',
-        options: ['Interrupted/light', 'Deep/refreshing', 'Excessive/groggy', 'Varies night to night'],
+        question: 'How has your sleep quality been?',
+        options: ['Interrupted or light', 'Deep and refreshing', 'Excessive — groggy on waking', 'Varies night to night'],
         allowMultiple: false,
       },
       {
@@ -112,14 +121,14 @@ export const AYURVEDA_SUBSECTIONS = [
       },
       {
         field: 'activity_level',
-        question: 'How active is your day-to-day routine?',
-        options: ['Sedentary', 'Light', 'Moderate', 'Very active'],
+        question: 'How physically active is your day-to-day routine?',
+        options: ['Very little', 'Light activity', 'Moderate activity', 'High activity'],
         allowMultiple: false,
       },
       {
         field: 'work_stress_pattern',
-        question: 'How would you describe your work/stress pattern lately?',
-        options: ['Low/steady', 'Moderate', 'High/constant', 'Comes in bursts'],
+        question: 'How would you describe your work or stress pattern lately?',
+        options: ['Low and steady', 'Moderate', 'High and constant', 'Comes in bursts'],
         allowMultiple: false,
       },
     ],
@@ -130,13 +139,13 @@ export const AYURVEDA_SUBSECTIONS = [
     fields: [
       {
         field: 'current_mood',
-        question: "Which of these have you been feeling lately?",
-        options: ['Anxious', 'Irritable', 'Restless', 'Calm', 'Foggy/unfocused', 'Low/flat'],
+        question: 'Which of these have you been feeling lately?',
+        options: ['Anxious', 'Irritable', 'Restless', 'Calm', 'Foggy or unfocused', 'Low or flat'],
         allowMultiple: true,
       },
       {
         field: 'recent_stressors',
-        question: "Anything stressful going on recently you'd like to mention?",
+        question: 'Is there anything stressful going on recently you would like to mention?',
         options: [],
         allowMultiple: false,
         freeText: true,
@@ -154,7 +163,7 @@ export const AYURVEDA_SUBSECTIONS = [
       {
         field: 'vikruti_qualities',
         question: 'Which best describes how your current problem feels?',
-        options: ['Cold/dry', 'Hot/irritated', 'Heavy/dull', 'Sharp/sudden', 'Gradual/slow-building'],
+        options: ['Cold and dry', 'Hot and irritated', 'Heavy and dull', 'Sharp and sudden', 'Gradual and slow-building'],
         allowMultiple: true,
       },
     ],
@@ -172,7 +181,7 @@ export const AYURVEDA_SUBSECTIONS = [
       },
       {
         field: 'home_remedies',
-        question: "Any home remedies you've tried for this?",
+        question: 'Have you tried any home remedies for this?',
         options: [],
         allowMultiple: false,
         freeText: true,
