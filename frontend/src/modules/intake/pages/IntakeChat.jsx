@@ -2,11 +2,13 @@ import React, { useEffect, useRef, useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "../../../context/AuthContext";
 import { startIntake, sendIntakeTurn, finalizeIntake } from "../../../api/intake";
+import { verifyClinicCode, sendClinicOtp, verifyClinicOtp } from "../../../api/clinic";
 import Logo from "../../../components/Common/Logo";
 import ProfileDropdown from "../../settings/components/ProfileDropdown";
 import PatientIdBadge from "../../../components/Common/PatientIdBadge";
 import PatientNotifications from "../../../components/Common/PatientNotifications";
 import SettingsModal from "../../settings/components/SettingsModal";
+import OtpInput from "../../../components/Common/OtpInput";
 import {
   LayoutGrid,
   TrendingUp,
@@ -19,6 +21,8 @@ import {
   Loader2,
   ShieldCheck,
   CheckCircle2,
+  Building2,
+  ArrowRight,
 } from "lucide-react";
 
 // Same nav list as Dashboard.jsx / AISearch.jsx / Timeline.jsx / etc.
@@ -126,23 +130,66 @@ function ChatBubble({ message }) {
   );
 }
 
+// Normalizes a turn response's quick_reply_options into the { options,
+// allow_multiple } shape — the backend now always sends this object shape
+// (backend/rag/services/intakeService.js), but this stays defensive against
+// a stale cached bundle or an older bare-array response reaching the UI.
+function normalizeQuickReplies(raw) {
+  if (raw && typeof raw === "object" && !Array.isArray(raw)) {
+    return { options: Array.isArray(raw.options) ? raw.options : [], allowMultiple: !!raw.allow_multiple };
+  }
+  return { options: Array.isArray(raw) ? raw : [], allowMultiple: false };
+}
+
+// Gate steps shown before the chat itself. "code" is the entry screen
+// (enter a clinic check-in code, or skip straight into a remote intake);
+// "confirm"/"otp" mirror the old standalone ClinicCheckIn.jsx flow;
+// "chat" reveals the actual conversation UI below.
+const GATE_STEPS = { CODE: "code", CONFIRM: "confirm", OTP: "otp", CHAT: "chat" };
+
 export default function IntakeChat() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { isAuthenticated } = useAuth();
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
-  const [sessionId, setSessionId] = useState(null);
-  const [section, setSection] = useState("chief_complaint");
-  const [messages, setMessages] = useState([]); // { role: 'patient'|'assistant', text, isError? }
-  const [quickReplies, setQuickReplies] = useState([]);
+  // Clinic Check-In flow can hand off an already-started session — created
+  // by POST /api/clinic/verify-otp — instead of this page starting a fresh
+  // remote one via POST /api/intake/start. Same shape either way:
+  // { session_id, next_question, quick_reply_options, section, red_flag }.
+  // preStarted only ever comes via router state now from within this same
+  // page's own gate flow below (handleClinicOtpSubmit), kept as a prop-style
+  // read so a future caller could still hand off a session the same way.
+  const preStarted = location.state?.preStartedSession || null;
+
+  // Gate: skip straight to "chat" when a session was already handed off;
+  // otherwise start on the clinic-code entry screen every time /intake is
+  // opened directly.
+  const [gateStep, setGateStep] = useState(preStarted ? GATE_STEPS.CHAT : GATE_STEPS.CODE);
+  const [clinicCode, setClinicCode] = useState("");
+  const [clinicDoctor, setClinicDoctor] = useState(null); // { doctorId, doctorName, clinicName }
+  const [clinicOtp, setClinicOtp] = useState(["", "", "", "", "", ""]);
+  const [otpTimer, setOtpTimer] = useState(0);
+  const [gateLoading, setGateLoading] = useState(false);
+  const [gateError, setGateError] = useState("");
+
+  const [sessionId, setSessionId] = useState(preStarted?.session_id || null);
+  const [section, setSection] = useState(preStarted?.section || "chief_complaint");
+  const [messages, setMessages] = useState(
+    preStarted ? [{ role: "assistant", text: preStarted.next_question }] : []
+  ); // { role: 'patient'|'assistant', text, isError? }
+  const [quickReplies, setQuickReplies] = useState(
+    preStarted ? normalizeQuickReplies(preStarted.quick_reply_options) : { options: [], allowMultiple: false }
+  );
+  const [selectedOptions, setSelectedOptions] = useState([]); // multi-select in-progress picks
   const [input, setInput] = useState("");
-  const [starting, setStarting] = useState(true);
+  const [starting, setStarting] = useState(!preStarted);
   const [sending, setSending] = useState(false);
   const [done, setDone] = useState(false);
   const [error, setError] = useState(null);
 
   const scrollRef = useRef(null);
-  const startedRef = useRef(false);
+  const startedRef = useRef(!!preStarted);
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -150,9 +197,11 @@ export default function IntakeChat() {
     }
   }, [messages, quickReplies]);
 
-  // Start the session exactly once — StrictMode/re-render safe via the ref.
+  // Start a plain remote intake session exactly once the gate has resolved
+  // to "chat" without a pre-started (clinic) session — StrictMode/re-render
+  // safe via the ref.
   useEffect(() => {
-    if (!isAuthenticated || startedRef.current) return;
+    if (!isAuthenticated || gateStep !== GATE_STEPS.CHAT || startedRef.current) return;
     startedRef.current = true;
 
     (async () => {
@@ -161,14 +210,106 @@ export default function IntakeChat() {
         setSessionId(res.session_id);
         setSection(res.section);
         setMessages([{ role: "assistant", text: res.next_question }]);
-        setQuickReplies(res.quick_reply_options || []);
+        setQuickReplies(normalizeQuickReplies(res.quick_reply_options));
       } catch (err) {
         setError(err.message || "Could not start your intake session. Please try again.");
       } finally {
         setStarting(false);
       }
     })();
-  }, [isAuthenticated]);
+  }, [isAuthenticated, gateStep]);
+
+  async function handleClinicCodeSubmit(e) {
+    e.preventDefault();
+    const trimmed = clinicCode.trim().toUpperCase();
+    if (!trimmed) return;
+
+    setGateLoading(true);
+    setGateError("");
+    try {
+      const result = await verifyClinicCode(trimmed);
+      setClinicDoctor(result);
+      setGateStep(GATE_STEPS.CONFIRM);
+    } catch (err) {
+      // Deliberately the same generic message the backend returns for every
+      // failure mode — never guess at a more specific reason here.
+      setGateError(err.message || "Invalid or expired code.");
+    } finally {
+      setGateLoading(false);
+    }
+  }
+
+  function startClinicOtpCountdown() {
+    const interval = setInterval(() => {
+      setOtpTimer((prev) => {
+        if (prev <= 1) {
+          clearInterval(interval);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+  }
+
+  async function startClinicOtpStep() {
+    setGateLoading(true);
+    setGateError("");
+    try {
+      await sendClinicOtp();
+      setGateStep(GATE_STEPS.OTP);
+      setOtpTimer(60);
+      startClinicOtpCountdown();
+    } catch (err) {
+      setGateError(err.message || "Failed to send verification code.");
+    } finally {
+      setGateLoading(false);
+    }
+  }
+
+  async function handleClinicOtpSubmit(e) {
+    e.preventDefault();
+    const otpCode = clinicOtp.join("");
+    if (otpCode.length !== 6) {
+      setGateError("Please enter the complete 6-digit code.");
+      return;
+    }
+
+    setGateLoading(true);
+    setGateError("");
+    try {
+      const session = await verifyClinicOtp({ doctorId: clinicDoctor.doctorId, otpCode });
+      // Same shape POST /api/intake/start returns — feed it straight into
+      // the chat state below instead of the remote-start effect.
+      startedRef.current = true;
+      setSessionId(session.session_id);
+      setSection(session.section);
+      setMessages([{ role: "assistant", text: session.next_question }]);
+      setQuickReplies(normalizeQuickReplies(session.quick_reply_options));
+      setStarting(false);
+      setGateStep(GATE_STEPS.CHAT);
+    } catch (err) {
+      setGateError(err.message || "Invalid OTP code. Please try again.");
+    } finally {
+      setGateLoading(false);
+    }
+  }
+
+  async function handleClinicOtpResend() {
+    setClinicOtp(["", "", "", "", "", ""]);
+    setGateError("");
+    try {
+      await sendClinicOtp();
+      setOtpTimer(60);
+      startClinicOtpCountdown();
+    } catch (err) {
+      setGateError(err.message || "Failed to resend verification code.");
+    }
+  }
+
+  function skipClinicCheckIn() {
+    setGateError("");
+    setGateStep(GATE_STEPS.CHAT);
+  }
 
   async function submitAnswer(rawText) {
     const trimmed = (rawText || "").trim();
@@ -176,7 +317,8 @@ export default function IntakeChat() {
 
     setError(null);
     setMessages((prev) => [...prev, { role: "patient", text: trimmed }]);
-    setQuickReplies([]);
+    setQuickReplies({ options: [], allowMultiple: false });
+    setSelectedOptions([]);
     setInput("");
     setSending(true);
 
@@ -184,7 +326,7 @@ export default function IntakeChat() {
       const res = await sendIntakeTurn(sessionId, trimmed);
       setSection(res.section);
       setMessages((prev) => [...prev, { role: "assistant", text: res.next_question }]);
-      setQuickReplies(res.quick_reply_options || []);
+      setQuickReplies(normalizeQuickReplies(res.quick_reply_options));
 
       // The backend's own state machine reaching "finalize" with no more
       // questions is the signal to close out — not a guess on our side.
@@ -212,6 +354,22 @@ export default function IntakeChat() {
     submitAnswer(input);
   }
 
+  // Multi-select: tapping an option toggles it in/out of the running
+  // selection instead of submitting immediately (single-select options
+  // still submit on tap, unchanged behavior). "Send" below submits the
+  // comma-joined selection as one patient message, same free-text channel
+  // the backend already parses answers from — no new wire format needed.
+  function toggleOption(opt) {
+    setSelectedOptions((prev) =>
+      prev.includes(opt) ? prev.filter((o) => o !== opt) : [...prev, opt]
+    );
+  }
+
+  function submitSelectedOptions() {
+    if (selectedOptions.length === 0) return;
+    submitAnswer(selectedOptions.join(", "));
+  }
+
   const currentStepIndex = SECTION_ORDER.indexOf(section);
 
   return (
@@ -232,10 +390,153 @@ export default function IntakeChat() {
               Visit Intake
             </h1>
             <p className="text-slate-500 mt-1">
-              A few quick questions before the doctor sees you — answer in your own words or tap an option.
+              {gateStep === GATE_STEPS.CHAT
+                ? "A few quick questions before the doctor sees you — answer in your own words or tap an option."
+                : "If you're checking in at a clinic, enter the code shown at the front desk first."}
             </p>
           </div>
 
+          {gateStep !== GATE_STEPS.CHAT ? (
+            <div className="flex-1 flex items-start justify-center pt-6">
+              <div className="w-full max-w-[440px] bg-white shadow-sm rounded-2xl p-8 border border-slate-100">
+                {gateStep === GATE_STEPS.CODE && (
+                  <>
+                    <div className="text-center mb-8">
+                      <div className="w-14 h-14 mx-auto mb-4 bg-blue-50 text-blue-600 rounded-2xl flex items-center justify-center">
+                        <Building2 size={28} />
+                      </div>
+                      <h2 className="text-xl font-bold text-slate-900">Clinic Check-In</h2>
+                      <p className="text-sm text-slate-500 mt-2">
+                        Enter the check-in code displayed at your doctor's clinic, or skip if you're not at a clinic right now.
+                      </p>
+                    </div>
+
+                    {gateError && (
+                      <div className="mb-6 p-4 rounded-xl bg-red-50 text-red-700 text-sm">{gateError}</div>
+                    )}
+
+                    <form onSubmit={handleClinicCodeSubmit} className="space-y-6">
+                      <input
+                        type="text"
+                        autoFocus
+                        value={clinicCode}
+                        onChange={(e) => setClinicCode(e.target.value.toUpperCase().slice(0, 8))}
+                        placeholder="e.g. 7K9M2P"
+                        className="w-full h-14 text-center text-2xl font-bold tracking-[0.3em] uppercase bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-200 transition-all"
+                      />
+                      <button
+                        type="submit"
+                        disabled={gateLoading || !clinicCode.trim()}
+                        className="w-full h-12 flex items-center justify-center gap-2 bg-blue-700 hover:bg-blue-800 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold rounded-xl transition-colors"
+                      >
+                        {gateLoading ? <Loader2 size={18} className="animate-spin" /> : <ArrowRight size={18} />}
+                        {gateLoading ? "Checking..." : "Continue"}
+                      </button>
+                    </form>
+
+                    <button
+                      type="button"
+                      onClick={skipClinicCheckIn}
+                      disabled={gateLoading}
+                      className="w-full mt-4 text-sm font-semibold text-slate-500 hover:text-slate-700 disabled:opacity-50"
+                    >
+                      Skip — I don't have a code
+                    </button>
+                  </>
+                )}
+
+                {gateStep === GATE_STEPS.CONFIRM && clinicDoctor && (
+                  <>
+                    <div className="text-center mb-8">
+                      <div className="w-14 h-14 mx-auto mb-4 bg-emerald-50 text-emerald-600 rounded-2xl flex items-center justify-center">
+                        <ShieldCheck size={28} />
+                      </div>
+                      <h2 className="text-xl font-bold text-slate-900">Is this your doctor?</h2>
+                    </div>
+
+                    <div className="rounded-2xl border border-slate-100 bg-slate-50 p-5 text-center mb-6">
+                      <p className="text-lg font-semibold text-slate-900">{clinicDoctor.doctorName}</p>
+                      {clinicDoctor.clinicName && (
+                        <p className="text-sm text-slate-500 mt-1">{clinicDoctor.clinicName}</p>
+                      )}
+                    </div>
+
+                    {gateError && (
+                      <div className="mb-6 p-4 rounded-xl bg-red-50 text-red-700 text-sm">{gateError}</div>
+                    )}
+
+                    <div className="flex gap-3">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setGateStep(GATE_STEPS.CODE);
+                          setClinicDoctor(null);
+                          setClinicCode("");
+                        }}
+                        className="flex-1 h-12 rounded-xl border border-slate-200 text-slate-600 font-semibold hover:bg-slate-50 transition-colors"
+                      >
+                        No, go back
+                      </button>
+                      <button
+                        type="button"
+                        onClick={startClinicOtpStep}
+                        disabled={gateLoading}
+                        className="flex-1 h-12 flex items-center justify-center gap-2 bg-blue-700 hover:bg-blue-800 disabled:opacity-50 text-white font-semibold rounded-xl transition-colors"
+                      >
+                        {gateLoading ? <Loader2 size={18} className="animate-spin" /> : "Yes, continue"}
+                      </button>
+                    </div>
+                  </>
+                )}
+
+                {gateStep === GATE_STEPS.OTP && (
+                  <>
+                    <div className="text-center mb-8">
+                      <div className="w-14 h-14 mx-auto mb-4 bg-blue-50 text-blue-600 rounded-2xl flex items-center justify-center">
+                        <ShieldCheck size={28} />
+                      </div>
+                      <h2 className="text-xl font-bold text-slate-900">Verify it's you</h2>
+                      <p className="text-sm text-slate-500 mt-2">
+                        We've sent a 6-digit verification code to your account email.
+                      </p>
+                    </div>
+
+                    {gateError && (
+                      <div className="mb-6 p-4 rounded-xl bg-red-50 text-red-700 text-sm">{gateError}</div>
+                    )}
+
+                    <form onSubmit={handleClinicOtpSubmit} className="space-y-8">
+                      <OtpInput value={clinicOtp} onChange={setClinicOtp} disabled={gateLoading} />
+
+                      <button
+                        type="submit"
+                        disabled={gateLoading}
+                        className="w-full h-12 flex items-center justify-center gap-2 bg-blue-700 hover:bg-blue-800 disabled:opacity-50 text-white font-semibold rounded-xl transition-colors"
+                      >
+                        {gateLoading ? "Verifying..." : "Verify & Start Intake"}
+                      </button>
+                    </form>
+
+                    <div className="mt-6 text-center">
+                      {otpTimer > 0 ? (
+                        <p className="text-sm text-slate-500">
+                          Resend code in <span className="font-semibold text-blue-700">{otpTimer}s</span>
+                        </p>
+                      ) : (
+                        <button
+                          onClick={handleClinicOtpResend}
+                          className="text-sm font-semibold text-blue-700 hover:underline"
+                        >
+                          Resend Verification Code
+                        </button>
+                      )}
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+          ) : (
+            <>
           {/* Progress strip — section labels, current one highlighted. */}
           <div className="flex items-center gap-2 mb-4 flex-wrap">
             {SECTION_ORDER.filter((s) => s !== "finalize").map((s, i) => (
@@ -298,19 +599,67 @@ export default function IntakeChat() {
 
               {!done && (
                 <>
-                  {quickReplies.length > 0 && (
-                    <div className="flex flex-wrap gap-2 mb-3">
-                      {quickReplies.map((opt) => (
-                        <button
-                          key={opt}
-                          type="button"
-                          disabled={sending}
-                          onClick={() => submitAnswer(opt)}
-                          className="text-sm px-4 py-2 rounded-full border border-blue-200 text-blue-700 bg-blue-50 hover:bg-blue-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                        >
-                          {opt}
-                        </button>
-                      ))}
+                  {quickReplies.options.length > 0 && (
+                    <div className="mb-3">
+                      {quickReplies.allowMultiple ? (
+                        // Multi-select — PRD §5: rendered as checkboxes when
+                        // allow_multiple is true. Selection accumulates until
+                        // "Send selected" submits it as one turn.
+                        <>
+                          <div className="flex flex-wrap gap-2 mb-2">
+                            {quickReplies.options.map((opt) => {
+                              const checked = selectedOptions.includes(opt);
+                              return (
+                                <label
+                                  key={opt}
+                                  className={`flex items-center gap-2 text-sm px-4 py-2 rounded-full border cursor-pointer transition-colors ${
+                                    checked
+                                      ? "border-blue-400 bg-blue-100 text-blue-800"
+                                      : "border-blue-200 text-blue-700 bg-blue-50 hover:bg-blue-100"
+                                  } ${sending ? "opacity-50 pointer-events-none" : ""}`}
+                                >
+                                  <input
+                                    type="checkbox"
+                                    className="accent-blue-600"
+                                    checked={checked}
+                                    disabled={sending}
+                                    onChange={() => toggleOption(opt)}
+                                  />
+                                  {opt}
+                                </label>
+                              );
+                            })}
+                          </div>
+                          <button
+                            type="button"
+                            disabled={sending || selectedOptions.length === 0}
+                            onClick={submitSelectedOptions}
+                            className="text-sm px-4 py-2 rounded-full bg-blue-700 hover:bg-blue-800 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold transition-colors"
+                          >
+                            Send selected
+                          </button>
+                        </>
+                      ) : (
+                        // Single-select — rendered as radio-style tap targets;
+                        // tapping submits immediately, same UX as before this
+                        // feature (PRD §5: radio buttons when allow_multiple
+                        // is false).
+                        <div className="flex flex-wrap gap-2" role="radiogroup">
+                          {quickReplies.options.map((opt) => (
+                            <button
+                              key={opt}
+                              type="button"
+                              role="radio"
+                              aria-checked="false"
+                              disabled={sending}
+                              onClick={() => submitAnswer(opt)}
+                              className="text-sm px-4 py-2 rounded-full border border-blue-200 text-blue-700 bg-blue-50 hover:bg-blue-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                            >
+                              {opt}
+                            </button>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   )}
 
@@ -350,6 +699,8 @@ export default function IntakeChat() {
                 <ShieldCheck size={13} className="text-slate-400 shrink-0" />
                 This only records what you tell us — it never diagnoses or gives medical advice.
               </p>
+            </>
+          )}
             </>
           )}
         </main>

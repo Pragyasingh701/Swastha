@@ -45,6 +45,10 @@ export default function DoctorRegister() {
     experience: 5,
     hospitalName: "",
     address: "",
+    // Clinic Check-In & Treatment-Method-Aware Intake PRD §3.2/§4.3: chosen
+    // ONCE here at registration — no settings-page edit path exists after
+    // this (see backend/db/users.js's treatment_method immutability note).
+    treatmentMethod: "",
   });
   const [files, setFiles] = useState({
     regCertificate: null,
@@ -101,6 +105,11 @@ export default function DoctorRegister() {
       return;
     }
 
+    if (form.treatmentMethod !== "allopathic" && form.treatmentMethod !== "ayurvedic") {
+      setErrorMessage("Please select your Treatment Method (Allopathic or Ayurvedic).");
+      return;
+    }
+
     if (!isValidFreeTextField(form.hospitalName, { minLength: 3, maxLength: 150 })) {
       setErrorMessage("Please enter a valid Hospital or Clinic Name.");
       return;
@@ -145,6 +154,7 @@ export default function DoctorRegister() {
           degree: form.degree,
           specialization: form.specialization,
           specialty: form.specialization,
+          treatmentMethod: form.treatmentMethod,
           experience: form.experience,
           hospitalName: form.hospitalName,
           address: form.address,
@@ -446,6 +456,41 @@ export default function DoctorRegister() {
                         value={form.specialization}
                         onChange={handleChange}
                       />
+                    </div>
+                  </div>
+                  <div className="space-y-2 md:col-span-2">
+                    <label className="font-label-md text-label-md text-on-surface-variant block ml-1">
+                      Treatment Method
+                    </label>
+                    <p className="font-body-sm text-body-sm text-on-surface-variant ml-1 mb-1">
+                      Fixed for the lifetime of your account — determines the AI intake question set your patients see. Cannot be self-edited later; contact support to change it.
+                    </p>
+                    <div className="grid grid-cols-2 gap-4">
+                      {[
+                        { value: "allopathic", label: "Allopathic", icon: "medication" },
+                        { value: "ayurvedic", label: "Ayurvedic", icon: "spa" },
+                      ].map((opt) => (
+                        <label
+                          key={opt.value}
+                          className={`flex items-center gap-3 h-11 px-4 rounded-xl border cursor-pointer transition-all ${
+                            form.treatmentMethod === opt.value
+                              ? "border-primary bg-primary/10 ring-4 ring-primary/10"
+                              : "border-outline-variant bg-surface hover:border-primary/40"
+                          }`}
+                        >
+                          <input
+                            type="radio"
+                            name="treatmentMethod"
+                            value={opt.value}
+                            checked={form.treatmentMethod === opt.value}
+                            onChange={handleChange}
+                            required
+                            className="accent-primary"
+                          />
+                          <span className="material-symbols-outlined text-primary">{opt.icon}</span>
+                          <span className="font-label-md text-label-md text-on-surface">{opt.label}</span>
+                        </label>
+                      ))}
                     </div>
                   </div>
                   <div className="space-y-2 md:col-span-2">

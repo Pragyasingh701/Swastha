@@ -1,6 +1,7 @@
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
+import OtpInput from "../../components/Common/OtpInput";
 
 export default function VerifyOTP() {
   const navigate = useNavigate();
@@ -13,7 +14,6 @@ export default function VerifyOTP() {
   const [timer, setTimer] = useState(60);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
-  const inputRefs = useRef([]);
 
   useEffect(() => {
     // Only redirect if no active email state in navigation AND user is already fully authenticated with a selected role
@@ -28,38 +28,6 @@ export default function VerifyOTP() {
     }, 1000);
     return () => clearInterval(interval);
   }, []);
-
-  const handleChange = (index, value) => {
-    if (isNaN(value)) return;
-    const newOtp = [...otp];
-    newOtp[index] = value.slice(-1);
-    setOtp(newOtp);
-
-    if (value && index < 5) {
-      inputRefs.current[index + 1]?.focus();
-    }
-  };
-
-  const handleKeyDown = (index, e) => {
-    if (e.key === "Backspace" && !otp[index] && index > 0) {
-      inputRefs.current[index - 1]?.focus();
-    }
-  };
-
-  const handlePaste = (e) => {
-    e.preventDefault();
-    const pasted = e.clipboardData.getData("text").replace(/\D/g, "").slice(0, 6);
-    if (!pasted) return;
-
-    const newOtp = ["", "", "", "", "", ""];
-    for (let i = 0; i < pasted.length; i++) {
-      newOtp[i] = pasted[i];
-    }
-    setOtp(newOtp);
-
-    const nextIndex = Math.min(pasted.length, 5);
-    inputRefs.current[nextIndex]?.focus();
-  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -118,22 +86,7 @@ export default function VerifyOTP() {
           )}
 
           <form onSubmit={handleSubmit} className="space-y-8">
-            <div className="flex justify-between items-center gap-2">
-              {otp.map((digit, index) => (
-                <input
-                  key={index}
-                  ref={(el) => (inputRefs.current[index] = el)}
-                  type="text"
-                  inputMode="numeric"
-                  maxLength={1}
-                  value={digit}
-                  onChange={(e) => handleChange(index, e.target.value)}
-                  onKeyDown={(e) => handleKeyDown(index, e)}
-                  onPaste={handlePaste}
-                  className="w-12 h-14 text-center text-headline-md font-extrabold bg-surface-container-lowest border border-outline-variant rounded-xl focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all"
-                />
-              ))}
-            </div>
+            <OtpInput value={otp} onChange={setOtp} disabled={isLoading} />
 
             <button
               type="submit"

@@ -125,6 +125,33 @@ export async function getIntakeSessionDetail(sessionId) {
   return request(`/intake-queue/${sessionId}`);
 }
 
+/**
+ * DOCTOR-facing: mark a queue row Completed (doctor has seen/consulted
+ * this patient) — distinct from the patient-driven intake `status`. Row
+ * drops out of the live queue and appears in getIntakeQueueHistory instead.
+ */
+export async function completeIntakeSession(sessionId) {
+  return request(`/intake-queue/${sessionId}/complete`, { method: 'POST' });
+}
+
+/**
+ * DOCTOR-facing: dismiss a queue row without deleting the underlying
+ * session (no-show, duplicate, etc.) — same "drops out of the live queue,
+ * appears in history" behavior as completeIntakeSession above.
+ */
+export async function removeIntakeSession(sessionId) {
+  return request(`/intake-queue/${sessionId}/remove`, { method: 'POST' });
+}
+
+/**
+ * DOCTOR-facing: every session this doctor has marked Completed or Removed,
+ * newest action first — GET /api/doctor-patients/intake-queue/history.
+ */
+export async function getIntakeQueueHistory() {
+  const result = await request('/intake-queue/history');
+  return result.history || [];
+}
+
 export default {
   getDoctorPatients,
   linkPatientToDoctor,
@@ -137,4 +164,7 @@ export default {
   getDoctorPatientNotifications,
   getIntakeQueue,
   getIntakeSessionDetail,
+  completeIntakeSession,
+  removeIntakeSession,
+  getIntakeQueueHistory,
 };

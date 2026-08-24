@@ -821,19 +821,28 @@ router.post('/profile', authenticateToken, async (req, res) => {
   // Doctor Mandatory Fields & Certificate Extraction Pipeline (for registration OR role switch to doctor)
   let extractedCertMeta = {};
   if (targetRole === 'doctor') {
-    const { fullName, phone, mobile, dob, regNumber, licenseNumber, council, degree, specialization, specialty, hospitalName, address } = profileDetails;
+    const { fullName, phone, mobile, dob, regNumber, licenseNumber, council, degree, specialization, specialty, hospitalName, address, treatmentMethod, treatment_method } = profileDetails;
     const certUrl = profileDetails.regCertificateUrl || profileDetails.reg_certificate_url || profileDetails.certificateUrl || profileDetails.certificate_url;
     const nameVal = fullName || profileDetails.name;
     const phoneVal = phone || mobile;
     const licVal = regNumber || licenseNumber;
     const specVal = specialization || specialty;
+    // Clinic-Check-In-&-Treatment-Method-Aware-Intake PRD §3.2/§4.3: required
+    // once at registration, no self-service edit path afterward — so it's
+    // only validated here on the same "first-time setup" branch as every
+    // other mandatory doctor field, never re-validated/re-settable on a
+    // plain settings update (isSettingsUpdate && !isRoleSwitch).
+    const treatmentMethodVal = treatmentMethod || treatment_method;
 
     const isNewCertProvided = Boolean(certUrl && certUrl !== userToUpdate?.reg_certificate_url);
     if (!isSettingsUpdate || isRoleSwitch || isNewCertProvided) {
-      if (!nameVal || !phoneVal || !dob || !licVal || !council || !degree || !specVal || !hospitalName || !address || !certUrl) {
+      if (!nameVal || !phoneVal || !dob || !licVal || !council || !degree || !specVal || !hospitalName || !address || !certUrl || !treatmentMethodVal) {
         return res.status(400).json({
-          message: 'All doctor credentials (Full Name, Date of Birth, Mobile Number, Medical Registration #, Council, Degree, Specialization, Hospital/Clinic Name, Practice Address, and Medical Registration Certificate) are mandatory when setting up a Doctor account.',
+          message: 'All doctor credentials (Full Name, Date of Birth, Mobile Number, Medical Registration #, Council, Degree, Specialization, Hospital/Clinic Name, Practice Address, Treatment Method, and Medical Registration Certificate) are mandatory when setting up a Doctor account.',
         });
+      }
+      if (!['allopathic', 'ayurvedic'].includes(treatmentMethodVal)) {
+        return res.status(400).json({ message: 'Treatment Method must be either Allopathic or Ayurvedic.' });
       }
       if (nameVal && !isValidFullName(nameVal)) {
         return res.status(400).json({ message: 'Please enter a valid full name using letters only.' });
@@ -919,6 +928,15 @@ router.post('/profile', authenticateToken, async (req, res) => {
       certExtractedData: isDoctor ? (extractedCertMeta.certExtractedData || userToUpdate?.cert_extracted_data) : null,
       licenseExpiryDate: isDoctor ? (extractedCertMeta.licenseExpiryDate || userToUpdate?.license_expiry_date) : null,
       verificationStatus: isDoctor ? (extractedCertMeta.verificationStatus || userToUpdate?.verification_status || 'pending') : 'verified',
+      // Immutable after first-time set (PRD §3.2/§4.3: "no self-service edit
+      // path after registration") — once userToUpdate already has a value,
+      // any value submitted in a later call (e.g. a settings-page payload
+      // that happens to still carry the field from a stale form) is ignored
+      // and the existing value is kept, same pattern createOrUpdateUser
+      // already uses for `role` immutability.
+      treatmentMethod: isDoctor
+        ? (userToUpdate?.treatment_method || profileDetails.treatmentMethod || profileDetails.treatment_method || null)
+        : null,
       role: targetRole || userToUpdate?.role || 'patient',
       hasSelectedRole: true,
     });
