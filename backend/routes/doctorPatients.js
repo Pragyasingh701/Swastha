@@ -15,7 +15,12 @@ import {
 import { createNotification } from '../db/notifications.js';
 import { sendDoctorRequestEmail } from '../utils/mailer.js';
 import { listTimelineReports } from '../db/reports.js';
-import { getIntakeQueueForPatients, getIntakeSessionForPatients } from '../db/intakeSessions.js';
+import {
+  getIntakeQueueForPatients,
+  getIntakeSessionForPatients,
+  setIntakeSessionDoctorAction,
+  getIntakeActionHistoryForDoctor,
+} from '../db/intakeSessions.js';
 
 const router = express.Router();
 const JWT_SECRET = process.env.JWT_SECRET || 'swastha_dev_secret_key_2026';
@@ -160,6 +165,9 @@ router.get('/intake-queue', async (req, res) => {
         priority: s.priority,
         red_flag_reason: s.red_flag_reason,
         status: s.status,
+        origin: s.origin,
+        intake_method: s.intake_method,
+        doctor_action: s.doctor_action,
         created_at: s.created_at,
         completed_at: s.completed_at,
       })),
@@ -167,6 +175,56 @@ router.get('/intake-queue', async (req, res) => {
   } catch (error) {
     console.error('Intake queue fetch error:', error);
     return res.status(500).json({ message: 'Unable to load intake queue.' });
+  }
+});
+
+/**
+ * GET /api/doctor-patients/intake-queue/history
+ * DOCTOR-facing. Every session the caller-doctor has marked Completed or
+ * Removed from the live queue, newest action first — the audit trail for
+ * both actions (PRD ask: "keep a history of which he has completed and
+ * also which he has removed"). Same 'accepted' link gate as the queue list
+ * above.
+ *
+ * Declared BEFORE '/intake-queue/:sessionId' so Express matches "history"
+ * here rather than treating it as a :sessionId.
+ */
+router.get('/intake-queue/history', async (req, res) => {
+  const authUser = getAuthUser(req);
+
+  if (!authUser?.userId) {
+    return res.status(401).json({ message: 'Authentication required.' });
+  }
+
+  try {
+    const patients = await getDoctorPatients(authUser.userId);
+    const accepted = patients.filter((p) => p.linkStatus === 'accepted');
+
+    if (accepted.length === 0) {
+      return res.json({ history: [] });
+    }
+
+    const patientById = new Map(accepted.map((p) => [p.patientUserId, p]));
+    const history = await getIntakeActionHistoryForDoctor(authUser.userId, [...patientById.keys()]);
+
+    return res.json({
+      history: history.map((h) => ({
+        session_id: h.session_id,
+        patient_id: h.patient_id,
+        patient_name: patientById.get(h.patient_id)?.name || 'Patient',
+        chief_complaint: h.chief_complaint,
+        priority: h.priority,
+        red_flag_reason: h.red_flag_reason,
+        origin: h.origin,
+        intake_method: h.intake_method,
+        action: h.action,
+        acted_at: h.acted_at,
+        created_at: h.created_at,
+      })),
+    });
+  } catch (error) {
+    console.error('Intake queue history fetch error:', error);
+    return res.status(500).json({ message: 'Unable to load intake queue history.' });
   }
 });
 
@@ -218,6 +276,9 @@ router.get('/intake-queue/:sessionId', async (req, res) => {
       priority: session.priority,
       red_flag_reason: session.red_flag_reason,
       status: session.status,
+      origin: session.origin,
+      intake_method: session.intake_method,
+      doctor_action: session.doctor_action,
       created_at: session.created_at,
       completed_at: session.completed_at,
     });
@@ -226,6 +287,71 @@ router.get('/intake-queue/:sessionId', async (req, res) => {
     return res.status(500).json({ message: 'Unable to load intake session.' });
   }
 });
+
+/**
+ * Shared handler for the Complete/Remove queue actions below — same
+ * ownership boundary as the detail route above: a session only resolves
+ * if its patient_id belongs to one of the caller-doctor's accepted-linked
+ * patients, otherwise 404 (never 403 — doesn't confirm or deny the session
+ * id exists to an unauthorized caller). Writes both the session's current
+ * doctor_action AND an append-only intake_session_actions audit row.
+ */
+async function handleIntakeQueueAction(req, res, action) {
+  const authUser = getAuthUser(req);
+
+  if (!authUser?.userId) {
+    return res.status(401).json({ message: 'Authentication required.' });
+  }
+
+  const sessionId = String(req.params?.sessionId ?? '').trim();
+  if (!sessionId) {
+    return res.status(400).json({ message: 'Session ID is required.' });
+  }
+
+  try {
+    const patients = await getDoctorPatients(authUser.userId);
+    const accepted = patients.filter((p) => p.linkStatus === 'accepted');
+    const patientIds = accepted.map((p) => p.patientUserId);
+
+    if (patientIds.length === 0) {
+      return res.status(404).json({ message: 'Intake session not found.' });
+    }
+
+    const updated = await setIntakeSessionDoctorAction({
+      sessionId,
+      doctorId: authUser.userId,
+      patientIds,
+      action,
+    });
+    if (!updated) {
+      return res.status(404).json({ message: 'Intake session not found.' });
+    }
+
+    return res.json({ session_id: updated.id, doctor_action: updated.doctor_action });
+  } catch (error) {
+    console.error(`Intake queue ${action} error:`, error);
+    return res.status(500).json({ message: `Unable to mark this session as ${action}.` });
+  }
+}
+
+/**
+ * POST /api/doctor-patients/intake-queue/:sessionId/complete
+ * DOCTOR-facing. Marks a queue row as Completed (doctor has seen/consulted
+ * this patient) — distinct from intake_sessions.status, which tracks
+ * whether the PATIENT finished answering the intake questions (see
+ * backend/db/intakeSessions.js's setIntakeSessionDoctorAction). Row drops
+ * out of the live queue and appears in intake-queue/history instead.
+ */
+router.post('/intake-queue/:sessionId/complete', (req, res) => handleIntakeQueueAction(req, res, 'completed'));
+
+/**
+ * POST /api/doctor-patients/intake-queue/:sessionId/remove
+ * DOCTOR-facing. Dismisses a queue row (e.g. a no-show, duplicate, or
+ * otherwise not worth keeping in the active queue) without deleting the
+ * underlying session — it drops out of the live queue and appears in
+ * intake-queue/history instead, same as Complete above.
+ */
+router.post('/intake-queue/:sessionId/remove', (req, res) => handleIntakeQueueAction(req, res, 'removed'));
 
 /**
  * POST /api/doctor-patients/requests/:linkId/accept

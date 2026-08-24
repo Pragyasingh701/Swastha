@@ -2,8 +2,24 @@ import React, { useEffect, useState } from "react";
 import DoctorSidebar from "../components/DoctorSidebar";
 import ProfileDropdown from "../../settings/components/ProfileDropdown";
 import NotificationBell from "../../../components/Common/NotificationBell";
-import { AlertTriangle, ClipboardList, X, Loader2, Pill, ShieldAlert } from "lucide-react";
-import { getIntakeQueue, getIntakeSessionDetail } from "../../../services/doctorPatients";
+import {
+  AlertTriangle,
+  ClipboardList,
+  X,
+  Loader2,
+  Pill,
+  ShieldAlert,
+  CheckCircle2,
+  Trash2,
+  History,
+} from "lucide-react";
+import {
+  getIntakeQueue,
+  getIntakeSessionDetail,
+  completeIntakeSession,
+  removeIntakeSession,
+  getIntakeQueueHistory,
+} from "../../../services/doctorPatients";
 
 // Module A (Conversational History Engine) — DOCTOR-facing priority queue,
 // its own page/sidebar entry (moved out of DoctorDashboard.jsx per request).
@@ -53,16 +69,18 @@ function TopBar() {
   );
 }
 
-function PageHeader({ count, isLoading }) {
+function PageHeader({ count, isLoading, view, onChangeView }) {
   return (
-    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-4 mb-8">
+    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-4 mb-6">
       <div>
         <h2 className="text-2xl md:text-3xl font-bold text-slate-900 mb-1 flex items-center gap-2">
           <ClipboardList className="text-blue-600" size={26} />
           Intake Queue
         </h2>
         <p className="text-slate-500">
-          Patient visit intakes from your linked patients — flagged sessions sort to the top. Click a patient to see their structured summary.
+          {view === "queue"
+            ? "Patient visit intakes from your linked patients — flagged sessions sort to the top. Click a patient to see their structured summary."
+            : "Sessions you've marked Completed or Removed from the active queue."}
         </p>
       </div>
       {!isLoading && (
@@ -74,7 +92,33 @@ function PageHeader({ count, isLoading }) {
   );
 }
 
-function IntakeQueueList({ sessions, isLoading, error, onSelect }) {
+function ViewTabs({ view, onChangeView }) {
+  const tabs = [
+    { key: "queue", label: "Active Queue", icon: ClipboardList },
+    { key: "history", label: "History", icon: History },
+  ];
+  return (
+    <div className="flex items-center gap-2 mb-6 border-b border-slate-200">
+      {tabs.map(({ key, label, icon: Icon }) => (
+        <button
+          key={key}
+          type="button"
+          onClick={() => onChangeView(key)}
+          className={`flex items-center gap-1.5 px-4 py-2.5 text-sm font-semibold border-b-2 -mb-px transition-colors ${
+            view === key
+              ? "border-blue-600 text-blue-700"
+              : "border-transparent text-slate-500 hover:text-slate-700"
+          }`}
+        >
+          <Icon size={15} />
+          {label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function IntakeQueueList({ sessions, isLoading, error, onSelect, onComplete, onRemove, actioningId }) {
   if (error) {
     return (
       <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
@@ -93,48 +137,141 @@ function IntakeQueueList({ sessions, isLoading, error, onSelect }) {
         </div>
       ) : (
         <ul className="divide-y divide-slate-100">
-          {sessions.map((s) => (
-            <li key={s.session_id}>
-              <button
-                type="button"
-                onClick={() => onSelect(s.session_id)}
-                className={`w-full flex items-center justify-between gap-4 px-5 py-4 text-left transition-colors hover:bg-slate-50 ${
-                  s.priority === "flagged" ? "bg-red-50/40 hover:bg-red-50/70" : ""
-                }`}
-              >
-                <div className="flex items-center gap-3 min-w-0">
-                  {s.priority === "flagged" && (
-                    <span className="shrink-0 w-9 h-9 rounded-lg bg-red-100 text-red-600 flex items-center justify-center">
-                      <AlertTriangle size={17} />
-                    </span>
-                  )}
-                  <div className="min-w-0">
-                    <p className="text-sm font-semibold text-slate-900 truncate">
-                      {s.patient_name}
-                      {s.priority === "flagged" && (
-                        <span className="ml-2 text-xs font-semibold px-2 py-0.5 rounded-full bg-red-100 text-red-700 align-middle">
-                          Flagged{s.red_flag_reason ? `: ${s.red_flag_reason}` : ""}
-                        </span>
-                      )}
-                    </p>
-                    <p className="text-sm text-slate-500 truncate">
-                      {s.chief_complaint || "No chief complaint recorded yet"}
-                    </p>
+          {sessions.map((s) => {
+            const isActioning = actioningId === s.session_id;
+            return (
+              <li key={s.session_id}>
+                <div
+                  className={`w-full flex items-center justify-between gap-4 px-5 py-4 transition-colors hover:bg-slate-50 ${
+                    s.priority === "flagged" ? "bg-red-50/40 hover:bg-red-50/70" : ""
+                  }`}
+                >
+                  <button
+                    type="button"
+                    onClick={() => onSelect(s.session_id)}
+                    className="flex items-center gap-3 min-w-0 flex-1 text-left"
+                  >
+                    {s.priority === "flagged" && (
+                      <span className="shrink-0 w-9 h-9 rounded-lg bg-red-100 text-red-600 flex items-center justify-center">
+                        <AlertTriangle size={17} />
+                      </span>
+                    )}
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold text-slate-900 truncate">
+                        {s.patient_name}
+                        {s.priority === "flagged" && (
+                          <span className="ml-2 text-xs font-semibold px-2 py-0.5 rounded-full bg-red-100 text-red-700 align-middle">
+                            Flagged{s.red_flag_reason ? `: ${s.red_flag_reason}` : ""}
+                          </span>
+                        )}
+                      </p>
+                      <p className="text-sm text-slate-500 truncate">
+                        {s.chief_complaint || "No chief complaint recorded yet"}
+                      </p>
+                    </div>
+                  </button>
+
+                  <div className="shrink-0 flex items-center gap-3">
+                    <div className="text-right">
+                      <span
+                        className={`inline-block text-xs font-medium px-2.5 py-1 rounded-full ${
+                          s.status === "completed"
+                            ? "bg-emerald-50 text-emerald-700"
+                            : "bg-blue-50 text-blue-700"
+                        }`}
+                      >
+                        {s.status === "completed" ? "Completed" : "In progress"}
+                      </span>
+                      <p className="text-xs text-slate-400 mt-1">{formatIntakeTimestamp(s.created_at)}</p>
+                    </div>
+
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        title="Mark as completed"
+                        disabled={isActioning}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onComplete(s.session_id);
+                        }}
+                        className="flex items-center gap-1 text-xs font-semibold px-2.5 py-1.5 rounded-lg border border-emerald-200 text-emerald-700 bg-emerald-50 hover:bg-emerald-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                      >
+                        {isActioning ? <Loader2 size={13} className="animate-spin" /> : <CheckCircle2 size={13} />}
+                        Complete
+                      </button>
+                      <button
+                        type="button"
+                        title="Remove from queue"
+                        disabled={isActioning}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onRemove(s.session_id);
+                        }}
+                        className="flex items-center gap-1 text-xs font-semibold px-2.5 py-1.5 rounded-lg border border-slate-200 text-slate-600 bg-white hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                      >
+                        {isActioning ? <Loader2 size={13} className="animate-spin" /> : <Trash2 size={13} />}
+                        Remove
+                      </button>
+                    </div>
                   </div>
                 </div>
-                <div className="shrink-0 text-right">
-                  <span
-                    className={`inline-block text-xs font-medium px-2.5 py-1 rounded-full ${
-                      s.status === "completed"
-                        ? "bg-emerald-50 text-emerald-700"
-                        : "bg-blue-50 text-blue-700"
-                    }`}
-                  >
-                    {s.status === "completed" ? "Completed" : "In progress"}
-                  </span>
-                  <p className="text-xs text-slate-400 mt-1">{formatIntakeTimestamp(s.created_at)}</p>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+function IntakeHistoryList({ history, isLoading, error }) {
+  if (error) {
+    return (
+      <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+        {error}
+      </div>
+    );
+  }
+
+  return (
+    <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
+      {isLoading ? (
+        <div className="px-5 py-6 text-sm text-slate-400">Loading history…</div>
+      ) : history.length === 0 ? (
+        <div className="px-5 py-6 text-sm text-slate-400">
+          No completed or removed sessions yet. Actions you take from the Active Queue tab show up here.
+        </div>
+      ) : (
+        <ul className="divide-y divide-slate-100">
+          {history.map((h) => (
+            <li key={h.session_id} className="flex items-center justify-between gap-4 px-5 py-4">
+              <div className="flex items-center gap-3 min-w-0">
+                <span
+                  className={`shrink-0 w-9 h-9 rounded-lg flex items-center justify-center ${
+                    h.action === "completed" ? "bg-emerald-100 text-emerald-600" : "bg-slate-100 text-slate-500"
+                  }`}
+                >
+                  {h.action === "completed" ? <CheckCircle2 size={17} /> : <Trash2 size={17} />}
+                </span>
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-slate-900 truncate">{h.patient_name}</p>
+                  <p className="text-sm text-slate-500 truncate">
+                    {h.chief_complaint || "No chief complaint recorded"}
+                  </p>
                 </div>
-              </button>
+              </div>
+              <div className="shrink-0 text-right">
+                <span
+                  className={`inline-block text-xs font-medium px-2.5 py-1 rounded-full ${
+                    h.action === "completed"
+                      ? "bg-emerald-50 text-emerald-700"
+                      : "bg-slate-100 text-slate-600"
+                  }`}
+                >
+                  {h.action === "completed" ? "Completed" : "Removed"}
+                </span>
+                <p className="text-xs text-slate-400 mt-1">{formatIntakeTimestamp(h.acted_at)}</p>
+              </div>
             </li>
           ))}
         </ul>
@@ -284,35 +421,86 @@ function IntakeSessionModal({ sessionId, onClose }) {
 }
 
 export default function IntakeQueue() {
+  const [view, setView] = useState("queue"); // 'queue' | 'history'
   const [sessions, setSessions] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
   const [selectedSessionId, setSelectedSessionId] = useState(null);
+  const [actioningId, setActioningId] = useState(null);
+  const [actionError, setActionError] = useState(null);
+
+  const [history, setHistory] = useState([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyError, setHistoryError] = useState(null);
+  const [historyLoaded, setHistoryLoaded] = useState(false);
+
+  async function loadQueue() {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const result = await getIntakeQueue();
+      setSessions(result);
+    } catch (err) {
+      setError(err.message || "Failed to load intake queue.");
+      setSessions([]);
+    } finally {
+      setIsLoading(false);
+    }
+  }
 
   useEffect(() => {
+    loadQueue();
+  }, []);
+
+  // History is fetched lazily on first switch to that tab, not on mount —
+  // most doctors will spend most of their time on the active queue.
+  useEffect(() => {
+    if (view !== "history" || historyLoaded) return;
     let cancelled = false;
 
-    async function load() {
-      setIsLoading(true);
-      setError(null);
+    (async () => {
+      setHistoryLoading(true);
+      setHistoryError(null);
       try {
-        const result = await getIntakeQueue();
-        if (!cancelled) setSessions(result);
-      } catch (err) {
+        const result = await getIntakeQueueHistory();
         if (!cancelled) {
-          setError(err.message || "Failed to load intake queue.");
-          setSessions([]);
+          setHistory(result);
+          setHistoryLoaded(true);
         }
+      } catch (err) {
+        if (!cancelled) setHistoryError(err.message || "Failed to load history.");
       } finally {
-        if (!cancelled) setIsLoading(false);
+        if (!cancelled) setHistoryLoading(false);
       }
-    }
+    })();
 
-    load();
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [view, historyLoaded]);
+
+  async function handleAction(sessionId, action) {
+    if (actioningId) return; // one action in flight at a time
+    setActionError(null);
+    setActioningId(sessionId);
+    try {
+      if (action === "completed") {
+        await completeIntakeSession(sessionId);
+      } else {
+        await removeIntakeSession(sessionId);
+      }
+      // Drop it from the live queue immediately — the row already moved
+      // server-side (doctor_action is set), no need to re-fetch the whole
+      // list. Invalidate the cached history so the next visit to that tab
+      // picks up this action rather than showing stale data.
+      setSessions((prev) => prev.filter((s) => s.session_id !== sessionId));
+      setHistoryLoaded(false);
+    } catch (err) {
+      setActionError(err.message || `Failed to mark this session as ${action}.`);
+    } finally {
+      setActioningId(null);
+    }
+  }
 
   return (
     <div className="h-screen overflow-hidden bg-slate-50 flex">
@@ -322,13 +510,32 @@ export default function IntakeQueue() {
         <TopBar />
 
         <main className="flex-1 overflow-y-auto px-6 md:px-10 py-8">
-          <PageHeader count={sessions.length} isLoading={isLoading} />
-          <IntakeQueueList
-            sessions={sessions}
-            isLoading={isLoading}
-            error={error}
-            onSelect={setSelectedSessionId}
+          <PageHeader
+            count={view === "queue" ? sessions.length : history.length}
+            isLoading={view === "queue" ? isLoading : historyLoading}
+            view={view}
           />
+          <ViewTabs view={view} onChangeView={setView} />
+
+          {actionError && (
+            <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+              {actionError}
+            </div>
+          )}
+
+          {view === "queue" ? (
+            <IntakeQueueList
+              sessions={sessions}
+              isLoading={isLoading}
+              error={error}
+              onSelect={setSelectedSessionId}
+              onComplete={(id) => handleAction(id, "completed")}
+              onRemove={(id) => handleAction(id, "removed")}
+              actioningId={actioningId}
+            />
+          ) : (
+            <IntakeHistoryList history={history} isLoading={historyLoading} error={historyError} />
+          )}
         </main>
       </div>
 
