@@ -302,8 +302,8 @@ function buildSystemPrompt(section, structuredHistory, intakeMethod, lastQuestio
     : 'chief_complaint -> hpi (SOCRATES-style follow-ups) -> drug_allergy -> finalize';
 
   const sectionRules = [
-    `- "chief_complaint": ask the patient to state their main complaint if not yet captured. One short question. Once you have a clear chief complaint, move to "hpi".`,
-    `- "hpi": ask SOCRATES-style follow-ups (Site, Onset, Character, Radiation, Associated symptoms, Timing, Exacerbating/relieving factors, Severity) ONE OR TWO AT A TIME — never ask all 8 in one question. Only ask about fields still empty in hpi above. Phrase each question short and direct, clinical-questionnaire style (e.g. "How is your pain normally?" / "How would you describe X?"), NOT a long or casual sentence with asides. Offer more than a minimal set of short quick_reply_options where a patient would naturally pick from a small set (more than 2 closed options where the option set supports it — e.g. severity 1-10 buttons, or 3+ options for a symptom quality rather than a bare yes/no where richer options make sense), each option a single short phrase (one attribute, not several stacked together). When every hpi field is filled, set section_complete: true for this turn and the caller will advance to "${isAyurvedic ? 'ayurveda_profile' : 'drug_allergy'}".`,
+    `- "chief_complaint": this is the patient's very first turn — "Tell Us Your Problem". Ask ONE open, welcoming question inviting them to describe what's wrong in their own words (any language they use is fine) — e.g. "What's bothering you today? Tell me in your own words." Do NOT ask a narrow/closed question here. Once they answer, extract chief_complaint (a short clinical phrase for what's wrong) AND, only if the patient actually volunteered them in this same message, also capture duration into hpi.onset and any aggravating/relieving factor into hpi.exacerbating_relieving — never ask separate follow-up questions for those here, only capture what they already said unprompted. Once chief_complaint is captured, move to "hpi" for everything else.`,
+    `- "hpi": ask SOCRATES-style follow-ups (Site, Onset, Character, Radiation, Associated symptoms, Timing, Exacerbating/relieving factors, Severity) ONE OR TWO AT A TIME — never ask all 8 in one question. Only ask about fields still empty in hpi above (skip any already filled from chief_complaint's extraction). Only ask what's clinically relevant to THIS chief_complaint — do not ask a generic fixed checklist. Tailor which fields you probe and how to the complaint type, for example: pain/ache complaints -> site, character, radiation, severity, aggravating/relieving factors; headache -> location, duration, severity, triggers, vision changes, nausea/vomiting; cough -> duration, dry vs productive, fever, breathing difficulty, blood in sputum; skin complaints -> location, itching, duration, rash appearance, triggers; joint complaints -> which joint(s), duration, swelling, stiffness, pain on movement. Always also check associated_symptoms relevant to that complaint type (e.g. vomiting/fever/loose motion/constipation/bloating/loss of appetite for abdominal complaints). Phrase each question short and direct, clinical-questionnaire style (e.g. "How is your pain normally?" / "How would you describe X?"), NOT a long or casual sentence with asides. Offer more than a minimal set of short quick_reply_options where a patient would naturally pick from a small set (more than 2 closed options where the option set supports it — e.g. severity 1-10 buttons, or 3+ options for a symptom quality rather than a bare yes/no where richer options make sense), each option a single short phrase (one attribute, not several stacked together). When every hpi field is filled, set section_complete: true for this turn and the caller will advance to "${isAyurvedic ? 'ayurveda_profile' : 'drug_allergy'}".`,
   ];
   if (isAyurvedic) {
     sectionRules.push(buildAyurvedaSectionRules(structuredHistory));
@@ -648,6 +648,12 @@ export async function runIntakeTurn({ section, structuredHistory, patientMessage
     section_complete: sectionComplete,
     red_flag: redFlag,
     red_flag_reason: redFlagReason,
+    // True only on the turn where red_flag first flips to true (history.red_flag
+    // was false/unset going in, redFlag is true coming out) — lets the caller
+    // show the Priority Alert exactly once, rather than re-showing it every
+    // turn for the rest of a flagged session (red_flag itself stays true and
+    // is returned every turn, sticky, per the rule above).
+    red_flag_is_new: redFlag && !history.red_flag,
     degraded: false,
   };
 }
