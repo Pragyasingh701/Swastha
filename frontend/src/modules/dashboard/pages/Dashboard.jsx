@@ -764,6 +764,14 @@ export default function Dashboard() {
           <div className="mb-6 flex flex-wrap gap-3">
             <button
               type="button"
+              onClick={() => navigate('/intake')}
+              className="flex items-center gap-2 rounded-lg bg-blue-700 px-4 py-2.5 text-sm font-semibold text-white transition-all duration-200 hover:bg-blue-800 hover:shadow-md hover:-translate-y-0.5"
+            >
+              <ClipboardList size={16} />
+              Start Visit Intake
+            </button>
+            <button
+              type="button"
               onClick={() => navigate('/family-vault')}
               className="flex items-center gap-2 rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white transition-all duration-200 hover:bg-slate-800 hover:shadow-md hover:-translate-y-0.5"
             >

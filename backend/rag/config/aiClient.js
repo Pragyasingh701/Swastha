@@ -27,6 +27,11 @@ export const EMBEDDING_DIMENSIONS = 768;
 const MODEL_LADDER = {
   'vision-ocr': ['gemini-flash-lite-latest', 'gemini-flash-latest', 'gemini-3.1-flash-lite'],
   generation: ['gemini-flash-lite-latest', 'gemini-flash-latest'],
+  // Same ladder as 'generation' (dialogue turns are short text+JSON, same
+  // as search/lab-insights — no reason for a different model list), just a
+  // distinct task key so runAI's per-task timeout/label stay separate from
+  // the generic 'generation' task. Confirmed with the user (Module A PRD).
+  'intake-dialogue': ['gemini-flash-lite-latest', 'gemini-flash-latest'],
   embedding: [EMBEDDING_MODEL],
 };
 
@@ -34,7 +39,7 @@ const MODEL_LADDER = {
 // catalogue; the other 4 slugs the old hardcoded chain used are all gone.
 const OPENROUTER_SAFE_DEFAULT = ['openrouter/free'];
 
-const TIMEOUT_MS = { embedding: 20000, 'vision-ocr': 45000, generation: 30000 };
+const TIMEOUT_MS = { embedding: 20000, 'vision-ocr': 45000, generation: 30000, 'intake-dialogue': 30000 };
 
 export const FRIENDLY_FALLBACK =
   "Swastha couldn't process this right now. Please try again shortly.";

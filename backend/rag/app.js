@@ -1,7 +1,9 @@
+// Mounted as a sub-app inside backend/server.js (at /rag) as of the
+// backend+rag merge — same process, same port, one Render service. CORS
+// and the JSON body parser are applied once by the parent app (with a
+// 2mb limit sized for this sub-app's OCR'd report text), not here.
 import express from 'express';
-import cors from 'cors';
 import './config/env.js'; // validates required env vars at startup, exits if missing
-import { CORS_ORIGIN } from './config/env.js';
 
 import reportsRouter from './routes/reports.js';
 import searchRouter from './routes/search.js';
@@ -10,11 +12,9 @@ import extractRouter from './routes/extract.js';
 import summarizeRouter from './routes/summarize.js';
 import labInsightsRouter from './routes/labInsights.js';
 import patientSummaryRouter from './routes/patientSummary.js';
+import intakeRouter from './routes/intake.js';
 
 const app = express();
-
-app.use(cors({ origin: CORS_ORIGIN }));
-app.use(express.json({ limit: '2mb' })); // OCR'd notes can be long
 
 app.get('/health', (req, res) => res.json({ ok: true, service: 'swastha-rag' }));
 
@@ -27,6 +27,10 @@ app.use('/api/extract', extractRouter);
 app.use('/api/summarize', summarizeRouter);
 app.use('/api/lab-insights', labInsightsRouter);
 app.use('/api/patient-summary', patientSummaryRouter);
+// Module A (Conversational History Engine), Phase 1+2 only: session
+// start/turn/finalize. Priority queue (GET /api/intake/queue) is a
+// separate later task — not mounted here yet.
+app.use('/api/intake', intakeRouter);
 
 // Central error handler as a last resort net — routes already catch and
 // respond themselves, but this guards against anything unhandled.

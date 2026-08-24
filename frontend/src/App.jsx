@@ -16,6 +16,7 @@ import GoogleCallback from "./modules/authentication/GoogleCallback";
 import ForgotPassword from "./modules/authentication/ForgotPassword";
 import ResetPassword from "./modules/authentication/ResetPassword";
 import DoctorDashboard from "./modules/doctor/pages/DoctorDashboard";
+import IntakeQueue from "./modules/doctor/pages/IntakeQueue";
 import DoctorPatients from "./modules/doctor/pages/DoctorPatients";
 import ClinicalIntelligence from "./modules/doctor/pages/ClinicalIntelligence";
 import DoctorAskSwastha from "./modules/doctor/pages/DoctorAskSwastha";
@@ -33,6 +34,10 @@ import LabTrends from "./modules/reports/components/pages/LabTrends";
 
 // Search
 import AISearch from "./modules/search/pages/AISearch";
+
+// Intake (Module A — Conversational History Engine)
+import IntakeChat from "./modules/intake/pages/IntakeChat";
+import ClinicCheckIn from "./modules/intake/pages/ClinicCheckIn";
 
 // Timeline
 import Timeline from "./modules/timeline/components/pages/Timeline";
@@ -277,6 +282,15 @@ export default function App() {
 />
 
         <Route
+          path="/doctor/intake-queue"
+          element={
+            <DoctorRoute>
+              <IntakeQueue />
+            </DoctorRoute>
+          }
+        />
+
+        <Route
           path="/doctor/patients"
           element={
             <DoctorRoute>
@@ -337,6 +351,24 @@ export default function App() {
             <ProtectedRoute>
               <AISearch />
             </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/intake"
+          element={
+            <PatientRoute>
+              <IntakeChat />
+            </PatientRoute>
+          }
+        />
+
+        <Route
+          path="/clinic-checkin"
+          element={
+            <PatientRoute>
+              <ClinicCheckIn />
+            </PatientRoute>
           }
         />
 

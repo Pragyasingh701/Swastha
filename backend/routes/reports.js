@@ -11,7 +11,12 @@ import { createNotification } from '../db/notifications.js';
 
 const router = express.Router();
 const JWT_SECRET = process.env.JWT_SECRET || 'swastha_dev_secret_key_2026';
-const RAG_BASE_URL = process.env.RAG_BASE_URL || 'http://localhost:3010/api';
+// RAG used to be a separate service/process (RAG_BASE_URL pointed at its
+// own port); it's now mounted in-process at /rag (see server.js), so this
+// defaults to a loopback call on this same server instead of a second
+// service. RAG_BASE_URL is still overridable for anyone still running it
+// standalone.
+const RAG_BASE_URL = process.env.RAG_BASE_URL || `http://localhost:${process.env.PORT || 5001}/rag/api`;
 
 // Generates an AI summary for a report via rag/'s /api/summarize (see
 // rag/src/services/summaryService.js) — forwards the same user JWT this

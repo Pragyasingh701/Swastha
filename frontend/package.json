@@ -8,10 +8,6 @@
     "build": "vite build"
   },
   "dependencies": {
-    "@react-oauth/google": "^0.12.2",
-    "@react-pdf-viewer/core": "^3.12.0",
-    "@react-pdf-viewer/default-layout": "^3.12.0",
-    "@supabase/supabase-js": "^2.43.0",
     "lucide-react": "^1.25.0",
     "react": "^18.3.0",
     "react-dom": "^18.3.0",

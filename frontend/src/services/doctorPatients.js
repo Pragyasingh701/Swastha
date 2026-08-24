@@ -106,6 +106,52 @@ export async function getDoctorPatientNotifications() {
   return result.notifications || [];
 }
 
+/**
+ * DOCTOR-facing: Module A intake queue (GET /api/doctor-patients/intake-queue).
+ * Sessions for every 'accepted'-linked patient, sorted priority desc
+ * (flagged first) then created_at asc — same order the server enforces,
+ * not re-sorted here.
+ */
+export async function getIntakeQueue() {
+  const result = await request('/intake-queue');
+  return result.sessions || [];
+}
+
+/**
+ * DOCTOR-facing: full detail for one intake session (structured_history
+ * included) — GET /api/doctor-patients/intake-queue/:sessionId.
+ */
+export async function getIntakeSessionDetail(sessionId) {
+  return request(`/intake-queue/${sessionId}`);
+}
+
+/**
+ * DOCTOR-facing: mark a queue row Completed (doctor has seen/consulted
+ * this patient) — distinct from the patient-driven intake `status`. Row
+ * drops out of the live queue and appears in getIntakeQueueHistory instead.
+ */
+export async function completeIntakeSession(sessionId) {
+  return request(`/intake-queue/${sessionId}/complete`, { method: 'POST' });
+}
+
+/**
+ * DOCTOR-facing: dismiss a queue row without deleting the underlying
+ * session (no-show, duplicate, etc.) — same "drops out of the live queue,
+ * appears in history" behavior as completeIntakeSession above.
+ */
+export async function removeIntakeSession(sessionId) {
+  return request(`/intake-queue/${sessionId}/remove`, { method: 'POST' });
+}
+
+/**
+ * DOCTOR-facing: every session this doctor has marked Completed or Removed,
+ * newest action first — GET /api/doctor-patients/intake-queue/history.
+ */
+export async function getIntakeQueueHistory() {
+  const result = await request('/intake-queue/history');
+  return result.history || [];
+}
+
 export default {
   getDoctorPatients,
   linkPatientToDoctor,
@@ -116,4 +162,9 @@ export default {
   acceptDoctorRequest,
   declineDoctorRequest,
   getDoctorPatientNotifications,
+  getIntakeQueue,
+  getIntakeSessionDetail,
+  completeIntakeSession,
+  removeIntakeSession,
+  getIntakeQueueHistory,
 };
