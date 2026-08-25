@@ -8,6 +8,7 @@ import {
   isValidRegistrationNumber,
   isValidWordsField,
   isValidFreeTextField,
+  isValidFullName,
 } from "../../utils/formValidation";
 
 export default function DoctorRegister() {
@@ -74,6 +75,11 @@ export default function DoctorRegister() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+
+    if (!isValidFullName(form.fullName)) {
+      setErrorMessage("Please enter a valid full name using letters only.");
+      return;
+    }
 
     if (!isValidIndianPhone(form.mobile)) {
       setErrorMessage("Please enter a valid 10-digit mobile number.");
@@ -234,21 +240,20 @@ export default function DoctorRegister() {
                   <div className="space-y-2">
                     <div className="flex items-center justify-between ml-1">
                       <label className="font-label-md text-label-md text-on-surface-variant ">Full Name</label>
-                      <span className="text-[11px] text-outline font-medium flex items-center gap-1">
-                        <span className="material-symbols-outlined text-[13px]">lock</span> Account Name
-                      </span>
+                      <span className="text-[11px] text-primary font-medium">Letters only</span>
                     </div>
                     <div className="relative">
                       <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-outline-variant ">
                         person_outline
                       </span>
                       <input
-                        readOnly
-                        className="w-full h-11 pl-10 pr-4 bg-surface-container-low border border-outline-variant/60 rounded-xl font-body-md text-on-surface cursor-not-allowed opacity-90 select-none"
+                        className="w-full h-11 pl-10 pr-4 bg-surface border border-outline-variant rounded-xl font-body-md text-on-surface focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all"
                         placeholder="e.g. Dr. Jane Doe"
                         type="text"
                         name="fullName"
                         value={form.fullName}
+                        onChange={handleChange}
+                        required
                       />
                     </div>
                   </div>
