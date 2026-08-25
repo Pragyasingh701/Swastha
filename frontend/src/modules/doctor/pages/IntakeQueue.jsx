@@ -165,8 +165,25 @@ function IntakeQueueList({ sessions, isLoading, error, onSelect, onComplete, onR
                           </span>
                         )}
                       </p>
-                      <p className="text-sm text-slate-500 truncate">
-                        {s.chief_complaint || "No chief complaint recorded yet"}
+                      <p className="text-sm text-slate-500 truncate flex items-center gap-2">
+                        <span className="truncate">{s.chief_complaint || "No chief complaint recorded yet"}</span>
+                        {/* Treatment-method badge — lets a doctor tell at a
+                            glance which intake question set this patient
+                            went through (Ayurvedic sessions include the
+                            extra ayurveda_profile section). Doesn't affect
+                            queue ordering — see getIntakeQueueForPatients'
+                            doctorId-scoping comment for why every session
+                            shown here already belongs to this doctor
+                            (or is unclaimed) regardless of method. */}
+                        <span
+                          className={`shrink-0 text-[11px] font-medium px-1.5 py-0.5 rounded ${
+                            s.intake_method === "ayurvedic"
+                              ? "bg-amber-50 text-amber-700"
+                              : "bg-slate-100 text-slate-500"
+                          }`}
+                        >
+                          {s.intake_method === "ayurvedic" ? "Ayurvedic" : "Allopathic"}
+                        </span>
                       </p>
                     </div>
                   </button>
@@ -326,8 +343,17 @@ function IntakeSessionModal({ sessionId, onClose }) {
             <p className="text-xs font-semibold uppercase tracking-wide text-blue-600 mb-1">
               Visit Intake Summary
             </p>
-            <h3 className="text-xl font-bold text-slate-900">
+            <h3 className="text-xl font-bold text-slate-900 flex items-center gap-2">
               {isLoading ? "Loading…" : detail?.patient_name || "Patient"}
+              {!isLoading && detail && (
+                <span
+                  className={`text-[11px] font-medium px-1.5 py-0.5 rounded ${
+                    detail.intake_method === "ayurvedic" ? "bg-amber-50 text-amber-700" : "bg-slate-100 text-slate-500"
+                  }`}
+                >
+                  {detail.intake_method === "ayurvedic" ? "Ayurvedic" : "Allopathic"}
+                </span>
+              )}
             </h3>
             {!isLoading && detail?.chief_complaint && (
               <p className="text-sm text-slate-500 mt-1">Chief complaint: {detail.chief_complaint}</p>
@@ -439,7 +465,9 @@ export default function IntakeQueue() {
     setError(null);
     try {
       const result = await getIntakeQueue();
-      setSessions(result);
+      // Only surface sessions the patient has actually completed — "in
+      // progress" intakes aren't ready for the doctor to review yet.
+      setSessions(result.filter((s) => s.status === "completed"));
     } catch (err) {
       setError(err.message || "Failed to load intake queue.");
       setSessions([]);

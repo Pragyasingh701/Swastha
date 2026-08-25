@@ -63,6 +63,42 @@ const HPI_FIELDS = [
   'severity',
 ];
 
+// Keyword sets per SOCRATES field, used ONLY by the hpi repeat-guard below
+// to figure out which field a repeated question was actually ABOUT — since
+// hpi questions are model-generated free text (no fixed question bank like
+// intakeQuestions.js's Ayurveda set), there's no canonical string to match
+// against, so this substitutes content keywords instead. Fixes a real bug:
+// the guard used to just grab "first empty field in HPI_FIELDS order",
+// which silently back-filled the WRONG field whenever more than one field
+// was empty and the repeat wasn't about the first one (the common case —
+// HPI has 8 fields that fill in gradually, so "first empty" is rarely the
+// field actually being re-asked about). Order matters where terms overlap
+// (checked top to bottom, first match wins) — e.g. "severity"/"scale" must
+// be checked before the generic "character" bucket so "how bad" style
+// severity questions don't get miscategorized as character.
+const HPI_FIELD_KEYWORDS = [
+  ['severity', ['severity', 'scale', 'how bad', 'how severe', 'out of 10', '1-10', '1 to 10']],
+  ['onset', ['onset', 'when did', 'how long', 'start', 'began', 'duration']],
+  ['radiation', ['radiat', 'spread', 'move to', 'travel']],
+  ['exacerbating_relieving', ['better', 'worse', 'trigger', 'relieve', 'aggravat', 'ease']],
+  ['timing', ['timing', 'constant', 'comes and goes', 'pattern', 'time of day', 'how often', 'frequency']],
+  ['associated_symptoms', ['associated', 'along with', 'other symptoms', 'also experienc', 'accompan']],
+  ['character', ['character', 'describe the', 'what does it feel', 'type of', 'quality', 'burning', 'sharp', 'dull']],
+  ['site', ['where', 'location', 'site', 'which part']],
+];
+
+// Maps a repeated hpi question to the field it's actually about, by keyword
+// match against the question text — falls back to null (guard does nothing)
+// rather than guessing wrong, since a silent wrong-field write is worse
+// than not back-filling at all.
+function hpiFieldForQuestion(questionText) {
+  const lower = (questionText || '').toLowerCase();
+  for (const [field, keywords] of HPI_FIELD_KEYWORDS) {
+    if (keywords.some((k) => lower.includes(k))) return field;
+  }
+  return null;
+}
+
 // Every leaf field ayurveda_profile must have an answer (or explicit
 // null/skip) for before that section can complete — derived from the
 // question-set data so it can't drift out of sync with intakeQuestions.js.
@@ -545,12 +581,12 @@ export async function runIntakeTurn({ section, structuredHistory, patientMessage
     const repeatedQuestion = priorQuestionsInSection.find((q) => questionsLookRepeated(q, parsed.next_question));
 
     if (repeatedQuestion && section === 'hpi') {
-      const targetField = HPI_FIELDS.find((f) => {
-        const v = history.hpi?.[f];
-        if (f === 'associated_symptoms') return !Array.isArray(v) || v.length === 0;
-        if (f === 'severity') return v === null || v === undefined || v === '';
-        return !(typeof v === 'string' && v.trim() !== '');
-      });
+      // Matched by KEYWORD CONTENT of the repeated question itself
+      // (hpiFieldForQuestion), not by "first empty field in fixed order" —
+      // see HPI_FIELD_KEYWORDS' comment for why the old approach silently
+      // back-filled the wrong field whenever more than one hpi field was
+      // empty and the repeat wasn't about the first one.
+      const targetField = hpiFieldForQuestion(repeatedQuestion);
       if (targetField && targetField !== 'associated_symptoms' && targetField !== 'severity') {
         const stillEmpty = !(typeof mergedHistory.hpi?.[targetField] === 'string' && mergedHistory.hpi[targetField].trim() !== '');
         if (stillEmpty) {
