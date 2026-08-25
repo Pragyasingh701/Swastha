@@ -1257,7 +1257,7 @@ function EventDetails({ event, onClose }) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 px-4 py-6">
-      <div className="w-full max-w-4xl max-h-[90vh] overflow-y-auto rounded-3xl bg-white dark:bg-slate-900 p-6 shadow-2xl">
+      <div className="w-full max-w-5xl max-h-[90vh] overflow-y-auto rounded-3xl bg-white p-6 shadow-2xl">
         <div className="flex items-start justify-between gap-4">
           <div>
             <p className="text-sm font-semibold uppercase tracking-[0.24em] text-blue-600 ">
@@ -1312,22 +1312,22 @@ function EventDetails({ event, onClose }) {
             </div>
 
             {event.notes && (
-              <div className="rounded-2xl border border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 p-4">
-                <p className="text-sm text-slate-500 dark:text-slate-400">Notes</p>
-                <p className="mt-2 text-sm text-slate-900 dark:text-slate-100 whitespace-pre-line">{event.notes}</p>
+              <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
+                <p className="text-sm text-slate-500 ">Notes</p>
+                <p className="mt-2 text-sm text-slate-600 whitespace-pre-line">{event.notes}</p>
               </div>
             )}
           </div>
 
           <div className="space-y-4">
             {event.fileUrl ? (
-              <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 p-3 h-full flex flex-col">
-                <p className="text-sm text-slate-500 dark:text-slate-400">Document preview</p>
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3 h-full flex flex-col">
+                <p className="text-sm text-slate-500 ">Document preview</p>
                 {previewType === 'pdf' ? (
                   <iframe
                     src={previewUrl}
                     title="PDF preview"
-                    className="mt-3 flex-1 w-full rounded-xl border border-slate-200 dark:border-slate-800"
+                    className="mt-3 flex-1 w-full rounded-xl border border-slate-200 "
                     style={{ minHeight: 420 }}
                   />
                 ) : previewType === 'image' ? (
@@ -1337,28 +1337,28 @@ function EventDetails({ event, onClose }) {
                     className="mt-3 max-h-[520px] w-full rounded-xl object-contain"
                   />
                 ) : (
-                  <p className="mt-3 text-sm text-slate-500 dark:text-slate-400">Preview not available for this file type.</p>
+                  <p className="mt-3 text-sm text-slate-500 ">Preview not available for this file type.</p>
                 )}
 
                 <a
                   href={previewUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="mt-3 inline-flex items-center gap-2 rounded-2xl border border-blue-100 dark:border-blue-500/20 bg-blue-50 dark:bg-blue-500/10 px-4 py-2 text-blue-700 dark:text-blue-400 text-sm font-semibold transition-colors hover:bg-blue-100 dark:hover:bg-blue-500/20"
+                  className="mt-3 inline-flex items-center gap-2 rounded-2xl border border-blue-100 bg-blue-50 px-4 py-2 text-blue-700 text-sm font-semibold transition-colors hover:bg-blue-100 "
                 >
                   <FileText size={16} />
                   View original document
                 </a>
               </div>
             ) : event.fileName ? (
-              <div className="rounded-2xl border border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 p-4">
-                <p className="text-sm text-slate-500 dark:text-slate-400">Attached file</p>
-                <p className="mt-2 text-sm font-semibold text-slate-900 dark:text-slate-100 break-all">{event.fileName}</p>
-                <p className="mt-1 text-xs text-slate-400 dark:text-slate-500">Original document not stored yet — filename only.</p>
+              <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
+                <p className="text-sm text-slate-500 ">Attached file</p>
+                <p className="mt-2 text-sm font-semibold text-slate-900 break-all">{event.fileName}</p>
+                <p className="mt-1 text-xs text-slate-400 ">Original document not stored yet — filename only.</p>
               </div>
             ) : (
-              <div className="rounded-2xl border border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 p-4">
-                <p className="text-sm text-slate-500 dark:text-slate-400">No document attached</p>
+              <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
+                <p className="text-sm text-slate-500 ">No document attached</p>
               </div>
             )}
           </div>
