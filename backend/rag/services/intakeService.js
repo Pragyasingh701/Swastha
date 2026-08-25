@@ -99,6 +99,215 @@ function hpiFieldForQuestion(questionText) {
   return null;
 }
 
+// Deterministic fallback question + options per SOCRATES field, used when
+// the model tries to re-ask a field that's ALREADY captured (see the dedup
+// guard in runIntakeTurn). Unlike ayurveda_profile — which has a real
+// question bank in intakeQuestions.js — hpi questions are normally
+// model-generated per complaint, so without this there'd be nothing to
+// substitute in when a repeat is caught, and the only options would be
+// another AI round-trip (slow — see aiClient.js's intake-dialogue timeout
+// note) or shipping the duplicate.
+//
+// `{complaint}` is replaced with the session's chief_complaint so the
+// substituted question still reads naturally ("Where exactly is the back
+// pain?"). Options are deliberately generic-but-tappable: the model's own
+// contextual options are always preferred, these only appear on the
+// fallback path. Free text stays available alongside them either way (the
+// chat UI always renders its text input), so these never have to be
+// exhaustive.
+const HPI_FALLBACK_QUESTIONS = {
+  site: {
+    question: 'Where exactly is the {complaint}?',
+    options: ['One specific spot', 'A general area', 'Moves around', 'Not sure'],
+    allow_multiple: false,
+  },
+  onset: {
+    question: 'When did the {complaint} start?',
+    options: ['Today', '2-3 days ago', 'About a week ago', 'More than a month ago'],
+    allow_multiple: false,
+  },
+  character: {
+    question: 'How would you describe the {complaint}?',
+    options: ['Sharp', 'Dull or aching', 'Burning', 'Cramping', 'Other'],
+    allow_multiple: false,
+  },
+  radiation: {
+    question: 'Does the {complaint} spread anywhere else?',
+    options: ['No, stays in one place', 'Yes, spreads nearby', 'Not sure'],
+    allow_multiple: false,
+  },
+  associated_symptoms: {
+    question: 'Have you noticed anything else along with the {complaint}?',
+    options: ['Fever', 'Nausea or vomiting', 'Swelling', 'Weakness', 'Nothing else'],
+    allow_multiple: true,
+  },
+  timing: {
+    question: 'Is the {complaint} constant, or does it come and go?',
+    options: ['Constant', 'Comes and goes', 'Worse at certain times', 'Not sure'],
+    allow_multiple: false,
+  },
+  exacerbating_relieving: {
+    question: 'Does anything make the {complaint} better or worse?',
+    options: ['Worse with movement', 'Better with rest', 'Worse at night', 'Nothing changes it'],
+    allow_multiple: false,
+  },
+  severity: {
+    question: 'On a scale of 1 to 10, how severe is the {complaint}?',
+    options: ['1-3 (mild)', '4-6 (moderate)', '7-8 (severe)', '9-10 (worst imaginable)'],
+    allow_multiple: false,
+  },
+};
+
+const DRUG_ALLERGY_FALLBACK_QUESTIONS = {
+  current_medications: {
+    question: 'Are you currently taking any medications?',
+    options: ['None', 'Yes — prescription', 'Yes — over the counter', 'Not sure'],
+    allow_multiple: false,
+  },
+  allergies: {
+    question: 'Do you have any known drug or food allergies?',
+    options: ['No known allergies', 'Yes — to a medicine', 'Yes — to a food', 'Not sure'],
+    allow_multiple: false,
+  },
+};
+
+// Normalizes whatever the model put in "target_field" to a bare leaf field
+// name — it may send a full path ("hpi.onset",
+// "ayurveda_profile.prakriti.body_frame") or just the leaf ("onset").
+function leafFieldName(targetField) {
+  if (typeof targetField !== 'string' || !targetField.trim()) return null;
+  const parts = targetField.trim().split('.');
+  return parts[parts.length - 1] || null;
+}
+
+// The next genuinely-unanswered field in `section`, with a ready-to-send
+// question + options for it. Used by the dedup guard to SUBSTITUTE a real
+// question when the model tries to re-ask something already answered —
+// picking deterministically here (rather than making a second AI call to
+// ask it again) keeps the turn fast, which matters because intake-dialogue
+// turns are already latency-sensitive (see aiClient.js's timeout note).
+// Returns null when the section has nothing left to ask, in which case the
+// caller leaves the model's own output alone and lets the normal
+// section-completion checks advance the flow.
+// Question + options spec for ONE named field, or null if that field isn't
+// one this section knows how to ask about. Used when backfilling missing
+// options onto a question the model DID ask legitimately — keying off the
+// field it actually asked about, rather than "whatever's unanswered first",
+// so the options can't end up describing a different question than the one
+// on screen.
+function questionSpecForField(field, history, intakeMethod) {
+  if (!field) return null;
+  const complaint = (history?.chief_complaint || 'problem').trim() || 'problem';
+
+  if (HPI_FALLBACK_QUESTIONS[field]) {
+    const spec = HPI_FALLBACK_QUESTIONS[field];
+    return {
+      field,
+      question: spec.question.replace(/\{complaint\}/g, complaint),
+      options: spec.options,
+      allow_multiple: spec.allow_multiple,
+    };
+  }
+  if (DRUG_ALLERGY_FALLBACK_QUESTIONS[field]) {
+    const spec = DRUG_ALLERGY_FALLBACK_QUESTIONS[field];
+    return { field, question: spec.question, options: spec.options, allow_multiple: spec.allow_multiple };
+  }
+  if (intakeMethod === 'ayurvedic') {
+    const match = AYURVEDA_QUESTION_INDEX.find((q) => q.field === field);
+    if (match) {
+      const full = AYURVEDA_SUBSECTIONS.flatMap((s) => s.fields).find((f) => f.field === field);
+      return {
+        field,
+        question: match.question,
+        options: Array.isArray(full?.options) ? full.options : [],
+        allow_multiple: !!full?.allowMultiple,
+      };
+    }
+  }
+  return null;
+}
+
+function nextUnansweredQuestionFor(section, history, intakeMethod) {
+  const complaint = (history?.chief_complaint || 'problem').trim() || 'problem';
+  const fill = (q) => q.replace(/\{complaint\}/g, complaint);
+
+  if (section === 'hpi') {
+    const field = HPI_FIELDS.find((f) => {
+      const v = history?.hpi?.[f];
+      if (f === 'associated_symptoms') return !Array.isArray(v) || v.length === 0;
+      if (f === 'severity') return v === null || v === undefined || v === '';
+      return !(typeof v === 'string' && v.trim() !== '');
+    });
+    const spec = field && HPI_FALLBACK_QUESTIONS[field];
+    if (!spec) return null;
+    return { field, question: fill(spec.question), options: spec.options, allow_multiple: spec.allow_multiple };
+  }
+
+  if (section === 'drug_allergy') {
+    const field = ['current_medications', 'allergies'].find(
+      (f) => !(Array.isArray(history?.drug_allergy?.[f]) && history.drug_allergy[f].length > 0)
+    );
+    const spec = field && DRUG_ALLERGY_FALLBACK_QUESTIONS[field];
+    if (!spec) return null;
+    return { field, question: spec.question, options: spec.options, allow_multiple: spec.allow_multiple };
+  }
+
+  if (section === 'ayurveda_profile' && intakeMethod === 'ayurvedic') {
+    // Ayurveda has a real canonical question bank, so substitute the exact
+    // question/options the patient would have been asked anyway.
+    const profile = history?.ayurveda_profile || emptyAyurvedaProfile();
+    const { fields } = nextAyurvedaFields(profile);
+    const spec = fields?.[0];
+    if (!spec) return null;
+    return {
+      field: spec.field,
+      question: spec.question,
+      options: Array.isArray(spec.options) ? spec.options : [],
+      allow_multiple: !!spec.allowMultiple,
+    };
+  }
+
+  return null;
+}
+
+// Every field already answered anywhere in this session, as flat
+// "section.field" keys — fed into the prompt as an explicit
+// "never ask these again" list and used by the dedup guard below.
+// Deliberately spans ALL sections, not just the current one: a field can
+// legitimately be filled from an earlier section (e.g. the patient
+// volunteers duration inside their chief_complaint answer, which
+// chief_complaint's rule captures straight into hpi.onset), and re-asking
+// it later in hpi is exactly the duplicate this is meant to stop.
+function capturedFieldKeys(history, intakeMethod) {
+  const keys = [];
+  if (typeof history?.chief_complaint === 'string' && history.chief_complaint.trim()) {
+    keys.push('chief_complaint');
+  }
+  for (const f of HPI_FIELDS) {
+    const v = history?.hpi?.[f];
+    const filled = f === 'associated_symptoms'
+      ? Array.isArray(v) && v.length > 0
+      : f === 'severity'
+        ? v !== null && v !== undefined && v !== ''
+        : typeof v === 'string' && v.trim() !== '';
+    if (filled) keys.push(`hpi.${f}`);
+  }
+  if (intakeMethod === 'ayurvedic' && history?.ayurveda_profile) {
+    for (const field of AYURVEDA_LEAF_FIELDS) {
+      if (isAyurvedaFieldAnswered(field, history.ayurveda_profile)) {
+        const group = AYURVEDA_FIELD_GROUPS[field];
+        keys.push(group ? `ayurveda_profile.${group}.${field}` : `ayurveda_profile.${field}`);
+      }
+    }
+  }
+  for (const f of ['current_medications', 'allergies']) {
+    if (Array.isArray(history?.drug_allergy?.[f]) && history.drug_allergy[f].length > 0) {
+      keys.push(`drug_allergy.${f}`);
+    }
+  }
+  return keys;
+}
+
 // Every leaf field ayurveda_profile must have an answer (or explicit
 // null/skip) for before that section can complete — derived from the
 // question-set data so it can't drift out of sync with intakeQuestions.js.
@@ -346,6 +555,7 @@ const AYURVEDA_QUESTION_INDEX = AYURVEDA_SUBSECTIONS.flatMap((sub) =>
 
 function buildSystemPrompt(section, structuredHistory, intakeMethod, lastQuestion) {
   const isAyurvedic = intakeMethod === 'ayurvedic';
+  const capturedKeys = capturedFieldKeys(structuredHistory, intakeMethod);
   const flowDescription = isAyurvedic
     ? 'chief_complaint -> hpi (SOCRATES-style follow-ups) -> ayurveda_profile (Ayurvedic constitution & lifestyle) -> drug_allergy -> finalize'
     : 'chief_complaint -> hpi (SOCRATES-style follow-ups) -> drug_allergy -> finalize';
@@ -383,8 +593,18 @@ ${lastQuestion ? `\nThe question you JUST asked the patient (their "Patient's la
 Structured history so far (jsonb, do not remove existing fields, only add/update):
 ${JSON.stringify(structuredHistory, null, 2)}
 
+ALREADY ANSWERED — never ask about any of these again, in any wording, for the rest of this session:
+${capturedKeys.length > 0 ? capturedKeys.map((k) => `- ${k}`).join('\n') : '- (nothing captured yet)'}
+A field on this list is DONE. It does not matter that you have not personally asked about it this turn, or that the patient answered it as part of a different question, or that you could word it differently — if the key is listed above, asking about it again is a duplicate and is forbidden. Pick a field that is NOT on this list.
+
 Section rules:
 ${sectionRules.join('\n')}
+
+ONE FIELD PER TURN (strict): "next_question" must ask about EXACTLY ONE field — never two. Do not join two different fields with "and", and do not ask a second thing in a follow-on sentence. If you were about to ask about two fields, ask ONLY the first one this turn; you will get another turn for the second one after the patient answers.
+  WRONG (asks onset AND exacerbating_relieving in one message): "Could you tell me how long you've been experiencing hairfall, and if there are any specific factors that make it better or worse?"
+  RIGHT (onset only, its own turn): "How long have you been experiencing hairfall?"
+  RIGHT (exacerbating_relieving, on a LATER turn): "Does anything make the hairfall better or worse?"
+Splitting into two option-groups in one message does NOT satisfy this rule — it must be two separate turns.
 
 CRITICAL — extracting the answer (this is the #1 failure mode to avoid): the patient's latest message is their answer to the question you just asked above. You MUST parse whatever they said — including short, casual, or indirect phrasing ("a week ago", "over the last few days", "comes and goes"), typos, and single-word free-text answers — into the matching field(s) in "updated_fields" this same turn. Never re-ask the same field again just because their wording wasn't a clean match to your options; interpret it and move on. This applies EQUALLY to free-text fields (e.g. food_intolerances, recent_stressors, home_remedies) — a short or oddly-spelled reply to a free-text question is still a real answer, record it as-is.
 Do NOT output a next_question that repeats — verbatim or reworded — ANY question you have already asked earlier in this same section, even one from several turns back. Keep track of every field you've already asked about in this section (see structured history above) and always move to a genuinely different still-empty one, or advance the section, once the patient has answered.
@@ -397,6 +617,7 @@ If the patient's most recent message or anything already in structured_history m
 Return ONLY a single JSON object (no prose, no markdown fences) with this exact shape:
 {
   "next_question": "<the next question or closing message to show the patient>",
+  "target_field": "<the ONE field key next_question is asking about, e.g. \\"hpi.onset\\", \\"drug_allergy.allergies\\"${isAyurvedic ? ', \\"ayurveda_profile.prakriti.body_frame\\"' : ''}, or null on the finalize turn>",
   "quick_reply_options": { "options": ["<short tappable option>", "..."], "allow_multiple": <true if the patient may pick more than one option this turn, else false> },
   "updated_fields": {
     "chief_complaint": "<string, only if this turn updated it, else omit>",
@@ -409,8 +630,11 @@ Return ONLY a single JSON object (no prose, no markdown fences) with this exact 
 }
 
 Rules for the JSON:
-- "quick_reply_options.options" should have 0-6 short items — leave it empty for open-ended questions where tapping doesn't make sense (e.g. "describe the pain in your own words") or for free-text fields explicitly marked as such. Offer MORE than a bare minimal set of options wherever the question has a natural closed answer set (more than 2 options where the option set supports it).
-- "quick_reply_options.allow_multiple" must be true whenever more than one answer can genuinely apply to the question just asked (e.g. multiple symptoms, multiple tastes, multiple moods) — false otherwise.
+- "quick_reply_options.options" is REQUIRED and must NEVER be empty on any question turn (the only exception is the "finalize" closing message, which uses []). Always generate 3-5 short, tappable options, written fresh for THIS patient's specific complaint and THIS field — not generic filler, and not copied from some other complaint. Hairfall options must be about hairfall, headache options about headache, joint pain about joint pain.
+- This applies even to fields that feel inherently open-ended. There is always a sensible small answer set — generate it. e.g. radiation -> ["No, stays in one place", "Yes, spreads nearby", "Not sure"]; a free-text field like recent_stressors -> ["Work", "Family", "Health", "Nothing in particular"]. Never return a question with no options and expect the patient to type.
+- Options do NOT need to cover every possibility: the patient always has a free-text box available alongside them, so 3-5 likely answers plus an escape option like "Other" / "Not sure" is the right shape. Keep each option a single short phrase.
+- "quick_reply_options.allow_multiple" must be true whenever more than one answer can genuinely apply to the question just asked (e.g. multiple symptoms, multiple tastes, multiple moods) — false otherwise. Multi-select renders as checkboxes, single-select as tap-to-send chips.
+- "target_field" must name the single field "next_question" is asking about, using the same key path as the structured history above. It must NOT be a field on the ALREADY ANSWERED list. If you genuinely cannot find an unanswered field left in this section, set section_complete: true instead of re-asking something.
 - "updated_fields" should ONLY contain fields the patient's latest message actually gave information for — never invent or guess values for fields they didn't address.
 - "severity" in hpi, if provided, must be an integer 1-10.
 - Never include a diagnosis, condition name, dosha-imbalance conclusion, or treatment suggestion anywhere in your response.
@@ -724,7 +948,7 @@ export async function runIntakeTurn({ section, structuredHistory, patientMessage
   );
 
   const rawOptions = parsed.quick_reply_options;
-  const quickReplyOptions = rawOptions && typeof rawOptions === 'object' && !Array.isArray(rawOptions)
+  let quickReplyOptions = rawOptions && typeof rawOptions === 'object' && !Array.isArray(rawOptions)
     ? {
         options: Array.isArray(rawOptions.options) ? rawOptions.options.map(String) : [],
         allow_multiple: !!rawOptions.allow_multiple,
@@ -733,9 +957,53 @@ export async function runIntakeTurn({ section, structuredHistory, patientMessage
     // treated as single-select, same default this field always had.
     : { options: Array.isArray(rawOptions) ? rawOptions.map(String) : [], allow_multiple: false };
 
+  // ── Duplicate-question guard (field-key based) ────────────────────────
+  // The model now declares which single field it's asking about
+  // ("target_field"). If that field is ALREADY answered in the merged
+  // history, this turn's question is a duplicate — regardless of how
+  // differently it's worded from the earlier one, which is what the
+  // text-similarity guard above can't reliably catch (observed in testing:
+  // "Could you tell me how long you've been experiencing hairfall..."
+  // followed later by "When did you first notice this hairfall
+  // beginning?" — same hpi.onset field, wording too different to match).
+  // Substitute the next genuinely-unanswered field's question instead of
+  // shipping the duplicate. Only runs while staying in the same section
+  // (!sectionComplete); on a section-advancing turn next_question belongs
+  // to the NEXT section, which this section-scoped bank shouldn't override.
+  let dedupedNextQuestion = finalNextQuestion;
+  if (!sectionComplete && resolvedSection !== 'finalize') {
+    const askedField = leafFieldName(parsed.target_field);
+    const alreadyAnswered = askedField
+      && capturedFieldKeys(mergedHistory, intakeMethod).some((k) => leafFieldName(k) === askedField);
+    if (alreadyAnswered) {
+      const replacement = nextUnansweredQuestionFor(section, mergedHistory, intakeMethod);
+      if (replacement) {
+        dedupedNextQuestion = replacement.question;
+        quickReplyOptions = { options: replacement.options, allow_multiple: replacement.allow_multiple };
+      }
+    }
+  }
+
+  // Options are contractually required on every question turn (see the
+  // prompt's quick_reply_options rules) — but the model still drops them
+  // sometimes, which strands the patient on a bare text box for a question
+  // that has an obvious small answer set. Backfill from the section's
+  // question bank rather than shipping an option-less turn. finalize is
+  // exempt: its closing message legitimately has no options.
+  if (quickReplyOptions.options.length === 0 && resolvedSection !== 'finalize' && !sectionComplete) {
+    // Prefer the field the model said it was asking about, so the backfilled
+    // options actually describe the question on screen; only fall back to
+    // "next unanswered" when target_field is missing or unrecognized.
+    const spec = questionSpecForField(leafFieldName(parsed.target_field), mergedHistory, intakeMethod)
+      || nextUnansweredQuestionFor(section, mergedHistory, intakeMethod);
+    if (spec) {
+      quickReplyOptions = { options: spec.options, allow_multiple: spec.allow_multiple };
+    }
+  }
+
   return {
     ok: true,
-    next_question: finalNextQuestion,
+    next_question: dedupedNextQuestion,
     quick_reply_options: quickReplyOptions,
     structured_history: mergedHistory,
     section: resolvedSection,
