@@ -12,6 +12,7 @@ import {
   CheckCircle2,
   Trash2,
   History,
+  Leaf,
 } from "lucide-react";
 import {
   getIntakeQueue,
@@ -41,6 +42,77 @@ const HPI_FIELD_LABELS = [
   ["timing", "Timing"],
   ["exacerbating_relieving", "Exacerbating / Relieving"],
   ["severity", "Severity"],
+];
+
+// Mirrors backend/rag/services/intakeQuestions.js's AYURVEDA_SUBSECTIONS
+// shape (group key -> title, field key -> label, in the same fixed order
+// patients are asked) — this is what was previously entirely missing from
+// the doctor's summary: ayurveda_profile was being collected on Ayurvedic
+// sessions but the modal never rendered it, so only HPI + Medications &
+// Allergies showed even though the patient answered a full Prakriti/
+// Vikriti/etc. questionnaire (bug, confirmed with the user). Kept as a
+// frontend-local mirror rather than importing the backend file directly
+// (separate deployables) — field/group KEYS must stay in sync with that
+// file if it ever changes, but labels here are free to differ slightly for
+// display (e.g. "Body Frame" vs internal "body_frame").
+const AYURVEDA_GROUPS = [
+  {
+    key: "prakriti",
+    title: "Prakriti (Constitution)",
+    fields: [
+      ["body_frame", "Body Frame"],
+      ["skin_type", "Skin Type"],
+      ["appetite_pattern", "Appetite Pattern"],
+      ["temperament", "Temperament"],
+      ["sleep_tendency", "Sleep Tendency"],
+    ],
+  },
+  {
+    key: "agni_ahara",
+    title: "Agni & Ahara (Digestion & Diet)",
+    fields: [
+      ["digestion_strength", "Digestion Strength"],
+      ["bowel_pattern", "Bowel Pattern"],
+      ["thirst_level", "Thirst Level"],
+      ["taste_cravings", "Taste Cravings"],
+      ["food_intolerances", "Food Intolerances"],
+    ],
+  },
+  {
+    key: "nidra_dinacharya",
+    title: "Nidra & Dinacharya (Sleep & Routine)",
+    fields: [
+      ["sleep_hours", "Sleep Hours"],
+      ["sleep_quality", "Sleep Quality"],
+      ["wake_routine", "Wake Routine"],
+      ["activity_level", "Activity Level"],
+      ["work_stress_pattern", "Work / Stress Pattern"],
+    ],
+  },
+  {
+    key: "manas",
+    title: "Manas (Mental-Emotional State)",
+    fields: [
+      ["current_mood", "Current Mood"],
+      ["recent_stressors", "Recent Stressors"],
+    ],
+  },
+  {
+    // vikruti_qualities is flat at the top level of ayurveda_profile (not
+    // nested under a "vikruti" object) — matches AYURVEDA_FIELD_GROUPS'
+    // null-group convention in intakeQuestions.js.
+    key: null,
+    title: "Vikruti (Current Complaint Quality)",
+    fields: [["vikruti_qualities", "Vikruti Qualities"]],
+  },
+  {
+    key: "history_ayurvedic",
+    title: "History (Prior Ayurvedic Treatment)",
+    fields: [
+      ["prior_treatments", "Prior Treatments"],
+      ["home_remedies", "Home Remedies"],
+    ],
+  },
 ];
 
 function formatIntakeTimestamp(value) {
@@ -328,6 +400,7 @@ function IntakeSessionModal({ sessionId, onClose }) {
 
   const hpi = detail?.structured_history?.hpi || {};
   const drugAllergy = detail?.structured_history?.drug_allergy || {};
+  const ayurvedaProfile = detail?.structured_history?.ayurveda_profile || null;
 
   return (
     <div
@@ -407,6 +480,40 @@ function IntakeSessionModal({ sessionId, onClose }) {
                   ))}
                 </div>
               </div>
+
+              {/* Ayurveda constitutional/lifestyle profile — only collected
+                  (and so only ever non-null) on intake_method: "ayurvedic"
+                  sessions. Grouped the same way it was asked (see
+                  AYURVEDA_GROUPS above), so the doctor reads it in the same
+                  order the patient answered it. */}
+              {ayurvedaProfile && (
+                <div>
+                  <h4 className="text-sm font-semibold text-slate-700 uppercase tracking-wide mb-2 flex items-center gap-1.5">
+                    <Leaf size={14} />
+                    Ayurveda / Dashavidha Profile
+                  </h4>
+                  <div className="space-y-4">
+                    {AYURVEDA_GROUPS.map(({ key, title, fields }) => {
+                      const groupData = key ? ayurvedaProfile[key] || {} : ayurvedaProfile;
+                      return (
+                        <div key={title}>
+                          <p className="text-xs font-semibold text-slate-500 mb-1.5">{title}</p>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            {fields.map(([fieldKey, label]) => (
+                              <div key={fieldKey} className="rounded-xl border border-slate-100 bg-slate-50 p-3">
+                                <p className="text-xs text-slate-500">{label}</p>
+                                <p className="text-sm font-medium text-slate-900 mt-0.5">
+                                  {formatFieldValue(groupData[fieldKey])}
+                                </p>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
 
               <div>
                 <h4 className="text-sm font-semibold text-slate-700 uppercase tracking-wide mb-2 flex items-center gap-1.5">
