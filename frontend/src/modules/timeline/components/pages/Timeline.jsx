@@ -6,11 +6,11 @@ import { useAuth } from "../../../../context/AuthContext";
 import * as reportService from "../../../../api/reports";
 import * as familyService from "../../../../api/family";
 import { indexReport, removeReportFromIndex } from "../../../../api/search";
+import ResponsiveSidebar from "../../../../components/Common/ResponsiveSidebar";
 import SettingsModal from "../../../settings/components/SettingsModal";
 import ProfileDropdown from "../../../settings/components/ProfileDropdown";
 import PatientIdBadge from "../../../../components/Common/PatientIdBadge";
 import PatientNotifications from "../../../../components/Common/PatientNotifications";
-import Logo from "../../../../components/Common/Logo";
 import {
   LayoutGrid,
   TrendingUp,
@@ -522,60 +522,13 @@ export default function Timeline() {
 
 
 function Sidebar({ onUploadClick, onOpenSettings }) {
-  const navigate = useNavigate();
-  const location = useLocation();
-  const pathname = location.pathname;
-
   return (
-    <aside className="hidden lg:flex lg:flex-col w-64 shrink-0 bg-slate-50 border-r border-slate-200 h-screen overflow-y-auto px-4 py-6">
-      <div className="px-2 mb-8">
-        <Logo />
-      </div>
-
-      <nav className="flex-1 space-y-1">
-        {navItems.map(({ label, icon: Icon, active, route }) => {
-          const isActive = Boolean(route && (pathname === route || pathname.startsWith(`${route}/`))) || active;
-
-          return (
-            <button
-              key={label}
-              type="button"
-              onClick={() => route && navigate(route)}
-              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
-                isActive
-                  ? "bg-blue-100 text-blue-700 "
-                  : "text-slate-600 hover:bg-slate-100 "
-              }`}
-            >
-            <Icon size={18} />
-            {label}
-            </button>
-          );
-        })}
-      </nav>
-
-      <div className="space-y-3 pt-4">
-        <button
-          type="button"
-          onClick={onUploadClick}
-          className="w-full flex items-center justify-center gap-2 bg-blue-700 hover:bg-blue-800 transition-all duration-200 hover:shadow-md hover:-translate-y-0.5 text-white text-sm font-semibold py-2.5 rounded-lg"
-        >
-          <UploadCloud size={18} />
-          Upload New Report
-        </button>
-
-        <div className="space-y-1 pt-2">
-          <button
-            type="button"
-            onClick={onOpenSettings}
-            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-100 "
-          >
-            <Settings size={18} />
-            Settings
-          </button>
-        </div>
-      </div>
-    </aside>
+    <ResponsiveSidebar
+      navItems={navItems}
+      action={{ label: "Upload New Report", icon: UploadCloud, onClick: onUploadClick }}
+      onOpenSettings={onOpenSettings}
+      className="bg-slate-50"
+    />
   );
 }
 
