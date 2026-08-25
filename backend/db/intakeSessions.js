@@ -13,18 +13,33 @@ import supabase from '../config/supabase.js';
  * priority is set directly from the dialogue engine's red_flag output
  * (intakeService.js) — no separate detection pass here, per PRD §6.2.
  *
+ * doctorId scoping: a session created via clinic check-in (routes/clinic.js)
+ * has doctor_id set to that SPECIFIC doctor and must only ever appear in
+ * their queue — a patient accepted-linked to multiple doctors (e.g. a
+ * remote allopathic doctor AND a walk-in Ayurvedic doctor scanned via a
+ * clinic code) was otherwise showing that session in every one of their
+ * linked doctors' queues, not just the doctor it actually belongs to (bug,
+ * confirmed with the user). A session with doctor_id IS NULL (started via
+ * the plain "Start Visit Intake" flow, no doctor picked) is unchanged —
+ * still visible to every one of the patient's linked doctors, since nothing
+ * has claimed it yet.
+ *
  * @param {string[]} patientIds - already-verified 'accepted'-linked patient ids
+ * @param {string} doctorId - the calling doctor's own id
  * @returns {Promise<Array<object>>} sessions sorted priority desc, created_at asc
  */
-export async function getIntakeQueueForPatients(patientIds) {
-  if (!Array.isArray(patientIds) || patientIds.length === 0 || !supabase) {
+export async function getIntakeQueueForPatients(patientIds, doctorId) {
+  if (!Array.isArray(patientIds) || patientIds.length === 0 || !doctorId || !supabase) {
     return [];
   }
 
   const { data, error } = await supabase
     .from('intake_sessions')
-    .select('id, patient_id, chief_complaint, priority, red_flag_reason, status, origin, intake_method, doctor_action, created_at, completed_at')
+    .select('id, patient_id, doctor_id, chief_complaint, priority, red_flag_reason, status, origin, intake_method, doctor_action, created_at, completed_at')
     .in('patient_id', patientIds)
+    // Only this doctor's own claimed sessions, or unclaimed (doctor_id null)
+    // ones — see the doctorId-scoping note above.
+    .or(`doctor_id.is.null,doctor_id.eq.${doctorId}`)
     // Doctor-actioned rows (Completed / Removed) drop out of the live
     // queue — they're not deleted, just no longer shown here. See
     // getIntakeActionHistoryForDoctor below for where they surface instead.
@@ -56,23 +71,28 @@ export async function getIntakeQueueForPatients(patientIds) {
  * structured_history (SOCRATES fields, drug/allergy) for the structured
  * summary view. Ownership (patient_id belongs to an 'accepted'-linked
  * patient) is verified by the caller, same as getIntakeQueueForPatients —
- * this function trusts the patientIds list it's given.
+ * this function trusts the patientIds list it's given. Also doctorId-scoped
+ * the same way getIntakeQueueForPatients is (see its comment) — a doctor
+ * cannot open another doctor's claimed session's detail view even by
+ * already knowing its sessionId.
  *
  * @param {string} sessionId
  * @param {string[]} patientIds - already-verified 'accepted'-linked patient ids
+ * @param {string} doctorId - the calling doctor's own id
  * @returns {Promise<object|null>} the session row, or null if not found /
- *   not owned by one of patientIds
+ *   not owned by one of patientIds / claimed by a different doctor
  */
-export async function getIntakeSessionForPatients(sessionId, patientIds) {
-  if (!sessionId || !Array.isArray(patientIds) || patientIds.length === 0 || !supabase) {
+export async function getIntakeSessionForPatients(sessionId, patientIds, doctorId) {
+  if (!sessionId || !Array.isArray(patientIds) || patientIds.length === 0 || !doctorId || !supabase) {
     return null;
   }
 
   const { data, error } = await supabase
     .from('intake_sessions')
-    .select('id, patient_id, chief_complaint, structured_history, priority, red_flag_reason, status, origin, intake_method, doctor_action, created_at, completed_at')
+    .select('id, patient_id, doctor_id, chief_complaint, structured_history, priority, red_flag_reason, status, origin, intake_method, doctor_action, created_at, completed_at')
     .eq('id', sessionId)
     .in('patient_id', patientIds)
+    .or(`doctor_id.is.null,doctor_id.eq.${doctorId}`)
     .maybeSingle();
 
   if (error && error.code !== 'PGRST116') {
@@ -110,6 +130,12 @@ export async function setIntakeSessionDoctorAction({ sessionId, doctorId, patien
     .update({ doctor_action: action })
     .eq('id', sessionId)
     .in('patient_id', patientIds)
+    // Same doctorId-scoping as getIntakeQueueForPatients/
+    // getIntakeSessionForPatients above — a doctor cannot Complete/Remove a
+    // session claimed by a different doctor, even if they already knew its
+    // sessionId (e.g. from when it briefly leaked into their queue before
+    // this fix).
+    .or(`doctor_id.is.null,doctor_id.eq.${doctorId}`)
     .select('id, patient_id, doctor_action')
     .maybeSingle();
 

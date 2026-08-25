@@ -154,7 +154,7 @@ router.get('/intake-queue', async (req, res) => {
     }
 
     const patientById = new Map(accepted.map((p) => [p.patientUserId, p]));
-    const sessions = await getIntakeQueueForPatients([...patientById.keys()]);
+    const sessions = await getIntakeQueueForPatients([...patientById.keys()], authUser.userId);
 
     return res.json({
       sessions: sessions.map((s) => ({
@@ -262,7 +262,7 @@ router.get('/intake-queue/:sessionId', async (req, res) => {
       return res.status(404).json({ message: 'Intake session not found.' });
     }
 
-    const session = await getIntakeSessionForPatients(sessionId, [...patientById.keys()]);
+    const session = await getIntakeSessionForPatients(sessionId, [...patientById.keys()], authUser.userId);
     if (!session) {
       return res.status(404).json({ message: 'Intake session not found.' });
     }

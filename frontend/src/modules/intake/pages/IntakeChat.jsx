@@ -172,6 +172,13 @@ export default function IntakeChat() {
   const [clinicOtp, setClinicOtp] = useState(["", "", "", "", "", ""]);
   const [otpTimer, setOtpTimer] = useState(0);
   const [gateLoading, setGateLoading] = useState(false);
+  // Same "still working on it" reassurance as sendingLongWait below, scoped
+  // to the OTP-verify step specifically — that's the one gate request that
+  // hits the AI dialogue ladder (it creates the intake session's first
+  // turn), so it's the one that can legitimately run long. The code-verify
+  // and doctor-confirm steps are plain DB lookups and stay fast, so this is
+  // only ever rendered on the OTP submit button.
+  const [gateLoadingLongWait, setGateLoadingLongWait] = useState(false);
   const [gateError, setGateError] = useState("");
 
   const [sessionId, setSessionId] = useState(preStarted?.session_id || null);
@@ -186,6 +193,15 @@ export default function IntakeChat() {
   const [input, setInput] = useState("");
   const [starting, setStarting] = useState(!preStarted);
   const [sending, setSending] = useState(false);
+  // Flips true if a turn is still pending after a while — the AI provider
+  // failover ladder (backend/rag/config/aiClient.js: multiple Gemini
+  // keys/models, then an OpenRouter fallback) can legitimately take well
+  // past what feels instant under provider slowness/rate-limiting, and a
+  // static "Thinking..." with no change for that whole time reads as stuck/
+  // frozen even though it isn't. This never changes any backend timing —
+  // purely a "still working on it" reassurance once the wait crosses a
+  // threshold a patient would otherwise worry about.
+  const [sendingLongWait, setSendingLongWait] = useState(false);
   const [done, setDone] = useState(false);
   const [error, setError] = useState(null);
   // Set once a turn's red_flag_is_new comes back true (backend: intakeService.js's
@@ -282,7 +298,9 @@ export default function IntakeChat() {
     }
 
     setGateLoading(true);
+    setGateLoadingLongWait(false);
     setGateError("");
+    const longWaitTimer = setTimeout(() => setGateLoadingLongWait(true), 8000);
     try {
       const session = await verifyClinicOtp({ doctorId: clinicDoctor.doctorId, otpCode });
       // Same shape POST /api/intake/start returns — feed it straight into
@@ -297,7 +315,9 @@ export default function IntakeChat() {
     } catch (err) {
       setGateError(err.message || "Invalid OTP code. Please try again.");
     } finally {
+      clearTimeout(longWaitTimer);
       setGateLoading(false);
+      setGateLoadingLongWait(false);
     }
   }
 
@@ -328,6 +348,13 @@ export default function IntakeChat() {
     setSelectedOptions([]);
     setInput("");
     setSending(true);
+    setSendingLongWait(false);
+    // See sendingLongWait's declaration comment — this turn may sit in the
+    // AI provider failover ladder for a while under slowness/rate-limiting;
+    // if it's still pending past this threshold, swap the "Thinking..."
+    // copy for a reassuring "still working" message instead of leaving a
+    // static spinner running with no visible change.
+    const longWaitTimer = setTimeout(() => setSendingLongWait(true), 8000);
 
     try {
       const res = await sendIntakeTurn(sessionId, trimmed);
@@ -353,7 +380,9 @@ export default function IntakeChat() {
         { role: "assistant", text: "Sorry, that didn't go through. Please try again.", isError: true },
       ]);
     } finally {
+      clearTimeout(longWaitTimer);
       setSending(false);
+      setSendingLongWait(false);
     }
   }
 
@@ -521,7 +550,11 @@ export default function IntakeChat() {
                         disabled={gateLoading}
                         className="w-full h-12 flex items-center justify-center gap-2 bg-blue-700 hover:bg-blue-800 disabled:opacity-50 text-white font-semibold rounded-xl transition-colors"
                       >
-                        {gateLoading ? "Verifying..." : "Verify & Start Intake"}
+                        {gateLoading
+                          ? gateLoadingLongWait
+                            ? "Still setting up your session — hang tight..."
+                            : "Verifying..."
+                          : "Verify & Start Intake"}
                       </button>
                     </form>
 
@@ -604,7 +637,9 @@ export default function IntakeChat() {
                   {sending && (
                     <div className="flex items-center gap-2 text-slate-400 text-sm">
                       <Loader2 size={16} className="animate-spin" />
-                      Thinking...
+                      {sendingLongWait
+                        ? "Still working on it — this can take a bit longer than usual, hang tight..."
+                        : "Thinking..."}
                     </div>
                   )}
                   {done && (
