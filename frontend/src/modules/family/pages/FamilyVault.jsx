@@ -21,7 +21,7 @@ import ProfileDropdown from '../../settings/components/ProfileDropdown';
 import PatientIdBadge from '../../../components/Common/PatientIdBadge';
 import PatientNotifications from '../../../components/Common/PatientNotifications';
 import SettingsModal from '../../settings/components/SettingsModal';
-import Logo from '../../../components/Common/Logo';
+import ResponsiveSidebar from '../../../components/Common/ResponsiveSidebar';
 import {
   createFamilyMember,
   createFamilyVault,
@@ -186,65 +186,13 @@ const VAULT_PROMPT_STORAGE_KEY = 'swastha.familyVaultPromptShown';
 
 
 function Sidebar({ onOpenSettings }) {
-  const navigate = useNavigate();
-  const location = useLocation();
-  const pathname = location.pathname;
-
   return (
-    <aside className="hidden lg:flex lg:flex-col w-64 shrink-0 border-r border-slate-200 bg-slate-50 px-4 py-6 h-screen overflow-y-auto">
-      <div className="mb-8 px-2">
-        <Logo />
-      </div>
-
-      <nav className="flex-1 space-y-1">
-        {navItems.map(({ label, icon: Icon, route }) => {
-          const isActive = Boolean(route && (pathname === route || pathname.startsWith(`${route}/`)));
-
-          return (
-            <button
-              key={label}
-              type="button"
-              onClick={() => route && navigate(route)}
-              className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${isActive
-                  ? 'bg-blue-100 text-blue-700 '
-                  : 'text-slate-600 hover:bg-slate-100 '
-                }`}
-              aria-label={label}
-              title={label}
-            >
-              <Icon size={18} />
-              {label}
-            </button>
-          );
-        })}
-      </nav>
-
-      <div className="space-y-3 pt-4">
-        <button
-          type="button"
-          onClick={() => navigate('/family-vault')}
-          className="flex w-full items-center justify-center gap-2 rounded-lg bg-blue-700 px-3 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-blue-800"
-          title="Open Family Vault"
-          aria-label="Open Family Vault"
-        >
-          <PlusCircle size={18} />
-          Open Family Vault
-        </button>
-
-        <div className="space-y-1 pt-2">
-          <button
-            type="button"
-            onClick={onOpenSettings}
-            className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-100 "
-            title="Settings"
-            aria-label="Settings"
-          >
-            <Settings size={18} />
-            Settings
-          </button>
-        </div>
-      </div>
-    </aside>
+    <ResponsiveSidebar
+      navItems={navItems}
+      action={{ label: 'Open Family Vault', icon: PlusCircle, route: '/family-vault' }}
+      onOpenSettings={onOpenSettings}
+      className="bg-slate-50"
+    />
   );
 }
 
