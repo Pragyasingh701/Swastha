@@ -105,6 +105,54 @@ function hpiFieldForQuestion(questionText) {
   return null;
 }
 
+// Complaints that are generalized/systemic rather than localized. For these,
+// two SOCRATES fields are clinically meaningless and must never be asked:
+// "site" (fatigue has no location) and "radiation" (nothing to radiate).
+// Added after a live session substituted the site fallback and asked
+// "Where exactly is the Fatigue or low energy?" with
+// ["One specific spot","A general area",...] — a nonsensical question the
+// patient can't answer.
+const SYSTEMIC_COMPLAINT_TERMS = [
+  'fatigue', 'tired', 'low energy', 'weak', 'weakness', 'lethargy', 'malaise',
+  'fever', 'chills', 'nausea', 'vomit', 'dizz', 'lightheaded', 'faint',
+  'insomnia', 'sleepless', "can't sleep", 'cant sleep', 'sleep', 'appetite',
+  'weight loss', 'weight gain', 'anxiety', 'depress', 'stress', 'mood',
+  'palpitation', 'sweating', 'night sweats',
+];
+
+// HPI fields that don't apply to a generalized/systemic complaint.
+const HPI_FIELDS_NA_FOR_SYSTEMIC = ['site', 'radiation'];
+const HPI_NA_MARKER = 'Not applicable (generalized symptom)';
+
+function isSystemicComplaint(chiefComplaint) {
+  const c = String(chiefComplaint || '').toLowerCase();
+  if (!c.trim()) return false;
+  // A localized pain complaint mentioning a body part is NOT systemic even
+  // if it also mentions e.g. weakness ("pain in right arm with weakness").
+  const localized = /\b(pain|ache|swelling|rash|itch|lump|injur|sprain|burn|wound|cut)\b/.test(c);
+  if (localized) return false;
+  return SYSTEMIC_COMPLAINT_TERMS.some((t) => c.includes(t));
+}
+
+// Returns a copy of the history with site/radiation explicitly marked
+// not-applicable when the complaint is systemic. Marking (rather than just
+// skipping) is required because hpiComplete() demands every field be
+// non-empty — skipping alone would strand the session in "hpi" forever.
+// The marker also flows into capturedFieldKeys(), so the prompt lists these
+// as ALREADY ANSWERED and the model won't ask them either.
+function markInapplicableHpiFields(history) {
+  if (!history?.hpi || !isSystemicComplaint(history.chief_complaint)) return history;
+  let changed = false;
+  const hpi = { ...history.hpi };
+  for (const f of HPI_FIELDS_NA_FOR_SYSTEMIC) {
+    if (!(typeof hpi[f] === 'string' && hpi[f].trim() !== '')) {
+      hpi[f] = HPI_NA_MARKER;
+      changed = true;
+    }
+  }
+  return changed ? { ...history, hpi } : history;
+}
+
 // Deterministic fallback question + options per SOCRATES field, used when
 // the model tries to re-ask a field that's ALREADY captured (see the dedup
 // guard in runIntakeTurn). Unlike ayurveda_profile — which has a real
@@ -619,7 +667,7 @@ function buildSystemPrompt(section, structuredHistory, intakeMethod, lastQuestio
   // than trying to word around it.
   const sectionRuleFor = {
     chief_complaint: `- "chief_complaint": ask the patient to state their main complaint if not yet captured. One short question. Once they answer, extract chief_complaint (a short clinical phrase for what's wrong) AND, only if the patient actually volunteered them in this same message, also capture duration into hpi.onset and any aggravating/relieving factor into hpi.exacerbating_relieving — never ask separate follow-up questions for those here, only capture what they already said unprompted (this avoids re-asking the same thing again once "hpi" starts). Once chief_complaint is captured, move to "hpi".`,
-    hpi: `- "hpi": ask SOCRATES-style follow-ups (Site, Onset, Character, Radiation, Associated symptoms, Timing, Exacerbating/relieving factors, Severity) ONE OR TWO AT A TIME — never ask all 8 in one question. Only ask about fields still empty in hpi above (skip any already filled from chief_complaint's extraction). Only ask what's clinically relevant to THIS chief_complaint — do not ask a generic fixed checklist. Tailor which fields you probe and how to the complaint type, for example: pain/ache complaints -> site, character, radiation, severity, aggravating/relieving factors; headache -> location, duration, severity, triggers, vision changes, nausea/vomiting; cough -> duration, dry vs productive, fever, breathing difficulty, blood in sputum; skin complaints -> location, itching, duration, rash appearance, triggers; joint complaints -> which joint(s), duration, swelling, stiffness, pain on movement. Always also check associated_symptoms relevant to that complaint type (e.g. vomiting/fever/loose motion/constipation/bloating/loss of appetite for abdominal complaints). Phrase each question short and direct, clinical-questionnaire style (e.g. "How is your pain normally?" / "How would you describe X?"), NOT a long or casual sentence with asides. Offer more than a minimal set of short quick_reply_options where a patient would naturally pick from a small set (more than 2 closed options where the option set supports it — e.g. severity 1-10 buttons, or 3+ options for a symptom quality rather than a bare yes/no where richer options make sense), each option a single short phrase (one attribute, not several stacked together). When every hpi field is filled, set section_complete: true for this turn and the caller will advance to "${isAyurvedic ? 'ayurveda_profile' : 'drug_allergy'}". This section is ONLY about the patient's chief complaint — never ask about their general constitution, lifestyle, diet, sleep, or temperament here, even if this is an Ayurvedic session; that comes later in "ayurveda_profile".`,
+    hpi: `- "hpi": ask SOCRATES-style follow-ups (Site, Onset, Character, Radiation, Associated symptoms, Timing, Exacerbating/relieving factors, Severity) ONE OR TWO AT A TIME — never ask all 8 in one question. Only ask about fields still empty in hpi above (skip any already filled from chief_complaint's extraction). Only ask what's clinically relevant to THIS chief_complaint — do not ask a generic fixed checklist. Tailor which fields you probe and how to the complaint type, for example: pain/ache complaints -> site, character, radiation, severity, aggravating/relieving factors; headache -> location, duration, severity, triggers, vision changes, nausea/vomiting; cough -> duration, dry vs productive, fever, breathing difficulty, blood in sputum; skin complaints -> location, itching, duration, rash appearance, triggers; joint complaints -> which joint(s), duration, swelling, stiffness, pain on movement. Always also check associated_symptoms relevant to that complaint type (e.g. vomiting/fever/loose motion/constipation/bloating/loss of appetite for abdominal complaints). Phrase each question short and direct, clinical-questionnaire style (e.g. "How is your pain normally?" / "How would you describe X?"), NOT a long or casual sentence with asides. Offer more than a minimal set of short quick_reply_options where a patient would naturally pick from a small set (more than 2 closed options where the option set supports it — e.g. severity 1-10 buttons, or 3+ options for a symptom quality rather than a bare yes/no where richer options make sense), each option a single short phrase (one attribute, not several stacked together). When every hpi field is filled, set section_complete: true for this turn and the caller will advance to "${isAyurvedic ? 'ayurveda_profile' : 'drug_allergy'}". This section is ONLY about the patient's chief complaint — never ask about their general constitution, lifestyle, diet, sleep, or temperament here, even if this is an Ayurvedic session; that comes later in "ayurveda_profile". If the complaint is generalized rather than localized (fatigue, fever, dizziness, nausea, weakness, poor sleep, low mood), do NOT ask about site or radiation — "where exactly is the fatigue?" and "does the tiredness spread?" are meaningless to a patient; those two fields are pre-marked not-applicable for such complaints and appear in the ALREADY ANSWERED list above.`,
     ayurveda_profile: isAyurvedic ? buildAyurvedaSectionRules(structuredHistory) : null,
     drug_allergy: `- "drug_allergy": ask about current medications and known drug/food allergies — TWO separate questions (medications first, then allergies), never bundled into one, and never ask either one more than once. When the patient answers "none"/"no" to either, still write a non-empty array for it — e.g. current_medications: ["None"] or allergies: ["None"] — NEVER leave it as an empty array or omit it, since an empty array cannot be distinguished from "not asked yet". Once BOTH current_medications and allergies are each a non-empty array, set section_complete: true.`,
     finalize: `- "finalize": no more questions — the session is being closed. Return next_question as a short closing message (e.g. "Thanks, that's everything the doctor needs — please have a seat.") and quick_reply_options as { "options": [], "allow_multiple": false }.`,
@@ -790,9 +838,13 @@ export async function runIntakeTurn({ section, structuredHistory, patientMessage
   if (!sections.includes(section)) {
     throw new Error(`runIntakeTurn: unknown section "${section}" for intake_method "${intakeMethod}"`);
   }
-  const history = structuredHistory && typeof structuredHistory === 'object'
+  const rawHistory = structuredHistory && typeof structuredHistory === 'object'
     ? structuredHistory
     : emptyStructuredHistory(intakeMethod);
+  // Mark site/radiation N/A up front for systemic complaints, so the prompt
+  // below lists them as ALREADY ANSWERED and the model never asks "where
+  // exactly is the fatigue?".
+  const history = markInapplicableHpiFields(rawHistory);
 
   const prompt = `${buildSystemPrompt(section, history, intakeMethod, lastQuestion)}\n\nPatient's latest message: "${(patientMessage || '').trim()}"`;
 
@@ -838,6 +890,11 @@ export async function runIntakeTurn({ section, structuredHistory, patientMessage
     red_flag: redFlag,
     red_flag_reason: redFlagReason,
   };
+  // Re-apply after the merge: the chief_complaint may only have become known
+  // on THIS turn (the first turn starts with it empty), so this is the point
+  // where a systemic complaint first becomes detectable and its N/A fields
+  // must be persisted.
+  mergedHistory = markInapplicableHpiFields(mergedHistory);
 
   // Deterministic repair for the #1 observed failure mode on the free-tier
   // model ladder: the model fails to extract the patient's answer into
@@ -1100,6 +1157,8 @@ export const __testing = {
   leafFieldName,
   nextUnansweredQuestionFor,
   questionSpecForField,
+  isSystemicComplaint,
+  markInapplicableHpiFields,
 };
 
 /**
