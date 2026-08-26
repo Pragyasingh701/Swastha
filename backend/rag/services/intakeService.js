@@ -78,13 +78,19 @@ const HPI_FIELDS = [
 // severity questions don't get miscategorized as character.
 const HPI_FIELD_KEYWORDS = [
   ['severity', ['severity', 'scale', 'how bad', 'how severe', 'out of 10', '1-10', '1 to 10']],
-  ['onset', ['onset', 'when did', 'how long', 'start', 'began', 'duration']],
+  // "first notice"/"since when" sit here (before timing) so an onset question
+  // isn't swallowed by timing's day-pattern terms below.
+  ['onset', ['onset', 'when did', 'first notice', 'first start', 'first began', 'since when', 'how long', 'how many days', 'start', 'began', 'duration']],
   ['radiation', ['radiat', 'spread', 'move to', 'travel']],
-  ['exacerbating_relieving', ['better', 'worse', 'trigger', 'relieve', 'aggravat', 'ease']],
-  ['timing', ['timing', 'constant', 'comes and goes', 'pattern', 'time of day', 'how often', 'frequency']],
-  ['associated_symptoms', ['associated', 'along with', 'other symptoms', 'also experienc', 'accompan']],
-  ['character', ['character', 'describe the', 'what does it feel', 'type of', 'quality', 'burning', 'sharp', 'dull']],
-  ['site', ['where', 'location', 'site', 'which part']],
+  ['exacerbating_relieving', ['better', 'worse', 'trigger', 'relieve', 'aggravat', 'ease', 'bring it on', 'set it off']],
+  // 'throughout the day'/'behave'/'all day'/'overall' added after observing a
+  // live miss: "Which of the following describes how your symptoms behave
+  // overall throughout the day?" matched NOTHING here, so the duplicate guard
+  // had no field to compare and shipped it as a third timing question.
+  ['timing', ['timing', 'constant', 'comes and goes', 'come and go', 'pattern', 'time of day', 'throughout the day', 'during the day', 'all day', 'behave', 'overall', 'how often', 'frequency', 'intermittent']],
+  ['associated_symptoms', ['associated', 'along with', 'other symptoms', 'also experienc', 'accompan', 'anything else']],
+  ['character', ['character', 'describe the', 'what does it feel', 'feel like', 'type of', 'quality', 'burning', 'sharp', 'dull']],
+  ['site', ['where', 'location', 'site', 'which part', 'which area']],
 ];
 
 // Maps a repeated hpi question to the field it's actually about, by keyword
@@ -170,6 +176,42 @@ const DRUG_ALLERGY_FALLBACK_QUESTIONS = {
     allow_multiple: false,
   },
 };
+
+// Two option sets that overlap heavily are the same question re-skinned,
+// even when the question TEXT was rewritten enough to defeat
+// questionsLookRepeated() and the model self-labelled a different
+// target_field. Compares normalized option strings; "Constant throughout the
+// day" vs "Constant all day" won't match exactly, so a majority-overlap
+// threshold on the smaller set is used rather than requiring identity.
+function optionSetsLookRepeated(a, b) {
+  // Filler words that carry no meaning inside a short option label, so
+  // "worse in the evening" and "worse by evening" reduce to the same tokens.
+  const FILLER = new Set(['in', 'the', 'by', 'a', 'an', 'of', 'at', 'to', 'is', 'it', 'and', 'or', 'my', 'me', 'i']);
+  const tokens = (o) => String(o)
+    .toLowerCase()
+    .replace(/[^a-z0-9 ]/g, ' ')
+    .split(/\s+/)
+    .filter((w) => w && !FILLER.has(w));
+
+  const A = (Array.isArray(a) ? a : []).map(tokens).filter((t) => t.length > 0);
+  const B = (Array.isArray(b) ? b : []).map(tokens).filter((t) => t.length > 0);
+  if (A.length < 2 || B.length < 2) return false;
+
+  // Two individual options are "the same option" when their content words
+  // mostly coincide — exact string equality is too brittle, since the model
+  // re-words chips every turn ("Constant all day" vs "Constant throughout
+  // the day").
+  const sameOption = (x, y) => {
+    const setY = new Set(y);
+    let shared = 0;
+    for (const w of new Set(x)) if (setY.has(w)) shared += 1;
+    return shared > 0 && shared / Math.min(new Set(x).size, setY.size) >= 0.6;
+  };
+
+  let matched = 0;
+  for (const optA of A) if (B.some((optB) => sameOption(optA, optB))) matched += 1;
+  return matched / Math.min(A.length, B.length) >= 0.6;
+}
 
 // Normalizes whatever the model put in "target_field" to a bare leaf field
 // name — it may send a full path ("hpi.onset",
@@ -731,7 +773,7 @@ function nextSection(current, sectionComplete, intakeMethod) {
  * database — callers (routes) own reading/writing the intake_sessions row,
  * same boundary as searchService.js not owning `reports`.
  *
- * @param {{ section: string, structuredHistory: object, patientMessage: string, intakeMethod?: 'allopathic'|'ayurvedic', lastQuestion?: string, priorQuestionsInSection?: string[] }} params
+ * @param {{ section: string, structuredHistory: object, patientMessage: string, intakeMethod?: 'allopathic'|'ayurvedic', lastQuestion?: string, priorQuestionsInSection?: string[], priorOptionSetsInSection?: string[][] }} params
  *   lastQuestion is the assistant's own previous next_question (from
  *   session.turns) — passed back into the prompt so the model has explicit
  *   context on what the patient's message is answering.
@@ -743,7 +785,7 @@ function nextSection(current, sectionComplete, intakeMethod) {
  *   fields in the documented order, so a repeat isn't always of the very
  *   last question).
  */
-export async function runIntakeTurn({ section, structuredHistory, patientMessage, intakeMethod = 'allopathic', lastQuestion = null, priorQuestionsInSection = [] }) {
+export async function runIntakeTurn({ section, structuredHistory, patientMessage, intakeMethod = 'allopathic', lastQuestion = null, priorQuestionsInSection = [], priorOptionSetsInSection = [] }) {
   const sections = sectionsFor(intakeMethod);
   if (!sections.includes(section)) {
     throw new Error(`runIntakeTurn: unknown section "${section}" for intake_method "${intakeMethod}"`);
@@ -970,12 +1012,38 @@ export async function runIntakeTurn({ section, structuredHistory, patientMessage
   // shipping the duplicate. Only runs while staying in the same section
   // (!sectionComplete); on a section-advancing turn next_question belongs
   // to the NEXT section, which this section-scoped bank shouldn't override.
+  //
+  // UPDATE: target_field alone proved insufficient — the model mislabels it.
+  // Observed live on one session: "When do you notice the pain or weakness
+  // getting worse?" and later "Does anything specific make this issue better
+  // or worse?" are both exacerbating_relieving, but were self-labelled as
+  // different fields, so this guard passed them both. A third question,
+  // "Which of the following describes how your symptoms behave overall
+  // throughout the day?", served the SAME timing chips as two earlier turns.
+  // So a question is now treated as a duplicate if ANY of three independent
+  // signals says so, rather than trusting the model's own label:
+  //   1. the field it DECLARED (target_field) is already answered
+  //   2. the field its TEXT actually reads as (hpiFieldForQuestion) is
+  //      already answered — catches mislabelling
+  //   3. its OPTIONS substantially repeat a set already offered in this
+  //      section — catches a re-skinned question whose wording and label
+  //      both changed
   let dedupedNextQuestion = finalNextQuestion;
   if (!sectionComplete && resolvedSection !== 'finalize') {
-    const askedField = leafFieldName(parsed.target_field);
-    const alreadyAnswered = askedField
-      && capturedFieldKeys(mergedHistory, intakeMethod).some((k) => leafFieldName(k) === askedField);
-    if (alreadyAnswered) {
+    const capturedLeaves = new Set(
+      capturedFieldKeys(mergedHistory, intakeMethod).map((k) => leafFieldName(k))
+    );
+    const declaredField = leafFieldName(parsed.target_field);
+    // Only meaningful for hpi — the ayurveda/drug_allergy banks are matched
+    // by canonical text elsewhere, and chief_complaint is a single field.
+    const textField = section === 'hpi' ? hpiFieldForQuestion(finalNextQuestion) : null;
+
+    const declaredIsAnswered = !!declaredField && capturedLeaves.has(declaredField);
+    const textIsAnswered = !!textField && capturedLeaves.has(textField);
+    const optionsRepeat = quickReplyOptions.options.length > 0
+      && priorOptionSetsInSection.some((prev) => optionSetsLookRepeated(prev, quickReplyOptions.options));
+
+    if (declaredIsAnswered || textIsAnswered || optionsRepeat) {
       const replacement = nextUnansweredQuestionFor(section, mergedHistory, intakeMethod);
       if (replacement) {
         dedupedNextQuestion = replacement.question;
@@ -1022,6 +1090,18 @@ export async function runIntakeTurn({ section, structuredHistory, patientMessage
 
 export { emptyStructuredHistory, hpiComplete, ayurvedaComplete, SECTIONS_ALLOPATHIC, SECTIONS_AYURVEDIC, sectionsFor };
 
+// Internal helpers exposed for unit testing only — same convention as
+// aiClient.js's __testing export. Not part of the module's real surface.
+export const __testing = {
+  hpiFieldForQuestion,
+  optionSetsLookRepeated,
+  questionsLookRepeated,
+  capturedFieldKeys,
+  leafFieldName,
+  nextUnansweredQuestionFor,
+  questionSpecForField,
+};
+
 /**
  * Creates a new intake_sessions row and runs the first turn (empty
  * structured_history, section "chief_complaint", no patient message yet —
@@ -1056,7 +1136,7 @@ export async function startIntakeSession(patientId, { doctorId = null, intakeMet
       intake_method: intakeMethod,
       status: 'in_progress',
       structured_history: turn.structured_history,
-      turns: [{ role: 'assistant', text: turn.next_question, section: turn.section, at: new Date().toISOString() }],
+      turns: [{ role: 'assistant', text: turn.next_question, section: turn.section, options: turn.quick_reply_options?.options || [], at: new Date().toISOString() }],
       priority: turn.red_flag ? 'flagged' : 'routine',
       red_flag_reason: turn.red_flag_reason,
     })
@@ -1120,6 +1200,14 @@ export async function advanceIntakeSession({ sessionId, patientMessage }) {
   const priorQuestionsInSection = priorTurns
     .filter((t) => t.role === 'assistant' && t.section === currentSection && typeof t.text === 'string')
     .map((t) => t.text);
+  // Option sets already offered in this section — a question re-skinned with
+  // new wording almost always keeps ~the same chips, so this catches repeats
+  // that neither the text-similarity nor the field-key check can (observed
+  // live: three different-sounding questions all served
+  // ["Constant throughout the day","Worse in the morning",...]).
+  const priorOptionSetsInSection = priorTurns
+    .filter((t) => t.role === 'assistant' && t.section === currentSection && Array.isArray(t.options) && t.options.length > 0)
+    .map((t) => t.options);
 
   const turn = await runIntakeTurn({
     section: currentSection,
@@ -1128,13 +1216,14 @@ export async function advanceIntakeSession({ sessionId, patientMessage }) {
     intakeMethod,
     lastQuestion,
     priorQuestionsInSection,
+    priorOptionSetsInSection,
   });
 
   const nowIso = new Date().toISOString();
   const updatedTurns = [
     ...(Array.isArray(session.turns) ? session.turns : []),
     { role: 'patient', text: patientMessage.trim(), at: nowIso },
-    { role: 'assistant', text: turn.next_question, section: turn.section, at: nowIso },
+    { role: 'assistant', text: turn.next_question, section: turn.section, options: turn.quick_reply_options?.options || [], at: nowIso },
   ];
 
   const { data: updated, error: updateError } = await supabase
