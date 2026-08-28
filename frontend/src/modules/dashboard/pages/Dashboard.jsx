@@ -122,6 +122,7 @@ function Header({
 }) {
   const navigate = useNavigate();
   const [selectedNotification, setSelectedNotification] = useState(null);
+  const [showAllNotifications, setShowAllNotifications] = useState(false);
   const unreadCount = notifications.filter((item) => !item.read).length;
 
   return (
@@ -238,10 +239,64 @@ function Header({
 
             <button
               type="button"
+              onClick={() => {
+                setIsNotificationsOpen(false);
+                setShowAllNotifications(true);
+              }}
               className="w-full border-t border-slate-100 px-4 py-3 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50"
             >
               View all activity
             </button>
+          </div>
+        )}
+
+        {showAllNotifications && (
+          <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/40 px-4" onClick={() => setShowAllNotifications(false)}>
+            <div className="w-full max-w-lg rounded-2xl border border-slate-200 bg-white text-left shadow-2xl" onClick={(event) => event.stopPropagation()}>
+              <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-blue-600">Activity</p>
+                  <h2 className="mt-1 text-xl font-semibold text-slate-900">All notifications</h2>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowAllNotifications(false)}
+                  className="rounded-lg px-2 py-1 text-2xl leading-none text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+                  aria-label="Close all notifications"
+                >
+                  &times;
+                </button>
+              </div>
+
+              <div className="max-h-[70vh] overflow-y-auto">
+                {notifications.length === 0 ? (
+                  <p className="px-6 py-8 text-sm text-slate-500">No activity yet.</p>
+                ) : (
+                  notifications.map((item) => (
+                    <button
+                      key={item.id}
+                      type="button"
+                      onClick={() => {
+                        setShowAllNotifications(false);
+                        setSelectedNotification(item);
+                        onMarkRead(item);
+                      }}
+                      className="flex w-full items-start gap-3 border-b border-slate-100 px-6 py-4 text-left transition-colors hover:bg-slate-50 last:border-b-0"
+                    >
+                      <span className={`mt-2 h-2.5 w-2.5 rounded-full shrink-0 ${item.read ? "bg-slate-300" : "bg-red-500"}`} />
+                      <span className="min-w-0 flex-1">
+                        <span className="flex items-center justify-between gap-3">
+                          <span className="text-sm font-medium text-slate-800">{item.title}</span>
+                          {!item.read && <span className="text-[10px] font-semibold uppercase tracking-wide text-blue-600">New</span>}
+                        </span>
+                        <span className="mt-1 block text-xs leading-5 text-slate-600">{item.message}</span>
+                        <span className="mt-1 block text-[11px] text-slate-400">{new Date(item.createdAt).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}</span>
+                      </span>
+                    </button>
+                  ))
+                )}
+              </div>
+            </div>
           </div>
         )}
 
