@@ -369,6 +369,10 @@ export default function IntakeChat() {
     return parts.join(", ");
   }
 
+  function isOtherConcernOption(option) {
+    return ["Other", "Other concern", "Something else", "Other / Something else"].includes(option);
+  }
+
   function handleSubmit(e) {
     e.preventDefault();
 
@@ -385,7 +389,7 @@ export default function IntakeChat() {
   }
 
   function handleQuickReplyClick(opt) {
-    if (opt === "Other") {
+    if (isOtherConcernOption(opt)) {
       setOtherRequired(true);
       setOtherPrompt("Please explain your problem in the type section.");
       return;
@@ -404,7 +408,7 @@ export default function IntakeChat() {
       const alreadySelected = prev.includes(opt);
       const next = alreadySelected ? prev.filter((o) => o !== opt) : [...prev, opt];
 
-      if (opt === "Other") {
+      if (isOtherConcernOption(opt)) {
         const hasInput = !!input.trim();
         const otherSelectedAlone = next.includes("Other") && next.length === 1 && !hasInput;
         if (otherSelectedAlone) {
