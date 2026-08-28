@@ -386,9 +386,23 @@ export default function IntakeChat() {
     }
   }
 
+  // Combines whatever the patient selected as chips/checkboxes with
+  // whatever they typed, rather than one silently overwriting the other.
+  // Bug this fixes: a patient could check "Worse with oiling" AND type
+  // "also itches at night" — the free-text form's submit only ever read
+  // `input`, so the checked option vanished with no error or indication
+  // anything was dropped. Order (selections first, then free text) matches
+  // how a patient would naturally read their own answer back.
+  function combinedAnswer() {
+    const typed = input.trim();
+    const parts = [...selectedOptions];
+    if (typed) parts.push(typed);
+    return parts.join(", ");
+  }
+
   function handleSubmit(e) {
     e.preventDefault();
-    submitAnswer(input);
+    submitAnswer(combinedAnswer());
   }
 
   // Multi-select: tapping an option toggles it in/out of the running
@@ -403,8 +417,11 @@ export default function IntakeChat() {
   }
 
   function submitSelectedOptions() {
-    if (selectedOptions.length === 0) return;
-    submitAnswer(selectedOptions.join(", "));
+    // Same merge as handleSubmit above — the patient may have also typed
+    // something in the free-text box before tapping "Send selected".
+    const combined = combinedAnswer();
+    if (!combined) return;
+    submitAnswer(combined);
   }
 
   const currentStepIndex = SECTION_ORDER.indexOf(section);
@@ -712,7 +729,13 @@ export default function IntakeChat() {
                               role="radio"
                               aria-checked="false"
                               disabled={sending}
-                              onClick={() => submitAnswer(opt)}
+                              onClick={() => {
+                                // Same merge as the other two submit paths —
+                                // a patient may have typed free text before
+                                // tapping a single-select chip.
+                                const typed = input.trim();
+                                submitAnswer(typed ? `${opt}, ${typed}` : opt);
+                              }}
                               className="text-sm px-4 py-2 rounded-full border border-blue-200 text-blue-700 bg-blue-50 hover:bg-blue-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                             >
                               {opt}

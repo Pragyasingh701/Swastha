@@ -915,6 +915,48 @@ export async function runIntakeTurn({ section, structuredHistory, patientMessage
     red_flag: redFlag,
     red_flag_reason: redFlagReason,
   };
+
+  // ── Direct extraction-miss guard ────────────────────────────────────
+  // Everything below this point (the repeat-detection back-fill, and the
+  // dedup guard further down) only rescues a missed answer AFTER the model
+  // has gone on to re-ask the same field — which is why a field could be
+  // asked three times in a row with two different real answers given
+  // in between: turn 1's extraction silently failed, and nothing checked
+  // that until the model happened to repeat itself on turn 2, whose
+  // extraction ALSO silently failed, so nothing rescued turn 2's answer
+  // either — it took a third ask before the pattern was even detectable.
+  //
+  // This closes that gap directly: every turn, verify that whatever
+  // question was just asked (lastQuestion) actually got its field filled by
+  // THIS turn's merge. If the field this message was answering is still
+  // empty afterward, the model failed to extract it — write the patient's
+  // raw message into it now, before any repeat can occur, rather than
+  // waiting for one to happen and hoping the field-key or option-overlap
+  // guards catch it later.
+  if (lastQuestion && (patientMessage || '').trim()) {
+    const answeredField = fieldForQuestion(section, lastQuestion, intakeMethod);
+    if (answeredField) {
+      const stillMissing = !capturedFieldKeys(mergedHistory, intakeMethod)
+        .some((k) => leafFieldName(k) === answeredField);
+      if (stillMissing) {
+        const raw = patientMessage.trim();
+        if (section === 'hpi' && HPI_FIELDS.includes(answeredField)
+            && answeredField !== 'associated_symptoms' && answeredField !== 'severity') {
+          mergedHistory = { ...mergedHistory, hpi: { ...mergedHistory.hpi, [answeredField]: raw } };
+        } else if (section === 'drug_allergy' && (answeredField === 'allergies' || answeredField === 'current_medications')) {
+          mergedHistory = { ...mergedHistory, drug_allergy: { ...mergedHistory.drug_allergy, [answeredField]: [raw] } };
+        } else if (section === 'ayurveda_profile' && !AYURVEDA_ARRAY_FIELDS.has(answeredField)) {
+          const profile = mergedHistory.ayurveda_profile || emptyAyurvedaProfile();
+          const group = AYURVEDA_FIELD_GROUPS[answeredField];
+          const nextProfile = { ...profile };
+          if (group) nextProfile[group] = { ...profile[group], [answeredField]: raw };
+          else nextProfile[answeredField] = raw;
+          mergedHistory = { ...mergedHistory, ayurveda_profile: nextProfile };
+        }
+      }
+    }
+  }
+
   // Re-apply after the merge: the chief_complaint may only have become known
   // on THIS turn (the first turn starts with it empty), so this is the point
   // where a systemic complaint first becomes detectable and its N/A fields
