@@ -24,6 +24,7 @@ import {
   Building2,
   ArrowRight,
   AlertTriangle,
+  Sparkles,
 } from "lucide-react";
 
 // Same nav list as Dashboard.jsx / AISearch.jsx / Timeline.jsx / etc.
@@ -33,6 +34,7 @@ const navItems = [
   { label: "Medical Vault", icon: Folder, route: "/vault" },
   { label: "Family Records", icon: Users, route: "/family-vault" },
   { label: "Lab Insights", icon: TrendingUp, route: "/lab-trends" },
+  { label: "Ask Swastha", icon: Sparkles, route: "/search" },
 ];
 
 const MAX_MESSAGE_LENGTH = 500;
@@ -146,6 +148,8 @@ export default function IntakeChat() {
   );
   const [selectedOptions, setSelectedOptions] = useState([]); // multi-select in-progress picks
   const [input, setInput] = useState("");
+  const [otherPrompt, setOtherPrompt] = useState("");
+  const [otherRequired, setOtherRequired] = useState(false);
   const [starting, setStarting] = useState(!preStarted);
   const [sending, setSending] = useState(false);
   // Flips true if a turn is still pending after a while — the AI provider
@@ -367,16 +371,53 @@ export default function IntakeChat() {
 
   function handleSubmit(e) {
     e.preventDefault();
+
+    const otherSelectedAlone = selectedOptions.includes("Other") && selectedOptions.length === 1 && !input.trim();
+    if (otherRequired || otherSelectedAlone) {
+      setOtherPrompt("Please explain your problem in the type section.");
+      setOtherRequired(true);
+      return;
+    }
+
+    setOtherPrompt("");
+    setOtherRequired(false);
     submitAnswer(combinedAnswer());
+  }
+
+  function handleQuickReplyClick(opt) {
+    if (opt === "Other") {
+      setOtherRequired(true);
+      setOtherPrompt("Please explain your problem in the type section.");
+      return;
+    }
+
+    setOtherRequired(false);
+    setOtherPrompt("");
+    submitAnswer(combinedAnswer(opt));
   }
 
   // Multi-select: tapping an option toggles it in/out of the running
   // selection. Nothing submits from here — the single Send button (see
   // below) is the only submit path for multi-select, same as free text.
   function toggleOption(opt) {
-    setSelectedOptions((prev) =>
-      prev.includes(opt) ? prev.filter((o) => o !== opt) : [...prev, opt]
-    );
+    setSelectedOptions((prev) => {
+      const alreadySelected = prev.includes(opt);
+      const next = alreadySelected ? prev.filter((o) => o !== opt) : [...prev, opt];
+
+      if (opt === "Other") {
+        const hasInput = !!input.trim();
+        const otherSelectedAlone = next.includes("Other") && next.length === 1 && !hasInput;
+        if (otherSelectedAlone) {
+          setOtherRequired(true);
+          setOtherPrompt("Please explain your problem in the type section.");
+        } else {
+          setOtherRequired(false);
+          setOtherPrompt("");
+        }
+      }
+
+      return next;
+    });
   }
 
   const currentStepIndex = SECTION_ORDER.indexOf(section);
@@ -678,7 +719,7 @@ export default function IntakeChat() {
                               role="radio"
                               aria-checked="false"
                               disabled={sending}
-                              onClick={() => submitAnswer(combinedAnswer(opt))}
+                              onClick={() => handleQuickReplyClick(opt)}
                               className="text-sm px-4 py-2 rounded-full border border-blue-200 text-blue-700 bg-blue-50 hover:bg-blue-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                             >
                               {opt}
@@ -701,18 +742,41 @@ export default function IntakeChat() {
                       there's a selection, typed text, or both —
                       combinedAnswer() merges them either way. */}
                   <form onSubmit={handleSubmit} className="flex items-center gap-3">
-                    <input
-                      type="text"
-                      value={input}
-                      onChange={(e) => setInput(e.target.value.slice(0, MAX_MESSAGE_LENGTH))}
-                      maxLength={MAX_MESSAGE_LENGTH}
-                      placeholder="Type your answer..."
-                      className="flex-1 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-200 focus:border-blue-400 "
-                      disabled={sending}
-                    />
+                    <div className="flex-1">
+                      {otherPrompt && (
+                        <div className="mb-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+                          {otherPrompt}
+                        </div>
+                      )}
+                      <input
+                        type="text"
+                        value={input}
+                        onChange={(e) => {
+                          const nextValue = e.target.value.slice(0, MAX_MESSAGE_LENGTH);
+                          setInput(nextValue);
+
+                          const otherSelectedAlone = selectedOptions.includes("Other") && selectedOptions.length === 1;
+                          if (otherSelectedAlone && !nextValue.trim()) {
+                            setOtherPrompt("Please explain your problem in the type section.");
+                            setOtherRequired(true);
+                          } else {
+                            setOtherPrompt("");
+                            setOtherRequired(false);
+                          }
+                        }}
+                        maxLength={MAX_MESSAGE_LENGTH}
+                        placeholder="Type your answer..."
+                        className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-200 focus:border-blue-400 "
+                        disabled={sending}
+                      />
+                    </div>
                     <button
                       type="submit"
-                      disabled={sending || (!input.trim() && selectedOptions.length === 0)}
+                      disabled={
+                        sending ||
+                        ((selectedOptions.includes("Other") && selectedOptions.length === 1 && !input.trim()) || otherRequired) ||
+                        (!input.trim() && selectedOptions.length === 0)
+                      }
                       className="flex items-center justify-center gap-2 bg-blue-700 hover:bg-blue-800 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-semibold px-5 py-3 rounded-xl transition-colors"
                     >
                       <Send size={16} />
