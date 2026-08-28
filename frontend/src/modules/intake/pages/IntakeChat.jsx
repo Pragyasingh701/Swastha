@@ -343,14 +343,24 @@ export default function IntakeChat() {
 
   // Combines whatever the patient selected as chips/checkboxes with
   // whatever they typed, rather than one silently overwriting the other.
-  // Bug this fixes: a patient could check "Worse with oiling" AND type
-  // "also itches at night" — the free-text form's submit only ever read
-  // `input`, so the checked option vanished with no error or indication
-  // anything was dropped. Order (selections first, then free text) matches
+  // Bug this fixes: a patient could check "Fever" AND type "tiredness" —
+  // whichever button they used to submit only ever read its own piece of
+  // state (the free-text form read only `input`, "Send selected" read only
+  // `selectedOptions`), so the other one vanished with no error or
+  // indication anything was dropped. This is now the ONLY place either
+  // piece of state is read at submit time, from the ONE submit path (see
+  // the Send button below) — there is no second handler left that can
+  // forget about one or the other.
+  //
+  // `extraOption`, if given, is folded in too — used by the single-select
+  // chip tap, which submits immediately on click rather than going through
+  // the Send button, but can still have typed text sitting in the box that
+  // needs to travel with it. Order (selections first, then free text) matches
   // how a patient would naturally read their own answer back.
-  function combinedAnswer() {
+  function combinedAnswer(extraOption) {
     const typed = input.trim();
     const parts = [...selectedOptions];
+    if (extraOption) parts.push(extraOption);
     if (typed) parts.push(typed);
     return parts.join(", ");
   }
@@ -361,22 +371,12 @@ export default function IntakeChat() {
   }
 
   // Multi-select: tapping an option toggles it in/out of the running
-  // selection instead of submitting immediately (single-select options
-  // still submit on tap, unchanged behavior). "Send" below submits the
-  // comma-joined selection as one patient message, same free-text channel
-  // the backend already parses answers from — no new wire format needed.
+  // selection. Nothing submits from here — the single Send button (see
+  // below) is the only submit path for multi-select, same as free text.
   function toggleOption(opt) {
     setSelectedOptions((prev) =>
       prev.includes(opt) ? prev.filter((o) => o !== opt) : [...prev, opt]
     );
-  }
-
-  function submitSelectedOptions() {
-    // Same merge as handleSubmit above — the patient may have also typed
-    // something in the free-text box before tapping "Send selected".
-    const combined = combinedAnswer();
-    if (!combined) return;
-    submitAnswer(combined);
   }
 
   const currentStepIndex = SECTION_ORDER.indexOf(section);
@@ -635,47 +635,41 @@ export default function IntakeChat() {
                     <div className="mb-3">
                       {quickReplies.allowMultiple ? (
                         // Multi-select — PRD §5: rendered as checkboxes when
-                        // allow_multiple is true. Selection accumulates until
-                        // "Send selected" submits it as one turn.
-                        <>
-                          <div className="flex flex-wrap gap-2 mb-2">
-                            {quickReplies.options.map((opt) => {
-                              const checked = selectedOptions.includes(opt);
-                              return (
-                                <label
-                                  key={opt}
-                                  className={`flex items-center gap-2 text-sm px-4 py-2 rounded-full border cursor-pointer transition-colors ${
-                                    checked
-                                      ? "border-blue-400 bg-blue-100 text-blue-800"
-                                      : "border-blue-200 text-blue-700 bg-blue-50 hover:bg-blue-100"
-                                  } ${sending ? "opacity-50 pointer-events-none" : ""}`}
-                                >
-                                  <input
-                                    type="checkbox"
-                                    className="accent-blue-600"
-                                    checked={checked}
-                                    disabled={sending}
-                                    onChange={() => toggleOption(opt)}
-                                  />
-                                  {opt}
-                                </label>
-                              );
-                            })}
-                          </div>
-                          <button
-                            type="button"
-                            disabled={sending || selectedOptions.length === 0}
-                            onClick={submitSelectedOptions}
-                            className="text-sm px-4 py-2 rounded-full bg-blue-700 hover:bg-blue-800 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold transition-colors"
-                          >
-                            Send selected
-                          </button>
-                        </>
+                        // allow_multiple is true. Checking only accumulates
+                        // selection; nothing submits from here anymore — see
+                        // the single Send button below for why the old
+                        // separate "Send selected" button was removed.
+                        <div className="flex flex-wrap gap-2">
+                          {quickReplies.options.map((opt) => {
+                            const checked = selectedOptions.includes(opt);
+                            return (
+                              <label
+                                key={opt}
+                                className={`flex items-center gap-2 text-sm px-4 py-2 rounded-full border cursor-pointer transition-colors ${
+                                  checked
+                                    ? "border-blue-400 bg-blue-100 text-blue-800"
+                                    : "border-blue-200 text-blue-700 bg-blue-50 hover:bg-blue-100"
+                                } ${sending ? "opacity-50 pointer-events-none" : ""}`}
+                              >
+                                <input
+                                  type="checkbox"
+                                  className="accent-blue-600"
+                                  checked={checked}
+                                  disabled={sending}
+                                  onChange={() => toggleOption(opt)}
+                                />
+                                {opt}
+                              </label>
+                            );
+                          })}
+                        </div>
                       ) : (
                         // Single-select — rendered as radio-style tap targets;
-                        // tapping submits immediately, same UX as before this
-                        // feature (PRD §5: radio buttons when allow_multiple
-                        // is false).
+                        // tapping still submits immediately (unchanged), but
+                        // now also folds in anything already typed via the
+                        // same combinedAnswer() the main Send button uses, so
+                        // a chip tap right after typing doesn't drop the
+                        // typed part either.
                         <div className="flex flex-wrap gap-2" role="radiogroup">
                           {quickReplies.options.map((opt) => (
                             <button
@@ -684,13 +678,7 @@ export default function IntakeChat() {
                               role="radio"
                               aria-checked="false"
                               disabled={sending}
-                              onClick={() => {
-                                // Same merge as the other two submit paths —
-                                // a patient may have typed free text before
-                                // tapping a single-select chip.
-                                const typed = input.trim();
-                                submitAnswer(typed ? `${opt}, ${typed}` : opt);
-                              }}
+                              onClick={() => submitAnswer(combinedAnswer(opt))}
                               className="text-sm px-4 py-2 rounded-full border border-blue-200 text-blue-700 bg-blue-50 hover:bg-blue-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                             >
                               {opt}
@@ -701,6 +689,17 @@ export default function IntakeChat() {
                     </div>
                   )}
 
+                  {/* Single submit path. There used to be two — this form's
+                      own submit, and a separate "Send selected" button next
+                      to the checkboxes — and each read only its own piece of
+                      state (typed text, or checked boxes) while ignoring the
+                      other, silently dropping whichever one the patient
+                      hadn't used to trigger that specific button. Collapsing
+                      to one path removes that class of bug structurally:
+                      there is no longer a second handler that CAN forget
+                      about selectedOptions or input. Enabled whenever
+                      there's a selection, typed text, or both —
+                      combinedAnswer() merges them either way. */}
                   <form onSubmit={handleSubmit} className="flex items-center gap-3">
                     <input
                       type="text"
@@ -713,7 +712,7 @@ export default function IntakeChat() {
                     />
                     <button
                       type="submit"
-                      disabled={sending || !input.trim()}
+                      disabled={sending || (!input.trim() && selectedOptions.length === 0)}
                       className="flex items-center justify-center gap-2 bg-blue-700 hover:bg-blue-800 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-semibold px-5 py-3 rounded-xl transition-colors"
                     >
                       <Send size={16} />
