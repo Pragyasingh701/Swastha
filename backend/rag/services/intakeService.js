@@ -153,6 +153,31 @@ function markInapplicableHpiFields(history) {
   return changed ? { ...history, hpi } : history;
 }
 
+// Which field a drug_allergy question is about, by keyword. That section
+// only has two turn-worthy questions, so simple term matching is enough.
+function drugAllergyFieldForQuestion(questionText) {
+  const t = String(questionText || '').toLowerCase();
+  if (/allerg/.test(t)) return 'allergies';
+  if (/medicat|medicine|prescription|taking any|drugs you/.test(t)) return 'current_medications';
+  return null;
+}
+
+// Section-aware "what field is this question actually about?", inferred from
+// the question TEXT rather than the model's self-reported target_field.
+// Previously this existed for hpi only, which left drug_allergy and
+// ayurveda_profile with no text-based duplicate signal at all — that is how
+// "Do you have any known drug allergies?" and, two turns later, "Do you have
+// any known drug or food allergies?" both shipped.
+function fieldForQuestion(section, questionText, intakeMethod) {
+  if (section === 'hpi') return hpiFieldForQuestion(questionText);
+  if (section === 'drug_allergy') return drugAllergyFieldForQuestion(questionText);
+  if (section === 'ayurveda_profile' && intakeMethod === 'ayurvedic') {
+    const match = AYURVEDA_QUESTION_INDEX.find((q) => questionsLookRepeated(q.question, questionText));
+    return match ? match.field : null;
+  }
+  return null;
+}
+
 // Deterministic fallback question + options per SOCRATES field, used when
 // the model tries to re-ask a field that's ALREADY captured (see the dedup
 // guard in runIntakeTurn). Unlike ayurveda_profile — which has a real
@@ -833,7 +858,7 @@ function nextSection(current, sectionComplete, intakeMethod) {
  *   fields in the documented order, so a repeat isn't always of the very
  *   last question).
  */
-export async function runIntakeTurn({ section, structuredHistory, patientMessage, intakeMethod = 'allopathic', lastQuestion = null, priorQuestionsInSection = [], priorOptionSetsInSection = [] }) {
+export async function runIntakeTurn({ section, structuredHistory, patientMessage, intakeMethod = 'allopathic', lastQuestion = null, priorQuestionsInSection = [], priorOptionSetsInSection = [], priorQaInSection = [] }) {
   const sections = sectionsFor(intakeMethod);
   if (!sections.includes(section)) {
     throw new Error(`runIntakeTurn: unknown section "${section}" for intake_method "${intakeMethod}"`);
@@ -915,67 +940,47 @@ export async function runIntakeTurn({ section, structuredHistory, patientMessage
   if ((patientMessage || '').trim() && typeof parsed.next_question === 'string' && priorQuestionsInSection.length > 0) {
     const repeatedQuestion = priorQuestionsInSection.find((q) => questionsLookRepeated(q, parsed.next_question));
 
-    if (repeatedQuestion && section === 'hpi') {
-      // Matched by KEYWORD CONTENT of the repeated question itself
-      // (hpiFieldForQuestion), not by "first empty field in fixed order" —
-      // see HPI_FIELD_KEYWORDS' comment for why the old approach silently
-      // back-filled the wrong field whenever more than one hpi field was
-      // empty and the repeat wasn't about the first one.
-      const targetField = hpiFieldForQuestion(repeatedQuestion);
-      if (targetField && targetField !== 'associated_symptoms' && targetField !== 'severity') {
-        const stillEmpty = !(typeof mergedHistory.hpi?.[targetField] === 'string' && mergedHistory.hpi[targetField].trim() !== '');
-        if (stillEmpty) {
-          mergedHistory = {
-            ...mergedHistory,
-            hpi: { ...mergedHistory.hpi, [targetField]: patientMessage.trim() },
-          };
-        }
-      }
-    }
+    if (repeatedQuestion) {
+      // Which field was the repeated question about? Inferred from its own
+      // text, section-aware — never from the model's self-report, which is
+      // unreliable.
+      const repeatedField = fieldForQuestion(section, repeatedQuestion, intakeMethod);
+      // And what did the patient ORIGINALLY answer it with? A repeat is
+      // usually of an older question, so the current patientMessage is
+      // typically the answer to some OTHER field — using it here is what
+      // would file "None" (a medications answer) under allergies.
+      const originalQa = priorQaInSection.find((qa) => questionsLookRepeated(qa.question, repeatedQuestion));
+      const recovered = originalQa
+        ? originalQa.answer
+        // Only fall back to the current message when the repeat is of the
+        // question we literally just asked, where they are the same thing.
+        : (lastQuestion && questionsLookRepeated(lastQuestion, repeatedQuestion) ? patientMessage.trim() : null);
 
-    if (repeatedQuestion && section === 'ayurveda_profile') {
-      // Match the repeated question back to a known ayurveda field by its
-      // canonical question text (not by assumed order), then write the raw
-      // answer in if that field is still genuinely empty after the merge —
-      // never overwrites a field the model DID correctly capture.
-      const match = AYURVEDA_QUESTION_INDEX.find((q) => questionsLookRepeated(q.question, repeatedQuestion));
-      if (match && !AYURVEDA_ARRAY_FIELDS.has(match.field)) {
-        const profile = mergedHistory.ayurveda_profile || emptyAyurvedaProfile();
-        const currentValue = match.group ? profile[match.group]?.[match.field] : profile[match.field];
-        const stillEmpty = !(typeof currentValue === 'string' && currentValue.trim() !== '');
-        if (stillEmpty) {
-          const nextProfile = {
-            ...profile,
-            [match.group]: match.group ? { ...profile[match.group], [match.field]: patientMessage.trim() } : profile[match.group],
-          };
-          if (!match.group) nextProfile[match.field] = patientMessage.trim();
-          mergedHistory = { ...mergedHistory, ayurveda_profile: nextProfile };
+      if (repeatedField && recovered) {
+        if (section === 'hpi' && HPI_FIELDS.includes(repeatedField)
+            && repeatedField !== 'associated_symptoms' && repeatedField !== 'severity') {
+          const empty = !(typeof mergedHistory.hpi?.[repeatedField] === 'string' && mergedHistory.hpi[repeatedField].trim() !== '');
+          if (empty) {
+            mergedHistory = { ...mergedHistory, hpi: { ...mergedHistory.hpi, [repeatedField]: recovered } };
+          }
+        } else if (section === 'drug_allergy' && (repeatedField === 'allergies' || repeatedField === 'current_medications')) {
+          if (!(Array.isArray(mergedHistory.drug_allergy?.[repeatedField]) && mergedHistory.drug_allergy[repeatedField].length > 0)) {
+            mergedHistory = {
+              ...mergedHistory,
+              drug_allergy: { ...mergedHistory.drug_allergy, [repeatedField]: [recovered] },
+            };
+          }
+        } else if (section === 'ayurveda_profile' && !AYURVEDA_ARRAY_FIELDS.has(repeatedField)) {
+          const profile = mergedHistory.ayurveda_profile || emptyAyurvedaProfile();
+          const group = AYURVEDA_FIELD_GROUPS[repeatedField];
+          const current = group ? profile[group]?.[repeatedField] : profile[repeatedField];
+          if (!(typeof current === 'string' && current.trim() !== '')) {
+            const nextProfile = { ...profile };
+            if (group) nextProfile[group] = { ...profile[group], [repeatedField]: recovered };
+            else nextProfile[repeatedField] = recovered;
+            mergedHistory = { ...mergedHistory, ayurveda_profile: nextProfile };
+          }
         }
-      }
-    }
-
-    // "drug_allergy" only has two turn-worthy questions — medications, then
-    // allergies — so the field to target is inferred straight from what the
-    // repeated question is actually about (word match), not from field
-    // order. current_medications/allergies are arrays (backend stores the
-    // raw answer as a single-item list rather than attempting to split it —
-    // same "imperfect but honest capture" tradeoff as the hpi/ayurveda
-    // fallbacks above), and only fills in if the model genuinely left that
-    // field untouched (observed in testing: "What medications are you
-    // currently taking?" asked twice back to back, dropping "None").
-    if (repeatedQuestion && section === 'drug_allergy') {
-      const isAboutAllergies = /allerg/i.test(repeatedQuestion);
-      const isAboutMedications = /medicat/i.test(repeatedQuestion);
-      if (isAboutMedications && mergedHistory.drug_allergy.current_medications.length === 0) {
-        mergedHistory = {
-          ...mergedHistory,
-          drug_allergy: { ...mergedHistory.drug_allergy, current_medications: [patientMessage.trim()] },
-        };
-      } else if (isAboutAllergies && mergedHistory.drug_allergy.allergies.length === 0) {
-        mergedHistory = {
-          ...mergedHistory,
-          drug_allergy: { ...mergedHistory.drug_allergy, allergies: [patientMessage.trim()] },
-        };
       }
     }
   }
@@ -1091,9 +1096,11 @@ export async function runIntakeTurn({ section, structuredHistory, patientMessage
       capturedFieldKeys(mergedHistory, intakeMethod).map((k) => leafFieldName(k))
     );
     const declaredField = leafFieldName(parsed.target_field);
-    // Only meaningful for hpi — the ayurveda/drug_allergy banks are matched
-    // by canonical text elsewhere, and chief_complaint is a single field.
-    const textField = section === 'hpi' ? hpiFieldForQuestion(finalNextQuestion) : null;
+    // Section-aware text inference. This used to be hpi-only, which left
+    // drug_allergy with no text signal — that is how "Do you have any known
+    // drug allergies?" shipped again two turns later as "Do you have any
+    // known drug or food allergies?".
+    const textField = fieldForQuestion(section, finalNextQuestion, intakeMethod);
 
     const declaredIsAnswered = !!declaredField && capturedLeaves.has(declaredField);
     const textIsAnswered = !!textField && capturedLeaves.has(textField);
@@ -1159,6 +1166,8 @@ export const __testing = {
   questionSpecForField,
   isSystemicComplaint,
   markInapplicableHpiFields,
+  fieldForQuestion,
+  drugAllergyFieldForQuestion,
 };
 
 /**
@@ -1267,6 +1276,21 @@ export async function advanceIntakeSession({ sessionId, patientMessage }) {
   const priorOptionSetsInSection = priorTurns
     .filter((t) => t.role === 'assistant' && t.section === currentSection && Array.isArray(t.options) && t.options.length > 0)
     .map((t) => t.options);
+  // Pair each prior assistant question in this section with the patient turn
+  // that answered it. Needed because a repeated question is usually a repeat
+  // of an OLDER question, not the one just asked — so recovering that
+  // question's own answer is the only way to back-fill the right value.
+  // Writing the CURRENT patientMessage instead (what the guards used to do)
+  // silently files one field's answer under another field.
+  const priorQaInSection = priorTurns.reduce((acc, t, i) => {
+    if (t.role === 'assistant' && t.section === currentSection && typeof t.text === 'string') {
+      const next = priorTurns[i + 1];
+      if (next && next.role === 'patient' && typeof next.text === 'string' && next.text.trim()) {
+        acc.push({ question: t.text, answer: next.text.trim() });
+      }
+    }
+    return acc;
+  }, []);
 
   const turn = await runIntakeTurn({
     section: currentSection,
@@ -1276,6 +1300,7 @@ export async function advanceIntakeSession({ sessionId, patientMessage }) {
     lastQuestion,
     priorQuestionsInSection,
     priorOptionSetsInSection,
+    priorQaInSection,
   });
 
   const nowIso = new Date().toISOString();
