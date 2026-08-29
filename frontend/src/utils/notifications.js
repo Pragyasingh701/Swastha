@@ -1,5 +1,15 @@
 const STORAGE_PREFIX = 'swastha_notifications';
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5001/api';
+const NOTIFICATION_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
+
+function removeExpiredNotifications(items) {
+  const cutoff = Date.now() - NOTIFICATION_RETENTION_MS;
+  return items.filter((item) => {
+    const createdAt = item.createdAt || item.created_at;
+    const timestamp = createdAt ? new Date(createdAt).getTime() : NaN;
+    return !Number.isFinite(timestamp) || timestamp >= cutoff;
+  });
+}
 
 function getUserKey(userLike) {
   const candidate = userLike || {};
@@ -16,7 +26,11 @@ export function readNotifications(userLike) {
     const key = getUserKey(userLike);
     const raw = localStorage.getItem(key);
     const parsed = raw ? JSON.parse(raw) : [];
-    return Array.isArray(parsed) ? parsed : [];
+    const active = Array.isArray(parsed) ? removeExpiredNotifications(parsed) : [];
+    if (active.length !== parsed.length) {
+      localStorage.setItem(key, JSON.stringify(active));
+    }
+    return active;
   } catch {
     return [];
   }

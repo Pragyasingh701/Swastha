@@ -3,7 +3,7 @@ import { useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "../../../context/AuthContext";
 import { startIntake, sendIntakeTurn, finalizeIntake, transcribeIntakeAudio, replayIntakeAudio } from "../../../api/intake";
 import { verifyClinicCode, sendClinicOtp, verifyClinicOtp } from "../../../api/clinic";
-import Logo from "../../../components/Common/Logo";
+import ResponsiveSidebar from "../../../components/Common/ResponsiveSidebar";
 import ProfileDropdown from "../../settings/components/ProfileDropdown";
 import PatientIdBadge from "../../../components/Common/PatientIdBadge";
 import PatientNotifications from "../../../components/Common/PatientNotifications";
@@ -28,6 +28,7 @@ import {
   Building2,
   ArrowRight,
   AlertTriangle,
+  Sparkles,
 } from "lucide-react";
 
 // Same nav list as Dashboard.jsx / AISearch.jsx / Timeline.jsx / etc.
@@ -37,63 +38,19 @@ const navItems = [
   { label: "Medical Vault", icon: Folder, route: "/vault" },
   { label: "Family Records", icon: Users, route: "/family-vault" },
   { label: "Lab Insights", icon: TrendingUp, route: "/lab-trends" },
+  { label: "Ask Swastha", icon: Sparkles, route: "/search" },
 ];
 
 const MAX_MESSAGE_LENGTH = 500;
 
 function Sidebar({ onOpenSettings }) {
-  const navigate = useNavigate();
-  const location = useLocation();
-  const pathname = location.pathname;
-
   return (
-    <aside className="hidden lg:flex lg:flex-col w-64 shrink-0 bg-slate-50 border-r border-slate-200 h-screen overflow-y-auto px-4 py-6">
-      <div className="px-2 mb-8">
-        <Logo />
-      </div>
-
-      <nav className="flex-1 space-y-1">
-        {navItems.map(({ label, icon: Icon, route }) => {
-          const isActive = Boolean(route && (pathname === route || pathname.startsWith(`${route}/`)));
-          return (
-            <button
-              key={label}
-              type="button"
-              onClick={() => route && navigate(route)}
-              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
-                isActive
-                  ? "bg-blue-100 text-blue-700 "
-                  : "text-slate-600 hover:bg-slate-100 "
-              }`}
-            >
-              <Icon size={18} />
-              {label}
-            </button>
-          );
-        })}
-      </nav>
-
-      <div className="space-y-3 pt-4">
-        <button
-          type="button"
-          onClick={() => navigate("/timeline?upload=true")}
-          className="w-full flex items-center justify-center gap-2 bg-blue-700 hover:bg-blue-800 transition-all duration-200 hover:shadow-md hover:-translate-y-0.5 text-white text-sm font-semibold py-2.5 rounded-lg"
-        >
-          <UploadCloud size={18} />
-          Upload New Report
-        </button>
-
-        <div className="space-y-1 pt-2">
-          <button
-            onClick={onOpenSettings}
-            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-100 "
-          >
-            <Settings size={18} />
-            Settings
-          </button>
-        </div>
-      </div>
-    </aside>
+    <ResponsiveSidebar
+      navItems={navItems}
+      action={{ label: "Upload New Report", icon: UploadCloud, route: "/timeline?upload=true" }}
+      onOpenSettings={onOpenSettings}
+      className="bg-slate-50"
+    />
   );
 }
 
@@ -239,6 +196,13 @@ export default function IntakeChat() {
   const [clinicOtp, setClinicOtp] = useState(["", "", "", "", "", ""]);
   const [otpTimer, setOtpTimer] = useState(0);
   const [gateLoading, setGateLoading] = useState(false);
+  // Same "still working on it" reassurance as sendingLongWait below, scoped
+  // to the OTP-verify step specifically — that's the one gate request that
+  // hits the AI dialogue ladder (it creates the intake session's first
+  // turn), so it's the one that can legitimately run long. The code-verify
+  // and doctor-confirm steps are plain DB lookups and stay fast, so this is
+  // only ever rendered on the OTP submit button.
+  const [gateLoadingLongWait, setGateLoadingLongWait] = useState(false);
   const [gateError, setGateError] = useState("");
 
   const [sessionId, setSessionId] = useState(preStarted?.session_id || null);
@@ -251,8 +215,19 @@ export default function IntakeChat() {
   );
   const [selectedOptions, setSelectedOptions] = useState([]); // multi-select in-progress picks
   const [input, setInput] = useState("");
+  const [otherPrompt, setOtherPrompt] = useState("");
+  const [otherRequired, setOtherRequired] = useState(false);
   const [starting, setStarting] = useState(!preStarted);
   const [sending, setSending] = useState(false);
+  // Flips true if a turn is still pending after a while — the AI provider
+  // failover ladder (backend/rag/config/aiClient.js: multiple Gemini
+  // keys/models, then an OpenRouter fallback) can legitimately take well
+  // past what feels instant under provider slowness/rate-limiting, and a
+  // static "Thinking..." with no change for that whole time reads as stuck/
+  // frozen even though it isn't. This never changes any backend timing —
+  // purely a "still working on it" reassurance once the wait crosses a
+  // threshold a patient would otherwise worry about.
+  const [sendingLongWait, setSendingLongWait] = useState(false);
   const [done, setDone] = useState(false);
   const [error, setError] = useState(null);
   // Set once a turn's red_flag_is_new comes back true (backend: intakeService.js's
@@ -614,7 +589,9 @@ export default function IntakeChat() {
   async function startClinicSession(languageCode) {
     const otpCode = clinicOtp.join("");
     setGateLoading(true);
+    setGateLoadingLongWait(false);
     setGateError("");
+    const longWaitTimer = setTimeout(() => setGateLoadingLongWait(true), 8000);
     try {
       const session = await verifyClinicOtp({
         doctorId: clinicDoctor.doctorId,
@@ -637,7 +614,9 @@ export default function IntakeChat() {
       setGateStep(GATE_STEPS.OTP);
       setGateError(err.message || "Invalid OTP code. Please try again.");
     } finally {
+      clearTimeout(longWaitTimer);
       setGateLoading(false);
+      setGateLoadingLongWait(false);
     }
   }
 
@@ -691,6 +670,13 @@ export default function IntakeChat() {
     setSelectedOptions([]);
     setInput("");
     setSending(true);
+    setSendingLongWait(false);
+    // See sendingLongWait's declaration comment — this turn may sit in the
+    // AI provider failover ladder for a while under slowness/rate-limiting;
+    // if it's still pending past this threshold, swap the "Thinking..."
+    // copy for a reassuring "still working" message instead of leaving a
+    // static spinner running with no visible change.
+    const longWaitTimer = setTimeout(() => setSendingLongWait(true), 8000);
 
     try {
       const res = await sendIntakeTurn(sessionId, trimmed);
@@ -717,29 +703,89 @@ export default function IntakeChat() {
         { role: "assistant", text: "Sorry, that didn't go through. Please try again.", isError: true },
       ]);
     } finally {
+      clearTimeout(longWaitTimer);
       setSending(false);
+      setSendingLongWait(false);
     }
+  }
+
+  // Combines whatever the patient selected as chips/checkboxes with
+  // whatever they typed, rather than one silently overwriting the other.
+  // Bug this fixes: a patient could check "Fever" AND type "tiredness" —
+  // whichever button they used to submit only ever read its own piece of
+  // state (the free-text form read only `input`, "Send selected" read only
+  // `selectedOptions`), so the other one vanished with no error or
+  // indication anything was dropped. This is now the ONLY place either
+  // piece of state is read at submit time, from the ONE submit path (see
+  // the Send button below) — there is no second handler left that can
+  // forget about one or the other.
+  //
+  // `extraOption`, if given, is folded in too — used by the single-select
+  // chip tap, which submits immediately on click rather than going through
+  // the Send button, but can still have typed text sitting in the box that
+  // needs to travel with it. Order (selections first, then free text) matches
+  // how a patient would naturally read their own answer back.
+  function combinedAnswer(extraOption) {
+    const typed = input.trim();
+    const parts = [...selectedOptions];
+    if (extraOption) parts.push(extraOption);
+    if (typed) parts.push(typed);
+    return parts.join(", ");
+  }
+
+  function isOtherConcernOption(option) {
+    return ["Other", "Other concern", "Something else", "Other / Something else"].includes(option);
   }
 
   function handleSubmit(e) {
     e.preventDefault();
-    submitAnswer(input);
+
+    const otherSelectedAlone = selectedOptions.includes("Other") && selectedOptions.length === 1 && !input.trim();
+    if (otherRequired || otherSelectedAlone) {
+      setOtherPrompt("Please explain your problem in the type section.");
+      setOtherRequired(true);
+      return;
+    }
+
+    setOtherPrompt("");
+    setOtherRequired(false);
+    submitAnswer(combinedAnswer());
+  }
+
+  function handleQuickReplyClick(opt) {
+    if (isOtherConcernOption(opt)) {
+      setOtherRequired(true);
+      setOtherPrompt("Please explain your problem in the type section.");
+      return;
+    }
+
+    setOtherRequired(false);
+    setOtherPrompt("");
+    submitAnswer(combinedAnswer(opt));
   }
 
   // Multi-select: tapping an option toggles it in/out of the running
-  // selection instead of submitting immediately (single-select options
-  // still submit on tap, unchanged behavior). "Send" below submits the
-  // comma-joined selection as one patient message, same free-text channel
-  // the backend already parses answers from — no new wire format needed.
+  // selection. Nothing submits from here — the single Send button (see
+  // below) is the only submit path for multi-select, same as free text.
   function toggleOption(opt) {
-    setSelectedOptions((prev) =>
-      prev.includes(opt) ? prev.filter((o) => o !== opt) : [...prev, opt]
-    );
-  }
+    setSelectedOptions((prev) => {
+      const alreadySelected = prev.includes(opt);
+      const next = alreadySelected ? prev.filter((o) => o !== opt) : [...prev, opt];
 
-  function submitSelectedOptions() {
-    if (selectedOptions.length === 0) return;
-    submitAnswer(selectedOptions.join(", "));
+      if (isOtherConcernOption(opt)) {
+        const hasInput = !!input.trim();
+        const otherSelectedAlone = next.includes("Other") && next.length === 1 && !hasInput;
+        if (otherSelectedAlone) {
+          setOtherRequired(true);
+          setOtherPrompt("Please explain your problem in the type section.");
+        } else {
+          setOtherRequired(false);
+          setOtherPrompt("");
+        }
+      }
+
+      return next;
+    });
   }
 
   const currentStepIndex = SECTION_ORDER.indexOf(section);
@@ -885,7 +931,11 @@ export default function IntakeChat() {
                         disabled={gateLoading}
                         className="w-full h-12 flex items-center justify-center gap-2 bg-blue-700 hover:bg-blue-800 disabled:opacity-50 text-white font-semibold rounded-xl transition-colors"
                       >
-                        {gateLoading ? "Verifying..." : "Continue"}
+                        {gateLoading
+                          ? gateLoadingLongWait
+                            ? "Still setting up your session — hang tight..."
+                            : "Verifying..."
+                          : "Continue"}
                       </button>
                     </form>
 
@@ -1031,7 +1081,9 @@ export default function IntakeChat() {
                   {sending && (
                     <div className="flex items-center gap-2 text-slate-400 text-sm">
                       <Loader2 size={16} className="animate-spin" />
-                      Thinking...
+                      {sendingLongWait
+                        ? "Still working on it — this can take a bit longer than usual, hang tight..."
+                        : "Thinking..."}
                     </div>
                   )}
                   {done && (
@@ -1055,47 +1107,41 @@ export default function IntakeChat() {
                     <div className="mb-3">
                       {quickReplies.allowMultiple ? (
                         // Multi-select — PRD §5: rendered as checkboxes when
-                        // allow_multiple is true. Selection accumulates until
-                        // "Send selected" submits it as one turn.
-                        <>
-                          <div className="flex flex-wrap gap-2 mb-2">
-                            {quickReplies.options.map((opt) => {
-                              const checked = selectedOptions.includes(opt);
-                              return (
-                                <label
-                                  key={opt}
-                                  className={`flex items-center gap-2 text-sm px-4 py-2 rounded-full border cursor-pointer transition-colors ${
-                                    checked
-                                      ? "border-blue-400 bg-blue-100 text-blue-800"
-                                      : "border-blue-200 text-blue-700 bg-blue-50 hover:bg-blue-100"
-                                  } ${sending ? "opacity-50 pointer-events-none" : ""}`}
-                                >
-                                  <input
-                                    type="checkbox"
-                                    className="accent-blue-600"
-                                    checked={checked}
-                                    disabled={sending}
-                                    onChange={() => toggleOption(opt)}
-                                  />
-                                  {opt}
-                                </label>
-                              );
-                            })}
-                          </div>
-                          <button
-                            type="button"
-                            disabled={sending || selectedOptions.length === 0}
-                            onClick={submitSelectedOptions}
-                            className="text-sm px-4 py-2 rounded-full bg-blue-700 hover:bg-blue-800 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold transition-colors"
-                          >
-                            Send selected
-                          </button>
-                        </>
+                        // allow_multiple is true. Checking only accumulates
+                        // selection; nothing submits from here anymore — see
+                        // the single Send button below for why the old
+                        // separate "Send selected" button was removed.
+                        <div className="flex flex-wrap gap-2">
+                          {quickReplies.options.map((opt) => {
+                            const checked = selectedOptions.includes(opt);
+                            return (
+                              <label
+                                key={opt}
+                                className={`flex items-center gap-2 text-sm px-4 py-2 rounded-full border cursor-pointer transition-colors ${
+                                  checked
+                                    ? "border-blue-400 bg-blue-100 text-blue-800"
+                                    : "border-blue-200 text-blue-700 bg-blue-50 hover:bg-blue-100"
+                                } ${sending ? "opacity-50 pointer-events-none" : ""}`}
+                              >
+                                <input
+                                  type="checkbox"
+                                  className="accent-blue-600"
+                                  checked={checked}
+                                  disabled={sending}
+                                  onChange={() => toggleOption(opt)}
+                                />
+                                {opt}
+                              </label>
+                            );
+                          })}
+                        </div>
                       ) : (
                         // Single-select — rendered as radio-style tap targets;
-                        // tapping submits immediately, same UX as before this
-                        // feature (PRD §5: radio buttons when allow_multiple
-                        // is false).
+                        // tapping still submits immediately (unchanged), but
+                        // now also folds in anything already typed via the
+                        // same combinedAnswer() the main Send button uses, so
+                        // a chip tap right after typing doesn't drop the
+                        // typed part either.
                         <div className="flex flex-wrap gap-2" role="radiogroup">
                           {quickReplies.options.map((opt) => (
                             <button
@@ -1104,7 +1150,7 @@ export default function IntakeChat() {
                               role="radio"
                               aria-checked="false"
                               disabled={sending}
-                              onClick={() => submitAnswer(opt)}
+                              onClick={() => handleQuickReplyClick(opt)}
                               className="text-sm px-4 py-2 rounded-full border border-blue-200 text-blue-700 bg-blue-50 hover:bg-blue-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                             >
                               {opt}
@@ -1116,10 +1162,16 @@ export default function IntakeChat() {
                   )}
 
                   {/* Voice controls + answer field. Everything is present
-                      at once (PRD §6): listen, type, and speak are never
-                      behind a "voice user vs text user" branch — someone
-                      who types fluently can still listen, and someone who
-                      spoke last turn can still type this one. */}
+                      at once (Voice Layer PRD §6): listen, type, and speak
+                      are never behind a "voice user vs text user" branch —
+                      someone who types fluently can still listen, and
+                      someone who spoke last turn can still type this one.
+                      The single submit path below is upstream's — there
+                      used to be two (this form's submit, and a separate
+                      "Send selected" next to the checkboxes), each reading
+                      only its own piece of state and silently dropping the
+                      other. The mic deliberately does NOT add a third: it
+                      writes into the same input this form already reads. */}
                   {voiceNote && (
                     <p className="mb-2 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
                       {voiceNote}
@@ -1131,8 +1183,7 @@ export default function IntakeChat() {
                         new questions, with the icon reflecting the current
                         state. Replaying a specific question is a separate
                         affordance — the small speaker under each question
-                        bubble in the transcript — so this button does not
-                        double as a replay control. Muting persists across
+                        bubble in the transcript. Muting persists across
                         turns and refreshes. */}
                     <button
                       type="button"
@@ -1155,15 +1206,34 @@ export default function IntakeChat() {
                       )}
                     </button>
 
-                    <input
-                      type="text"
-                      value={input}
-                      onChange={(e) => setInput(e.target.value.slice(0, MAX_MESSAGE_LENGTH))}
-                      maxLength={MAX_MESSAGE_LENGTH}
-                      placeholder={isRecording ? "Listening..." : isTranscribing ? "Transcribing..." : "Type your answer..."}
-                      className="flex-1 min-w-0 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-200 focus:border-blue-400"
-                      disabled={sending}
-                    />
+                    <div className="flex-1 min-w-0">
+                      {otherPrompt && (
+                        <div className="mb-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+                          {otherPrompt}
+                        </div>
+                      )}
+                      <input
+                        type="text"
+                        value={input}
+                        onChange={(e) => {
+                          const nextValue = e.target.value.slice(0, MAX_MESSAGE_LENGTH);
+                          setInput(nextValue);
+
+                          const otherSelectedAlone = selectedOptions.includes("Other") && selectedOptions.length === 1;
+                          if (otherSelectedAlone && !nextValue.trim()) {
+                            setOtherPrompt("Please explain your problem in the type section.");
+                            setOtherRequired(true);
+                          } else {
+                            setOtherPrompt("");
+                            setOtherRequired(false);
+                          }
+                        }}
+                        maxLength={MAX_MESSAGE_LENGTH}
+                        placeholder={isRecording ? "Listening..." : isTranscribing ? "Transcribing..." : "Type your answer..."}
+                        className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-200 focus:border-blue-400 "
+                        disabled={sending}
+                      />
+                    </div>
 
                     {/* Mic: tap to record, tap to stop. Does NOT submit —
                         the transcript lands in the field above so the
@@ -1192,7 +1262,12 @@ export default function IntakeChat() {
 
                     <button
                       type="submit"
-                      disabled={sending || isRecording || !input.trim()}
+                      disabled={
+                        sending ||
+                        isRecording ||
+                        ((selectedOptions.includes("Other") && selectedOptions.length === 1 && !input.trim()) || otherRequired) ||
+                        (!input.trim() && selectedOptions.length === 0)
+                      }
                       className="shrink-0 flex items-center justify-center gap-2 bg-blue-700 hover:bg-blue-800 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-semibold px-5 py-3 rounded-xl transition-colors"
                     >
                       <Send size={16} />

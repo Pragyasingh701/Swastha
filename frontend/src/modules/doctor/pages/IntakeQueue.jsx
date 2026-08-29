@@ -12,6 +12,7 @@ import {
   CheckCircle2,
   Trash2,
   History,
+  Leaf,
 } from "lucide-react";
 import {
   getIntakeQueue,
@@ -28,10 +29,10 @@ import {
 // Clicking a row opens the structured summary (structured_history) for
 // that session via GET /api/doctor-patients/intake-queue/:sessionId.
 
-// SOCRATES field order + labels — matches backend/rag/services/
-// intakeService.js's HPI_FIELDS, kept in the same order for the doctor's
-// reading flow (Site -> Onset -> Character -> Radiation -> Associated
-// symptoms -> Timing -> Exacerbating/relieving -> Severity).
+// SOCRATES ordering + labels. NOT the list of what gets rendered — see the
+// "Dynamic field rendering" note below. This only says how to word and
+// order the fields we know about; anything captured that isn't listed here
+// still renders, it just sorts after these and gets a humanized label.
 const HPI_FIELD_LABELS = [
   ["site", "Site"],
   ["onset", "Onset"],
@@ -42,6 +43,189 @@ const HPI_FIELD_LABELS = [
   ["exacerbating_relieving", "Exacerbating / Relieving"],
   ["severity", "Severity"],
 ];
+
+// Mirrors backend/rag/services/intakeQuestions.js's AYURVEDA_SUBSECTIONS
+// shape (group key -> title, field key -> label, in the same fixed order
+// patients are asked) — this is what was previously entirely missing from
+// the doctor's summary: ayurveda_profile was being collected on Ayurvedic
+// sessions but the modal never rendered it, so only HPI + Medications &
+// Allergies showed even though the patient answered a full Prakriti/
+// Vikriti/etc. questionnaire (bug, confirmed with the user). Kept as a
+// frontend-local mirror rather than importing the backend file directly
+// (separate deployables) — field/group KEYS must stay in sync with that
+// file if it ever changes, but labels here are free to differ slightly for
+// display (e.g. "Body Frame" vs internal "body_frame").
+const AYURVEDA_GROUPS = [
+  {
+    key: "prakriti",
+    title: "Prakriti (Constitution)",
+    fields: [
+      ["body_frame", "Body Frame"],
+      ["skin_type", "Skin Type"],
+      ["appetite_pattern", "Appetite Pattern"],
+      ["temperament", "Temperament"],
+      ["sleep_tendency", "Sleep Tendency"],
+    ],
+  },
+  {
+    key: "agni_ahara",
+    title: "Agni & Ahara (Digestion & Diet)",
+    fields: [
+      ["digestion_strength", "Digestion Strength"],
+      ["bowel_pattern", "Bowel Pattern"],
+      ["thirst_level", "Thirst Level"],
+      ["taste_cravings", "Taste Cravings"],
+      ["food_intolerances", "Food Intolerances"],
+    ],
+  },
+  {
+    key: "nidra_dinacharya",
+    title: "Nidra & Dinacharya (Sleep & Routine)",
+    fields: [
+      ["sleep_hours", "Sleep Hours"],
+      ["sleep_quality", "Sleep Quality"],
+      ["wake_routine", "Wake Routine"],
+      ["activity_level", "Activity Level"],
+      ["work_stress_pattern", "Work / Stress Pattern"],
+    ],
+  },
+  {
+    key: "manas",
+    title: "Manas (Mental-Emotional State)",
+    fields: [
+      ["current_mood", "Current Mood"],
+      ["recent_stressors", "Recent Stressors"],
+    ],
+  },
+  {
+    // vikruti_qualities is flat at the top level of ayurveda_profile (not
+    // nested under a "vikruti" object) — matches AYURVEDA_FIELD_GROUPS'
+    // null-group convention in intakeQuestions.js.
+    key: null,
+    title: "Vikruti (Current Complaint Quality)",
+    fields: [["vikruti_qualities", "Vikruti Qualities"]],
+  },
+  {
+    key: "history_ayurvedic",
+    title: "History (Prior Ayurvedic Treatment)",
+    fields: [
+      ["prior_treatments", "Prior Treatments"],
+      ["home_remedies", "Home Remedies"],
+    ],
+  },
+];
+
+// Curated order + wording for drug_allergy, same role as HPI_FIELD_LABELS.
+const DRUG_ALLERGY_FIELD_LABELS = [
+  ["current_medications", "Current Medications"],
+  ["allergies", "Known Allergies"],
+  ["notes", "Notes"],
+];
+
+// ─────────────────────────────────────────────────────────────────────────
+// Dynamic field rendering.
+//
+// The label tables above are ORDERING AND LABEL HINTS, not the list of what
+// gets displayed. The modal used to iterate them directly, which meant the
+// summary showed exactly the fields someone had remembered to list here —
+// anything the intake captured but this file didn't know about was silently
+// invisible to the doctor, with no error and nothing on screen to hint that
+// an answer existed. That is a bad failure mode for a clinical summary: a
+// doctor cannot tell the difference between "the patient wasn't asked" and
+// "the answer exists but this screen drops it".
+//
+// So rendering now works the other way round: iterate what the SESSION
+// actually contains, and use these tables only to decide order and wording.
+// Known fields keep their curated label and position; unknown ones still
+// appear (at the end, with a humanized label) rather than disappearing.
+// ─────────────────────────────────────────────────────────────────────────
+
+// Keys that are state-machine bookkeeping rather than patient answers, and
+// so must never be rendered as if they were something the patient said.
+const NON_ANSWER_KEYS = new Set(["section", "red_flag", "red_flag_reason"]);
+
+// "work_stress_pattern" -> "Work Stress Pattern". Fallback only — a curated
+// label from the tables above always wins when one exists.
+function humanizeFieldKey(key) {
+  return String(key)
+    .split("_")
+    .filter(Boolean)
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(" ");
+}
+
+// True when a captured value is worth showing. Explicit false/0 count as
+// answers; only null/undefined/""/[] mean "nothing was captured".
+function hasAnswer(value) {
+  if (value === null || value === undefined) return false;
+  if (Array.isArray(value)) return value.length > 0;
+  if (typeof value === "string") return value.trim() !== "";
+  return true;
+}
+
+/**
+ * Orders an object's answered fields for display: fields named in
+ * `labelPairs` first, in that order, then any remaining answered fields the
+ * table didn't know about.
+ *
+ * @param {object} obj    the captured section from structured_history
+ * @param {Array}  labelPairs  [[key, label], ...] curated order + wording
+ * @returns {Array<{key, label, value}>}
+ */
+function orderedAnsweredFields(obj, labelPairs) {
+  if (!obj || typeof obj !== "object") return [];
+  const labels = new Map(labelPairs);
+  const out = [];
+
+  for (const [key, label] of labelPairs) {
+    if (hasAnswer(obj[key])) out.push({ key, label, value: obj[key] });
+  }
+  for (const key of Object.keys(obj)) {
+    if (labels.has(key) || NON_ANSWER_KEYS.has(key)) continue;
+    if (hasAnswer(obj[key])) out.push({ key, label: humanizeFieldKey(key), value: obj[key] });
+  }
+  return out;
+}
+
+/**
+ * Same idea for ayurveda_profile, which is grouped one level deeper.
+ * Returns only groups that actually have answers, so an untouched
+ * sub-section doesn't render as an empty heading.
+ */
+function orderedAyurvedaGroups(profile) {
+  if (!profile || typeof profile !== "object") return [];
+  const known = new Set();
+  const groups = [];
+
+  for (const { key, title, fields } of AYURVEDA_GROUPS) {
+    // key === null means the fields live flat on the profile itself
+    // (vikruti_qualities), matching AYURVEDA_FIELD_GROUPS' convention.
+    const source = key ? profile[key] : profile;
+    if (key) known.add(key);
+    fields.forEach(([f]) => known.add(f));
+    const items = orderedAnsweredFields(source, fields)
+      // For the flat group, only take its own declared fields — otherwise it
+      // would swallow every other top-level key on the profile.
+      .filter((it) => (key ? true : fields.some(([f]) => f === it.key)));
+    if (items.length > 0) groups.push({ title, items });
+  }
+
+  // Anything on the profile these groups don't cover — a new sub-section, or
+  // a new field inside one — still gets shown rather than dropped.
+  const extras = [];
+  for (const [k, v] of Object.entries(profile)) {
+    if (known.has(k) || NON_ANSWER_KEYS.has(k)) continue;
+    if (v && typeof v === "object" && !Array.isArray(v)) {
+      const items = orderedAnsweredFields(v, []);
+      if (items.length > 0) groups.push({ title: humanizeFieldKey(k), items });
+    } else if (hasAnswer(v)) {
+      extras.push({ key: k, label: humanizeFieldKey(k), value: v });
+    }
+  }
+  if (extras.length > 0) groups.push({ title: "Other", items: extras });
+
+  return groups;
+}
 
 function formatIntakeTimestamp(value) {
   if (!value) return "";
@@ -165,8 +349,25 @@ function IntakeQueueList({ sessions, isLoading, error, onSelect, onComplete, onR
                           </span>
                         )}
                       </p>
-                      <p className="text-sm text-slate-500 truncate">
-                        {s.chief_complaint || "No chief complaint recorded yet"}
+                      <p className="text-sm text-slate-500 truncate flex items-center gap-2">
+                        <span className="truncate">{s.chief_complaint || "No chief complaint recorded yet"}</span>
+                        {/* Treatment-method badge — lets a doctor tell at a
+                            glance which intake question set this patient
+                            went through (Ayurvedic sessions include the
+                            extra ayurveda_profile section). Doesn't affect
+                            queue ordering — see getIntakeQueueForPatients'
+                            doctorId-scoping comment for why every session
+                            shown here already belongs to this doctor
+                            (or is unclaimed) regardless of method. */}
+                        <span
+                          className={`shrink-0 text-[11px] font-medium px-1.5 py-0.5 rounded ${
+                            s.intake_method === "ayurvedic"
+                              ? "bg-amber-50 text-amber-700"
+                              : "bg-slate-100 text-slate-500"
+                          }`}
+                        >
+                          {s.intake_method === "ayurvedic" ? "Ayurvedic" : "Allopathic"}
+                        </span>
                       </p>
                     </div>
                   </button>
@@ -311,6 +512,13 @@ function IntakeSessionModal({ sessionId, onClose }) {
 
   const hpi = detail?.structured_history?.hpi || {};
   const drugAllergy = detail?.structured_history?.drug_allergy || {};
+  const ayurvedaProfile = detail?.structured_history?.ayurveda_profile || null;
+
+  // Built from what the SESSION actually captured, with the tables above
+  // supplying order and wording — see the "Dynamic field rendering" note.
+  const hpiFields = orderedAnsweredFields(hpi, HPI_FIELD_LABELS);
+  const drugAllergyFields = orderedAnsweredFields(drugAllergy, DRUG_ALLERGY_FIELD_LABELS);
+  const ayurvedaGroups = orderedAyurvedaGroups(ayurvedaProfile);
 
   return (
     <div
@@ -326,8 +534,17 @@ function IntakeSessionModal({ sessionId, onClose }) {
             <p className="text-xs font-semibold uppercase tracking-wide text-blue-600 mb-1">
               Visit Intake Summary
             </p>
-            <h3 className="text-xl font-bold text-slate-900">
+            <h3 className="text-xl font-bold text-slate-900 flex items-center gap-2">
               {isLoading ? "Loading…" : detail?.patient_name || "Patient"}
+              {!isLoading && detail && (
+                <span
+                  className={`text-[11px] font-medium px-1.5 py-0.5 rounded ${
+                    detail.intake_method === "ayurvedic" ? "bg-amber-50 text-amber-700" : "bg-slate-100 text-slate-500"
+                  }`}
+                >
+                  {detail.intake_method === "ayurvedic" ? "Ayurvedic" : "Allopathic"}
+                </span>
+              )}
             </h3>
             {!isLoading && detail?.chief_complaint && (
               <p className="text-sm text-slate-500 mt-1">Chief complaint: {detail.chief_complaint}</p>
@@ -370,42 +587,79 @@ function IntakeSessionModal({ sessionId, onClose }) {
                 <h4 className="text-sm font-semibold text-slate-700 uppercase tracking-wide mb-2">
                   History of Present Illness (SOCRATES)
                 </h4>
+                {hpiFields.length === 0 && (
+                  <p className="text-sm text-slate-400">
+                    Not captured yet — the patient hasn't reached this part of the intake.
+                  </p>
+                )}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  {HPI_FIELD_LABELS.map(([key, label]) => (
+                  {hpiFields.map(({ key, label, value }) => (
                     <div key={key} className="rounded-xl border border-slate-100 bg-slate-50 p-3">
                       <p className="text-xs text-slate-500">{label}</p>
                       <p className="text-sm font-medium text-slate-900 mt-0.5">
-                        {formatFieldValue(hpi[key])}
+                        {formatFieldValue(value)}
                       </p>
                     </div>
                   ))}
                 </div>
               </div>
 
+              {/* Ayurveda constitutional/lifestyle profile — only present on
+                      intake_method: "ayurvedic" sessions. Groups and fields are
+                      ordered by AYURVEDA_GROUPS but sourced from the session, so
+                      a sub-section the patient never reached is omitted rather
+                      than shown empty, and a group this file doesn't know about
+                      still appears. */}
+              {ayurvedaGroups.length > 0 && (
+                <div>
+                  <h4 className="text-sm font-semibold text-slate-700 uppercase tracking-wide mb-2 flex items-center gap-1.5">
+                    <Leaf size={14} />
+                    Ayurveda / Dashavidha Profile
+                  </h4>
+                  <div className="space-y-4">
+                    {ayurvedaGroups.map(({ title, items }) => (
+                      <div key={title}>
+                        <p className="text-xs font-semibold text-slate-500 mb-1.5">{title}</p>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          {items.map(({ key, label, value }) => (
+                            <div key={key} className="rounded-xl border border-slate-100 bg-slate-50 p-3">
+                              <p className="text-xs text-slate-500">{label}</p>
+                              <p className="text-sm font-medium text-slate-900 mt-0.5">
+                                {formatFieldValue(value)}
+                              </p>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               <div>
                 <h4 className="text-sm font-semibold text-slate-700 uppercase tracking-wide mb-2 flex items-center gap-1.5">
                   <Pill size={14} />
                   Medications & Allergies
                 </h4>
+                {drugAllergyFields.length === 0 && (
+                  <p className="text-sm text-slate-400">
+                    Not captured yet — the patient hasn't reached this part of the intake.
+                  </p>
+                )}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div className="rounded-xl border border-slate-100 bg-slate-50 p-3">
-                    <p className="text-xs text-slate-500">Current Medications</p>
-                    <p className="text-sm font-medium text-slate-900 mt-0.5">
-                      {formatFieldValue(drugAllergy.current_medications)}
-                    </p>
-                  </div>
-                  <div className="rounded-xl border border-slate-100 bg-slate-50 p-3">
-                    <p className="text-xs text-slate-500">Known Allergies</p>
-                    <p className="text-sm font-medium text-slate-900 mt-0.5">
-                      {formatFieldValue(drugAllergy.allergies)}
-                    </p>
-                  </div>
-                  {drugAllergy.notes && (
-                    <div className="rounded-xl border border-slate-100 bg-slate-50 p-3 sm:col-span-2">
-                      <p className="text-xs text-slate-500">Notes</p>
-                      <p className="text-sm font-medium text-slate-900 mt-0.5">{drugAllergy.notes}</p>
+                  {drugAllergyFields.map(({ key, label, value }) => (
+                    <div
+                      key={key}
+                      className={`rounded-xl border border-slate-100 bg-slate-50 p-3 ${
+                        key === "notes" ? "sm:col-span-2" : ""
+                      }`}
+                    >
+                      <p className="text-xs text-slate-500">{label}</p>
+                      <p className="text-sm font-medium text-slate-900 mt-0.5">
+                        {formatFieldValue(value)}
+                      </p>
                     </div>
-                  )}
+                  ))}
                 </div>
               </div>
 
@@ -439,7 +693,9 @@ export default function IntakeQueue() {
     setError(null);
     try {
       const result = await getIntakeQueue();
-      setSessions(result);
+      // Only surface sessions the patient has actually completed — "in
+      // progress" intakes aren't ready for the doctor to review yet.
+      setSessions(result.filter((s) => s.status === "completed"));
     } catch (err) {
       setError(err.message || "Failed to load intake queue.");
       setSessions([]);

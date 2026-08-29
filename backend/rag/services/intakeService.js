@@ -63,6 +63,366 @@ const HPI_FIELDS = [
   'severity',
 ];
 
+// Keyword sets per SOCRATES field, used ONLY by the hpi repeat-guard below
+// to figure out which field a repeated question was actually ABOUT — since
+// hpi questions are model-generated free text (no fixed question bank like
+// intakeQuestions.js's Ayurveda set), there's no canonical string to match
+// against, so this substitutes content keywords instead. Fixes a real bug:
+// the guard used to just grab "first empty field in HPI_FIELDS order",
+// which silently back-filled the WRONG field whenever more than one field
+// was empty and the repeat wasn't about the first one (the common case —
+// HPI has 8 fields that fill in gradually, so "first empty" is rarely the
+// field actually being re-asked about). Order matters where terms overlap
+// (checked top to bottom, first match wins) — e.g. "severity"/"scale" must
+// be checked before the generic "character" bucket so "how bad" style
+// severity questions don't get miscategorized as character.
+const HPI_FIELD_KEYWORDS = [
+  ['severity', ['severity', 'scale', 'how bad', 'how severe', 'out of 10', '1-10', '1 to 10']],
+  // "first notice"/"since when" sit here (before timing) so an onset question
+  // isn't swallowed by timing's day-pattern terms below.
+  ['onset', ['onset', 'when did', 'first notice', 'first start', 'first began', 'since when', 'how long', 'how many days', 'start', 'began', 'duration']],
+  ['radiation', ['radiat', 'spread', 'move to', 'travel']],
+  ['exacerbating_relieving', ['better', 'worse', 'trigger', 'relieve', 'aggravat', 'ease', 'bring it on', 'set it off']],
+  // 'throughout the day'/'behave'/'all day'/'overall' added after observing a
+  // live miss: "Which of the following describes how your symptoms behave
+  // overall throughout the day?" matched NOTHING here, so the duplicate guard
+  // had no field to compare and shipped it as a third timing question.
+  ['timing', ['timing', 'constant', 'comes and goes', 'come and go', 'pattern', 'time of day', 'throughout the day', 'during the day', 'all day', 'behave', 'overall', 'how often', 'frequency', 'intermittent']],
+  ['associated_symptoms', ['associated', 'along with', 'other symptoms', 'also experienc', 'accompan', 'anything else']],
+  ['character', ['character', 'describe the', 'what does it feel', 'feel like', 'type of', 'quality', 'burning', 'sharp', 'dull']],
+  ['site', ['where', 'location', 'site', 'which part', 'which area']],
+];
+
+// Maps a repeated hpi question to the field it's actually about, by keyword
+// match against the question text — falls back to null (guard does nothing)
+// rather than guessing wrong, since a silent wrong-field write is worse
+// than not back-filling at all.
+function hpiFieldForQuestion(questionText) {
+  const lower = (questionText || '').toLowerCase();
+  for (const [field, keywords] of HPI_FIELD_KEYWORDS) {
+    if (keywords.some((k) => lower.includes(k))) return field;
+  }
+  return null;
+}
+
+// Complaints that are generalized/systemic rather than localized. For these,
+// two SOCRATES fields are clinically meaningless and must never be asked:
+// "site" (fatigue has no location) and "radiation" (nothing to radiate).
+// Added after a live session substituted the site fallback and asked
+// "Where exactly is the Fatigue or low energy?" with
+// ["One specific spot","A general area",...] — a nonsensical question the
+// patient can't answer.
+const SYSTEMIC_COMPLAINT_TERMS = [
+  'fatigue', 'tired', 'low energy', 'weak', 'weakness', 'lethargy', 'malaise',
+  'fever', 'chills', 'nausea', 'vomit', 'dizz', 'lightheaded', 'faint',
+  'insomnia', 'sleepless', "can't sleep", 'cant sleep', 'sleep', 'appetite',
+  'weight loss', 'weight gain', 'anxiety', 'depress', 'stress', 'mood',
+  'palpitation', 'sweating', 'night sweats',
+];
+
+// HPI fields that don't apply to a generalized/systemic complaint.
+const HPI_FIELDS_NA_FOR_SYSTEMIC = ['site', 'radiation'];
+const HPI_NA_MARKER = 'Not applicable (generalized symptom)';
+
+function isSystemicComplaint(chiefComplaint) {
+  const c = String(chiefComplaint || '').toLowerCase();
+  if (!c.trim()) return false;
+  // A localized pain complaint mentioning a body part is NOT systemic even
+  // if it also mentions e.g. weakness ("pain in right arm with weakness").
+  const localized = /\b(pain|ache|swelling|rash|itch|lump|injur|sprain|burn|wound|cut)\b/.test(c);
+  if (localized) return false;
+  return SYSTEMIC_COMPLAINT_TERMS.some((t) => c.includes(t));
+}
+
+// Returns a copy of the history with site/radiation explicitly marked
+// not-applicable when the complaint is systemic. Marking (rather than just
+// skipping) is required because hpiComplete() demands every field be
+// non-empty — skipping alone would strand the session in "hpi" forever.
+// The marker also flows into capturedFieldKeys(), so the prompt lists these
+// as ALREADY ANSWERED and the model won't ask them either.
+function markInapplicableHpiFields(history) {
+  if (!history?.hpi || !isSystemicComplaint(history.chief_complaint)) return history;
+  let changed = false;
+  const hpi = { ...history.hpi };
+  for (const f of HPI_FIELDS_NA_FOR_SYSTEMIC) {
+    if (!(typeof hpi[f] === 'string' && hpi[f].trim() !== '')) {
+      hpi[f] = HPI_NA_MARKER;
+      changed = true;
+    }
+  }
+  return changed ? { ...history, hpi } : history;
+}
+
+// Which field a drug_allergy question is about, by keyword. That section
+// only has two turn-worthy questions, so simple term matching is enough.
+function drugAllergyFieldForQuestion(questionText) {
+  const t = String(questionText || '').toLowerCase();
+  if (/allerg/.test(t)) return 'allergies';
+  if (/medicat|medicine|prescription|taking any|drugs you/.test(t)) return 'current_medications';
+  return null;
+}
+
+// Section-aware "what field is this question actually about?", inferred from
+// the question TEXT rather than the model's self-reported target_field.
+// Previously this existed for hpi only, which left drug_allergy and
+// ayurveda_profile with no text-based duplicate signal at all — that is how
+// "Do you have any known drug allergies?" and, two turns later, "Do you have
+// any known drug or food allergies?" both shipped.
+function fieldForQuestion(section, questionText, intakeMethod) {
+  if (section === 'hpi') return hpiFieldForQuestion(questionText);
+  if (section === 'drug_allergy') return drugAllergyFieldForQuestion(questionText);
+  if (section === 'ayurveda_profile' && intakeMethod === 'ayurvedic') {
+    const match = AYURVEDA_QUESTION_INDEX.find((q) => questionsLookRepeated(q.question, questionText));
+    return match ? match.field : null;
+  }
+  return null;
+}
+
+// Deterministic fallback question + options per SOCRATES field, used when
+// the model tries to re-ask a field that's ALREADY captured (see the dedup
+// guard in runIntakeTurn). Unlike ayurveda_profile — which has a real
+// question bank in intakeQuestions.js — hpi questions are normally
+// model-generated per complaint, so without this there'd be nothing to
+// substitute in when a repeat is caught, and the only options would be
+// another AI round-trip (slow — see aiClient.js's intake-dialogue timeout
+// note) or shipping the duplicate.
+//
+// `{complaint}` is replaced with the session's chief_complaint so the
+// substituted question still reads naturally ("Where exactly is the back
+// pain?"). Options are deliberately generic-but-tappable: the model's own
+// contextual options are always preferred, these only appear on the
+// fallback path. Free text stays available alongside them either way (the
+// chat UI always renders its text input), so these never have to be
+// exhaustive.
+const HPI_FALLBACK_QUESTIONS = {
+  site: {
+    question: 'Where exactly is the {complaint}?',
+    options: ['One specific spot', 'A general area', 'Moves around', 'Not sure'],
+    allow_multiple: false,
+  },
+  onset: {
+    question: 'When did the {complaint} start?',
+    options: ['Today', '2-3 days ago', 'About a week ago', 'More than a month ago'],
+    allow_multiple: false,
+  },
+  character: {
+    question: 'How would you describe the {complaint}?',
+    options: ['Sharp', 'Dull or aching', 'Burning', 'Cramping', 'Other'],
+    allow_multiple: false,
+  },
+  radiation: {
+    question: 'Does the {complaint} spread anywhere else?',
+    options: ['No, stays in one place', 'Yes, spreads nearby', 'Not sure'],
+    allow_multiple: false,
+  },
+  associated_symptoms: {
+    question: 'Have you noticed anything else along with the {complaint}?',
+    options: ['Fever', 'Nausea or vomiting', 'Swelling', 'Weakness', 'Nothing else'],
+    allow_multiple: true,
+  },
+  timing: {
+    question: 'Is the {complaint} constant, or does it come and go?',
+    options: ['Constant', 'Comes and goes', 'Worse at certain times', 'Not sure'],
+    allow_multiple: false,
+  },
+  exacerbating_relieving: {
+    question: 'Does anything make the {complaint} better or worse?',
+    options: ['Worse with movement', 'Better with rest', 'Worse at night', 'Nothing changes it'],
+    allow_multiple: false,
+  },
+  severity: {
+    question: 'On a scale of 1 to 10, how severe is the {complaint}?',
+    options: ['1-3 (mild)', '4-6 (moderate)', '7-8 (severe)', '9-10 (worst imaginable)'],
+    allow_multiple: false,
+  },
+};
+
+const DRUG_ALLERGY_FALLBACK_QUESTIONS = {
+  current_medications: {
+    question: 'Are you currently taking any medications?',
+    options: ['None', 'Yes — prescription', 'Yes — over the counter', 'Not sure'],
+    allow_multiple: false,
+  },
+  allergies: {
+    question: 'Do you have any known drug or food allergies?',
+    options: ['No known allergies', 'Yes — to a medicine', 'Yes — to a food', 'Not sure'],
+    allow_multiple: false,
+  },
+};
+
+// Two option sets that overlap heavily are the same question re-skinned,
+// even when the question TEXT was rewritten enough to defeat
+// questionsLookRepeated() and the model self-labelled a different
+// target_field. Compares normalized option strings; "Constant throughout the
+// day" vs "Constant all day" won't match exactly, so a majority-overlap
+// threshold on the smaller set is used rather than requiring identity.
+function optionSetsLookRepeated(a, b) {
+  // Filler words that carry no meaning inside a short option label, so
+  // "worse in the evening" and "worse by evening" reduce to the same tokens.
+  const FILLER = new Set(['in', 'the', 'by', 'a', 'an', 'of', 'at', 'to', 'is', 'it', 'and', 'or', 'my', 'me', 'i']);
+  const tokens = (o) => String(o)
+    .toLowerCase()
+    .replace(/[^a-z0-9 ]/g, ' ')
+    .split(/\s+/)
+    .filter((w) => w && !FILLER.has(w));
+
+  const A = (Array.isArray(a) ? a : []).map(tokens).filter((t) => t.length > 0);
+  const B = (Array.isArray(b) ? b : []).map(tokens).filter((t) => t.length > 0);
+  if (A.length < 2 || B.length < 2) return false;
+
+  // Two individual options are "the same option" when their content words
+  // mostly coincide — exact string equality is too brittle, since the model
+  // re-words chips every turn ("Constant all day" vs "Constant throughout
+  // the day").
+  const sameOption = (x, y) => {
+    const setY = new Set(y);
+    let shared = 0;
+    for (const w of new Set(x)) if (setY.has(w)) shared += 1;
+    return shared > 0 && shared / Math.min(new Set(x).size, setY.size) >= 0.6;
+  };
+
+  let matched = 0;
+  for (const optA of A) if (B.some((optB) => sameOption(optA, optB))) matched += 1;
+  return matched / Math.min(A.length, B.length) >= 0.6;
+}
+
+// Normalizes whatever the model put in "target_field" to a bare leaf field
+// name — it may send a full path ("hpi.onset",
+// "ayurveda_profile.prakriti.body_frame") or just the leaf ("onset").
+function leafFieldName(targetField) {
+  if (typeof targetField !== 'string' || !targetField.trim()) return null;
+  const parts = targetField.trim().split('.');
+  return parts[parts.length - 1] || null;
+}
+
+// The next genuinely-unanswered field in `section`, with a ready-to-send
+// question + options for it. Used by the dedup guard to SUBSTITUTE a real
+// question when the model tries to re-ask something already answered —
+// picking deterministically here (rather than making a second AI call to
+// ask it again) keeps the turn fast, which matters because intake-dialogue
+// turns are already latency-sensitive (see aiClient.js's timeout note).
+// Returns null when the section has nothing left to ask, in which case the
+// caller leaves the model's own output alone and lets the normal
+// section-completion checks advance the flow.
+// Question + options spec for ONE named field, or null if that field isn't
+// one this section knows how to ask about. Used when backfilling missing
+// options onto a question the model DID ask legitimately — keying off the
+// field it actually asked about, rather than "whatever's unanswered first",
+// so the options can't end up describing a different question than the one
+// on screen.
+function questionSpecForField(field, history, intakeMethod) {
+  if (!field) return null;
+  const complaint = (history?.chief_complaint || 'problem').trim() || 'problem';
+
+  if (HPI_FALLBACK_QUESTIONS[field]) {
+    const spec = HPI_FALLBACK_QUESTIONS[field];
+    return {
+      field,
+      question: spec.question.replace(/\{complaint\}/g, complaint),
+      options: spec.options,
+      allow_multiple: spec.allow_multiple,
+    };
+  }
+  if (DRUG_ALLERGY_FALLBACK_QUESTIONS[field]) {
+    const spec = DRUG_ALLERGY_FALLBACK_QUESTIONS[field];
+    return { field, question: spec.question, options: spec.options, allow_multiple: spec.allow_multiple };
+  }
+  if (intakeMethod === 'ayurvedic') {
+    const match = AYURVEDA_QUESTION_INDEX.find((q) => q.field === field);
+    if (match) {
+      const full = AYURVEDA_SUBSECTIONS.flatMap((s) => s.fields).find((f) => f.field === field);
+      return {
+        field,
+        question: match.question,
+        options: Array.isArray(full?.options) ? full.options : [],
+        allow_multiple: !!full?.allowMultiple,
+      };
+    }
+  }
+  return null;
+}
+
+function nextUnansweredQuestionFor(section, history, intakeMethod) {
+  const complaint = (history?.chief_complaint || 'problem').trim() || 'problem';
+  const fill = (q) => q.replace(/\{complaint\}/g, complaint);
+
+  if (section === 'hpi') {
+    const field = HPI_FIELDS.find((f) => {
+      const v = history?.hpi?.[f];
+      if (f === 'associated_symptoms') return !Array.isArray(v) || v.length === 0;
+      if (f === 'severity') return v === null || v === undefined || v === '';
+      return !(typeof v === 'string' && v.trim() !== '');
+    });
+    const spec = field && HPI_FALLBACK_QUESTIONS[field];
+    if (!spec) return null;
+    return { field, question: fill(spec.question), options: spec.options, allow_multiple: spec.allow_multiple };
+  }
+
+  if (section === 'drug_allergy') {
+    const field = ['current_medications', 'allergies'].find(
+      (f) => !(Array.isArray(history?.drug_allergy?.[f]) && history.drug_allergy[f].length > 0)
+    );
+    const spec = field && DRUG_ALLERGY_FALLBACK_QUESTIONS[field];
+    if (!spec) return null;
+    return { field, question: spec.question, options: spec.options, allow_multiple: spec.allow_multiple };
+  }
+
+  if (section === 'ayurveda_profile' && intakeMethod === 'ayurvedic') {
+    // Ayurveda has a real canonical question bank, so substitute the exact
+    // question/options the patient would have been asked anyway.
+    const profile = history?.ayurveda_profile || emptyAyurvedaProfile();
+    const { fields } = nextAyurvedaFields(profile);
+    const spec = fields?.[0];
+    if (!spec) return null;
+    return {
+      field: spec.field,
+      question: spec.question,
+      options: Array.isArray(spec.options) ? spec.options : [],
+      allow_multiple: !!spec.allowMultiple,
+    };
+  }
+
+  return null;
+}
+
+// Every field already answered anywhere in this session, as flat
+// "section.field" keys — fed into the prompt as an explicit
+// "never ask these again" list and used by the dedup guard below.
+// Deliberately spans ALL sections, not just the current one: a field can
+// legitimately be filled from an earlier section (e.g. the patient
+// volunteers duration inside their chief_complaint answer, which
+// chief_complaint's rule captures straight into hpi.onset), and re-asking
+// it later in hpi is exactly the duplicate this is meant to stop.
+function capturedFieldKeys(history, intakeMethod) {
+  const keys = [];
+  if (typeof history?.chief_complaint === 'string' && history.chief_complaint.trim()) {
+    keys.push('chief_complaint');
+  }
+  for (const f of HPI_FIELDS) {
+    const v = history?.hpi?.[f];
+    const filled = f === 'associated_symptoms'
+      ? Array.isArray(v) && v.length > 0
+      : f === 'severity'
+        ? v !== null && v !== undefined && v !== ''
+        : typeof v === 'string' && v.trim() !== '';
+    if (filled) keys.push(`hpi.${f}`);
+  }
+  if (intakeMethod === 'ayurvedic' && history?.ayurveda_profile) {
+    for (const field of AYURVEDA_LEAF_FIELDS) {
+      if (isAyurvedaFieldAnswered(field, history.ayurveda_profile)) {
+        const group = AYURVEDA_FIELD_GROUPS[field];
+        keys.push(group ? `ayurveda_profile.${group}.${field}` : `ayurveda_profile.${field}`);
+      }
+    }
+  }
+  for (const f of ['current_medications', 'allergies']) {
+    if (Array.isArray(history?.drug_allergy?.[f]) && history.drug_allergy[f].length > 0) {
+      keys.push(`drug_allergy.${f}`);
+    }
+  }
+  return keys;
+}
+
 // Every leaf field ayurveda_profile must have an answer (or explicit
 // null/skip) for before that section can complete — derived from the
 // question-set data so it can't drift out of sync with intakeQuestions.js.
@@ -324,21 +684,34 @@ const LANGUAGE_NAMES = {
 function buildSystemPrompt(section, structuredHistory, intakeMethod, lastQuestion, language) {
   const isAyurvedic = intakeMethod === 'ayurvedic';
   const languageName = LANGUAGE_NAMES[language] || LANGUAGE_NAMES['hi-IN'];
+  const capturedKeys = capturedFieldKeys(structuredHistory, intakeMethod);
   const flowDescription = isAyurvedic
     ? 'chief_complaint -> hpi (SOCRATES-style follow-ups) -> ayurveda_profile (Ayurvedic constitution & lifestyle) -> drug_allergy -> finalize'
     : 'chief_complaint -> hpi (SOCRATES-style follow-ups) -> drug_allergy -> finalize';
 
-  const sectionRules = [
-    `- "chief_complaint": ask the patient to state their main complaint if not yet captured. One short question. Once they answer, extract chief_complaint (a short clinical phrase for what's wrong) AND, only if the patient actually volunteered them in this same message, also capture duration into hpi.onset and any aggravating/relieving factor into hpi.exacerbating_relieving — never ask separate follow-up questions for those here, only capture what they already said unprompted (this avoids re-asking the same thing again once "hpi" starts). Once chief_complaint is captured, move to "hpi".`,
-    `- "hpi": ask SOCRATES-style follow-ups (Site, Onset, Character, Radiation, Associated symptoms, Timing, Exacerbating/relieving factors, Severity) STRICTLY ONE AT A TIME — exactly one field per question, never two. Only ask about fields still empty in hpi above (skip any already filled from chief_complaint's extraction). Only ask what's clinically relevant to THIS chief_complaint — do not ask a generic fixed checklist. Tailor which fields you probe and how to the complaint type, for example: pain/ache complaints -> site, character, radiation, severity, aggravating/relieving factors; headache -> location, duration, severity, triggers, vision changes, nausea/vomiting; cough -> duration, dry vs productive, fever, breathing difficulty, blood in sputum; skin complaints -> location, itching, duration, rash appearance, triggers; joint complaints -> which joint(s), duration, swelling, stiffness, pain on movement. Always also check associated_symptoms relevant to that complaint type (e.g. vomiting/fever/loose motion/constipation/bloating/loss of appetite for abdominal complaints). Phrase each question short and direct, clinical-questionnaire style (e.g. "How is your pain normally?" / "How would you describe X?"), NOT a long or casual sentence with asides. Offer more than a minimal set of short quick_reply_options where a patient would naturally pick from a small set (more than 2 closed options where the option set supports it — e.g. severity 1-10 buttons, or 3+ options for a symptom quality rather than a bare yes/no where richer options make sense), each option a single short phrase (one attribute, not several stacked together). When every hpi field is filled, set section_complete: true for this turn and the caller will advance to "${isAyurvedic ? 'ayurveda_profile' : 'drug_allergy'}".`,
-  ];
-  if (isAyurvedic) {
-    sectionRules.push(buildAyurvedaSectionRules(structuredHistory));
-  }
-  sectionRules.push(
-    `- "drug_allergy": ask about current medications and known drug/food allergies — TWO separate questions (medications first, then allergies), never bundled into one, and never ask either one more than once. When the patient answers "none"/"no" to either, still write a non-empty array for it — e.g. current_medications: ["None"] or allergies: ["None"] — NEVER leave it as an empty array or omit it, since an empty array cannot be distinguished from "not asked yet". Once BOTH current_medications and allergies are each a non-empty array, set section_complete: true.`,
-    `- "finalize": no more questions — the session is being closed. Return next_question as a short closing message (e.g. "Thanks, that's everything the doctor needs — please have a seat.") and quick_reply_options as { "options": [], "allow_multiple": false }.`
-  );
+  // Keyed by section name so buildSystemPrompt injects ONLY the current
+  // section's rule below — a real bug this fixes (observed in testing):
+  // every section's rule used to be concatenated into ONE "Section rules"
+  // block regardless of Current section, including the full Ayurveda
+  // sub-section field list (buildAyurvedaSectionRules always computes "next
+  // unanswered field(s)" from an otherwise-empty profile early in a
+  // session, so it's always concrete and example-rich). On a free-tier
+  // model this reliably won out over the more abstract hpi instruction, so
+  // right after chief_complaint the very first hpi turn skipped straight to
+  // asking Prakriti questions ("How is your natural body frame?") instead
+  // of anything about the patient's actual complaint — chief_complaint ->
+  // hpi -> ayurveda_profile collapsed into chief_complaint -> ayurveda_
+  // profile with hpi never actually asked. Only ever exposing the one rule
+  // that matches Current section removes the ambiguity outright rather
+  // than trying to word around it.
+  const sectionRuleFor = {
+    chief_complaint: `- "chief_complaint": ask the patient to state their main complaint if not yet captured. One short question. Once they answer, extract chief_complaint (a short clinical phrase for what's wrong) AND, only if the patient actually volunteered them in this same message, also capture duration into hpi.onset and any aggravating/relieving factor into hpi.exacerbating_relieving — never ask separate follow-up questions for those here, only capture what they already said unprompted (this avoids re-asking the same thing again once "hpi" starts). Once chief_complaint is captured, move to "hpi".`,
+    hpi: `- "hpi": ask SOCRATES-style follow-ups (Site, Onset, Character, Radiation, Associated symptoms, Timing, Exacerbating/relieving factors, Severity) ONE OR TWO AT A TIME — never ask all 8 in one question. Only ask about fields still empty in hpi above (skip any already filled from chief_complaint's extraction). Only ask what's clinically relevant to THIS chief_complaint — do not ask a generic fixed checklist. Tailor which fields you probe and how to the complaint type, for example: pain/ache complaints -> site, character, radiation, severity, aggravating/relieving factors; headache -> location, duration, severity, triggers, vision changes, nausea/vomiting; cough -> duration, dry vs productive, fever, breathing difficulty, blood in sputum; skin complaints -> location, itching, duration, rash appearance, triggers; joint complaints -> which joint(s), duration, swelling, stiffness, pain on movement. Always also check associated_symptoms relevant to that complaint type (e.g. vomiting/fever/loose motion/constipation/bloating/loss of appetite for abdominal complaints). Phrase each question short and direct, clinical-questionnaire style (e.g. "How is your pain normally?" / "How would you describe X?"), NOT a long or casual sentence with asides. Offer more than a minimal set of short quick_reply_options where a patient would naturally pick from a small set (more than 2 closed options where the option set supports it — e.g. severity 1-10 buttons, or 3+ options for a symptom quality rather than a bare yes/no where richer options make sense), each option a single short phrase (one attribute, not several stacked together). When every hpi field is filled, set section_complete: true for this turn and the caller will advance to "${isAyurvedic ? 'ayurveda_profile' : 'drug_allergy'}". This section is ONLY about the patient's chief complaint — never ask about their general constitution, lifestyle, diet, sleep, or temperament here, even if this is an Ayurvedic session; that comes later in "ayurveda_profile". If the complaint is generalized rather than localized (fatigue, fever, dizziness, nausea, weakness, poor sleep, low mood), do NOT ask about site or radiation — "where exactly is the fatigue?" and "does the tiredness spread?" are meaningless to a patient; those two fields are pre-marked not-applicable for such complaints and appear in the ALREADY ANSWERED list above. On the turn where every hpi field finally becomes filled and you set section_complete: true, your next_question must go STRAIGHT into asking the first thing the next section needs — never a wrap-up line asking the patient's permission to continue, and never announcing or previewing what the next section is about (e.g. never "Now let's talk about your general health and lifestyle — is that okay?" or "Next I'll ask a few Ayurvedic questions about your constitution"). The patient never chose their doctor's treatment method and is not being offered a choice about what gets asked next — treat moving into the next section exactly like turning a page, with no announcement, the same way you would move from hpi into drug_allergy on a non-Ayurvedic session.`,
+    ayurveda_profile: isAyurvedic ? buildAyurvedaSectionRules(structuredHistory) : null,
+    drug_allergy: `- "drug_allergy": ask about current medications and known drug/food allergies — TWO separate questions (medications first, then allergies), never bundled into one, and never ask either one more than once. When the patient answers "none"/"no" to either, still write a non-empty array for it — e.g. current_medications: ["None"] or allergies: ["None"] — NEVER leave it as an empty array or omit it, since an empty array cannot be distinguished from "not asked yet". Once BOTH current_medications and allergies are each a non-empty array, set section_complete: true.`,
+    finalize: `- "finalize": no more questions — the session is being closed. Return next_question as a short closing message (e.g. "Thanks, that's everything the doctor needs — please have a seat.") and quick_reply_options as { "options": [], "allow_multiple": false }.`,
+  };
+  const sectionRules = [sectionRuleFor[section] || `- "${section}": (no rule defined — advance or ask a safe generic follow-up)`];
 
   return `You are a clinical intake assistant for an Indian OPD (outpatient) clinic. You are talking directly to a PATIENT before their doctor consult, gathering a structured history. You NEVER diagnose, suggest a condition, or give medical advice — you only ask focused follow-up questions and structure what the patient tells you. This applies identically whether the consulting doctor practices allopathic or Ayurvedic medicine — do not suggest a diagnosis, condition, dosha imbalance conclusion, or treatment in either case.
 
@@ -357,15 +730,26 @@ This does not forbid a single clinically-standard pair inside ONE field (e.g. "�
 
 Current section: "${section}"
 Section flow: ${flowDescription}.
-${isAyurvedic ? 'This patient\'s doctor practices Ayurvedic medicine — the extra "ayurveda_profile" section below gathers constitutional/lifestyle detail their approach depends on. Never ask the patient which kind of doctor they are seeing or which question set to use — that is already decided.' : ''}
+${isAyurvedic ? 'This patient\'s doctor practices Ayurvedic medicine — the flow includes an extra "ayurveda_profile" section (constitutional/lifestyle detail their approach depends on) after "hpi", which you will be told to focus on once the current section reaches it. Never ask the patient which kind of doctor they are seeing or which question set to use — that is already decided.' : ''}
 ${lastQuestion ? `\nThe question you JUST asked the patient (their "Patient's latest message" below is a direct answer to THIS): "${lastQuestion}"\n` : ''}
 Structured history so far (jsonb, do not remove existing fields, only add/update):
 ${JSON.stringify(structuredHistory, null, 2)}
 
+ALREADY ANSWERED — never ask about any of these again, in any wording, for the rest of this session:
+${capturedKeys.length > 0 ? capturedKeys.map((k) => `- ${k}`).join('\n') : '- (nothing captured yet)'}
+A field on this list is DONE. It does not matter that you have not personally asked about it this turn, or that the patient answered it as part of a different question, or that you could word it differently — if the key is listed above, asking about it again is a duplicate and is forbidden. Pick a field that is NOT on this list.
+
 Section rules:
 ${sectionRules.join('\n')}
 
+ONE FIELD PER TURN (strict): "next_question" must ask about EXACTLY ONE field — never two. Do not join two different fields with "and", and do not ask a second thing in a follow-on sentence. If you were about to ask about two fields, ask ONLY the first one this turn; you will get another turn for the second one after the patient answers.
+  WRONG (asks onset AND exacerbating_relieving in one message): "Could you tell me how long you've been experiencing hairfall, and if there are any specific factors that make it better or worse?"
+  RIGHT (onset only, its own turn): "How long have you been experiencing hairfall?"
+  RIGHT (exacerbating_relieving, on a LATER turn): "Does anything make the hairfall better or worse?"
+Splitting into two option-groups in one message does NOT satisfy this rule — it must be two separate turns.
+
 CRITICAL — extracting the answer (this is the #1 failure mode to avoid): the patient's latest message is their answer to the question you just asked above. You MUST parse whatever they said — including short, casual, or indirect phrasing ("a week ago", "over the last few days", "comes and goes"), typos, and single-word free-text answers — into the matching field(s) in "updated_fields" this same turn. Never re-ask the same field again just because their wording wasn't a clean match to your options; interpret it and move on. This applies EQUALLY to free-text fields (e.g. food_intolerances, recent_stressors, home_remedies) — a short or oddly-spelled reply to a free-text question is still a real answer, record it as-is.
+For a multi-select question (associated_symptoms, or any ayurveda_profile field marked "patient may pick MORE THAN ONE"), the patient's message may be a comma-separated MIX of a tapped option and something they additionally typed — e.g. "Fever, tiredness" means they both picked the "Fever" chip AND typed "tiredness" as an extra symptom. Both parts are real answers: split on commas and capture EVERY distinct item into the array, not just the first or the last one. Do not discard a part because it doesn't exactly match one of the options you offered — an extra typed item is still valid content for that field.
 Do NOT output a next_question that repeats — verbatim or reworded — ANY question you have already asked earlier in this same section, even one from several turns back. Keep track of every field you've already asked about in this section (see structured history above) and always move to a genuinely different still-empty one, or advance the section, once the patient has answered.
 
 Red-flag check (run this on EVERY turn regardless of section, independent of section progress):
@@ -376,6 +760,7 @@ If the patient's most recent message or anything already in structured_history m
 Return ONLY a single JSON object (no prose, no markdown fences) with this exact shape:
 {
   "next_question": "<the next question or closing message to show the patient>",
+  "target_field": "<the ONE field key next_question is asking about, e.g. \\"hpi.onset\\", \\"drug_allergy.allergies\\"${isAyurvedic ? ', \\"ayurveda_profile.prakriti.body_frame\\"' : ''}, or null on the finalize turn>",
   "quick_reply_options": { "options": ["<short tappable option>", "..."], "allow_multiple": <true if the patient may pick more than one option this turn, else false> },
   "updated_fields": {
     "chief_complaint": "<string, only if this turn updated it, else omit>",
@@ -388,8 +773,11 @@ Return ONLY a single JSON object (no prose, no markdown fences) with this exact 
 }
 
 Rules for the JSON:
-- "quick_reply_options.options" should have 0-6 short items — leave it empty for open-ended questions where tapping doesn't make sense (e.g. "describe the pain in your own words") or for free-text fields explicitly marked as such. Offer MORE than a bare minimal set of options wherever the question has a natural closed answer set (more than 2 options where the option set supports it).
-- "quick_reply_options.allow_multiple" must be true whenever more than one answer can genuinely apply to the question just asked (e.g. multiple symptoms, multiple tastes, multiple moods) — false otherwise.
+- "quick_reply_options.options" is REQUIRED and must NEVER be empty on any question turn (the only exception is the "finalize" closing message, which uses []). Always generate 3-5 short, tappable options, written fresh for THIS patient's specific complaint and THIS field — not generic filler, and not copied from some other complaint. Hairfall options must be about hairfall, headache options about headache, joint pain about joint pain.
+- This applies even to fields that feel inherently open-ended. There is always a sensible small answer set — generate it. e.g. radiation -> ["No, stays in one place", "Yes, spreads nearby", "Not sure"]; a free-text field like recent_stressors -> ["Work", "Family", "Health", "Nothing in particular"]. Never return a question with no options and expect the patient to type.
+- Options do NOT need to cover every possibility: the patient always has a free-text box available alongside them, so 3-5 likely answers plus an escape option like "Other" / "Not sure" is the right shape. Keep each option a single short phrase.
+- "quick_reply_options.allow_multiple" must be true whenever more than one answer can genuinely apply to the question just asked (e.g. multiple symptoms, multiple tastes, multiple moods) — false otherwise. Multi-select renders as checkboxes, single-select as tap-to-send chips.
+- "target_field" must name the single field "next_question" is asking about, using the same key path as the structured history above. It must NOT be a field on the ALREADY ANSWERED list. If you genuinely cannot find an unanswered field left in this section, set section_complete: true instead of re-asking something.
 - CRITICAL RULE for "updated_fields" — if a field has not actually been asked about and answered by the patient, OMIT it entirely. Do NOT guess, do NOT invent a plausible-sounding value, do NOT fill in what a typical patient with this complaint "probably" would have said, and do NOT estimate a value from the rest of the history. A blank field the doctor can ask about in person is far better than a confident-looking wrong answer on a clinical record — a fabricated severity or duration could change how a patient is triaged. Only record what the patient actually told you, in the turn they told you.
 - Concretely: if you never asked about severity, "severity" must not appear in updated_fields at all. Never write a number there because 5 or 7 seems reasonable for this complaint. The same applies to every other field.
 - "updated_fields" should ONLY contain fields the patient's latest message actually gave information for.
@@ -565,7 +953,7 @@ function nextSection(current, sectionComplete, intakeMethod) {
  * database — callers (routes) own reading/writing the intake_sessions row,
  * same boundary as searchService.js not owning `reports`.
  *
- * @param {{ section: string, structuredHistory: object, patientMessage: string, intakeMethod?: 'allopathic'|'ayurvedic', lastQuestion?: string, priorQuestionsInSection?: string[] }} params
+ * @param {{ section: string, structuredHistory: object, patientMessage: string, intakeMethod?: 'allopathic'|'ayurvedic', lastQuestion?: string, priorQuestionsInSection?: string[], priorOptionSetsInSection?: string[][] }} params
  *   lastQuestion is the assistant's own previous next_question (from
  *   session.turns) — passed back into the prompt so the model has explicit
  *   context on what the patient's message is answering.
@@ -577,14 +965,18 @@ function nextSection(current, sectionComplete, intakeMethod) {
  *   fields in the documented order, so a repeat isn't always of the very
  *   last question).
  */
-export async function runIntakeTurn({ section, structuredHistory, patientMessage, intakeMethod = 'allopathic', lastQuestion = null, priorQuestionsInSection = [], language = 'hi-IN' }) {
+export async function runIntakeTurn({ section, structuredHistory, patientMessage, intakeMethod = 'allopathic', lastQuestion = null, priorQuestionsInSection = [], priorOptionSetsInSection = [], priorQaInSection = [], language = 'hi-IN' }) {
   const sections = sectionsFor(intakeMethod);
   if (!sections.includes(section)) {
     throw new Error(`runIntakeTurn: unknown section "${section}" for intake_method "${intakeMethod}"`);
   }
-  const history = structuredHistory && typeof structuredHistory === 'object'
+  const rawHistory = structuredHistory && typeof structuredHistory === 'object'
     ? structuredHistory
     : emptyStructuredHistory(intakeMethod);
+  // Mark site/radiation N/A up front for systemic complaints, so the prompt
+  // below lists them as ALREADY ANSWERED and the model never asks "where
+  // exactly is the fatigue?".
+  const history = markInapplicableHpiFields(rawHistory);
 
   const prompt = `${buildSystemPrompt(section, history, intakeMethod, lastQuestion, language)}\n\nPatient's latest message: "${(patientMessage || '').trim()}"`;
 
@@ -656,6 +1048,53 @@ export async function runIntakeTurn({ section, structuredHistory, patientMessage
     red_flag_reason: redFlagReason,
   };
 
+  // ── Direct extraction-miss guard ────────────────────────────────────
+  // Everything below this point (the repeat-detection back-fill, and the
+  // dedup guard further down) only rescues a missed answer AFTER the model
+  // has gone on to re-ask the same field — which is why a field could be
+  // asked three times in a row with two different real answers given
+  // in between: turn 1's extraction silently failed, and nothing checked
+  // that until the model happened to repeat itself on turn 2, whose
+  // extraction ALSO silently failed, so nothing rescued turn 2's answer
+  // either — it took a third ask before the pattern was even detectable.
+  //
+  // This closes that gap directly: every turn, verify that whatever
+  // question was just asked (lastQuestion) actually got its field filled by
+  // THIS turn's merge. If the field this message was answering is still
+  // empty afterward, the model failed to extract it — write the patient's
+  // raw message into it now, before any repeat can occur, rather than
+  // waiting for one to happen and hoping the field-key or option-overlap
+  // guards catch it later.
+  if (lastQuestion && (patientMessage || '').trim()) {
+    const answeredField = fieldForQuestion(section, lastQuestion, intakeMethod);
+    if (answeredField) {
+      const stillMissing = !capturedFieldKeys(mergedHistory, intakeMethod)
+        .some((k) => leafFieldName(k) === answeredField);
+      if (stillMissing) {
+        const raw = patientMessage.trim();
+        if (section === 'hpi' && HPI_FIELDS.includes(answeredField)
+            && answeredField !== 'associated_symptoms' && answeredField !== 'severity') {
+          mergedHistory = { ...mergedHistory, hpi: { ...mergedHistory.hpi, [answeredField]: raw } };
+        } else if (section === 'drug_allergy' && (answeredField === 'allergies' || answeredField === 'current_medications')) {
+          mergedHistory = { ...mergedHistory, drug_allergy: { ...mergedHistory.drug_allergy, [answeredField]: [raw] } };
+        } else if (section === 'ayurveda_profile' && !AYURVEDA_ARRAY_FIELDS.has(answeredField)) {
+          const profile = mergedHistory.ayurveda_profile || emptyAyurvedaProfile();
+          const group = AYURVEDA_FIELD_GROUPS[answeredField];
+          const nextProfile = { ...profile };
+          if (group) nextProfile[group] = { ...profile[group], [answeredField]: raw };
+          else nextProfile[answeredField] = raw;
+          mergedHistory = { ...mergedHistory, ayurveda_profile: nextProfile };
+        }
+      }
+    }
+  }
+
+  // Re-apply after the merge: the chief_complaint may only have become known
+  // on THIS turn (the first turn starts with it empty), so this is the point
+  // where a systemic complaint first becomes detectable and its N/A fields
+  // must be persisted.
+  mergedHistory = markInapplicableHpiFields(mergedHistory);
+
   // Deterministic repair for the #1 observed failure mode on the free-tier
   // model ladder: the model fails to extract the patient's answer into
   // updated_fields and instead re-asks a question it already asked earlier
@@ -675,67 +1114,47 @@ export async function runIntakeTurn({ section, structuredHistory, patientMessage
   if ((patientMessage || '').trim() && typeof parsed.next_question === 'string' && priorQuestionsInSection.length > 0) {
     const repeatedQuestion = priorQuestionsInSection.find((q) => questionsLookRepeated(q, parsed.next_question));
 
-    if (repeatedQuestion && section === 'hpi') {
-      const targetField = HPI_FIELDS.find((f) => {
-        const v = history.hpi?.[f];
-        if (f === 'associated_symptoms') return !Array.isArray(v) || v.length === 0;
-        if (f === 'severity') return v === null || v === undefined || v === '';
-        return !(typeof v === 'string' && v.trim() !== '');
-      });
-      if (targetField && targetField !== 'associated_symptoms' && targetField !== 'severity') {
-        const stillEmpty = !(typeof mergedHistory.hpi?.[targetField] === 'string' && mergedHistory.hpi[targetField].trim() !== '');
-        if (stillEmpty) {
-          mergedHistory = {
-            ...mergedHistory,
-            hpi: { ...mergedHistory.hpi, [targetField]: patientMessage.trim() },
-          };
-        }
-      }
-    }
+    if (repeatedQuestion) {
+      // Which field was the repeated question about? Inferred from its own
+      // text, section-aware — never from the model's self-report, which is
+      // unreliable.
+      const repeatedField = fieldForQuestion(section, repeatedQuestion, intakeMethod);
+      // And what did the patient ORIGINALLY answer it with? A repeat is
+      // usually of an older question, so the current patientMessage is
+      // typically the answer to some OTHER field — using it here is what
+      // would file "None" (a medications answer) under allergies.
+      const originalQa = priorQaInSection.find((qa) => questionsLookRepeated(qa.question, repeatedQuestion));
+      const recovered = originalQa
+        ? originalQa.answer
+        // Only fall back to the current message when the repeat is of the
+        // question we literally just asked, where they are the same thing.
+        : (lastQuestion && questionsLookRepeated(lastQuestion, repeatedQuestion) ? patientMessage.trim() : null);
 
-    if (repeatedQuestion && section === 'ayurveda_profile') {
-      // Match the repeated question back to a known ayurveda field by its
-      // canonical question text (not by assumed order), then write the raw
-      // answer in if that field is still genuinely empty after the merge —
-      // never overwrites a field the model DID correctly capture.
-      const match = AYURVEDA_QUESTION_INDEX.find((q) => questionsLookRepeated(q.question, repeatedQuestion));
-      if (match && !AYURVEDA_ARRAY_FIELDS.has(match.field)) {
-        const profile = mergedHistory.ayurveda_profile || emptyAyurvedaProfile();
-        const currentValue = match.group ? profile[match.group]?.[match.field] : profile[match.field];
-        const stillEmpty = !(typeof currentValue === 'string' && currentValue.trim() !== '');
-        if (stillEmpty) {
-          const nextProfile = {
-            ...profile,
-            [match.group]: match.group ? { ...profile[match.group], [match.field]: patientMessage.trim() } : profile[match.group],
-          };
-          if (!match.group) nextProfile[match.field] = patientMessage.trim();
-          mergedHistory = { ...mergedHistory, ayurveda_profile: nextProfile };
+      if (repeatedField && recovered) {
+        if (section === 'hpi' && HPI_FIELDS.includes(repeatedField)
+            && repeatedField !== 'associated_symptoms' && repeatedField !== 'severity') {
+          const empty = !(typeof mergedHistory.hpi?.[repeatedField] === 'string' && mergedHistory.hpi[repeatedField].trim() !== '');
+          if (empty) {
+            mergedHistory = { ...mergedHistory, hpi: { ...mergedHistory.hpi, [repeatedField]: recovered } };
+          }
+        } else if (section === 'drug_allergy' && (repeatedField === 'allergies' || repeatedField === 'current_medications')) {
+          if (!(Array.isArray(mergedHistory.drug_allergy?.[repeatedField]) && mergedHistory.drug_allergy[repeatedField].length > 0)) {
+            mergedHistory = {
+              ...mergedHistory,
+              drug_allergy: { ...mergedHistory.drug_allergy, [repeatedField]: [recovered] },
+            };
+          }
+        } else if (section === 'ayurveda_profile' && !AYURVEDA_ARRAY_FIELDS.has(repeatedField)) {
+          const profile = mergedHistory.ayurveda_profile || emptyAyurvedaProfile();
+          const group = AYURVEDA_FIELD_GROUPS[repeatedField];
+          const current = group ? profile[group]?.[repeatedField] : profile[repeatedField];
+          if (!(typeof current === 'string' && current.trim() !== '')) {
+            const nextProfile = { ...profile };
+            if (group) nextProfile[group] = { ...profile[group], [repeatedField]: recovered };
+            else nextProfile[repeatedField] = recovered;
+            mergedHistory = { ...mergedHistory, ayurveda_profile: nextProfile };
+          }
         }
-      }
-    }
-
-    // "drug_allergy" only has two turn-worthy questions — medications, then
-    // allergies — so the field to target is inferred straight from what the
-    // repeated question is actually about (word match), not from field
-    // order. current_medications/allergies are arrays (backend stores the
-    // raw answer as a single-item list rather than attempting to split it —
-    // same "imperfect but honest capture" tradeoff as the hpi/ayurveda
-    // fallbacks above), and only fills in if the model genuinely left that
-    // field untouched (observed in testing: "What medications are you
-    // currently taking?" asked twice back to back, dropping "None").
-    if (repeatedQuestion && section === 'drug_allergy') {
-      const isAboutAllergies = /allerg/i.test(repeatedQuestion);
-      const isAboutMedications = /medicat/i.test(repeatedQuestion);
-      if (isAboutMedications && mergedHistory.drug_allergy.current_medications.length === 0) {
-        mergedHistory = {
-          ...mergedHistory,
-          drug_allergy: { ...mergedHistory.drug_allergy, current_medications: [patientMessage.trim()] },
-        };
-      } else if (isAboutAllergies && mergedHistory.drug_allergy.allergies.length === 0) {
-        mergedHistory = {
-          ...mergedHistory,
-          drug_allergy: { ...mergedHistory.drug_allergy, allergies: [patientMessage.trim()] },
-        };
       }
     }
   }
@@ -793,6 +1212,37 @@ export async function runIntakeTurn({ section, structuredHistory, patientMessage
         ''
       ).trim() || nextQuestionText;
 
+  // Deterministic backstop for the "proceed with Ayurvedic questions?"
+  // pattern (observed live): right on the turn hpi completes and the
+  // section advances into ayurveda_profile, the model sometimes announces
+  // or asks permission to continue instead of just asking the next
+  // section's first question — even though intake_method is never
+  // patient-chosen and this is meant to be as seamless as hpi -> drug_
+  // allergy already is on allopathic sessions. Only strips LEADING
+  // announcement/permission clauses on the exact turn the section changed;
+  // a genuine question elsewhere is left untouched. Applied in a loop (not
+  // once) because the model can produce this as two separate sentences —
+  // "Let's move on to some Ayurvedic questions. Is that okay?" — and a
+  // single pass only removes the first one, leaving the second dangling in
+  // front of the real question. If stripping empties the string, the
+  // fallback a few lines below supplies a safe generic question rather
+  // than leaving the patient with nothing.
+  const sectionJustAdvanced = resolvedSection !== section;
+  const ANNOUNCEMENT_CLAUSE_RE =
+    /^(?:(?:great|thanks|thank you|ok(?:ay)?|got it|perfect|now|next)[,!.]?\s*)?(?:(?:let'?s|i'?ll|we'?ll)\s+(?:now\s+)?(?:move on to|move into|talk about|go over|go through|ask (?:you )?(?:a few|some))|(?:is (?:that|it) (?:okay|ok|alright|fine)\??)|(?:shall we (?:continue|proceed|move on)\??)|(?:would you like to (?:continue|proceed)\??)|(?:can we (?:continue|proceed)\??))\b[^.!?]*[.!?]?\s*/i;
+  function stripLeadingAnnouncements(text) {
+    let out = text;
+    for (let i = 0; i < 3; i += 1) {
+      const next = out.replace(ANNOUNCEMENT_CLAUSE_RE, '').trim();
+      if (next === out || !next) break;
+      out = next;
+    }
+    return out;
+  }
+  const deAnnouncedNextQuestion = sectionJustAdvanced
+    ? stripLeadingAnnouncements(cleanedNextQuestion) || cleanedNextQuestion
+    : cleanedNextQuestion;
+
   // Last-resort fallback: the model occasionally returns a genuinely empty
   // next_question (blank string, or a field that's missing/non-string) —
   // observed in testing as a blank chat bubble the patient can't act on,
@@ -800,14 +1250,14 @@ export async function runIntakeTurn({ section, structuredHistory, patientMessage
   // follow-up for whichever section is still open so the conversation can
   // always continue. finalize is excluded — an empty closing message there
   // is harmless and shouldn't get a "please continue" prompt.
-  const finalNextQuestion = cleanedNextQuestion || (
+  const finalNextQuestion = deAnnouncedNextQuestion || (
     resolvedSection === 'finalize'
       ? "Thanks, that's everything the doctor needs — please have a seat."
       : 'Could you tell me a bit more about that?'
   );
 
   const rawOptions = parsed.quick_reply_options;
-  const quickReplyOptions = rawOptions && typeof rawOptions === 'object' && !Array.isArray(rawOptions)
+  let quickReplyOptions = rawOptions && typeof rawOptions === 'object' && !Array.isArray(rawOptions)
     ? {
         options: Array.isArray(rawOptions.options) ? rawOptions.options.map(String) : [],
         allow_multiple: !!rawOptions.allow_multiple,
@@ -816,9 +1266,81 @@ export async function runIntakeTurn({ section, structuredHistory, patientMessage
     // treated as single-select, same default this field always had.
     : { options: Array.isArray(rawOptions) ? rawOptions.map(String) : [], allow_multiple: false };
 
+  // ── Duplicate-question guard (field-key based) ────────────────────────
+  // The model now declares which single field it's asking about
+  // ("target_field"). If that field is ALREADY answered in the merged
+  // history, this turn's question is a duplicate — regardless of how
+  // differently it's worded from the earlier one, which is what the
+  // text-similarity guard above can't reliably catch (observed in testing:
+  // "Could you tell me how long you've been experiencing hairfall..."
+  // followed later by "When did you first notice this hairfall
+  // beginning?" — same hpi.onset field, wording too different to match).
+  // Substitute the next genuinely-unanswered field's question instead of
+  // shipping the duplicate. Only runs while staying in the same section
+  // (!sectionComplete); on a section-advancing turn next_question belongs
+  // to the NEXT section, which this section-scoped bank shouldn't override.
+  //
+  // UPDATE: target_field alone proved insufficient — the model mislabels it.
+  // Observed live on one session: "When do you notice the pain or weakness
+  // getting worse?" and later "Does anything specific make this issue better
+  // or worse?" are both exacerbating_relieving, but were self-labelled as
+  // different fields, so this guard passed them both. A third question,
+  // "Which of the following describes how your symptoms behave overall
+  // throughout the day?", served the SAME timing chips as two earlier turns.
+  // So a question is now treated as a duplicate if ANY of three independent
+  // signals says so, rather than trusting the model's own label:
+  //   1. the field it DECLARED (target_field) is already answered
+  //   2. the field its TEXT actually reads as (hpiFieldForQuestion) is
+  //      already answered — catches mislabelling
+  //   3. its OPTIONS substantially repeat a set already offered in this
+  //      section — catches a re-skinned question whose wording and label
+  //      both changed
+  let dedupedNextQuestion = finalNextQuestion;
+  if (!sectionComplete && resolvedSection !== 'finalize') {
+    const capturedLeaves = new Set(
+      capturedFieldKeys(mergedHistory, intakeMethod).map((k) => leafFieldName(k))
+    );
+    const declaredField = leafFieldName(parsed.target_field);
+    // Section-aware text inference. This used to be hpi-only, which left
+    // drug_allergy with no text signal — that is how "Do you have any known
+    // drug allergies?" shipped again two turns later as "Do you have any
+    // known drug or food allergies?".
+    const textField = fieldForQuestion(section, finalNextQuestion, intakeMethod);
+
+    const declaredIsAnswered = !!declaredField && capturedLeaves.has(declaredField);
+    const textIsAnswered = !!textField && capturedLeaves.has(textField);
+    const optionsRepeat = quickReplyOptions.options.length > 0
+      && priorOptionSetsInSection.some((prev) => optionSetsLookRepeated(prev, quickReplyOptions.options));
+
+    if (declaredIsAnswered || textIsAnswered || optionsRepeat) {
+      const replacement = nextUnansweredQuestionFor(section, mergedHistory, intakeMethod);
+      if (replacement) {
+        dedupedNextQuestion = replacement.question;
+        quickReplyOptions = { options: replacement.options, allow_multiple: replacement.allow_multiple };
+      }
+    }
+  }
+
+  // Options are contractually required on every question turn (see the
+  // prompt's quick_reply_options rules) — but the model still drops them
+  // sometimes, which strands the patient on a bare text box for a question
+  // that has an obvious small answer set. Backfill from the section's
+  // question bank rather than shipping an option-less turn. finalize is
+  // exempt: its closing message legitimately has no options.
+  if (quickReplyOptions.options.length === 0 && resolvedSection !== 'finalize' && !sectionComplete) {
+    // Prefer the field the model said it was asking about, so the backfilled
+    // options actually describe the question on screen; only fall back to
+    // "next unanswered" when target_field is missing or unrecognized.
+    const spec = questionSpecForField(leafFieldName(parsed.target_field), mergedHistory, intakeMethod)
+      || nextUnansweredQuestionFor(section, mergedHistory, intakeMethod);
+    if (spec) {
+      quickReplyOptions = { options: spec.options, allow_multiple: spec.allow_multiple };
+    }
+  }
+
   return {
     ok: true,
-    next_question: finalNextQuestion,
+    next_question: dedupedNextQuestion,
     quick_reply_options: quickReplyOptions,
     structured_history: mergedHistory,
     section: resolvedSection,
@@ -836,6 +1358,22 @@ export async function runIntakeTurn({ section, structuredHistory, patientMessage
 }
 
 export { emptyStructuredHistory, hpiComplete, ayurvedaComplete, SECTIONS_ALLOPATHIC, SECTIONS_AYURVEDIC, sectionsFor };
+
+// Internal helpers exposed for unit testing only — same convention as
+// aiClient.js's __testing export. Not part of the module's real surface.
+export const __testing = {
+  hpiFieldForQuestion,
+  optionSetsLookRepeated,
+  questionsLookRepeated,
+  capturedFieldKeys,
+  leafFieldName,
+  nextUnansweredQuestionFor,
+  questionSpecForField,
+  isSystemicComplaint,
+  markInapplicableHpiFields,
+  fieldForQuestion,
+  drugAllergyFieldForQuestion,
+};
 
 /**
  * Creates a new intake_sessions row and runs the first turn (empty
@@ -877,7 +1415,7 @@ export async function startIntakeSession(patientId, { doctorId = null, intakeMet
       language,
       status: 'in_progress',
       structured_history: turn.structured_history,
-      turns: [{ role: 'assistant', text: turn.next_question, section: turn.section, at: new Date().toISOString() }],
+      turns: [{ role: 'assistant', text: turn.next_question, section: turn.section, options: turn.quick_reply_options?.options || [], at: new Date().toISOString() }],
       priority: turn.red_flag ? 'flagged' : 'routine',
       red_flag_reason: turn.red_flag_reason,
     })
@@ -941,6 +1479,29 @@ export async function advanceIntakeSession({ sessionId, patientMessage }) {
   const priorQuestionsInSection = priorTurns
     .filter((t) => t.role === 'assistant' && t.section === currentSection && typeof t.text === 'string')
     .map((t) => t.text);
+  // Option sets already offered in this section — a question re-skinned with
+  // new wording almost always keeps ~the same chips, so this catches repeats
+  // that neither the text-similarity nor the field-key check can (observed
+  // live: three different-sounding questions all served
+  // ["Constant throughout the day","Worse in the morning",...]).
+  const priorOptionSetsInSection = priorTurns
+    .filter((t) => t.role === 'assistant' && t.section === currentSection && Array.isArray(t.options) && t.options.length > 0)
+    .map((t) => t.options);
+  // Pair each prior assistant question in this section with the patient turn
+  // that answered it. Needed because a repeated question is usually a repeat
+  // of an OLDER question, not the one just asked — so recovering that
+  // question's own answer is the only way to back-fill the right value.
+  // Writing the CURRENT patientMessage instead (what the guards used to do)
+  // silently files one field's answer under another field.
+  const priorQaInSection = priorTurns.reduce((acc, t, i) => {
+    if (t.role === 'assistant' && t.section === currentSection && typeof t.text === 'string') {
+      const next = priorTurns[i + 1];
+      if (next && next.role === 'patient' && typeof next.text === 'string' && next.text.trim()) {
+        acc.push({ question: t.text, answer: next.text.trim() });
+      }
+    }
+    return acc;
+  }, []);
 
   const turn = await runIntakeTurn({
     section: currentSection,
@@ -949,6 +1510,8 @@ export async function advanceIntakeSession({ sessionId, patientMessage }) {
     intakeMethod,
     lastQuestion,
     priorQuestionsInSection,
+    priorOptionSetsInSection,
+    priorQaInSection,
     // Read from the session row's own snapshot, like intake_method above —
     // the language was fixed once at /intake/start and must not be
     // re-derived per turn (Voice Layer PRD §6).
@@ -959,7 +1522,7 @@ export async function advanceIntakeSession({ sessionId, patientMessage }) {
   const updatedTurns = [
     ...(Array.isArray(session.turns) ? session.turns : []),
     { role: 'patient', text: patientMessage.trim(), at: nowIso },
-    { role: 'assistant', text: turn.next_question, section: turn.section, at: nowIso },
+    { role: 'assistant', text: turn.next_question, section: turn.section, options: turn.quick_reply_options?.options || [], at: nowIso },
   ];
 
   const { data: updated, error: updateError } = await supabase

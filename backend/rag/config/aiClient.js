@@ -39,7 +39,17 @@ const MODEL_LADDER = {
 // catalogue; the other 4 slugs the old hardcoded chain used are all gone.
 const OPENROUTER_SAFE_DEFAULT = ['openrouter/free'];
 
-const TIMEOUT_MS = { embedding: 20000, 'vision-ocr': 45000, generation: 30000, 'intake-dialogue': 30000 };
+// intake-dialogue gets a SHORTER per-attempt timeout than generation
+// (30000ms) — it's a short, interactive, one-question-at-a-time exchange
+// (unlike report summarization, which can legitimately run long), and the
+// full ladder already retries same-key once then moves through 4 keys x 2
+// models x Gemini, then OpenRouter — a slow/stalled first attempt at 30s
+// each was compounding into 30-55s+ single turns (observed in testing: one
+// attempt hard-timed-out at 30009ms, the retry then took another ~23s to
+// actually succeed). At 12s, a stalled attempt fails over to the next
+// key/model roughly 2.5x faster while still giving a normal-latency
+// response (typically well under 12s) a fair shot to complete.
+const TIMEOUT_MS = { embedding: 20000, 'vision-ocr': 45000, generation: 30000, 'intake-dialogue': 12000 };
 
 export const FRIENDLY_FALLBACK =
   "Swastha couldn't process this right now. Please try again shortly.";
