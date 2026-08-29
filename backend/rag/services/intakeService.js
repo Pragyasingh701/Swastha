@@ -194,45 +194,77 @@ function fieldForQuestion(section, questionText, intakeMethod) {
 // fallback path. Free text stays available alongside them either way (the
 // chat UI always renders its text input), so these never have to be
 // exhaustive.
+// Deterministic question banks used when the model's own next_question has
+// to be replaced — the dedup guard (it re-asked an already-answered field)
+// and the options backfill. These REPLACE what the patient sees, so they
+// must exist in every language the session can be in: a Hindi session that
+// hits the dedup guard would otherwise show one hardcoded English question
+// in an otherwise all-Hindi conversation (observed in testing). Options are
+// localized alongside the question — a Hindi question with English chips is
+// the same bug half-fixed.
+//
+// {complaint} is substituted with the patient's chief complaint, which is
+// stored in ENGLISH (it is the doctor-facing record). So the Hindi
+// templates deliberately do NOT use that placeholder — interpolating it
+// produced half-English questions like "Abdominal pain के साथ और कुछ
+// महसूस हो रहा है?" (seen in testing). They say "यह तकलीफ़" instead,
+// which reads naturally because the question always follows the
+// patient's own description of the problem.
 const HPI_FALLBACK_QUESTIONS = {
   site: {
     question: 'Where exactly is the {complaint}?',
+    question_hi: 'यह तकलीफ़ ठीक किस जगह पर है?',
     options: ['One specific spot', 'A general area', 'Moves around', 'Not sure'],
+    options_hi: ['एक ही जगह पर', 'थोड़े बड़े हिस्से में', 'जगह बदलता रहता है', 'पता नहीं'],
     allow_multiple: false,
   },
   onset: {
     question: 'When did the {complaint} start?',
+    question_hi: 'यह तकलीफ़ कब से शुरू हुई?',
     options: ['Today', '2-3 days ago', 'About a week ago', 'More than a month ago'],
+    options_hi: ['आज से', '2-3 दिन पहले से', 'लगभग एक हफ्ते से', 'एक महीने से ज़्यादा'],
     allow_multiple: false,
   },
   character: {
     question: 'How would you describe the {complaint}?',
+    question_hi: 'यह तकलीफ़ कैसी महसूस होती है?',
     options: ['Sharp', 'Dull or aching', 'Burning', 'Cramping', 'Other'],
+    options_hi: ['चुभने वाला', 'हल्का या भारी दर्द', 'जलन जैसा', 'मरोड़ वाला', 'अन्य'],
     allow_multiple: false,
   },
   radiation: {
     question: 'Does the {complaint} spread anywhere else?',
+    question_hi: 'क्या यह तकलीफ़ शरीर के किसी और हिस्से तक जाती है?',
     options: ['No, stays in one place', 'Yes, spreads nearby', 'Not sure'],
+    options_hi: ['नहीं, एक ही जगह रहता है', 'हाँ, आस-पास फैलता है', 'पता नहीं'],
     allow_multiple: false,
   },
   associated_symptoms: {
     question: 'Have you noticed anything else along with the {complaint}?',
+    question_hi: 'इसके साथ और कुछ महसूस हो रहा है?',
     options: ['Fever', 'Nausea or vomiting', 'Swelling', 'Weakness', 'Nothing else'],
+    options_hi: ['बुखार', 'मितली या उल्टी', 'सूजन', 'कमजोरी', 'और कुछ नहीं'],
     allow_multiple: true,
   },
   timing: {
     question: 'Is the {complaint} constant, or does it come and go?',
+    question_hi: 'क्या यह तकलीफ़ लगातार रहती है या आती-जाती है?',
     options: ['Constant', 'Comes and goes', 'Worse at certain times', 'Not sure'],
+    options_hi: ['लगातार रहता है', 'आता-जाता है', 'कुछ समय पर ज़्यादा होता है', 'पता नहीं'],
     allow_multiple: false,
   },
   exacerbating_relieving: {
     question: 'Does anything make the {complaint} better or worse?',
+    question_hi: 'किसी चीज़ से यह तकलीफ़ बढ़ती या कम होती है?',
     options: ['Worse with movement', 'Better with rest', 'Worse at night', 'Nothing changes it'],
+    options_hi: ['चलने-फिरने से बढ़ता है', 'आराम करने से कम होता है', 'रात में ज़्यादा होता है', 'किसी चीज़ से फर्क नहीं पड़ता'],
     allow_multiple: false,
   },
   severity: {
     question: 'On a scale of 1 to 10, how severe is the {complaint}?',
+    question_hi: '1 से 10 के बीच, यह तकलीफ़ कितनी तेज़ है?',
     options: ['1-3 (mild)', '4-6 (moderate)', '7-8 (severe)', '9-10 (worst imaginable)'],
+    options_hi: ['1-3 (हल्का)', '4-6 (मध्यम)', '7-8 (तेज़)', '9-10 (बहुत ज़्यादा)'],
     allow_multiple: false,
   },
 };
@@ -240,15 +272,34 @@ const HPI_FALLBACK_QUESTIONS = {
 const DRUG_ALLERGY_FALLBACK_QUESTIONS = {
   current_medications: {
     question: 'Are you currently taking any medications?',
+    question_hi: 'क्या आप अभी कोई दवा ले रहे हैं?',
     options: ['None', 'Yes — prescription', 'Yes — over the counter', 'Not sure'],
+    options_hi: ['कोई नहीं', 'हाँ — डॉक्टर की लिखी दवा', 'हाँ — मेडिकल से ली हुई दवा', 'पता नहीं'],
     allow_multiple: false,
   },
   allergies: {
     question: 'Do you have any known drug or food allergies?',
+    question_hi: 'क्या आपको किसी दवा या खाने से एलर्जी है?',
     options: ['No known allergies', 'Yes — to a medicine', 'Yes — to a food', 'Not sure'],
+    options_hi: ['कोई एलर्जी नहीं', 'हाँ — किसी दवा से', 'हाँ — किसी खाने से', 'पता नहीं'],
     allow_multiple: false,
   },
 };
+
+/**
+ * Picks the language-appropriate question/options out of a bank entry.
+ * Falls back to English if a Hindi variant is somehow missing, so a new
+ * un-translated entry degrades to "wrong language" rather than "undefined".
+ */
+function localizeSpec(spec, language) {
+  if (!spec) return null;
+  const hi = language === 'hi-IN';
+  return {
+    question: (hi && spec.question_hi) || spec.question,
+    options: (hi && spec.options_hi) || spec.options,
+    allow_multiple: spec.allow_multiple,
+  };
+}
 
 // Two option sets that overlap heavily are the same question re-skinned,
 // even when the question TEXT was rewritten enough to defeat
@@ -310,12 +361,12 @@ function leafFieldName(targetField) {
 // field it actually asked about, rather than "whatever's unanswered first",
 // so the options can't end up describing a different question than the one
 // on screen.
-function questionSpecForField(field, history, intakeMethod) {
+function questionSpecForField(field, history, intakeMethod, language = 'hi-IN') {
   if (!field) return null;
   const complaint = (history?.chief_complaint || 'problem').trim() || 'problem';
 
   if (HPI_FALLBACK_QUESTIONS[field]) {
-    const spec = HPI_FALLBACK_QUESTIONS[field];
+    const spec = localizeSpec(HPI_FALLBACK_QUESTIONS[field], language);
     return {
       field,
       question: spec.question.replace(/\{complaint\}/g, complaint),
@@ -324,7 +375,7 @@ function questionSpecForField(field, history, intakeMethod) {
     };
   }
   if (DRUG_ALLERGY_FALLBACK_QUESTIONS[field]) {
-    const spec = DRUG_ALLERGY_FALLBACK_QUESTIONS[field];
+    const spec = localizeSpec(DRUG_ALLERGY_FALLBACK_QUESTIONS[field], language);
     return { field, question: spec.question, options: spec.options, allow_multiple: spec.allow_multiple };
   }
   if (intakeMethod === 'ayurvedic') {
@@ -342,7 +393,7 @@ function questionSpecForField(field, history, intakeMethod) {
   return null;
 }
 
-function nextUnansweredQuestionFor(section, history, intakeMethod) {
+function nextUnansweredQuestionFor(section, history, intakeMethod, language = 'hi-IN') {
   const complaint = (history?.chief_complaint || 'problem').trim() || 'problem';
   const fill = (q) => q.replace(/\{complaint\}/g, complaint);
 
@@ -353,7 +404,7 @@ function nextUnansweredQuestionFor(section, history, intakeMethod) {
       if (f === 'severity') return v === null || v === undefined || v === '';
       return !(typeof v === 'string' && v.trim() !== '');
     });
-    const spec = field && HPI_FALLBACK_QUESTIONS[field];
+    const spec = field && localizeSpec(HPI_FALLBACK_QUESTIONS[field], language);
     if (!spec) return null;
     return { field, question: fill(spec.question), options: spec.options, allow_multiple: spec.allow_multiple };
   }
@@ -362,7 +413,7 @@ function nextUnansweredQuestionFor(section, history, intakeMethod) {
     const field = ['current_medications', 'allergies'].find(
       (f) => !(Array.isArray(history?.drug_allergy?.[f]) && history.drug_allergy[f].length > 0)
     );
-    const spec = field && DRUG_ALLERGY_FALLBACK_QUESTIONS[field];
+    const spec = field && localizeSpec(DRUG_ALLERGY_FALLBACK_QUESTIONS[field], language);
     if (!spec) return null;
     return { field, question: spec.question, options: spec.options, allow_multiple: spec.allow_multiple };
   }
@@ -792,11 +843,15 @@ Rules for the JSON:
 // parse answers, only to decide "was this field ever put to the patient?"
 //
 // Deliberately generous: a false positive here just permits a value the
-// model wanted to write anyway (status quo), while a false negative would
-// silently drop a real answer the patient gave. So this errs toward
-// allowing, and only blocks fields with no plausible question behind them
-// at all — which is exactly the observed failure (severity invented with
-// no severity question anywhere in the transcript).
+// model wanted to write anyway (status quo), while a false negative
+// silently drops a real answer the patient gave — which is strictly worse,
+// because the field then stays empty and the engine re-asks it every turn,
+// stranding the patient in a loop (observed in testing: a genuine
+// "खाने के बाद बढ़ता है" answer was dropped because the cue list was too
+// narrow, and that question then repeated three turns running).
+// So this errs hard toward allowing, and only blocks fields with no
+// plausible question behind them at all — the observed invention case was
+// severity appearing with no severity question anywhere in the transcript.
 const HPI_FIELD_CUES = {
   site: ['where', 'which part', 'location', 'कहाँ', 'कहां', 'किस हिस्से', 'जगह'],
   onset: ['when did', 'since when', 'how long', 'start', 'began', 'कब से', 'कब शुरू', 'कितने दिन', 'कब'],
@@ -804,7 +859,7 @@ const HPI_FIELD_CUES = {
   radiation: ['spread', 'travel', 'move to', 'radiat', 'फैल', 'जाता', 'कहीं और'],
   associated_symptoms: ['along with', 'other symptom', 'also have', 'nausea', 'vomit', 'fever', 'साथ', 'अन्य लक्षण', 'उल्टी', 'मितली', 'बुखार', 'दस्त'],
   timing: ['come and go', 'constant', 'all the time', 'time of day', 'intermittent', 'लगातार', 'रुक', 'कभी', 'समय'],
-  exacerbating_relieving: ['better', 'worse', 'relief', 'trigger', 'after eating', 'बढ़', 'कम', 'आराम', 'खाने के बाद'],
+  exacerbating_relieving: ['better', 'worse', 'relief', 'trigger', 'after eating', 'make it', 'बढ़', 'कम', 'आराम', 'खाने के बाद', 'ज़्यादा', 'ज्यादा', 'चीज़', 'चीज', 'असर', 'फर्क', 'राहत'],
   severity: ['severity', 'how bad', 'how severe', 'scale', '1 to 10', '1-10', 'pain score', 'कितना', 'तीव्रता', 'गंभीर', 'दस में'],
 };
 
@@ -945,6 +1000,20 @@ function nextSection(current, sectionComplete, intakeMethod) {
   return sections[idx + 1];
 }
 
+// Shown when every provider in the ladder failed for this turn. aiClient's
+// FRIENDLY_FALLBACK is English-only by design (shared transport layer, no
+// session context), so intake supplies its own language-aware wording —
+// the patient should never be dropped into English mid-session just
+// because the model ladder was exhausted.
+const EXHAUSTION_MESSAGE = {
+  'en-IN': "Swastha couldn't process this right now. Please try again shortly.",
+  'hi-IN': 'अभी कुछ तकनीकी दिक्कत आ रही है। कृपया थोड़ी देर बाद दोबारा कोशिश करें।',
+};
+
+function exhaustionMessageFor(language) {
+  return EXHAUSTION_MESSAGE[language] || EXHAUSTION_MESSAGE['hi-IN'];
+}
+
 /**
  * Runs one dialogue-engine turn: builds the prompt from current
  * structured_history + section + intake_method, calls
@@ -987,9 +1056,15 @@ export async function runIntakeTurn({ section, structuredHistory, patientMessage
     // 500 for a generation-class task. The session stays in_progress and the
     // patient sees the friendly fallback as the "question" — caller can
     // retry the same turn.
+    //
+    // aiClient's FRIENDLY_FALLBACK is English-only and lives in a shared
+    // transport layer with no session context (and is byte-mirrored in
+    // backend/services/aiClient.js, which must stay identical), so the
+    // localized wording is chosen HERE, where the session's language is
+    // known. Otherwise a Hindi session ends a turn in English.
     return {
       ok: false,
-      next_question: gen.text,
+      next_question: exhaustionMessageFor(language),
       quick_reply_options: { options: [], allow_multiple: false },
       structured_history: history,
       section,
@@ -1313,7 +1388,7 @@ export async function runIntakeTurn({ section, structuredHistory, patientMessage
       && priorOptionSetsInSection.some((prev) => optionSetsLookRepeated(prev, quickReplyOptions.options));
 
     if (declaredIsAnswered || textIsAnswered || optionsRepeat) {
-      const replacement = nextUnansweredQuestionFor(section, mergedHistory, intakeMethod);
+      const replacement = nextUnansweredQuestionFor(section, mergedHistory, intakeMethod, language);
       if (replacement) {
         dedupedNextQuestion = replacement.question;
         quickReplyOptions = { options: replacement.options, allow_multiple: replacement.allow_multiple };
@@ -1331,8 +1406,8 @@ export async function runIntakeTurn({ section, structuredHistory, patientMessage
     // Prefer the field the model said it was asking about, so the backfilled
     // options actually describe the question on screen; only fall back to
     // "next unanswered" when target_field is missing or unrecognized.
-    const spec = questionSpecForField(leafFieldName(parsed.target_field), mergedHistory, intakeMethod)
-      || nextUnansweredQuestionFor(section, mergedHistory, intakeMethod);
+    const spec = questionSpecForField(leafFieldName(parsed.target_field), mergedHistory, intakeMethod, language)
+      || nextUnansweredQuestionFor(section, mergedHistory, intakeMethod, language);
     if (spec) {
       quickReplyOptions = { options: spec.options, allow_multiple: spec.allow_multiple };
     }
