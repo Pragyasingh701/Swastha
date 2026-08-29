@@ -244,6 +244,12 @@ export default function IntakeChat() {
   const audioRef = useRef(null);
   // Pending timeout for the options readout that follows a question.
   const optionsTimerRef = useRef(null);
+  // Monotonic token identifying the most recent playback request. Any async
+  // work (a replay-audio fetch, the options-readout timer) checks that its
+  // token is still current before it makes a sound, so a slow response that
+  // resolves after the patient has already moved on is discarded instead of
+  // playing over the question now on screen. Newest request always wins.
+  const playTokenRef = useRef(0);
 
   // ── Voice layer state (Phase 7a/7b) ─────────────────────────────────
   // Chosen once on the language screen, then sent to /intake/start and
@@ -310,7 +316,18 @@ export default function IntakeChat() {
   // Safari can still refuse, so a rejection just leaves the speaker icon
   // sitting there for them to tap.
   function stopPlayback() {
-    audioRef.current?.pause();
+    // Bumping the token invalidates any in-flight fetch or pending options
+    // timer that was started for an earlier question.
+    playTokenRef.current += 1;
+    if (audioRef.current) {
+      audioRef.current.pause();
+      // Reset so this element can't resume mid-sentence if it's reused.
+      try {
+        audioRef.current.currentTime = 0;
+      } catch {
+        /* not seekable yet — pause() is enough */
+      }
+    }
     audioRef.current = null;
     // Cancel a pending options clip too, or it would start playing after
     // the patient has already muted/stopped or moved to the next turn.
@@ -330,8 +347,15 @@ export default function IntakeChat() {
   function playAudioPayload(base64, mime, forText = null, followUp = null) {
     if (!base64) return;
     try {
+      // Always stop whatever is playing FIRST. Without this, a new question
+      // arriving mid-sentence would layer its audio over the previous one
+      // (two <audio> elements playing at once), which is the overlap the
+      // patient hears. Applies equally to autoplay on a new turn and to a
+      // "Listen" tap on an older question.
+      stopPlayback();
+      const token = playTokenRef.current;
+
       const audio = new Audio(`data:${mime || "audio/wav"};base64,${base64}`);
-      audioRef.current?.pause();
       audioRef.current = audio;
       audio.onplay = () => {
         setIsSpeaking(true);
@@ -346,6 +370,10 @@ export default function IntakeChat() {
         // Beat of silence between question and options so they don't run
         // together as one breathless sentence.
         optionsTimerRef.current = setTimeout(() => {
+          // The patient may have answered during that pause — if so this
+          // token is stale and the options readout must not interrupt the
+          // question that has since started.
+          if (playTokenRef.current !== token) return;
           const opts = new Audio(`data:${followUp.mime || "audio/wav"};base64,${followUp.base64}`);
           audioRef.current = opts;
           opts.onended = stopPlayback;
@@ -404,10 +432,15 @@ export default function IntakeChat() {
     // is usually a cache hit there too.
     if (!sessionId) return;
     setLoadingAudioText(text);
+    // Snapshot the token so a slow fetch that lands after the patient has
+    // already answered (or tapped a different question) is cached but not
+    // played — newest request wins.
+    const requestedAt = playTokenRef.current;
     try {
       const res = await replayIntakeAudio(sessionId, text);
       const payload = { base64: res.audio_base64, mime: res.audio_mime_type || "audio/wav" };
       setAudioByText((prev) => ({ ...prev, [text]: payload }));
+      if (playTokenRef.current !== requestedAt) return;
       playAudioPayload(payload.base64, payload.mime, text);
     } catch {
       // Audio unavailable — the question text is still on screen to read.
@@ -665,6 +698,10 @@ export default function IntakeChat() {
     if (!trimmed || sending || !sessionId || done) return;
 
     setError(null);
+    // Cut the current question's audio the instant the patient answers,
+    // rather than waiting for the reply to arrive — otherwise the old
+    // question keeps talking over them for the whole LLM round-trip.
+    stopPlayback();
     setMessages((prev) => [...prev, { role: "patient", text: trimmed }]);
     setQuickReplies({ options: [], allowMultiple: false });
     setSelectedOptions([]);
