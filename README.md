@@ -27,7 +27,7 @@ the **Frontend SPA** (Vite/React, `:5173`).
 - **🔍 Grounded RAG Semantic Search**: The RAG sub-app (mounted inside the backend at `/rag`) performs `pgvector` similarity search over patient records and synthesizes natural-language answers via **OpenRouter AI**.
 - **👨‍👩‍👧‍👦 Family Vault & Authorization Network**: Centralized health management for families. Manage dependants (children/elders) and send email-authorized consent requests for adult family members.
 - **📊 AI Lab Trends Visualizer**: Interactive trend analysis powered by **Recharts**, tracking blood work, lab parameters, and vital metrics over time.
-- **👨‍⚕️ Doctor Clinical Dashboard**: Dedicated portal allowing verified healthcare professionals to link patients by their unique 6-digit **patient code** (or user ID), then search records, view past diagnoses, active medications, and medical history.
+- **👨‍⚕️ Doctor Clinical Dashboard**: Dedicated portal allowing verified healthcare professionals to link patients by their unique 6-digit **patient code** (or user ID), then search records, view past diagnoses, active medications, and medical history. Access is patient-approved and **time-limited to 24 hours** per approval — after that, the link goes inactive and the doctor must send a fresh request rather than retaining standing access.
 
 ---
 
@@ -259,9 +259,19 @@ CREATE TABLE public.family_members (
 CREATE INDEX IF NOT EXISTS family_members_patient_id_idx ON public.family_members(patient_id);
 CREATE INDEX IF NOT EXISTS idx_family_members_parent_member_id ON public.family_members(parent_member_id);
 
--- 8. Doctor ↔ Patient Link Table (⚠️ hand-created, see note above)
+-- 8. Doctor ↔ Patient Link Table (⚠️ hand-created, see note above — except
+-- access_expires_at, which DOES have a real migration:
+-- supabase/migrations/20260830010000_add_access_expires_at_to_doctor_patient.sql)
 -- A doctor sends a link request (status='pending'); the patient accepts or
 -- declines, in-app or via a one-shot emailed token (email_action_token).
+-- Acceptance is NOT permanent: access_expires_at is stamped to 24h from the
+-- moment of acceptance, and every health-data read (isDoctorLinkedToPatient
+-- in backend/db/doctorPatients.js, the single shared gate) checks it in
+-- addition to status='accepted'. Once it lapses, the doctor's patient-list
+-- card shows the link as inactive (no patient data included in that card)
+-- until they send a fresh request — see requestAccessAgain, which re-opens
+-- this same row (status back to 'pending', access_expires_at cleared)
+-- rather than inserting a second one for the pair.
 CREATE TABLE public.doctor_patient (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   doctor_id VARCHAR NOT NULL REFERENCES public.doctors(id) ON DELETE CASCADE,
@@ -276,6 +286,7 @@ CREATE TABLE public.doctor_patient (
   patient_blood_group TEXT,
   status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'accepted', 'declined')),
   responded_at TIMESTAMPTZ,       -- when the patient accepted/declined; NULL = no response yet
+  access_expires_at TIMESTAMPTZ,  -- set to responded_at + 24h on acceptance; NULL = not accepted (yet)
   email_action_token TEXT,        -- one-shot accept/decline token sent by email
   created_at TIMESTAMPTZ DEFAULT NOW(),
   CONSTRAINT doctor_patient_unique UNIQUE (doctor_id, patient_id)

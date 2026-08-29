@@ -57,6 +57,16 @@ export async function deletePatientFromDoctor(patientId, linkId = null) {
 }
 
 /**
+ * DOCTOR-facing: re-sends an access request for a patient whose previous
+ * 24h access window has expired — no patient code re-entry needed, unlike
+ * linkPatientToDoctor. Used by the "Request Access Again" button on an
+ * expired card.
+ */
+export async function requestAccessAgain(patientId) {
+  return request(`/${patientId}/re-request`, { method: 'POST' });
+}
+
+/**
  * Doctor-facing single-patient detail. The server enforces status ===
  * 'accepted' and returns 403 otherwise — this call must only ever be
  * triggered for a card the UI already knows is accepted (never for a
@@ -156,6 +166,7 @@ export default {
   getDoctorPatients,
   linkPatientToDoctor,
   deletePatientFromDoctor,
+  requestAccessAgain,
   getDoctorPatientDetail,
   getDoctorPatientSummary,
   getPendingDoctorRequests,

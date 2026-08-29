@@ -9,6 +9,7 @@ import {
   declineDoctorLinkRequest,
   resolveDoctorLinkRequestByToken,
   isDoctorLinkedToPatient,
+  requestAccessAgain,
   getDoctorNotifications,
   getPatientNotifications,
 } from '../db/doctorPatients.js';
@@ -458,7 +459,7 @@ router.get('/email-action/accept', async (req, res) => {
     await resolveDoctorLinkRequestByToken(token, 'accepted');
     return renderEmailActionPage(res, {
       heading: 'Request accepted',
-      message: 'You have granted this doctor access to your health records. You can revoke access at any time from the Swastha app.',
+      message: 'You have granted this doctor access to your health records for the next 24 hours. Access expires automatically after that, and you can revoke it sooner at any time from the Swastha app.',
     });
   } catch (error) {
     return renderEmailActionPage(res, {
@@ -698,6 +699,47 @@ router.get('/:patientId/summary', async (req, res) => {
   } catch (error) {
     console.error('Doctor patient summary error:', error);
     return res.status(500).json({ message: 'Failed to load patient summary', error: error.message });
+  }
+});
+
+/**
+ * POST /api/doctor-patients/:patientId/re-request
+ * DOCTOR-facing: re-sends an access request for a patient whose previous
+ * 24h access window has expired — used by the "Request Access Again"
+ * button on an expired card, so the doctor doesn't have to re-type the
+ * patient code. Rejects (via requestAccessAgain) anything that isn't an
+ * actually-expired accepted link, e.g. a still-pending or declined pair.
+ */
+router.post('/:patientId/re-request', async (req, res) => {
+  const authUser = getAuthUser(req);
+
+  if (!authUser?.userId) {
+    return res.status(401).json({ message: 'Authentication required.' });
+  }
+
+  const patientId = String(req.params?.patientId ?? '').trim();
+  if (!patientId) {
+    return res.status(400).json({ message: 'Patient ID is required.' });
+  }
+
+  try {
+    const result = await requestAccessAgain({ doctorId: authUser.userId, patientUserId: patientId });
+
+    if (result.link.status === 'pending' && result.link.email_action_token && result.link.patient_email) {
+      try {
+        const backendUrl = process.env.BACKEND_URL || 'http://localhost:5001';
+        const acceptUrl = `${backendUrl}/api/doctor-patients/email-action/accept?token=${result.link.email_action_token}`;
+        const declineUrl = `${backendUrl}/api/doctor-patients/email-action/decline?token=${result.link.email_action_token}`;
+        await sendDoctorRequestEmail(result.link.patient_email, result.link.patient_name, acceptUrl, declineUrl);
+      } catch (emailError) {
+        console.warn('Doctor re-request email warning:', emailError?.message || emailError);
+      }
+    }
+
+    return res.json({ message: 'Request sent to patient.', patient: result.patient, link: { id: result.link.id, status: result.link.status } });
+  } catch (error) {
+    console.error('Doctor re-request error:', error);
+    return res.status(400).json({ message: error?.message || 'Unable to send request.' });
   }
 });
 
