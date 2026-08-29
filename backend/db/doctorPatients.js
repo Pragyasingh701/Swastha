@@ -302,35 +302,8 @@ export const linkDoctorToPatient = async ({ doctorId, patientCode }) => {
 
     // Access lapsed — re-open the SAME row as a fresh pending request
     // rather than inserting a second one (doctor_patient_unique constrains
-    // one row per doctor/patient pair). Refreshes the denormalized patient
-    // snapshot fields too, in case they changed since the original request.
-    const emailActionToken = crypto.randomBytes(20).toString('hex');
-    const { data: reopened, error: reopenError } = await supabase
-      .from('doctor_patient')
-      .update({
-        status: 'pending',
-        patient_email: patient.email || null,
-        patient_name: patient.name || patient.fullName || patient.email || 'Patient',
-        patient_phone: patient.phone || patient.mobile || patient.phone_number || null,
-        patient_gender: patient.gender || 'U',
-        patient_dob: patient.dob || patient.date_of_birth || patient.dateOfBirth || null,
-        patient_blood_group: patient.blood_group || patient.bloodGroup || patient.blood_type || null,
-        responded_at: null,
-        access_expires_at: null,
-        email_action_token: emailActionToken,
-      })
-      .eq('id', existingLink.id)
-      .select()
-      .single();
-
-    if (reopenError) throw reopenError;
-
-    await notifyPatientOfNewRequest({ doctorId, patient, link: reopened });
-
-    return {
-      link: reopened,
-      patient: minimalDoctorPatientCard(reopened),
-    };
+    // one row per doctor/patient pair).
+    return reopenExpiredLink({ doctorId, patient, existingLink });
   }
 
   // One-shot token for the "Accept" / "Decline" links in the request email
@@ -373,6 +346,85 @@ export const linkDoctorToPatient = async ({ doctorId, patientCode }) => {
     // request, only once (if) the patient accepts.
     patient: minimalDoctorPatientCard(data),
   };
+};
+
+// Re-opens an existing (accepted-but-expired) doctor_patient row as a fresh
+// pending request — refreshes the denormalized patient snapshot fields in
+// case they changed since the original request, and issues a new
+// email_action_token/notification exactly like a brand-new request would.
+// Shared by linkDoctorToPatient (re-requesting by patient code) and
+// requestAccessAgain (re-requesting straight from an expired card, by
+// patient id, no code re-entry needed).
+async function reopenExpiredLink({ doctorId, patient, existingLink }) {
+  const emailActionToken = crypto.randomBytes(20).toString('hex');
+  const { data: reopened, error: reopenError } = await supabase
+    .from('doctor_patient')
+    .update({
+      status: 'pending',
+      patient_email: patient.email || null,
+      patient_name: patient.name || patient.fullName || patient.email || 'Patient',
+      patient_phone: patient.phone || patient.mobile || patient.phone_number || null,
+      patient_gender: patient.gender || 'U',
+      patient_dob: patient.dob || patient.date_of_birth || patient.dateOfBirth || null,
+      patient_blood_group: patient.blood_group || patient.bloodGroup || patient.blood_type || null,
+      responded_at: null,
+      access_expires_at: null,
+      email_action_token: emailActionToken,
+    })
+    .eq('id', existingLink.id)
+    .select()
+    .single();
+
+  if (reopenError) throw reopenError;
+
+  await notifyPatientOfNewRequest({ doctorId, patient, link: reopened });
+
+  return {
+    link: reopened,
+    patient: minimalDoctorPatientCard(reopened),
+  };
+}
+
+/**
+ * Re-requests access straight from an expired card — no patient code
+ * re-entry needed, since the doctor is already linked to (and knows) this
+ * patient. Only valid when the existing link is 'accepted' and its access
+ * has actually expired; anything else is rejected so this can't be used to
+ * bypass the normal pending->accept flow or re-request a declined pair.
+ */
+export const requestAccessAgain = async ({ doctorId, patientUserId }) => {
+  if (!doctorId || !patientUserId) {
+    throw new Error('Doctor ID and patient ID are required.');
+  }
+  if (!supabase) throw new Error('Database connection is unavailable.');
+
+  const { data: existingLink, error: existingLinkError } = await supabase
+    .from('doctor_patient')
+    .select('*')
+    .eq('doctor_id', doctorId)
+    .eq('patient_id', patientUserId)
+    .maybeSingle();
+
+  if (existingLinkError && existingLinkError.code !== 'PGRST116') throw existingLinkError;
+  if (!existingLink) {
+    throw new Error('No previous request found for this patient.');
+  }
+  if (existingLink.status !== 'accepted' || !isAccessExpired(existingLink)) {
+    throw new Error('This request is not eligible to be re-sent.');
+  }
+
+  const { data: patient, error: patientError } = await supabase
+    .from('patients')
+    .select('*')
+    .eq('id', patientUserId)
+    .maybeSingle();
+
+  if (patientError && patientError.code !== 'PGRST116') throw patientError;
+  if (!patient) {
+    throw new Error('Patient not found.');
+  }
+
+  return reopenExpiredLink({ doctorId, patient, existingLink });
 };
 
 // Shared by both the brand-new-request path and the re-open-after-expiry
