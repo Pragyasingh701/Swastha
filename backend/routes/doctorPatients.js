@@ -458,7 +458,7 @@ router.get('/email-action/accept', async (req, res) => {
     await resolveDoctorLinkRequestByToken(token, 'accepted');
     return renderEmailActionPage(res, {
       heading: 'Request accepted',
-      message: 'You have granted this doctor access to your health records. You can revoke access at any time from the Swastha app.',
+      message: 'You have granted this doctor access to your health records for the next 24 hours. Access expires automatically after that, and you can revoke it sooner at any time from the Swastha app.',
     });
   } catch (error) {
     return renderEmailActionPage(res, {

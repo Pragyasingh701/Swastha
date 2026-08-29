@@ -84,17 +84,24 @@ function normalizeDoctorPatientCard(patient = {}) {
 }
 
 // Deliberately tiny — no age, phone, dob, blood group, avatar, or anything
-// else. A pending/declined card must not leak ANY patient data beyond the
-// name, so this is a hardcoded allowlist rather than a filtered version of
-// the full object (which would silently start leaking fields if someone
-// later adds to normalizeDoctorPatientCard without updating this too).
-function minimalDoctorPatientCard(link) {
+// else. A pending/declined/expired card must not leak ANY patient data
+// beyond the name, so this is a hardcoded allowlist rather than a filtered
+// version of the full object (which would silently start leaking fields if
+// someone later adds to normalizeDoctorPatientCard without updating this
+// too).
+//
+// statusOverride lets a caller report a derived status ('expired') that
+// differs from the raw link.status ('accepted') still on the row — used
+// when an accepted link's access_expires_at has passed but the DB row
+// hasn't been touched (expiry is computed live, not written back).
+function minimalDoctorPatientCard(link, statusOverride) {
   return {
     linkId: link.id,
     patientUserId: link.patient_id,
     patient_name: link.patient_name || 'Patient',
-    linkStatus: link.status, // 'pending' | 'declined' — kept distinct from
+    linkStatus: statusOverride || link.status, // 'pending' | 'declined' | 'expired' — kept distinct from
     linkedAt: link.created_at, // the unrelated display `status` field above
+    accessExpiresAt: link.access_expires_at || null,
   };
 }
 
@@ -131,6 +138,14 @@ export const getDoctorPatients = async (doctorId) => {
         // hasn't accepted.
         if (link.status !== 'accepted') {
           return minimalDoctorPatientCard(link);
+        }
+
+        // Accepted but the 24h access window has lapsed: same treatment as
+        // pending/declined — minimal, name-only card, no `patients` lookup.
+        // Surfaced as linkStatus 'expired' (not 'accepted') so the frontend
+        // renders it as inactive rather than as a full patient card.
+        if (isAccessExpired(link)) {
+          return minimalDoctorPatientCard(link, 'expired');
         }
 
         // Post-split: doctor_patient.patient_id always points at `patients`
@@ -273,10 +288,48 @@ export const linkDoctorToPatient = async ({ doctorId, patientCode }) => {
       // clear error rather than silently re-sending or silently no-op'ing.
       throw new Error('This patient has declined your request. You cannot re-request access.');
     }
-    // pending or accepted — idempotent, return the existing link as-is.
+
+    const expired = existingLink.status === 'accepted' && isAccessExpired(existingLink);
+
+    if (!expired) {
+      // pending, or still within its 24h access window — idempotent,
+      // return the existing link as-is.
+      return {
+        link: existingLink,
+        patient: existingLink.status === 'accepted' ? normalizeDoctorPatientCard(patient) : minimalDoctorPatientCard(existingLink),
+      };
+    }
+
+    // Access lapsed — re-open the SAME row as a fresh pending request
+    // rather than inserting a second one (doctor_patient_unique constrains
+    // one row per doctor/patient pair). Refreshes the denormalized patient
+    // snapshot fields too, in case they changed since the original request.
+    const emailActionToken = crypto.randomBytes(20).toString('hex');
+    const { data: reopened, error: reopenError } = await supabase
+      .from('doctor_patient')
+      .update({
+        status: 'pending',
+        patient_email: patient.email || null,
+        patient_name: patient.name || patient.fullName || patient.email || 'Patient',
+        patient_phone: patient.phone || patient.mobile || patient.phone_number || null,
+        patient_gender: patient.gender || 'U',
+        patient_dob: patient.dob || patient.date_of_birth || patient.dateOfBirth || null,
+        patient_blood_group: patient.blood_group || patient.bloodGroup || patient.blood_type || null,
+        responded_at: null,
+        access_expires_at: null,
+        email_action_token: emailActionToken,
+      })
+      .eq('id', existingLink.id)
+      .select()
+      .single();
+
+    if (reopenError) throw reopenError;
+
+    await notifyPatientOfNewRequest({ doctorId, patient, link: reopened });
+
     return {
-      link: existingLink,
-      patient: existingLink.status === 'accepted' ? normalizeDoctorPatientCard(patient) : minimalDoctorPatientCard(existingLink),
+      link: reopened,
+      patient: minimalDoctorPatientCard(reopened),
     };
   }
 
@@ -311,11 +364,24 @@ export const linkDoctorToPatient = async ({ doctorId, patientCode }) => {
     throw error;
   }
 
-  // Notify the patient — this is the ONLY place a doctor's access request
-  // becomes visible to them (there is no separate "Doctor Requests" page
-  // anymore; it lives entirely in the notification bell). metadata.linkId
-  // is what lets the bell render Accept/Decline buttons directly on this
-  // notification and call the right endpoint.
+  await notifyPatientOfNewRequest({ doctorId, patient, link: data });
+
+  return {
+    link: data,
+    // Pending: return the minimal shape, not the full patient object —
+    // the requesting doctor doesn't get health data just by sending a
+    // request, only once (if) the patient accepts.
+    patient: minimalDoctorPatientCard(data),
+  };
+};
+
+// Shared by both the brand-new-request path and the re-open-after-expiry
+// path above — this is the ONLY place a doctor's access request becomes
+// visible to the patient (there is no separate "Doctor Requests" page
+// anymore; it lives entirely in the notification bell). metadata.linkId is
+// what lets the bell render Accept/Decline buttons directly on this
+// notification and call the right endpoint.
+async function notifyPatientOfNewRequest({ doctorId, patient, link }) {
   const { data: doctor } = await supabase
     .from('doctors')
     .select('name')
@@ -329,17 +395,9 @@ export const linkDoctorToPatient = async ({ doctorId, patientCode }) => {
     eventType: 'doctor_request',
     title: 'New doctor access request',
     message: `Dr. ${doctorName} requested access to your health records.`,
-    metadata: { linkId: data.id, doctorName },
+    metadata: { linkId: link.id, doctorName },
   });
-
-  return {
-    link: data,
-    // Pending: return the minimal shape, not the full patient object —
-    // the requesting doctor doesn't get health data just by sending a
-    // request, only once (if) the patient accepts.
-    patient: minimalDoctorPatientCard(data),
-  };
-};
+}
 
 /**
  * All pending doctor link requests for a given patient — what the

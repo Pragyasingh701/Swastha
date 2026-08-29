@@ -111,6 +111,7 @@ export const sendDoctorRequestEmail = async (email, doctorName, acceptUrl, decli
       <h2 style="color: #004ac6; margin-bottom: 10px;">Doctor access request</h2>
       <p style="font-size: 14px; color: #434655;">${doctorName ? `Dr. ${doctorName}` : 'A doctor'} has requested access to your health records on Swastha.</p>
       <p style="font-size: 14px; color: #434655;">You can respond right from this email, or from the notification bell in the app — whichever you use first, the other will show the same result.</p>
+      <p style="font-size: 14px; color: #434655;">If you accept, access is granted for 24 hours — after that, the doctor will need to request access again.</p>
       <div style="text-align: center; margin: 25px 0;">
         <a href="${acceptUrl}" style="background-color: #2563eb; color: #ffffff; padding: 12px 24px; text-decoration: none; border-radius: 8px; font-weight: bold; display: inline-block; margin: 0 8px;">
           Accept
