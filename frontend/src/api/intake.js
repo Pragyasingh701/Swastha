@@ -30,8 +30,46 @@ async function request(path, options = {}) {
   return data;
 }
 
-export async function startIntake() {
-  return request('/intake/start', { method: 'POST' });
+export async function startIntake(language) {
+  return request('/intake/start', {
+    method: 'POST',
+    body: JSON.stringify(language ? { language } : {}),
+  });
+}
+
+/**
+ * Voice layer (Phase 7b). Uploads one recorded answer and returns
+ * { transcript, language_code }. Does NOT advance the dialogue — the
+ * transcript goes into the patient's answer field for review/editing, and
+ * only the (possibly corrected) text is then sent through sendIntakeTurn
+ * exactly as a typed answer would be.
+ *
+ * Not routed through request() above: that helper sets a JSON content-type
+ * and stringifies the body, whereas this needs multipart with the browser
+ * setting its own boundary.
+ */
+export async function transcribeIntakeAudio(sessionId, audioBlob) {
+  const token = getStoredToken();
+  const form = new FormData();
+  // Filename is required by some servers to infer type; the extension is
+  // cosmetic since the backend trusts the blob's MIME type.
+  form.append('file', audioBlob, 'answer.webm');
+  form.append('session_id', sessionId);
+
+  const response = await fetch(`${RAG_BASE_URL}/intake/transcribe`, {
+    method: 'POST',
+    headers: { ...(getAuthHeader(token)) },
+    body: form,
+  });
+
+  const data = await response.json();
+  if (!response.ok) {
+    const error = new Error(data.error || 'Could not transcribe audio');
+    error.code = data.error;
+    error.status = response.status;
+    throw error;
+  }
+  return data;
 }
 
 export async function sendIntakeTurn(sessionId, message) {
@@ -48,4 +86,16 @@ export async function finalizeIntake(sessionId) {
   });
 }
 
-export default { startIntake, sendIntakeTurn, finalizeIntake };
+/**
+ * Re-speaks a question the patient has already been asked, so any earlier
+ * question in the transcript can be replayed. Read-only — does not advance
+ * or otherwise change the conversation.
+ */
+export async function replayIntakeAudio(sessionId, text) {
+  return request('/intake/replay-audio', {
+    method: 'POST',
+    body: JSON.stringify({ session_id: sessionId, text }),
+  });
+}
+
+export default { startIntake, sendIntakeTurn, finalizeIntake, transcribeIntakeAudio, replayIntakeAudio };
