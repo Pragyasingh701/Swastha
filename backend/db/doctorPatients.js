@@ -19,7 +19,8 @@ async function notifySafely(args) {
 //   pending   -> doctor requested, patient hasn't responded. No health
 //                data is ever returned for a pending link — only
 //                { id, patient_name, status } (see minimalDoctorPatientCard).
-//   accepted  -> patient approved. Full card + full health record access.
+//   accepted  -> patient approved. Full card + full health record access
+//                — but only until access_expires_at (see below).
 //   declined  -> patient rejected. Name-only, doctor cannot re-request
 //                (linkDoctorToPatient blocks re-linking a declined pair).
 //
@@ -28,6 +29,22 @@ async function notifySafely(args) {
 // requires status = 'accepted'. This is enforced here, at the single
 // shared source of truth, specifically so it cannot be bypassed by a
 // route that forgets to check status separately.
+//
+// ACCESS EXPIRY (access_expires_at column, added in
+// supabase/migrations/20260830010000_add_access_expires_at_to_doctor_patient.sql):
+// an 'accepted' link only grants access for ACCESS_DURATION_MS from the
+// moment of acceptance — isDoctorLinkedToPatient and getDoctorPatients
+// both treat an accepted-but-expired link as if it were no longer
+// accepted (surfaced to the frontend as linkStatus 'expired'), and
+// linkDoctorToPatient lets the doctor send a fresh request once that
+// happens rather than treating the pair as already linked.
+
+const ACCESS_DURATION_MS = 24 * 60 * 60 * 1000;
+
+function isAccessExpired(link) {
+  if (!link?.access_expires_at) return false;
+  return new Date(link.access_expires_at).getTime() <= Date.now();
+}
 
 function normalizeDoctorPatientCard(patient = {}) {
   const patientIdValue = patient.patient_code || patient.id;
@@ -162,10 +179,11 @@ export const getDoctorPatients = async (doctorId) => {
 
 /**
  * The authorization gate every other route/service uses before returning a
- * patient's health data to a doctor. Requires status = 'accepted' — a
- * pending or declined link returns false, same as no link at all. This is
- * the single place that decision is made; callers must not re-derive it
- * from a raw link-exists check.
+ * patient's health data to a doctor. Requires status = 'accepted' AND an
+ * unexpired access_expires_at — a pending, declined, or expired link
+ * returns false, same as no link at all. This is the single place that
+ * decision is made; callers must not re-derive it from a raw
+ * link-exists/status check.
  */
 export const isDoctorLinkedToPatient = async (doctorId, patientUserId) => {
   if (!doctorId || !patientUserId || !supabase) {
@@ -175,7 +193,7 @@ export const isDoctorLinkedToPatient = async (doctorId, patientUserId) => {
   try {
     const { data, error } = await supabase
       .from('doctor_patient')
-      .select('id')
+      .select('id, access_expires_at')
       .eq('doctor_id', doctorId)
       .eq('patient_id', patientUserId)
       .eq('status', 'accepted')
@@ -185,7 +203,8 @@ export const isDoctorLinkedToPatient = async (doctorId, patientUserId) => {
       throw error;
     }
 
-    return Boolean(data);
+    if (!data) return false;
+    return !isAccessExpired(data);
   } catch (error) {
     console.warn('Doctor-patient link check warning:', error?.message || error);
     return false;
@@ -492,9 +511,16 @@ export const getDoctorNotifications = async (doctorId) => {
 // double-applying. email_action_token is cleared on resolution so a
 // reused/stale email link can no longer act on this row either.
 async function resolveDoctorLinkRequest({ link, newStatus, resolvedByRole, resolvedByUserId }) {
+  const updatePayload = { status: newStatus, responded_at: new Date().toISOString(), email_action_token: null };
+  if (newStatus === 'accepted') {
+    // Access is time-boxed from the moment of acceptance, not permanent —
+    // see the ACCESS EXPIRY note above this file's status-column comment.
+    updatePayload.access_expires_at = new Date(Date.now() + ACCESS_DURATION_MS).toISOString();
+  }
+
   const { data, error } = await supabase
     .from('doctor_patient')
-    .update({ status: newStatus, responded_at: new Date().toISOString(), email_action_token: null })
+    .update(updatePayload)
     .eq('id', link.id)
     .eq('status', 'pending') // re-check at write time, not just at the read above — closes the race window between the two.
     .select()
@@ -511,13 +537,17 @@ async function resolveDoctorLinkRequest({ link, newStatus, resolvedByRole, resol
 
   const eventType = newStatus === 'accepted' ? 'doctor_request_accepted' : 'doctor_request_declined';
   const verb = newStatus === 'accepted' ? 'accepted' : 'declined';
+  const message =
+    newStatus === 'accepted'
+      ? `${data.patient_name || 'A patient'} accepted your access request. You have access to their records for the next 24 hours.`
+      : `${data.patient_name || 'A patient'} declined your access request.`;
   await notifySafely({
     recipientId: data.doctor_id,
     actorId: resolvedByUserId,
     actorRole: resolvedByRole,
     eventType,
     title: `Request ${verb}`,
-    message: `${data.patient_name || 'A patient'} ${verb} your access request.`,
+    message,
     metadata: { linkId: data.id },
   });
 
