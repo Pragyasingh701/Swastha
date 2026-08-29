@@ -308,15 +308,29 @@ const AYURVEDA_QUESTION_INDEX = AYURVEDA_SUBSECTIONS.flatMap((sub) =>
   }))
 );
 
-function buildSystemPrompt(section, structuredHistory, intakeMethod, lastQuestion) {
+// Patient-facing language for the generated question text (Voice Layer
+// PRD §6). Chosen once at /intake/start and stored on the session row —
+// this is the same value ttsService uses to pick a voice, threaded through
+// to the GENERATION prompt so the question text itself is written in the
+// patient's language rather than being English prose spoken by a Hindi
+// voice (which was both unreadable for the patient and the source of
+// mispronounced TTS, since Bulbul was being handed English text under a
+// hi-IN language code).
+const LANGUAGE_NAMES = {
+  'hi-IN': 'Hindi (Devanagari script)',
+  'en-IN': 'Indian English',
+};
+
+function buildSystemPrompt(section, structuredHistory, intakeMethod, lastQuestion, language) {
   const isAyurvedic = intakeMethod === 'ayurvedic';
+  const languageName = LANGUAGE_NAMES[language] || LANGUAGE_NAMES['hi-IN'];
   const flowDescription = isAyurvedic
     ? 'chief_complaint -> hpi (SOCRATES-style follow-ups) -> ayurveda_profile (Ayurvedic constitution & lifestyle) -> drug_allergy -> finalize'
     : 'chief_complaint -> hpi (SOCRATES-style follow-ups) -> drug_allergy -> finalize';
 
   const sectionRules = [
     `- "chief_complaint": ask the patient to state their main complaint if not yet captured. One short question. Once they answer, extract chief_complaint (a short clinical phrase for what's wrong) AND, only if the patient actually volunteered them in this same message, also capture duration into hpi.onset and any aggravating/relieving factor into hpi.exacerbating_relieving — never ask separate follow-up questions for those here, only capture what they already said unprompted (this avoids re-asking the same thing again once "hpi" starts). Once chief_complaint is captured, move to "hpi".`,
-    `- "hpi": ask SOCRATES-style follow-ups (Site, Onset, Character, Radiation, Associated symptoms, Timing, Exacerbating/relieving factors, Severity) ONE OR TWO AT A TIME — never ask all 8 in one question. Only ask about fields still empty in hpi above (skip any already filled from chief_complaint's extraction). Only ask what's clinically relevant to THIS chief_complaint — do not ask a generic fixed checklist. Tailor which fields you probe and how to the complaint type, for example: pain/ache complaints -> site, character, radiation, severity, aggravating/relieving factors; headache -> location, duration, severity, triggers, vision changes, nausea/vomiting; cough -> duration, dry vs productive, fever, breathing difficulty, blood in sputum; skin complaints -> location, itching, duration, rash appearance, triggers; joint complaints -> which joint(s), duration, swelling, stiffness, pain on movement. Always also check associated_symptoms relevant to that complaint type (e.g. vomiting/fever/loose motion/constipation/bloating/loss of appetite for abdominal complaints). Phrase each question short and direct, clinical-questionnaire style (e.g. "How is your pain normally?" / "How would you describe X?"), NOT a long or casual sentence with asides. Offer more than a minimal set of short quick_reply_options where a patient would naturally pick from a small set (more than 2 closed options where the option set supports it — e.g. severity 1-10 buttons, or 3+ options for a symptom quality rather than a bare yes/no where richer options make sense), each option a single short phrase (one attribute, not several stacked together). When every hpi field is filled, set section_complete: true for this turn and the caller will advance to "${isAyurvedic ? 'ayurveda_profile' : 'drug_allergy'}".`,
+    `- "hpi": ask SOCRATES-style follow-ups (Site, Onset, Character, Radiation, Associated symptoms, Timing, Exacerbating/relieving factors, Severity) STRICTLY ONE AT A TIME — exactly one field per question, never two. Only ask about fields still empty in hpi above (skip any already filled from chief_complaint's extraction). Only ask what's clinically relevant to THIS chief_complaint — do not ask a generic fixed checklist. Tailor which fields you probe and how to the complaint type, for example: pain/ache complaints -> site, character, radiation, severity, aggravating/relieving factors; headache -> location, duration, severity, triggers, vision changes, nausea/vomiting; cough -> duration, dry vs productive, fever, breathing difficulty, blood in sputum; skin complaints -> location, itching, duration, rash appearance, triggers; joint complaints -> which joint(s), duration, swelling, stiffness, pain on movement. Always also check associated_symptoms relevant to that complaint type (e.g. vomiting/fever/loose motion/constipation/bloating/loss of appetite for abdominal complaints). Phrase each question short and direct, clinical-questionnaire style (e.g. "How is your pain normally?" / "How would you describe X?"), NOT a long or casual sentence with asides. Offer more than a minimal set of short quick_reply_options where a patient would naturally pick from a small set (more than 2 closed options where the option set supports it — e.g. severity 1-10 buttons, or 3+ options for a symptom quality rather than a bare yes/no where richer options make sense), each option a single short phrase (one attribute, not several stacked together). When every hpi field is filled, set section_complete: true for this turn and the caller will advance to "${isAyurvedic ? 'ayurveda_profile' : 'drug_allergy'}".`,
   ];
   if (isAyurvedic) {
     sectionRules.push(buildAyurvedaSectionRules(structuredHistory));
@@ -327,6 +341,19 @@ function buildSystemPrompt(section, structuredHistory, intakeMethod, lastQuestio
   );
 
   return `You are a clinical intake assistant for an Indian OPD (outpatient) clinic. You are talking directly to a PATIENT before their doctor consult, gathering a structured history. You NEVER diagnose, suggest a condition, or give medical advice — you only ask focused follow-up questions and structure what the patient tells you. This applies identically whether the consulting doctor practices allopathic or Ayurvedic medicine — do not suggest a diagnosis, condition, dosha imbalance conclusion, or treatment in either case.
+
+LANGUAGE — read this before anything else:
+Write EVERY patient-facing string in ${languageName}. That means "next_question" (including the "finalize" closing message) and every string inside "quick_reply_options.options" — those are shown to the patient and read aloud to them, so a patient who only reads ${languageName} must be able to understand them completely.
+Keep widely-recognised clinical terms and medicine names as-is where a patient would actually recognise them better that way (e.g. "fever", "BP", "sugar", brand names) rather than forcing an unnatural literal translation — natural clinic speech, not textbook translation.
+EXCEPTION — "updated_fields" is NOT patient-facing: every value you write inside "updated_fields" must stay in ENGLISH, exactly as before, because it becomes the doctor's clinical record. So you may ask the patient a question in ${languageName} and record their answer in English in the same turn. JSON keys/field names are ALWAYS English and never translated.
+
+ONE QUESTION PER TURN — this is a hard rule:
+"next_question" must ask about EXACTLY ONE thing. Never bundle two different fields into one turn, whether joined by "and", "aur", "और", a comma, or a second question mark. Ask one field, wait for the patient's answer, then ask the next field on the FOLLOWING turn. A patient answering aloud can only answer one thing at a time, and a bundled question reliably gets only half an answer — which then gets recorded against the wrong field.
+BAD  (two fields — site AND onset bundled): "यह दर्द पेट के किस हिस्से में है और कब से हो रहा है?"
+GOOD (site only, this turn):                "यह दर्द पेट के किस हिस्से में है?"
+GOOD (onset only, the NEXT turn):           "यह दर्द कब से हो रहा है?"
+Offering several quick_reply_options for that ONE question is correct and encouraged — a list of choices for a single field is not the same thing as asking two questions.
+This does not forbid a single clinically-standard pair inside ONE field (e.g. "क्या उल्टी या मितली हो रही है?" is one associated_symptoms question, not two) — the test is whether you are filling one field or two.
 
 Current section: "${section}"
 Section flow: ${flowDescription}.
@@ -363,10 +390,89 @@ Return ONLY a single JSON object (no prose, no markdown fences) with this exact 
 Rules for the JSON:
 - "quick_reply_options.options" should have 0-6 short items — leave it empty for open-ended questions where tapping doesn't make sense (e.g. "describe the pain in your own words") or for free-text fields explicitly marked as such. Offer MORE than a bare minimal set of options wherever the question has a natural closed answer set (more than 2 options where the option set supports it).
 - "quick_reply_options.allow_multiple" must be true whenever more than one answer can genuinely apply to the question just asked (e.g. multiple symptoms, multiple tastes, multiple moods) — false otherwise.
-- "updated_fields" should ONLY contain fields the patient's latest message actually gave information for — never invent or guess values for fields they didn't address.
+- CRITICAL RULE for "updated_fields" — if a field has not actually been asked about and answered by the patient, OMIT it entirely. Do NOT guess, do NOT invent a plausible-sounding value, do NOT fill in what a typical patient with this complaint "probably" would have said, and do NOT estimate a value from the rest of the history. A blank field the doctor can ask about in person is far better than a confident-looking wrong answer on a clinical record — a fabricated severity or duration could change how a patient is triaged. Only record what the patient actually told you, in the turn they told you.
+- Concretely: if you never asked about severity, "severity" must not appear in updated_fields at all. Never write a number there because 5 or 7 seems reasonable for this complaint. The same applies to every other field.
+- "updated_fields" should ONLY contain fields the patient's latest message actually gave information for.
+- Language split, restated because it is easy to get wrong: "next_question" and "quick_reply_options.options" are in ${languageName}; every value inside "updated_fields" is in English. The patient may answer in any language or script — always normalise what they said into English before writing it into "updated_fields".
 - "severity" in hpi, if provided, must be an integer 1-10.
 - Never include a diagnosis, condition name, dosha-imbalance conclusion, or treatment suggestion anywhere in your response.
 - "next_question" must not contradict "section_complete": if section_complete is false, never phrase next_question as a wrap-up ("that completes...", "that's everything...", "last question...", "great, all done with X") right before still going on to ask something else in the SAME response — that reads as the assistant contradicting itself mid-message. Only use wrap-up phrasing on the turn where section_complete is actually true (or, within ayurveda_profile, only once every one of its sub-sections is done).`;
+}
+
+// Keywords that mark a question as having actually asked about a given HPI
+// field, in both languages. Used by the invention guard below — NOT to
+// parse answers, only to decide "was this field ever put to the patient?"
+//
+// Deliberately generous: a false positive here just permits a value the
+// model wanted to write anyway (status quo), while a false negative would
+// silently drop a real answer the patient gave. So this errs toward
+// allowing, and only blocks fields with no plausible question behind them
+// at all — which is exactly the observed failure (severity invented with
+// no severity question anywhere in the transcript).
+const HPI_FIELD_CUES = {
+  site: ['where', 'which part', 'location', 'कहाँ', 'कहां', 'किस हिस्से', 'जगह'],
+  onset: ['when did', 'since when', 'how long', 'start', 'began', 'कब से', 'कब शुरू', 'कितने दिन', 'कब'],
+  character: ['what kind', 'describe', 'feel like', 'type of pain', 'कैसा', 'किस तरह', 'कैसी'],
+  radiation: ['spread', 'travel', 'move to', 'radiat', 'फैल', 'जाता', 'कहीं और'],
+  associated_symptoms: ['along with', 'other symptom', 'also have', 'nausea', 'vomit', 'fever', 'साथ', 'अन्य लक्षण', 'उल्टी', 'मितली', 'बुखार', 'दस्त'],
+  timing: ['come and go', 'constant', 'all the time', 'time of day', 'intermittent', 'लगातार', 'रुक', 'कभी', 'समय'],
+  exacerbating_relieving: ['better', 'worse', 'relief', 'trigger', 'after eating', 'बढ़', 'कम', 'आराम', 'खाने के बाद'],
+  severity: ['severity', 'how bad', 'how severe', 'scale', '1 to 10', '1-10', 'pain score', 'कितना', 'तीव्रता', 'गंभीर', 'दस में'],
+};
+
+/**
+ * True if `field` was plausibly asked about in any assistant question this
+ * session (or in the question being answered right now).
+ */
+function wasFieldAsked(field, askedQuestions) {
+  const cues = HPI_FIELD_CUES[field];
+  if (!cues) return true; // unknown field — not ours to police
+  const haystack = askedQuestions.join(' \n ').toLowerCase();
+  return cues.some((cue) => haystack.includes(cue.toLowerCase()));
+}
+
+/**
+ * Drops HPI values the model tried to write for fields it never actually
+ * asked about — the "Severity: 5 with no severity question anywhere in the
+ * transcript" failure. Same principle the OCR extraction prompt states in
+ * config/gemini.js: a blank field a clinician can ask about in person
+ * beats a confident-looking invented one on a medical record.
+ *
+ * Only applies to NEW writes. A value already in structured_history from an
+ * earlier turn is left alone — it was vetted when it was written.
+ *
+ * @returns {{ cleaned: object, dropped: string[] }}
+ */
+function stripUnaskedHpiFields(updatedFields, currentHpi, askedQuestions) {
+  if (!updatedFields?.hpi || typeof updatedFields.hpi !== 'object') {
+    return { cleaned: updatedFields, dropped: [] };
+  }
+
+  const dropped = [];
+  const keptHpi = {};
+
+  for (const [field, value] of Object.entries(updatedFields.hpi)) {
+    // Already populated => this is a correction/refinement of an answer the
+    // patient previously gave, not an invention. Let it through.
+    const existing = currentHpi?.[field];
+    const alreadyHasValue = Array.isArray(existing)
+      ? existing.length > 0
+      : existing !== '' && existing !== null && existing !== undefined;
+
+    if (alreadyHasValue || wasFieldAsked(field, askedQuestions)) {
+      keptHpi[field] = value;
+    } else {
+      dropped.push(field);
+    }
+  }
+
+  if (dropped.length > 0) {
+    console.warn(
+      `[intake] dropped ${dropped.length} invented hpi field(s) never asked about: ${dropped.join(', ')}`
+    );
+  }
+
+  return { cleaned: { ...updatedFields, hpi: keptHpi }, dropped };
 }
 
 function mergeStructuredHistory(current, updatedFields, intakeMethod) {
@@ -471,7 +577,7 @@ function nextSection(current, sectionComplete, intakeMethod) {
  *   fields in the documented order, so a repeat isn't always of the very
  *   last question).
  */
-export async function runIntakeTurn({ section, structuredHistory, patientMessage, intakeMethod = 'allopathic', lastQuestion = null, priorQuestionsInSection = [] }) {
+export async function runIntakeTurn({ section, structuredHistory, patientMessage, intakeMethod = 'allopathic', lastQuestion = null, priorQuestionsInSection = [], language = 'hi-IN' }) {
   const sections = sectionsFor(intakeMethod);
   if (!sections.includes(section)) {
     throw new Error(`runIntakeTurn: unknown section "${section}" for intake_method "${intakeMethod}"`);
@@ -480,7 +586,7 @@ export async function runIntakeTurn({ section, structuredHistory, patientMessage
     ? structuredHistory
     : emptyStructuredHistory(intakeMethod);
 
-  const prompt = `${buildSystemPrompt(section, history, intakeMethod, lastQuestion)}\n\nPatient's latest message: "${(patientMessage || '').trim()}"`;
+  const prompt = `${buildSystemPrompt(section, history, intakeMethod, lastQuestion, language)}\n\nPatient's latest message: "${(patientMessage || '').trim()}"`;
 
   const gen = await runAI({ task: 'intake-dialogue', input: prompt, json: true, label: 'intake-dialogue' });
 
@@ -513,14 +619,39 @@ export async function runIntakeTurn({ section, structuredHistory, patientMessage
     throw new Error(`Intake dialogue model returned unparsable output: ${err.message}`);
   }
 
+  // Cheap compound-question tripwire. Deliberately only counts question
+  // marks rather than trying to detect conjunctions: "और"/"and" appears
+  // constantly inside perfectly good single questions (option lists,
+  // clinically-standard symptom pairs like "nausea and vomiting"), so
+  // conjunction-matching would fire on correct questions. Two question
+  // marks is unambiguous. Logged, never auto-retried — a retry would add
+  // a full LLM round-trip to a turn that is usually fine, and the prompt
+  // rule above is the actual fix.
+  const questionMarks = (parsed.next_question?.match(/[?？]/g) || []).length;
+  if (questionMarks > 1) {
+    console.warn(`[intake] possible compound question (${questionMarks} "?"): ${parsed.next_question}`);
+  }
+
   // red_flag is sticky — once true, never flips back to false even if the
   // model didn't re-detect it this turn (PRD §6.1: independent of section
   // progress, and a missed re-mention should never un-flag a session).
   const redFlag = !!history.red_flag || !!parsed.red_flag;
   const redFlagReason = history.red_flag ? history.red_flag_reason : (parsed.red_flag ? (parsed.red_flag_reason || 'Red flag detected') : null);
 
+  // Invention guard: refuse to record an HPI field the patient was never
+  // asked about (see stripUnaskedHpiFields). The questions considered are
+  // every assistant question asked so far in this section PLUS the one
+  // being answered right now — the patient's current message can only be
+  // answering a question that has already been put to them.
+  const askedQuestions = [...priorQuestionsInSection, lastQuestion].filter(Boolean);
+  const { cleaned: vettedFields } = stripUnaskedHpiFields(
+    parsed.updated_fields,
+    history.hpi,
+    askedQuestions
+  );
+
   let mergedHistory = {
-    ...mergeStructuredHistory(history, parsed.updated_fields, intakeMethod),
+    ...mergeStructuredHistory(history, vettedFields, intakeMethod),
     red_flag: redFlag,
     red_flag_reason: redFlagReason,
   };
@@ -720,7 +851,7 @@ export { emptyStructuredHistory, hpiComplete, ayurvedaComplete, SECTIONS_ALLOPAT
  *   preserving origin='remote'/intake_method='allopathic' defaults exactly
  *   as before this feature.
  */
-export async function startIntakeSession(patientId, { doctorId = null, intakeMethod = 'allopathic', origin = 'remote' } = {}) {
+export async function startIntakeSession(patientId, { doctorId = null, intakeMethod = 'allopathic', origin = 'remote', language = 'hi-IN' } = {}) {
   if (!patientId) throw new Error('startIntakeSession: patientId is required');
 
   const structuredHistory = emptyStructuredHistory(intakeMethod);
@@ -729,6 +860,7 @@ export async function startIntakeSession(patientId, { doctorId = null, intakeMet
     structuredHistory,
     patientMessage: '(session just started — greet the patient and ask them to describe their main complaint today)',
     intakeMethod,
+    language,
   });
 
   const { data, error } = await supabase
@@ -738,6 +870,11 @@ export async function startIntakeSession(patientId, { doctorId = null, intakeMet
       doctor_id: doctorId,
       origin,
       intake_method: intakeMethod,
+      // Voice layer (Phase 7a): chosen once here and read back on every
+      // turn, never re-derived per-turn from the patient's answer
+      // (Voice Layer PRD §6). Purely a TTS concern — the dialogue engine
+      // itself does not branch on it.
+      language,
       status: 'in_progress',
       structured_history: turn.structured_history,
       turns: [{ role: 'assistant', text: turn.next_question, section: turn.section, at: new Date().toISOString() }],
@@ -812,6 +949,10 @@ export async function advanceIntakeSession({ sessionId, patientMessage }) {
     intakeMethod,
     lastQuestion,
     priorQuestionsInSection,
+    // Read from the session row's own snapshot, like intake_method above —
+    // the language was fixed once at /intake/start and must not be
+    // re-derived per turn (Voice Layer PRD §6).
+    language: session.language || 'hi-IN',
   });
 
   const nowIso = new Date().toISOString();

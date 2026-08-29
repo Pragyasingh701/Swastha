@@ -6,6 +6,7 @@ import { findUserById } from '../db/users.js';
 import { sendOTPEmail } from '../utils/mailer.js';
 import { isDoctorLinkedToPatient } from '../db/doctorPatients.js';
 import { startIntakeSession } from '../rag/services/intakeService.js';
+import { synthesizeSpeech } from '../rag/services/ttsService.js';
 
 const router = express.Router();
 const JWT_SECRET = process.env.JWT_SECRET || 'swastha_dev_secret_key_2026';
@@ -229,11 +230,26 @@ router.post('/verify-otp', requirePatientAuth, async (req, res) => {
 
     await upsertAcceptedLink({ doctorId, patientId });
 
+    // Patient-chosen on the language screen shown before this call (Voice
+    // Layer PRD §6 — asked once, stored on the session row). Unlike
+    // intakeMethod above this IS patient-supplied, since it's their own
+    // reading/listening preference rather than a clinical setting; an
+    // unrecognised value falls back to the default rather than failing.
+    const language = req.body?.language === 'en-IN' ? 'en-IN' : 'hi-IN';
+
     const { session, turn } = await startIntakeSession(patientId, {
       doctorId,
       intakeMethod,
       origin: 'clinic_checkin',
+      language,
     });
+
+    // Same audio fields POST /rag/api/intake/start returns — this endpoint
+    // is the other way a session gets created, so it has to speak the first
+    // question too or a clinic check-in patient gets a silent opener while
+    // every later turn talks. A TTS failure just omits the audio fields;
+    // it never blocks the check-in.
+    const speech = await synthesizeSpeech(turn.next_question, language);
 
     return res.status(200).json({
       session_id: session.id,
@@ -241,6 +257,15 @@ router.post('/verify-otp', requirePatientAuth, async (req, res) => {
       quick_reply_options: turn.quick_reply_options,
       section: turn.section,
       red_flag: turn.red_flag,
+      language,
+      ...(speech.ok
+        ? {
+            audio_base64: speech.audio_base64,
+            audio_mime_type: speech.mime_type,
+            audio_provider: speech.provider,
+            audio_degraded: !!speech.degraded,
+          }
+        : {}),
     });
   } catch (error) {
     console.error('Clinic verify-otp error:', error);

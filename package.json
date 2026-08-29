@@ -18,6 +18,7 @@
     "concurrently": "^10.0.3",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
+    "edge-tts-universal": "^1.4.0",
     "express": "^4.19.2",
     "google-auth-library": "^10.9.1",
     "jsonwebtoken": "^9.0.3",

@@ -55,10 +55,10 @@ export async function sendClinicOtp() {
  * quick_reply_options, section, red_flag } — ready to hand straight into
  * IntakeChat.jsx.
  */
-export async function verifyClinicOtp({ doctorId, otpCode }) {
+export async function verifyClinicOtp({ doctorId, otpCode, language }) {
   return request('/verify-otp', {
     method: 'POST',
-    body: JSON.stringify({ doctorId, otpCode }),
+    body: JSON.stringify({ doctorId, otpCode, ...(language ? { language } : {}) }),
   });
 }
 
