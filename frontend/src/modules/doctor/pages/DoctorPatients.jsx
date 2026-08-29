@@ -897,7 +897,7 @@ export default function DoctorPatients() {
                   return (
                   <div
                     key={`${patient.patientUserId || patient.id}-${patient.name}`}
-                    className="bg-white rounded-2xl p-6 shadow-[0_4px_12px_rgba(15,23,42,0.05)] border border-[#c3c6d7]/20 hover:shadow-[0_8px_24px_rgba(15,23,42,0.08)] transition-all"
+                    className="flex flex-col h-full bg-white rounded-2xl p-6 shadow-[0_4px_12px_rgba(15,23,42,0.05)] border border-[#c3c6d7]/20 hover:shadow-[0_8px_24px_rgba(15,23,42,0.08)] transition-all"
                     onClick={() => {
                       if (openMenuId === patient.linkId) {
                         setOpenMenuId(null);
@@ -970,7 +970,7 @@ export default function DoctorPatients() {
                     <button
                       type="button"
                       onClick={() => setSelectedPatient(patient)}
-                      className="w-full py-2.5 rounded-lg border border-[#c3c6d7]/60 text-[#434655] hover:bg-[#f3f3fe] hover:text-[#004ac6] hover:border-[#004ac6]/30 transition-all flex justify-center items-center gap-1"
+                      className="mt-auto w-full py-2.5 rounded-lg border border-[#c3c6d7]/60 text-[#434655] hover:bg-[#f3f3fe] hover:text-[#004ac6] hover:border-[#004ac6]/30 transition-all flex justify-center items-center gap-1"
                     >
                       View Profile
                       <span className="material-symbols-outlined text-[16px]">arrow_forward</span>
@@ -1021,7 +1021,7 @@ function LockedPatientCard({ patient, linkStatus, openMenuId, setOpenMenuId, del
 
   return (
     <div
-      className={`rounded-2xl p-6 border transition-all ${
+      className={`flex flex-col h-full rounded-2xl p-6 border transition-all ${
         isPending
           ? 'bg-white border-[#c3c6d7]/20 shadow-[0_4px_12px_rgba(15,23,42,0.05)]'
           : isExpired
@@ -1088,7 +1088,7 @@ function LockedPatientCard({ patient, linkStatus, openMenuId, setOpenMenuId, del
       </div>
 
       {isExpired ? (
-        <div className="pt-2 border-t border-dashed border-[#c3c6d7]/40 space-y-2">
+        <div className="mt-auto pt-4 border-t border-dashed border-[#c3c6d7]/40 space-y-3">
           <p className="text-sm text-[#737686] text-center">Access expired after 24 hours.</p>
           <button
             type="button"
@@ -1100,6 +1100,7 @@ function LockedPatientCard({ patient, linkStatus, openMenuId, setOpenMenuId, del
             className="w-full py-2.5 rounded-lg border border-rose-200 text-rose-700 hover:bg-rose-50 transition-all flex justify-center items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {isRequestingAgain ? 'Sending request...' : 'Request Access Again'}
+            {!isRequestingAgain && <span className="material-symbols-outlined text-[16px]">refresh</span>}
           </button>
         </div>
       ) : (
@@ -1107,7 +1108,7 @@ function LockedPatientCard({ patient, linkStatus, openMenuId, setOpenMenuId, del
         // clickable-through to any detail view. This message replaces it
         // rather than a disabled button, so there's no interactive-looking
         // element that a doctor might expect to do something.
-        <p className="text-sm text-[#737686] text-center py-2 border-t border-dashed border-[#c3c6d7]/40">
+        <p className="mt-auto text-sm text-[#737686] text-center py-2 border-t border-dashed border-[#c3c6d7]/40">
           {isPending
             ? 'Waiting for patient to accept your request.'
             : 'This patient has declined your request.'}
