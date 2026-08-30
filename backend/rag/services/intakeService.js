@@ -415,8 +415,21 @@ const HPI_FALLBACK_QUESTIONS = {
   site: {
     question: 'Where exactly is the {complaint}?',
     question_hi: 'यह तकलीफ़ ठीक किस जगह पर है?',
-    options: ['One specific spot', 'A general area', 'Moves around', 'Not sure'],
-    options_hi: ['एक ही जगह पर', 'थोड़े बड़े हिस्से में', 'जगह बदलता रहता है', 'पता नहीं'],
+    // Location descriptors ONLY. "Moves around" and "A general area" were
+    // both movement/spread language — that's radiation's job, not site's —
+    // so a patient answering this Site fallback question with "Moves
+    // around" produced radiation-shaped information under the site key,
+    // and then got asked the real radiation question right after, which
+    // read as a near-duplicate ("does it spread anywhere else?" right
+    // after "does it move around?"). Confirmed live across 8+ different
+    // sessions hitting this exact fallback (e.g. session
+    // 5777a9c7-d4e7-4e17-b21b-6c85e5460f15). Generic across complaints
+    // since {complaint} varies — kept deliberately non-anatomical
+    // ("general area" -> "spread across a wider area", still about WHERE
+    // not WHETHER it moves) rather than naming specific body regions that
+    // wouldn't fit every complaint.
+    options: ['One specific spot', 'A wider area, not just one spot', 'All over', 'Not sure'],
+    options_hi: ['एक ही जगह पर', 'एक से ज़्यादा जगह पर', 'पूरे हिस्से में', 'पता नहीं'],
     allow_multiple: false,
   },
   onset: {
@@ -974,7 +987,7 @@ function buildSystemPrompt(section, structuredHistory, intakeMethod, lastQuestio
   // than trying to word around it.
   const sectionRuleFor = {
     chief_complaint: `- "chief_complaint": ask the patient to state their main complaint if not yet captured. One short question. Once they answer, extract chief_complaint (a short clinical phrase for what's wrong) AND, only if the patient actually volunteered them in this same message, also capture duration into hpi.onset and any aggravating/relieving factor into hpi.exacerbating_relieving — never ask separate follow-up questions for those here, only capture what they already said unprompted (this avoids re-asking the same thing again once "hpi" starts). Once chief_complaint is captured, move to "hpi".`,
-    hpi: `- "hpi": ask SOCRATES-style follow-ups (Site, Onset, Character, Radiation, Associated symptoms, Timing, Exacerbating/relieving factors, Severity) ONE OR TWO AT A TIME — never ask all 8 in one question. Only ask about fields still empty in hpi above (skip any already filled from chief_complaint's extraction). Only ask what's clinically relevant to THIS chief_complaint — do not ask a generic fixed checklist. Tailor which fields you probe and how to the complaint type, for example: pain/ache complaints -> site, character, radiation, severity, aggravating/relieving factors; headache -> location, duration, severity, triggers, vision changes, nausea/vomiting; cough -> duration, dry vs productive, fever, breathing difficulty, blood in sputum; skin complaints -> location, itching, duration, rash appearance, triggers; joint complaints -> which joint(s), duration, swelling, stiffness, pain on movement. Always also check associated_symptoms relevant to that complaint type (e.g. vomiting/fever/loose motion/constipation/bloating/loss of appetite for abdominal complaints). Phrase each question short and direct, clinical-questionnaire style (e.g. "How is your pain normally?" / "How would you describe X?"), NOT a long or casual sentence with asides. Offer more than a minimal set of short quick_reply_options where a patient would naturally pick from a small set (more than 2 closed options where the option set supports it — e.g. severity 1-10 buttons, or 3+ options for a symptom quality rather than a bare yes/no where richer options make sense), each option a single short phrase (one attribute, not several stacked together). When every hpi field is filled, set section_complete: true for this turn and the caller will advance to "${isAyurvedic ? 'ayurveda_profile' : 'drug_allergy'}". This section is ONLY about the patient's chief complaint — never ask about their general constitution, lifestyle, diet, sleep, or temperament here, even if this is an Ayurvedic session; that comes later in "ayurveda_profile". If the complaint is generalized rather than localized (fatigue, fever, dizziness, nausea, weakness, poor sleep, low mood), do NOT ask about site or radiation — "where exactly is the fatigue?" and "does the tiredness spread?" are meaningless to a patient; those two fields are pre-marked not-applicable for such complaints and appear in the ALREADY ANSWERED list above. On the turn where every hpi field finally becomes filled and you set section_complete: true, your next_question must go STRAIGHT into asking the first thing the next section needs — never a wrap-up line asking the patient's permission to continue, and never announcing or previewing what the next section is about (e.g. never "Now let's talk about your general health and lifestyle — is that okay?" or "Next I'll ask a few Ayurvedic questions about your constitution"). The patient never chose their doctor's treatment method and is not being offered a choice about what gets asked next — treat moving into the next section exactly like turning a page, with no announcement, the same way you would move from hpi into drug_allergy on a non-Ayurvedic session.`,
+    hpi: `- "hpi": ask SOCRATES-style follow-ups (Site, Onset, Character, Radiation, Associated symptoms, Timing, Exacerbating/relieving factors, Severity) ONE OR TWO AT A TIME — never ask all 8 in one question. Only ask about fields still empty in hpi above (skip any already filled from chief_complaint's extraction). Only ask what's clinically relevant to THIS chief_complaint — do not ask a generic fixed checklist. Tailor which fields you probe and how to the complaint type, for example: pain/ache complaints -> site, character, radiation, severity, aggravating/relieving factors; headache -> location, duration, severity, triggers, vision changes, nausea/vomiting; cough -> duration, dry vs productive, fever, breathing difficulty, blood in sputum; skin complaints -> location, itching, duration, rash appearance, triggers; joint complaints -> which joint(s), duration, swelling, stiffness, pain on movement. Always also check associated_symptoms relevant to that complaint type (e.g. vomiting/fever/loose motion/constipation/bloating/loss of appetite for abdominal complaints). SITE vs RADIATION boundary (a real live mix-up, confirmed with the user): site's quick_reply_options must describe WHERE the complaint is located ONLY (e.g. "Upper stomach", "Lower abdomen", "All over", "Near the navel", "Not sure") — NEVER include movement or spreading language like "moves around" or "spreads" in site's options, since that is radiation's question, not site's. Answering site with movement language produces radiation-shaped information under the wrong field, and the patient then gets asked the real radiation question right after, which reads as a near-duplicate of the question they just answered. Phrase each question short and direct, clinical-questionnaire style (e.g. "How is your pain normally?" / "How would you describe X?"), NOT a long or casual sentence with asides. Offer more than a minimal set of short quick_reply_options where a patient would naturally pick from a small set (more than 2 closed options where the option set supports it — e.g. severity 1-10 buttons, or 3+ options for a symptom quality rather than a bare yes/no where richer options make sense), each option a single short phrase (one attribute, not several stacked together). When every hpi field is filled, set section_complete: true for this turn and the caller will advance to "${isAyurvedic ? 'ayurveda_profile' : 'drug_allergy'}". This section is ONLY about the patient's chief complaint — never ask about their general constitution, lifestyle, diet, sleep, or temperament here, even if this is an Ayurvedic session; that comes later in "ayurveda_profile". If the complaint is generalized rather than localized (fatigue, fever, dizziness, nausea, weakness, poor sleep, low mood), do NOT ask about site or radiation — "where exactly is the fatigue?" and "does the tiredness spread?" are meaningless to a patient; those two fields are pre-marked not-applicable for such complaints and appear in the ALREADY ANSWERED list above. On the turn where every hpi field finally becomes filled and you set section_complete: true, your next_question must go STRAIGHT into asking the first thing the next section needs — never a wrap-up line asking the patient's permission to continue, and never announcing or previewing what the next section is about (e.g. never "Now let's talk about your general health and lifestyle — is that okay?" or "Next I'll ask a few Ayurvedic questions about your constitution"). The patient never chose their doctor's treatment method and is not being offered a choice about what gets asked next — treat moving into the next section exactly like turning a page, with no announcement, the same way you would move from hpi into drug_allergy on a non-Ayurvedic session.`,
     ayurveda_profile: isAyurvedic ? buildAyurvedaSectionRules(structuredHistory) : null,
     drug_allergy: `- "drug_allergy": ask about current medications and known drug/food allergies — TWO separate questions (medications first, then allergies), never bundled into one, and never ask either one more than once. When the patient answers "none"/"no" to either, still write a non-empty array for it — e.g. current_medications: ["None"] or allergies: ["None"] — NEVER leave it as an empty array or omit it, since an empty array cannot be distinguished from "not asked yet". Once BOTH current_medications and allergies are each a non-empty array, set section_complete: true.`,
     finalize: `- "finalize": no more questions — the session is being closed. Return next_question as a short closing message (e.g. "Thanks, that's everything the doctor needs — please have a seat.") and quick_reply_options as { "options": [], "allow_multiple": false }.`,
@@ -1575,6 +1588,26 @@ export async function runIntakeTurn({ section, structuredHistory, patientMessage
     if (sectionComplete && !hpiComplete(mergedHistory.hpi)) {
       sectionComplete = false;
     }
+    // The other half of the belt-and-braces check above — this used to only
+    // ever COMBAT the model over-claiming completion, never under-claiming
+    // it. A model that keeps drilling into an ad-hoc sub-detail (e.g. "How
+    // many times a day are you having loose motions?") with
+    // section_complete: false even once every one of the 8 real SOCRATES
+    // fields is genuinely filled had no forcing mechanism at all — it could
+    // stay in "hpi" indefinitely, and since the literal-duplicate guard
+    // below only has a fallback SUBSTITUTE question for a still-EMPTY
+    // canonical field, once every field is filled there was nothing left to
+    // substitute either, so a repeat of that ad-hoc question shipped
+    // unmodified (live repro: session
+    // 290ae9cb-d88f-44a8-9fee-eae6bc2b68c0 — "How many times a day are you
+    // having loose motions?" repeated verbatim after every SOCRATES field
+    // was already answered). Forcing sectionComplete true here — the same
+    // direction chief_complaint's forcing above already does — means the
+    // conversation always advances once the real fields are done,
+    // regardless of what optional extra detail the model wanted to chase.
+    if (!sectionComplete && hpiComplete(mergedHistory.hpi)) {
+      sectionComplete = true;
+    }
   }
   if (section === 'ayurveda_profile') {
     // Deterministic double-check mirroring hpiComplete()'s role above
@@ -1583,13 +1616,33 @@ export async function runIntakeTurn({ section, structuredHistory, patientMessage
     // ayurveda_profile.
     sectionComplete = ayurvedaComplete(mergedHistory.ayurveda_profile);
   }
-  if (section === 'drug_allergy' && sectionComplete && !drugAllergyComplete(mergedHistory.drug_allergy)) {
-    // Same belt-and-braces as hpi/ayurveda_profile above — this section had
-    // no deterministic check at all before, and the model was observed
-    // reporting section_complete: false turn after turn even once both
-    // fields were captured (or genuinely dropping "None" on extraction),
-    // looping "What medications are you currently taking?" indefinitely.
-    sectionComplete = false;
+  if (section === 'drug_allergy') {
+    if (sectionComplete && !drugAllergyComplete(mergedHistory.drug_allergy)) {
+      // Same belt-and-braces as hpi/ayurveda_profile above — this section had
+      // no deterministic check at all before, and the model was observed
+      // reporting section_complete: false turn after turn even once both
+      // fields were captured (or genuinely dropping "None" on extraction),
+      // looping "What medications are you currently taking?" indefinitely.
+      sectionComplete = false;
+    }
+    // Live repro fix (claim D, drug_allergy -> finalize boundary): same
+    // asymmetry as the hpi fix above — this only ever forced sectionComplete
+    // to FALSE (over-claim guard), never to TRUE, so a model that kept
+    // reporting section_complete: false despite both current_medications
+    // and allergies genuinely being captured had no forcing mechanism at
+    // this, the LAST section boundary before finalize. Observed live
+    // pattern matching exactly this shape: "Thank you. Are you currently
+    // taking any regular medicines or supplements?" — a stray "Thank you."
+    // (read as an aborted attempt at the finalize closing message) directly
+    // followed by a literal repeat of the medications question that had
+    // already been answered two turns earlier. Forcing sectionComplete true
+    // here means the state machine reaches finalize deterministically as
+    // soon as both fields are genuinely filled, instead of depending on the
+    // model ever reporting it — the same fix already applied to hpi and
+    // already unconditional for ayurveda_profile above.
+    if (!sectionComplete && drugAllergyComplete(mergedHistory.drug_allergy)) {
+      sectionComplete = true;
+    }
   }
 
   const resolvedSection = nextSection(section, sectionComplete, intakeMethod);
@@ -1604,12 +1657,29 @@ export async function runIntakeTurn({ section, structuredHistory, patientMessage
   // sees the two contradict each other, even if the prompt rule doesn't
   // land on a given turn.
   const nextQuestionText = typeof parsed.next_question === 'string' ? parsed.next_question.trim() : '';
+  // Live repro fix (claim D): a bare "Thank you." with NO wrap-up clause
+  // following it — e.g. "Thank you. Are you currently taking any regular
+  // medicines or supplements?" — read as an aborted attempt at the
+  // finalize closing message, immediately followed by a re-ask of an
+  // already-answered question. The original regex below only strips a
+  // leading acknowledgement word when it's immediately followed by an
+  // actual wrap-up clause ("that completes...", "we're done", etc.); a
+  // standalone "Thank you." with nothing after it but the next real
+  // question matched nothing, so it was never stripped. This second,
+  // narrower pattern catches ONLY that standalone-acknowledgement shape —
+  // an acknowledgement word as its own leading sentence, with no wrap-up
+  // clause riding along — leaving the original pattern untouched for the
+  // case it already handles correctly.
+  const STANDALONE_THANKS_RE = /^(?:great|thanks|thank you|ok(?:ay)?|got it|perfect)[,!.]?\s*[.!]\s*/i;
   const cleanedNextQuestion = sectionComplete
     ? nextQuestionText
-    : nextQuestionText.replace(
-        /^(?:(?:great|thanks|thank you|ok(?:ay)?|got it|perfect)[,!.]?\s*)?(?:that\s+(?:completes|covers|wraps up)|that'?s\s+(?:everything|all|it)|(?:we'?re|you'?re)\s+(?:all\s+)?done)\b[^.!?]*[.!?]\s*/i,
-        ''
-      ).trim() || nextQuestionText;
+    : nextQuestionText
+        .replace(
+          /^(?:(?:great|thanks|thank you|ok(?:ay)?|got it|perfect)[,!.]?\s*)?(?:that\s+(?:completes|covers|wraps up)|that'?s\s+(?:everything|all|it)|(?:we'?re|you'?re)\s+(?:all\s+)?done)\b[^.!?]*[.!?]\s*/i,
+          ''
+        )
+        .replace(STANDALONE_THANKS_RE, '')
+        .trim() || nextQuestionText;
 
   // Deterministic backstop for the "proceed with Ayurvedic questions?"
   // pattern (observed live): right on the turn hpi completes and the
@@ -1749,8 +1819,27 @@ export async function runIntakeTurn({ section, structuredHistory, patientMessage
     const textIsAnswered = !!textField && capturedLeaves.has(textField);
     const optionsRepeat = quickReplyOptions.options.length > 0
       && priorOptionSetsInSection.some((prev) => optionSetsLookRepeated(prev, quickReplyOptions.options));
+    // Live repro fix (session 290ae9cb-d88f-44a8-9fee-eae6bc2b68c0):
+    // "How many times a day are you having loose motions?" was asked,
+    // answered, then the SAME question — byte-identical text — was asked
+    // again immediately after. None of the three signals above caught it
+    // in principle they should have (options did overlap), but this
+    // question is an ad-hoc drill-down into associated_symptoms with no
+    // canonical field of its own, so declaredField/textField were both
+    // null and the whole guard was one bad model turn away from shipping
+    // a literal duplicate with no independent backstop. A pure string
+    // comparison needs no field classification at all and catches this
+    // regardless of section, field, or whether the model bothered to
+    // repeat the options too — the simplest, most direct signal, checked
+    // against every prior question in the section (not just the last one,
+    // matching priorQuestionsInSection's existing convention elsewhere in
+    // this function).
+    const normalizeForExactMatch = (t) => String(t || '').trim().toLowerCase().replace(/\s+/g, ' ');
+    const normalizedNext = normalizeForExactMatch(finalNextQuestion);
+    const isLiteralRepeat = normalizedNext !== ''
+      && priorQuestionsInSection.some((q) => normalizeForExactMatch(q) === normalizedNext);
 
-    if (declaredIsAnswered || textIsAnswered || optionsRepeat) {
+    if (declaredIsAnswered || textIsAnswered || optionsRepeat || isLiteralRepeat) {
       const replacement = nextUnansweredQuestionFor(section, mergedHistory, intakeMethod, language);
       if (replacement) {
         dedupedNextQuestion = replacement.question;
