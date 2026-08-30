@@ -12,7 +12,6 @@ import {
   requestAccessAgain,
   getDoctorNotifications,
   getPatientNotifications,
-  getActiveDoctorLinksForPatient,
 } from '../db/doctorPatients.js';
 import { createNotification } from '../db/notifications.js';
 import { sendDoctorRequestEmail } from '../utils/mailer.js';
@@ -91,40 +90,6 @@ router.get('/notifications', async (req, res) => {
   } catch (error) {
     console.error('Notifications fetch error:', error);
     return res.status(500).json({ message: 'Unable to load notifications.' });
-  }
-});
-
-/**
- * GET /api/doctor-patients/my-doctors/active
- * PATIENT-facing. Answers one question: will an intake this patient starts
- * right now actually reach a doctor?
- *
- * A 'Start Visit Intake' session started without a clinic check-in code has
- * doctor_id NULL, and the doctor queue only ever returns sessions belonging
- * to a doctor's OWN 'accepted'-linked patients (db/intakeSessions.js
- * getIntakeQueueForPatients). So for a patient with no active link the
- * session is an orphan — it is stored, but no doctor can see it. The intake
- * UI calls this before the skip path to warn them and point at the clinic
- * check-in code, which is the flow that DOES create the link (POST
- * /api/clinic/verify-otp upserts it to 'accepted').
- *
- * Scoped to req.user — a caller can only ever ask about their own links.
- * Declared before any '/:param' route so Express doesn't match
- * 'my-doctors' as a :patientId.
- */
-router.get('/my-doctors/active', async (req, res) => {
-  const authUser = getAuthUser(req);
-
-  if (!authUser?.userId) {
-    return res.status(401).json({ message: 'Authentication required.' });
-  }
-
-  try {
-    const { hasActiveDoctor, doctorCount } = await getActiveDoctorLinksForPatient(authUser.userId);
-    return res.json({ hasActiveDoctor, doctorCount });
-  } catch (error) {
-    console.error('Active doctor link fetch error:', error);
-    return res.status(500).json({ message: 'Unable to check your doctor links.' });
   }
 });
 
