@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "../../../context/AuthContext";
-import { startIntake, sendIntakeTurn, finalizeIntake, transcribeIntakeAudio, replayIntakeAudio } from "../../../api/intake";
+import { startIntake, resumeIntake, sendIntakeTurn, finalizeIntake, transcribeIntakeAudio, replayIntakeAudio } from "../../../api/intake";
 import { verifyClinicCode, sendClinicOtp, verifyClinicOtp } from "../../../api/clinic";
 import { hasActiveDoctorLink } from "../../../services/doctorPatients";
 import ResponsiveSidebar from "../../../components/Common/ResponsiveSidebar";
@@ -175,6 +175,31 @@ function readStoredMute() {
   }
 }
 
+// Issue #4 fix (audit report): the active session_id, so a refresh/tab-close
+// can be resumed instead of silently abandoning the session and starting a
+// fresh one every time (a direct contributor to the stuck in_progress rows
+// found live — Issue #10). Cleared once the session finalizes (see
+// clearStoredSessionId in submitAnswer) or when a resume attempt turns out
+// stale (the backend 404s — already finished, or genuinely gone).
+const SESSION_STORAGE_KEY = "swastha_intake_session_id";
+
+function readStoredSessionId() {
+  try {
+    return localStorage.getItem(SESSION_STORAGE_KEY) || null;
+  } catch {
+    return null;
+  }
+}
+
+function writeStoredSessionId(sessionId) {
+  try {
+    if (sessionId) localStorage.setItem(SESSION_STORAGE_KEY, sessionId);
+    else localStorage.removeItem(SESSION_STORAGE_KEY);
+  } catch {
+    /* storage unavailable (private mode) — resume just won't work this session */
+  }
+}
+
 export default function IntakeChat() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -189,6 +214,17 @@ export default function IntakeChat() {
   // page's own gate flow below (handleClinicOtpSubmit), kept as a prop-style
   // read so a future caller could still hand off a session the same way.
   const preStarted = location.state?.preStartedSession || null;
+
+  // A session handed off from a previous page (rather than started fresh by
+  // one of the effects below) still needs to be persisted for resume —
+  // otherwise a refresh right after landing here with a preStarted session
+  // would have nothing stored yet.
+  useEffect(() => {
+    if (preStarted?.session_id) writeStoredSessionId(preStarted.session_id);
+    // Only ever runs off the value present at mount — preStarted itself
+    // never changes for the lifetime of this component.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Gate: skip straight to "chat" when a session was already handed off;
   // otherwise start on the clinic-code entry screen every time /intake is
@@ -286,14 +322,45 @@ export default function IntakeChat() {
   // Start a plain remote intake session exactly once the gate has resolved
   // to "chat" without a pre-started (clinic) session — StrictMode/re-render
   // safe via the ref.
+  //
+  // Issue #4 fix (audit report): before creating a brand-new session, try
+  // resuming a previously-stored one first (see SESSION_STORAGE_KEY above)
+  // — this is what makes a refresh/tab-close continue the same session
+  // instead of always abandoning it. A resume attempt that fails for any
+  // reason (nothing stored, the backend 404s because it's already finished
+  // or genuinely gone, or a network error) falls straight through to the
+  // normal start path — resuming is a best-effort convenience, never a hard
+  // gate on being able to use intake at all.
   useEffect(() => {
     if (!isAuthenticated || gateStep !== GATE_STEPS.CHAT || startedRef.current) return;
     startedRef.current = true;
 
     (async () => {
+      const storedSessionId = readStoredSessionId();
+      if (storedSessionId) {
+        try {
+          const res = await resumeIntake(storedSessionId);
+          setSessionId(res.session_id);
+          setSection(res.section);
+          setMessages(Array.isArray(res.messages) && res.messages.length > 0
+            ? res.messages
+            : [{ role: "assistant", text: res.next_question }]);
+          setQuickReplies(normalizeQuickReplies(res.quick_reply_options));
+          if (res.language) setLanguage(res.language);
+          if (res.red_flag) setPriorityAlert(true);
+          setStarting(false);
+          return; // resumed — skip the fresh /start below entirely
+        } catch {
+          // Stale/finished/gone — clear it so this doesn't keep being tried
+          // on every future mount, then fall through to starting fresh.
+          writeStoredSessionId(null);
+        }
+      }
+
       try {
         const res = await startIntake(language);
         setSessionId(res.session_id);
+        writeStoredSessionId(res.session_id);
         setSection(res.section);
         setMessages([{ role: "assistant", text: res.next_question }]);
         setQuickReplies(normalizeQuickReplies(res.quick_reply_options));
@@ -638,6 +705,7 @@ export default function IntakeChat() {
       // the chat state below instead of the remote-start effect.
       startedRef.current = true;
       setSessionId(session.session_id);
+      writeStoredSessionId(session.session_id);
       setSection(session.section);
       setMessages([{ role: "assistant", text: session.next_question }]);
       setQuickReplies(normalizeQuickReplies(session.quick_reply_options));
@@ -759,6 +827,10 @@ export default function IntakeChat() {
       if (res.section === "finalize") {
         await finalizeIntake(sessionId);
         setDone(true);
+        // Nothing left to resume into once finalized — clear it so a later
+        // "Start Visit Intake" click begins a genuinely new session instead
+        // of trying (and failing) to resume this now-completed one.
+        writeStoredSessionId(null);
       }
       // Priority Alert: shown once, the turn red_flag first flips true —
       // still also affects the doctor's queue sort/badge (unchanged).

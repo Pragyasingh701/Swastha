@@ -38,6 +38,23 @@ export async function startIntake(language) {
 }
 
 /**
+ * Issue #4 fix (audit report): rehydrates an in-progress session after a
+ * page refresh/tab-close, instead of the previous behavior of silently
+ * abandoning it and starting a new one every time. Returns the same
+ * { session_id, section, quick_reply_options, red_flag, language } shape
+ * startIntake/sendIntakeTurn return, plus the full `messages` transcript so
+ * the chat UI can redraw every prior bubble, not just the latest question.
+ *
+ * Callers should treat any failure (404 for "not found/not yours/already
+ * finished", or a network error) as "nothing to resume" and fall through to
+ * starting a fresh session — this is a best-effort convenience, never a
+ * hard gate on being able to use intake at all.
+ */
+export async function resumeIntake(sessionId) {
+  return request(`/intake/${encodeURIComponent(sessionId)}`, { method: 'GET' });
+}
+
+/**
  * Voice layer (Phase 7b). Uploads one recorded answer and returns
  * { transcript, language_code }. Does NOT advance the dialogue — the
  * transcript goes into the patient's answer field for review/editing, and
@@ -98,4 +115,4 @@ export async function replayIntakeAudio(sessionId, text) {
   });
 }
 
-export default { startIntake, sendIntakeTurn, finalizeIntake, transcribeIntakeAudio, replayIntakeAudio };
+export default { startIntake, resumeIntake, sendIntakeTurn, finalizeIntake, transcribeIntakeAudio, replayIntakeAudio };

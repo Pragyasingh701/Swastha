@@ -7,6 +7,7 @@ import reportsRoutes from './routes/reports.js';
 import doctorPatientsRoutes from './routes/doctorPatients.js';
 import notificationsRoutes from './routes/notifications.js';
 import clinicRoutes from './routes/clinic.js';
+import intakeAdminRoutes from './routes/intakeAdmin.js';
 
 import fs from 'fs';
 import path from 'path';
@@ -50,6 +51,10 @@ app.use('/api/reports', reportsRoutes);
 app.use('/api/doctor-patients', doctorPatientsRoutes);
 app.use('/api/notifications', notificationsRoutes);
 app.use('/api/clinic', clinicRoutes);
+// Machine-to-machine only (shared-secret protected, not JWT) — see
+// routes/intakeAdmin.js's own comment for why this lives outside the
+// normal patient/doctor route boundary.
+app.use('/api/intake-admin', intakeAdminRoutes);
 
 // RAG microservice, merged in as a sub-app (was its own process/port/
 // Render service; see backend/rag/app.js) so the whole backend runs as

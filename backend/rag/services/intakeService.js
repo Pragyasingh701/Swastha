@@ -124,7 +124,108 @@ const SYSTEMIC_COMPLAINT_TERMS = [
 const HPI_FIELDS_NA_FOR_SYSTEMIC = ['site', 'radiation'];
 const HPI_NA_MARKER = 'Not applicable (generalized symptom)';
 
-function isSystemicComplaint(chiefComplaint) {
+// Issue #2/#3 fix (audit report): hpiComplete() requires every HPI field
+// non-empty before the section can advance, but — unlike site/radiation
+// above — nothing ever force-filled a field the extraction pipeline simply
+// kept failing to capture (e.g. timing). When that happened the section
+// never completed, every later turn got mislabeled with the stuck section
+// (since turn.section is always the CURRENT, non-advancing section), and
+// the repeat/dedup guards — all scoped by `t.section === currentSection` —
+// lost precision for the rest of the session because they were comparing
+// against a growing pool of turns that were actually about a different
+// section (ayurveda_profile/drug_allergy questions all tagged "hpi").
+// Reproduced live: session 10115ff3-fcd9-4ccb-b61b-8ad267798b0e never
+// completed hpi because hpi.timing stayed "" for the whole session despite
+// dozens of later turns.
+//
+// Fix: same "mark it explicitly rather than leave it blank" mechanism as
+// markInapplicableHpiFields above, but keyed off attempt count instead of
+// complaint type. A field counts as "stuck" once its question has been
+// asked this many times in the current section without ever landing a
+// value (counted via hpiFieldForQuestion's keyword match against
+// priorQuestionsInSection, the same signal the repeat-guard already uses)
+// — chosen to be generous enough that a slow-but-genuine back-and-forth
+// isn't cut short, while still guaranteeing forward progress within a
+// bounded number of turns.
+const HPI_STUCK_FIELD_ATTEMPT_THRESHOLD = 3;
+const HPI_STUCK_FIELD_MARKER = 'Not specified (patient did not provide a clear answer)';
+
+/**
+ * Force-fills any HPI field that has been asked about at least
+ * HPI_STUCK_FIELD_ATTEMPT_THRESHOLD times in the current section's prior
+ * questions but is still empty — guarantees hpiComplete() can eventually
+ * become true no matter what the model does, the same guarantee
+ * markInapplicableHpiFields already gives site/radiation on systemic
+ * complaints. Marking (not just accepting incompleteness) matters because
+ * hpiComplete() treats a blank as "not yet asked", so leaving it blank
+ * would strand the session exactly as before.
+ *
+ * Only ever called from the hpi section with that section's own prior
+ * questions, so a field's attempt count can't be inflated by questions
+ * from an unrelated section.
+ */
+function markStuckHpiFields(history, priorQuestionsInSection) {
+  if (!history?.hpi || !Array.isArray(priorQuestionsInSection) || priorQuestionsInSection.length === 0) {
+    return history;
+  }
+  const attemptCounts = new Map();
+  for (const q of priorQuestionsInSection) {
+    const field = hpiFieldForQuestion(q);
+    if (field) attemptCounts.set(field, (attemptCounts.get(field) || 0) + 1);
+  }
+  let changed = false;
+  const hpi = { ...history.hpi };
+  for (const [field, count] of attemptCounts) {
+    if (count < HPI_STUCK_FIELD_ATTEMPT_THRESHOLD) continue;
+    if (field === 'associated_symptoms') {
+      if (!Array.isArray(hpi[field]) || hpi[field].length === 0) {
+        hpi[field] = [];
+        // associated_symptoms legitimately completes as an empty array
+        // (hpiComplete() only requires Array.isArray for this field), so
+        // no marker string is needed — an explicit empty array already
+        // means "asked, nothing reported" under the existing convention.
+        changed = true;
+      }
+      continue;
+    }
+    if (field === 'severity') {
+      if (hpi[field] === null || hpi[field] === undefined || hpi[field] === '') {
+        // severity must be an integer 1-10 per the schema — there is no
+        // sentinel string equivalent, so this is the one field where
+        // "stuck" still can't force a clinically-meaningless number. Left
+        // to the doctor to ask directly; every OTHER field on this list can
+        // safely take the neutral marker instead.
+        continue;
+      }
+      continue;
+    }
+    if (!(typeof hpi[field] === 'string' && hpi[field].trim() !== '')) {
+      hpi[field] = HPI_STUCK_FIELD_MARKER;
+      changed = true;
+    }
+  }
+  return changed ? { ...history, hpi } : history;
+}
+
+// Issue #7 fix (audit report): SYSTEMIC_COMPLAINT_TERMS is a hand-maintained
+// allowlist that can only ever cover terms someone already observed and
+// added — confirmed live to still miss common terms ("HIV" produced "Where
+// exactly is the HIV?"), and the same reactive-list shape as the
+// announcement-clause fix above. The model already classifies far subtler
+// things every turn (red-flag detection, section completion), so it's
+// asked to classify this too, as part of the SAME turn's structured output
+// (see buildSystemPrompt's "is_systemic_complaint" field below) rather than
+// a hardcoded term match — a classification step fits the existing prompt
+// architecture (one JSON call already producing multiple derived signals)
+// far better than growing a list forever.
+//
+// The term list is kept, not deleted, as a same-turn fallback ONLY for when
+// the model's own classification is missing/malformed (e.g. still on the
+// very first turn before chief_complaint exists, or a degraded/exhausted
+// response) — belt-and-braces at zero extra cost, same philosophy as every
+// other deterministic backstop in this file, but no longer the primary
+// signal.
+function isSystemicComplaintByTermList(chiefComplaint) {
   const c = String(chiefComplaint || '').toLowerCase();
   if (!c.trim()) return false;
   // A localized pain complaint mentioning a body part is NOT systemic even
@@ -134,14 +235,26 @@ function isSystemicComplaint(chiefComplaint) {
   return SYSTEMIC_COMPLAINT_TERMS.some((t) => c.includes(t));
 }
 
+/**
+ * @param {string} chiefComplaint
+ * @param {boolean|null|undefined} modelVerdict - the model's own
+ *   is_systemic_complaint classification for this turn, when available.
+ *   Preferred over the term list whenever it's an actual boolean; the term
+ *   list only runs as a fallback (see comment above).
+ */
+function isSystemicComplaint(chiefComplaint, modelVerdict) {
+  if (typeof modelVerdict === 'boolean') return modelVerdict;
+  return isSystemicComplaintByTermList(chiefComplaint);
+}
+
 // Returns a copy of the history with site/radiation explicitly marked
 // not-applicable when the complaint is systemic. Marking (rather than just
 // skipping) is required because hpiComplete() demands every field be
 // non-empty — skipping alone would strand the session in "hpi" forever.
 // The marker also flows into capturedFieldKeys(), so the prompt lists these
 // as ALREADY ANSWERED and the model won't ask them either.
-function markInapplicableHpiFields(history) {
-  if (!history?.hpi || !isSystemicComplaint(history.chief_complaint)) return history;
+function markInapplicableHpiFields(history, modelVerdict) {
+  if (!history?.hpi || !isSystemicComplaint(history.chief_complaint, modelVerdict)) return history;
   let changed = false;
   const hpi = { ...history.hpi };
   for (const f of HPI_FIELDS_NA_FOR_SYSTEMIC) {
@@ -819,6 +932,7 @@ Return ONLY a single JSON object (no prose, no markdown fences) with this exact 
     ${isAyurvedic ? '"ayurveda_profile": { "<sub-object name, e.g. prakriti>": { "<only the fields this turn updated>": "<value or array>" }, "vikruti_qualities": ["<only if this turn updated it>"] },\n    ' : ''}"drug_allergy": { "<only the drug_allergy fields this turn updated>": "<value>" }
   },
   "section_complete": <true if the CURRENT section ("${section}") is now fully captured, else false>,
+  "is_systemic_complaint": <true if the chief_complaint (once known) is a GENERALIZED/systemic symptom with no body location — e.g. fatigue, fever, dizziness, nausea, insomnia, anxiety, weight change, an infection or condition name with no localized site (e.g. "HIV", "diabetes") — false if it is localized to a body part/area (e.g. pain, swelling, rash, a joint, an injury) even if weakness or fatigue is also mentioned alongside it. null if chief_complaint is not yet known this turn.>,
   "red_flag": <true|false>,
   "red_flag_reason": "<short reason if red_flag is true, else null>"
 }
@@ -1086,17 +1200,44 @@ export async function runIntakeTurn({ section, structuredHistory, patientMessage
     throw new Error(`Intake dialogue model returned unparsable output: ${err.message}`);
   }
 
-  // Cheap compound-question tripwire. Deliberately only counts question
-  // marks rather than trying to detect conjunctions: "और"/"and" appears
+  // Compound-question tripwire. Deliberately only counts question marks
+  // rather than trying to detect conjunctions: "और"/"and" appears
   // constantly inside perfectly good single questions (option lists,
   // clinically-standard symptom pairs like "nausea and vomiting"), so
   // conjunction-matching would fire on correct questions. Two question
-  // marks is unambiguous. Logged, never auto-retried — a retry would add
-  // a full LLM round-trip to a turn that is usually fine, and the prompt
-  // rule above is the actual fix.
-  const questionMarks = (parsed.next_question?.match(/[?？]/g) || []).length;
+  // marks is unambiguous.
+  //
+  // Issue #5 fix (audit report): this used to only console.warn — the
+  // prompt's "ONE QUESTION PER TURN" rule was the sole enforcement, and it
+  // demonstrably doesn't always land (confirmed live: ~0.7% of turns).
+  // Now actively corrected with a single extra runAI call scoped to only
+  // the turns that actually trip it (rare enough that the added latency
+  // — one more 12s-capped round-trip — is worth it for a patient-facing
+  // question, unlike a blanket retry on every turn). If the retry itself
+  // fails or still trips the same check, the ORIGINAL response is used
+  // rather than risking a worse or empty result — this is a best-effort
+  // correction, not a hard gate.
+  let questionMarks = (parsed.next_question?.match(/[?？]/g) || []).length;
   if (questionMarks > 1) {
-    console.warn(`[intake] possible compound question (${questionMarks} "?"): ${parsed.next_question}`);
+    console.warn(`[intake] possible compound question (${questionMarks} "?"), retrying: ${parsed.next_question}`);
+    const retryPrompt = `${prompt}\n\nYour previous reply asked more than one question in "next_question": "${parsed.next_question}"\nThat breaks the ONE QUESTION PER TURN rule above. Re-answer the SAME turn, asking ONLY about the first field you were trying to ask about — drop the second question entirely (you'll get a separate turn for it later). Return the same JSON shape as before, corrected.`;
+    const retryGen = await runAI({ task: 'intake-dialogue', input: retryPrompt, json: true, label: 'intake-dialogue-compound-retry' });
+    if (retryGen.ok) {
+      try {
+        const retryParsed = extractJson(retryGen.text);
+        const retryQuestionMarks = (retryParsed.next_question?.match(/[?？]/g) || []).length;
+        if (retryQuestionMarks <= 1 && typeof retryParsed.next_question === 'string' && retryParsed.next_question.trim()) {
+          parsed = retryParsed;
+          questionMarks = retryQuestionMarks;
+        } else {
+          console.warn('[intake] compound-question retry did not fix it — keeping original response');
+        }
+      } catch (err) {
+        console.warn(`[intake] compound-question retry returned unparsable output, keeping original: ${err.message}`);
+      }
+    } else {
+      console.warn('[intake] compound-question retry call failed, keeping original response');
+    }
   }
 
   // red_flag is sticky — once true, never flips back to false even if the
@@ -1167,8 +1308,13 @@ export async function runIntakeTurn({ section, structuredHistory, patientMessage
   // Re-apply after the merge: the chief_complaint may only have become known
   // on THIS turn (the first turn starts with it empty), so this is the point
   // where a systemic complaint first becomes detectable and its N/A fields
-  // must be persisted.
-  mergedHistory = markInapplicableHpiFields(mergedHistory);
+  // must be persisted. Prefers the MODEL's own is_systemic_complaint
+  // classification from this turn's response over the term-list fallback
+  // (see isSystemicComplaint's comment) — only falls back to the term list
+  // when the model didn't return a usable boolean (e.g. still null because
+  // chief_complaint just got captured this same turn, or a malformed
+  // response).
+  mergedHistory = markInapplicableHpiFields(mergedHistory, parsed.is_systemic_complaint);
 
   // Deterministic repair for the #1 observed failure mode on the free-tier
   // model ladder: the model fails to extract the patient's answer into
@@ -1249,8 +1395,17 @@ export async function runIntakeTurn({ section, structuredHistory, patientMessage
     // complaint" forever even as HPI answers come in.
     sectionComplete = true;
   }
-  if (section === 'hpi' && sectionComplete && !hpiComplete(mergedHistory.hpi)) {
-    sectionComplete = false;
+  if (section === 'hpi') {
+    // Force-fill any field stuck across HPI_STUCK_FIELD_ATTEMPT_THRESHOLD+
+    // attempts BEFORE checking completeness, so a genuinely stuck field
+    // (Issue #2/#3 — see markStuckHpiFields) can never permanently block
+    // the section the way it used to. priorQuestionsInSection already
+    // includes lastQuestion (advanceIntakeSession's caller includes it),
+    // so this turn's own question counts toward the threshold too.
+    mergedHistory = { ...mergedHistory, hpi: markStuckHpiFields(mergedHistory, priorQuestionsInSection).hpi };
+    if (sectionComplete && !hpiComplete(mergedHistory.hpi)) {
+      sectionComplete = false;
+    }
   }
   if (section === 'ayurveda_profile') {
     // Deterministic double-check mirroring hpiComplete()'s role above
@@ -1303,16 +1458,55 @@ export async function runIntakeTurn({ section, structuredHistory, patientMessage
   // fallback a few lines below supplies a safe generic question rather
   // than leaving the patient with nothing.
   const sectionJustAdvanced = resolvedSection !== section;
-  const ANNOUNCEMENT_CLAUSE_RE =
-    /^(?:(?:great|thanks|thank you|ok(?:ay)?|got it|perfect|now|next)[,!.]?\s*)?(?:(?:let'?s|i'?ll|we'?ll)\s+(?:now\s+)?(?:move on to|move into|talk about|go over|go through|ask (?:you )?(?:a few|some))|(?:is (?:that|it) (?:okay|ok|alright|fine)\??)|(?:shall we (?:continue|proceed|move on)\??)|(?:would you like to (?:continue|proceed)\??)|(?:can we (?:continue|proceed)\??))\b[^.!?]*[.!?]?\s*/i;
+  // Issue #6 fix (audit report): the old approach matched a hand-enumerated
+  // list of exact leading-clause phrasings (ANNOUNCEMENT_CLAUSE_RE below,
+  // kept only as a comment for context) — inherently reactive, since it can
+  // only ever cover a phrasing someone already observed in testing and
+  // added to the list, and it only ever looked at the START of the string,
+  // so a mid-sentence or differently-ordered announcement slipped through
+  // untouched (confirmed live: "Now, let's look at your daily habits and
+  // routine. Which of these best describes your daily activity level?" —
+  // the transition text was its own leading SENTENCE, which the old regex's
+  // clause-anchoring should have caught but a slight wording drift missed).
+  //
+  // Structural replacement: split into sentences and drop any LEADING
+  // sentence that (a) is short (a real clinical question is rarely under 6
+  // words) and (b) contains a soft transition/permission SIGNAL WORD rather
+  // than a full hand-picked clause — single keywords generalize across
+  // paraphrasing far better than fixed multi-word patterns, since a
+  // transition sentence almost always contains at least one of these words
+  // somewhere, regardless of how the model orders or phrases the rest of
+  // the sentence. A sentence is never dropped just for containing one of
+  // these words if it's also long/detailed enough to plausibly be the real
+  // question itself (e.g. "Would you like to describe how the pain in your
+  // knee behaves when you climb stairs?" stays, since length + specificity
+  // indicate real content, not filler). Runs in a loop so a two-sentence
+  // announcement ("Let's move on. Is that okay?") gets both sentences
+  // stripped, not just the first.
+  const TRANSITION_SIGNAL_WORDS = [
+    'move on', 'moving on', "let's now", "let's talk", "let's go", "we'll now",
+    "i'll now", 'next up', 'next,', 'shall we', 'is that okay', 'is that ok',
+    'is that alright', 'is it okay', 'sound good', 'ready to continue',
+    'continue?', 'proceed?', 'before we', 'now that', "now, let's",
+  ];
+  const MAX_ANNOUNCEMENT_SENTENCE_WORDS = 12;
+  function looksLikeAnnouncementSentence(sentence) {
+    const trimmed = sentence.trim();
+    if (!trimmed) return false;
+    const wordCount = trimmed.split(/\s+/).length;
+    if (wordCount > MAX_ANNOUNCEMENT_SENTENCE_WORDS) return false; // too long/specific to be filler
+    const lower = trimmed.toLowerCase();
+    return TRANSITION_SIGNAL_WORDS.some((w) => lower.includes(w));
+  }
   function stripLeadingAnnouncements(text) {
-    let out = text;
-    for (let i = 0; i < 3; i += 1) {
-      const next = out.replace(ANNOUNCEMENT_CLAUSE_RE, '').trim();
-      if (next === out || !next) break;
-      out = next;
+    // Split on sentence-ending punctuation while keeping it attached to each
+    // sentence, so re-joining doesn't lose the original terminators.
+    const sentences = text.match(/[^.!?]+[.!?]*(?:\s+|$)/g) || [text];
+    let start = 0;
+    while (start < sentences.length - 1 && looksLikeAnnouncementSentence(sentences[start])) {
+      start += 1;
     }
-    return out;
+    return sentences.slice(start).join('').trim();
   }
   const deAnnouncedNextQuestion = sectionJustAdvanced
     ? stripLeadingAnnouncements(cleanedNextQuestion) || cleanedNextQuestion
@@ -1445,9 +1639,11 @@ export const __testing = {
   nextUnansweredQuestionFor,
   questionSpecForField,
   isSystemicComplaint,
+  isSystemicComplaintByTermList,
   markInapplicableHpiFields,
   fieldForQuestion,
   drugAllergyFieldForQuestion,
+  markStuckHpiFields,
 };
 
 /**

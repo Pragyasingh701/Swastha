@@ -302,29 +302,16 @@ function ViewTabs({ view, onChangeView }) {
   );
 }
 
-function IntakeQueueList({ sessions, isLoading, error, onSelect, onComplete, onRemove, actioningId }) {
-  if (error) {
-    return (
-      <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-        {error}
-      </div>
-    );
-  }
-
+// Renders one group's rows. Split out of IntakeQueueList so the "In
+// Progress" and "Ready for Review" sections (see IntakeQueueList below)
+// share identical row markup instead of two copies drifting apart.
+function IntakeQueueRows({ sessions, onSelect, onComplete, onRemove, actioningId }) {
   return (
-    <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
-      {isLoading ? (
-        <div className="px-5 py-6 text-sm text-slate-400">Loading intake sessions…</div>
-      ) : sessions.length === 0 ? (
-        <div className="px-5 py-6 text-sm text-slate-400">
-          No patient intake sessions yet. A session reaches this queue once a patient you're linked to completes "Start Visit Intake" — a walk-in can link themselves by entering your daily check-in code at the start of their intake.
-        </div>
-      ) : (
-        <ul className="divide-y divide-slate-100">
-          {sessions.map((s) => {
-            const isActioning = actioningId === s.session_id;
-            return (
-              <li key={s.session_id}>
+    <ul className="divide-y divide-slate-100">
+      {sessions.map((s) => {
+        const isActioning = actioningId === s.session_id;
+        return (
+          <li key={s.session_id}>
                 <div
                   className={`w-full flex items-center justify-between gap-4 px-5 py-4 transition-colors hover:bg-slate-50 ${
                     s.priority === "flagged" ? "bg-red-50/40 hover:bg-red-50/70" : ""
@@ -416,10 +403,74 @@ function IntakeQueueList({ sessions, isLoading, error, onSelect, onComplete, onR
                     </div>
                   </div>
                 </div>
-              </li>
-            );
-          })}
-        </ul>
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
+// Active Queue is split into two groups rather than one flat list (Issue
+// #1 — the queue used to filter to status === "completed" only, which hid
+// every in_progress session, including flagged ones, from the doctor until
+// the patient finished answering — defeating the whole point of the
+// mid-session red-flag alert). Both groups come from the SAME
+// doctor_action IS NULL result the backend already returns; this only
+// regroups by status, it does not refetch or re-scope anything.
+function IntakeQueueList({ sessions, isLoading, error, onSelect, onComplete, onRemove, actioningId }) {
+  if (error) {
+    return (
+      <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+        {error}
+      </div>
+    );
+  }
+
+  if (isLoading) {
+    return (
+      <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
+        <div className="px-5 py-6 text-sm text-slate-400">Loading intake sessions…</div>
+      </div>
+    );
+  }
+
+  if (sessions.length === 0) {
+    return (
+      <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
+        <div className="px-5 py-6 text-sm text-slate-400">
+          No patient intake sessions yet. A session reaches this queue once a patient you're linked to starts "Start Visit Intake" — a walk-in can link themselves by entering your daily check-in code at the start of their intake.
+        </div>
+      </div>
+    );
+  }
+
+  const inProgress = sessions.filter((s) => s.status !== "completed");
+  const readyForReview = sessions.filter((s) => s.status === "completed");
+  const rowProps = { onSelect, onComplete, onRemove, actioningId };
+
+  return (
+    <div className="space-y-6">
+      {inProgress.length > 0 && (
+        <div>
+          <h3 className="text-sm font-semibold text-slate-600 mb-2 flex items-center gap-2">
+            In Progress
+            <span className="text-xs font-medium text-slate-400">
+              patient is still answering — flagged sessions need attention now
+            </span>
+          </h3>
+          <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
+            <IntakeQueueRows sessions={inProgress} {...rowProps} />
+          </div>
+        </div>
+      )}
+
+      {readyForReview.length > 0 && (
+        <div>
+          <h3 className="text-sm font-semibold text-slate-600 mb-2">Ready for Review</h3>
+          <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
+            <IntakeQueueRows sessions={readyForReview} {...rowProps} />
+          </div>
+        </div>
       )}
     </div>
   );
@@ -456,8 +507,22 @@ function IntakeHistoryList({ history, isLoading, error }) {
                 </span>
                 <div className="min-w-0">
                   <p className="text-sm font-semibold text-slate-900 truncate">{h.patient_name}</p>
-                  <p className="text-sm text-slate-500 truncate">
-                    {h.chief_complaint || "No chief complaint recorded"}
+                  <p className="text-sm text-slate-500 truncate flex items-center gap-2">
+                    <span className="truncate">{h.chief_complaint || "No chief complaint recorded"}</span>
+                    {/* Same treatment-method badge as the active queue and
+                        the summary modal (Issue #9 — this was previously
+                        the only place showing intake_method even though
+                        the backend already returns it on every history
+                        row, see getIntakeActionHistoryForDoctor). */}
+                    <span
+                      className={`shrink-0 text-[11px] font-medium px-1.5 py-0.5 rounded ${
+                        h.intake_method === "ayurvedic"
+                          ? "bg-amber-50 text-amber-700"
+                          : "bg-slate-100 text-slate-500"
+                      }`}
+                    >
+                      {h.intake_method === "ayurvedic" ? "Ayurvedic" : "Allopathic"}
+                    </span>
                   </p>
                 </div>
               </div>
@@ -693,9 +758,15 @@ export default function IntakeQueue() {
     setError(null);
     try {
       const result = await getIntakeQueue();
-      // Only surface sessions the patient has actually completed — "in
-      // progress" intakes aren't ready for the doctor to review yet.
-      setSessions(result.filter((s) => s.status === "completed"));
+      // The backend already scopes this to doctor_action IS NULL (every
+      // session still on this doctor's active queue, in_progress or
+      // completed) — no further filtering here. It used to be filtered to
+      // status === "completed" only, which hid every in_progress session
+      // (including flagged ones) until the patient finished the whole
+      // intake (Issue #1 — confirmed live: 78% of active-eligible sessions
+      // were in_progress and invisible). IntakeQueueList now renders both
+      // groups, so this just needs to pass everything through.
+      setSessions(result);
     } catch (err) {
       setError(err.message || "Failed to load intake queue.");
       setSessions([]);

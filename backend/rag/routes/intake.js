@@ -70,6 +70,100 @@ async function withAudio(payload, questionText, language) {
 }
 
 /**
+ * GET /api/intake/:sessionId
+ * PATIENT-facing. Issue #4 fix (audit report): there was previously no way
+ * for the frontend to rehydrate an in-progress session after a page
+ * refresh/tab-close/reload — IntakeChat.jsx held the whole conversation in
+ * local React state only, so any reload called POST /start again, silently
+ * abandoning the previous session (never finalized, invisible to the
+ * frontend) and starting a brand-new one. That was a direct contributor to
+ * the stuck/abandoned in_progress rows found live in the audit (Issue #10).
+ *
+ * Returns the full turns[] transcript plus enough state (section,
+ * quick_reply_options for the LAST assistant turn, red_flag) for the chat
+ * UI to redraw exactly where the patient left off, in the same shape /start
+ * and /turn already return for the latest turn, plus the full message list.
+ * Ownership is the same check every other route here uses — 404, not 403,
+ * on a session that exists but isn't the caller's, so a client can't
+ * distinguish "not yours" from "doesn't exist" (routes/doctorPatients.js's
+ * intake-queue detail route uses the same 404-not-403 convention).
+ *
+ * A session that has already reached status 'completed' is intentionally
+ * excluded (404) — resume is for continuing an unfinished conversation;
+ * finalized sessions have nothing left to resume into, and the frontend
+ * clears its stored session_id once /finalize succeeds (see IntakeChat.jsx)
+ * so this should not normally even be requested for one.
+ */
+router.get('/:sessionId', requireAuth, async (req, res) => {
+  const patientId = req.user.userId;
+  const { sessionId } = req.params;
+
+  if (!sessionId || typeof sessionId !== 'string') {
+    return res.status(400).json({ error: 'sessionId is required' });
+  }
+
+  try {
+    const { data: session, error: sessionError } = await supabase
+      .from('intake_sessions')
+      .select('id, patient_id, status, structured_history, turns, language')
+      .eq('id', sessionId)
+      .single();
+
+    const resumableStatuses = ['in_progress', 'abandoned'];
+    if (sessionError || !session || session.patient_id !== patientId || !resumableStatuses.includes(session.status)) {
+      // Same 404-not-403 posture as every other ownership check in this
+      // file — a client can't tell "not yours" from "doesn't exist" from
+      // "already finished", which is also the correct signal for the
+      // frontend to fall back to starting a fresh session either way.
+      // 'completed' is deliberately excluded (nothing left to resume into);
+      // 'abandoned' IS resumable — see the un-abandon below (Issue #10).
+      return res.status(404).json({ error: 'No resumable intake session found.' });
+    }
+
+    if (session.status === 'abandoned') {
+      // The patient came back — un-abandon it rather than leaving them
+      // resumed into a row that still reads as abandoned everywhere else
+      // (the doctor's queue, history). abandoned_at is cleared too, so a
+      // session that gets abandoned and resumed more than once doesn't
+      // carry a stale timestamp from an earlier abandonment.
+      const { error: unabandonError } = await supabase
+        .from('intake_sessions')
+        .update({ status: 'in_progress', abandoned_at: null })
+        .eq('id', sessionId);
+      if (unabandonError) {
+        console.error(`[GET /api/intake/${sessionId}] failed to un-abandon session:`, unabandonError);
+        // Not fatal to the resume itself — the patient can still continue;
+        // the row just stays marked abandoned until the next sweep skips it
+        // again (still status-filtered to in_progress) or a future request
+        // retries this update.
+      }
+    }
+
+    const turns = Array.isArray(session.turns) ? session.turns : [];
+    const lastAssistantTurn = [...turns].reverse().find((t) => t.role === 'assistant');
+
+    return res.status(200).json({
+      session_id: session.id,
+      section: session.structured_history?.section || 'chief_complaint',
+      // Same shape sendIntakeTurn's response uses for options, built from
+      // the last assistant turn's own recorded options — not re-derived
+      // from anything else, so a resumed session shows exactly the chips
+      // the patient last saw.
+      quick_reply_options: { options: lastAssistantTurn?.options || [], allow_multiple: false },
+      red_flag: !!session.structured_history?.red_flag,
+      red_flag_reason: session.structured_history?.red_flag_reason || null,
+      language: normalizeLanguage(session.language || DEFAULT_LANGUAGE),
+      // Full transcript so the frontend can redraw every prior bubble, not
+      // just the latest question — { role: 'patient'|'assistant', text }.
+      messages: turns.map((t) => ({ role: t.role, text: t.text })),
+    });
+  } catch (err) {
+    console.error(`[GET /api/intake/${sessionId}] failed for patient ${patientId}:`, err);
+    return res.status(500).json({ error: 'Could not load intake session.' });
+  }
+});
+
+/**
  * POST /api/intake/start
  * PATIENT-facing. Creates a new intake_sessions row for the caller and runs
  * the first dialogue-engine turn. patient_id comes from the JWT
