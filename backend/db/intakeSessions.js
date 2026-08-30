@@ -44,6 +44,13 @@ export async function getIntakeQueueForPatients(patientIds, doctorId) {
     // queue — they're not deleted, just no longer shown here. See
     // getIntakeActionHistoryForDoctor below for where they surface instead.
     .is('doctor_action', null)
+    // Issue #10 fix (audit report): 'abandoned' sessions (see
+    // abandonStaleIntakeSessions below) are excluded from the live queue —
+    // the whole point of the sweep is to stop a patient who genuinely
+    // walked away from cluttering the doctor's active view. Not deleted,
+    // and a patient who returns un-abandons it back to in_progress (Issue
+    // #4's resume route), which puts it right back in this result set.
+    .neq('status', 'abandoned')
     // 'flagged' sorts before 'routine' alphabetically-descending purely by
     // coincidence of the two literal strings chosen in the PRD's check
     // constraint — this is NOT relying on alphabetical order by design, it's
@@ -212,4 +219,51 @@ export async function getIntakeActionHistoryForDoctor(doctorId, patientIds) {
     acted_at: a.acted_at,
     ...sessionById.get(a.session_id),
   }));
+}
+
+// Issue #10 fix (audit report): a session left in_progress and never
+// returned to used to sit in the doctor's Active Queue and the patient's
+// resumable state forever — no cleanup mechanism existed at all. 70 of 104
+// sampled sessions were found stuck in_progress live, most well over 24h
+// old. Decision (confirmed with the user): mark abandoned rather than
+// delete or silently time-filter — the partial clinical data stays on the
+// record, an abandoned session can still surface in History, and a patient
+// who returns (GET /rag/api/intake/:sessionId, Issue #4's resume path)
+// un-abandons it back to in_progress rather than losing progress.
+//
+// 48h threshold, deliberately longer than the existing 24h doctor-patient
+// access-link expiry (db/doctorPatients.js's ACCESS_DURATION_MS) — that one
+// is a security boundary (data access), this is advisory queue hygiene, and
+// a patient legitimately pausing a multi-part intake over a weekend should
+// not have it swept away.
+const ABANDON_AFTER_MS = 48 * 60 * 60 * 1000;
+
+/**
+ * Sweeps every intake_sessions row that's been in_progress for longer than
+ * ABANDON_AFTER_MS and marks it 'abandoned'. Intended to run on a schedule
+ * (see backend/routes/intakeAdmin.js's sweep endpoint / scripts/
+ * expireAbandonedIntakeSessions.js for a manual/cron-triggered run), not on
+ * a per-request path — this is background housekeeping, not something a
+ * doctor or patient request should ever wait on.
+ *
+ * @returns {Promise<{ abandonedCount: number, abandonedIds: string[] }>}
+ */
+export async function abandonStaleIntakeSessions() {
+  if (!supabase) return { abandonedCount: 0, abandonedIds: [] };
+
+  const cutoffIso = new Date(Date.now() - ABANDON_AFTER_MS).toISOString();
+
+  const { data, error } = await supabase
+    .from('intake_sessions')
+    .update({ status: 'abandoned', abandoned_at: new Date().toISOString() })
+    .eq('status', 'in_progress')
+    .lt('created_at', cutoffIso)
+    .select('id');
+
+  if (error) {
+    throw new Error(`abandonStaleIntakeSessions: sweep failed: ${error.message}`);
+  }
+
+  const abandonedIds = (data || []).map((r) => r.id);
+  return { abandonedCount: abandonedIds.length, abandonedIds };
 }
