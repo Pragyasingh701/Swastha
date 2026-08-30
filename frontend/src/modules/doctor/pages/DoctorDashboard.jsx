@@ -13,6 +13,7 @@ import NotificationBell from "../../../components/Common/NotificationBell";
 import { useAuth } from "../../../context/AuthContext";
 import { getDoctorPatients } from "../../../services/doctorPatients";
 import { getTimelineReports } from "../../../api/reports";
+import CheckInCodeCard from "../components/CheckInCodeCard";
 
 /* -----------------------------------------------------------
    Sidebar nav — Appointments, Consultations, and Schedule
@@ -109,16 +110,25 @@ export default function DoctorDashboard() {
             </div>
           )}
 
-          <div className="grid grid-cols-1 gap-8">
-            <section>
-              <h3 className="text-sm font-semibold text-slate-500 uppercase tracking-wide mb-3">
-                Overview
-              </h3>
-              <StatGrid stats={stats} isLoading={isLoading} />
-            </section>
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            <div className="lg:col-span-2 grid grid-cols-1 gap-8">
+              <section>
+                <h3 className="text-sm font-semibold text-slate-500 uppercase tracking-wide mb-3">
+                  Overview
+                </h3>
+                <StatGrid stats={stats} isLoading={isLoading} />
+              </section>
 
-            <section>
-              <WeeklyActivitySummary stats={stats} isLoading={isLoading} />
+              <section>
+                <WeeklyActivitySummary stats={stats} isLoading={isLoading} />
+              </section>
+            </div>
+
+            <section className="lg:col-span-1">
+              <h3 className="text-sm font-semibold text-slate-500 uppercase tracking-wide mb-3">
+                Clinic Check-In
+              </h3>
+              <CheckInCodeCard />
             </section>
           </div>
         </main>

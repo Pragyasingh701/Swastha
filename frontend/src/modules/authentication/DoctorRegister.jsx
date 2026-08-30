@@ -8,6 +8,7 @@ import {
   isValidRegistrationNumber,
   isValidWordsField,
   isValidFreeTextField,
+  isValidFullName,
 } from "../../utils/formValidation";
 
 export default function DoctorRegister() {
@@ -45,6 +46,10 @@ export default function DoctorRegister() {
     experience: 5,
     hospitalName: "",
     address: "",
+    // Clinic Check-In & Treatment-Method-Aware Intake PRD §3.2/§4.3: chosen
+    // ONCE here at registration — no settings-page edit path exists after
+    // this (see backend/db/users.js's treatment_method immutability note).
+    treatmentMethod: "",
   });
   const [files, setFiles] = useState({
     regCertificate: null,
@@ -70,6 +75,11 @@ export default function DoctorRegister() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+
+    if (!isValidFullName(form.fullName)) {
+      setErrorMessage("Please enter a valid full name using letters only.");
+      return;
+    }
 
     if (!isValidIndianPhone(form.mobile)) {
       setErrorMessage("Please enter a valid 10-digit mobile number.");
@@ -98,6 +108,11 @@ export default function DoctorRegister() {
 
     if (!isValidWordsField(form.specialization)) {
       setErrorMessage("Please enter a valid Specialization (e.g. Cardiology).");
+      return;
+    }
+
+    if (form.treatmentMethod !== "allopathic" && form.treatmentMethod !== "ayurvedic") {
+      setErrorMessage("Please select your Treatment Method (Allopathic or Ayurvedic).");
       return;
     }
 
@@ -145,6 +160,7 @@ export default function DoctorRegister() {
           degree: form.degree,
           specialization: form.specialization,
           specialty: form.specialization,
+          treatmentMethod: form.treatmentMethod,
           experience: form.experience,
           hospitalName: form.hospitalName,
           address: form.address,
@@ -172,7 +188,6 @@ export default function DoctorRegister() {
             <span className="font-headline-md text-headline-md font-bold text-primary tracking-tight">Swastha</span>
             <div className="hidden md:flex gap-6 items-center">
               <span className="text-on-surface-variant hover:text-primary transition-colors font-body-md text-body-md cursor-pointer">Features</span>
-              <span className="text-on-surface-variant hover:text-primary transition-colors font-body-md text-body-md cursor-pointer">ABHA Sync</span>
               <span className="text-on-surface-variant hover:text-primary transition-colors font-body-md text-body-md cursor-pointer">Vault</span>
               <span className="text-on-surface-variant hover:text-primary transition-colors font-body-md text-body-md cursor-pointer">Timeline</span>
             </div>
@@ -225,21 +240,20 @@ export default function DoctorRegister() {
                   <div className="space-y-2">
                     <div className="flex items-center justify-between ml-1">
                       <label className="font-label-md text-label-md text-on-surface-variant ">Full Name</label>
-                      <span className="text-[11px] text-outline font-medium flex items-center gap-1">
-                        <span className="material-symbols-outlined text-[13px]">lock</span> Account Name
-                      </span>
+                      <span className="text-[11px] text-primary font-medium">Letters only</span>
                     </div>
                     <div className="relative">
                       <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-outline-variant ">
                         person_outline
                       </span>
                       <input
-                        readOnly
-                        className="w-full h-11 pl-10 pr-4 bg-surface-container-low border border-outline-variant/60 rounded-xl font-body-md text-on-surface cursor-not-allowed opacity-90 select-none"
+                        className="w-full h-11 pl-10 pr-4 bg-surface border border-outline-variant rounded-xl font-body-md text-on-surface focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all"
                         placeholder="e.g. Dr. Jane Doe"
                         type="text"
                         name="fullName"
                         value={form.fullName}
+                        onChange={handleChange}
+                        required
                       />
                     </div>
                   </div>
@@ -447,6 +461,41 @@ export default function DoctorRegister() {
                         value={form.specialization}
                         onChange={handleChange}
                       />
+                    </div>
+                  </div>
+                  <div className="space-y-2 md:col-span-2">
+                    <label className="font-label-md text-label-md text-on-surface-variant block ml-1">
+                      Treatment Method
+                    </label>
+                    <p className="font-body-sm text-body-sm text-on-surface-variant ml-1 mb-1">
+                      Fixed for the lifetime of your account — determines the AI intake question set your patients see. Cannot be self-edited later; contact support to change it.
+                    </p>
+                    <div className="grid grid-cols-2 gap-4">
+                      {[
+                        { value: "allopathic", label: "Allopathic", icon: "medication" },
+                        { value: "ayurvedic", label: "Ayurvedic", icon: "spa" },
+                      ].map((opt) => (
+                        <label
+                          key={opt.value}
+                          className={`flex items-center gap-3 h-11 px-4 rounded-xl border cursor-pointer transition-all ${
+                            form.treatmentMethod === opt.value
+                              ? "border-primary bg-primary/10 ring-4 ring-primary/10"
+                              : "border-outline-variant bg-surface hover:border-primary/40"
+                          }`}
+                        >
+                          <input
+                            type="radio"
+                            name="treatmentMethod"
+                            value={opt.value}
+                            checked={form.treatmentMethod === opt.value}
+                            onChange={handleChange}
+                            required
+                            className="accent-primary"
+                          />
+                          <span className="material-symbols-outlined text-primary">{opt.icon}</span>
+                          <span className="font-label-md text-label-md text-on-surface">{opt.label}</span>
+                        </label>
+                      ))}
                     </div>
                   </div>
                   <div className="space-y-2 md:col-span-2">

@@ -9,16 +9,29 @@ import {
   declineDoctorLinkRequest,
   resolveDoctorLinkRequestByToken,
   isDoctorLinkedToPatient,
+  requestAccessAgain,
   getDoctorNotifications,
   getPatientNotifications,
+  getActiveDoctorLinksForPatient,
 } from '../db/doctorPatients.js';
 import { createNotification } from '../db/notifications.js';
 import { sendDoctorRequestEmail } from '../utils/mailer.js';
 import { listTimelineReports } from '../db/reports.js';
+import {
+  getIntakeQueueForPatients,
+  getIntakeSessionForPatients,
+  setIntakeSessionDoctorAction,
+  getIntakeActionHistoryForDoctor,
+} from '../db/intakeSessions.js';
 
 const router = express.Router();
 const JWT_SECRET = process.env.JWT_SECRET || 'swastha_dev_secret_key_2026';
-const RAG_BASE_URL = process.env.RAG_BASE_URL || 'http://localhost:3010/api';
+// RAG used to be a separate service/process (RAG_BASE_URL pointed at its
+// own port); it's now mounted in-process at /rag (see server.js), so this
+// defaults to a loopback call on this same server instead of a second
+// service. RAG_BASE_URL is still overridable for anyone still running it
+// standalone.
+const RAG_BASE_URL = process.env.RAG_BASE_URL || `http://localhost:${process.env.PORT || 5001}/rag/api`;
 
 function getAuthUser(req) {
   const authHeader = req.headers.authorization || '';
@@ -82,6 +95,40 @@ router.get('/notifications', async (req, res) => {
 });
 
 /**
+ * GET /api/doctor-patients/my-doctors/active
+ * PATIENT-facing. Answers one question: will an intake this patient starts
+ * right now actually reach a doctor?
+ *
+ * A 'Start Visit Intake' session started without a clinic check-in code has
+ * doctor_id NULL, and the doctor queue only ever returns sessions belonging
+ * to a doctor's OWN 'accepted'-linked patients (db/intakeSessions.js
+ * getIntakeQueueForPatients). So for a patient with no active link the
+ * session is an orphan — it is stored, but no doctor can see it. The intake
+ * UI calls this before the skip path to warn them and point at the clinic
+ * check-in code, which is the flow that DOES create the link (POST
+ * /api/clinic/verify-otp upserts it to 'accepted').
+ *
+ * Scoped to req.user — a caller can only ever ask about their own links.
+ * Declared before any '/:param' route so Express doesn't match
+ * 'my-doctors' as a :patientId.
+ */
+router.get('/my-doctors/active', async (req, res) => {
+  const authUser = getAuthUser(req);
+
+  if (!authUser?.userId) {
+    return res.status(401).json({ message: 'Authentication required.' });
+  }
+
+  try {
+    const { hasActiveDoctor, doctorCount } = await getActiveDoctorLinksForPatient(authUser.userId);
+    return res.json({ hasActiveDoctor, doctorCount });
+  } catch (error) {
+    console.error('Active doctor link fetch error:', error);
+    return res.status(500).json({ message: 'Unable to check your doctor links.' });
+  }
+});
+
+/**
  * GET /api/doctor-patients/pending-requests
  * PATIENT-facing: lists doctor link requests awaiting this patient's
  * response. Scoped to req.user — a patient can only ever see their own
@@ -105,6 +152,242 @@ router.get('/pending-requests', async (req, res) => {
     return res.status(500).json({ message: 'Unable to load doctor requests.' });
   }
 });
+
+/**
+ * GET /api/doctor-patients/intake-queue
+ * DOCTOR-facing. Module A (Conversational History Engine), Phase 3 — PRD
+ * §6.2/§8. Deviates from the PRD's literal path (/rag/api/intake/queue):
+ * this is a plain priority-sorted read with no AI/generation step, so it
+ * follows the SAME pattern as /:patientId/summary below — the 'accepted'
+ * doctor_patient link gate (via getDoctorPatients) happens here, in the
+ * main backend, not in rag/ (which is only reached for actual generation
+ * work). Confirmed with the user.
+ *
+ * Returns sessions for EVERY status (in_progress + completed), across all
+ * of the caller-doctor's accepted-linked patients, sorted priority desc
+ * (flagged first) then created_at asc — same sort PRD §6.2 specifies.
+ *
+ * Declared before any '/:param' route so Express doesn't match
+ * "intake-queue" as a :patientId.
+ */
+router.get('/intake-queue', async (req, res) => {
+  const authUser = getAuthUser(req);
+
+  if (!authUser?.userId) {
+    return res.status(401).json({ message: 'Authentication required.' });
+  }
+
+  try {
+    // getDoctorPatients already returns only 'accepted' links with full
+    // patient data attached (minimalDoctorPatientCard stops short of that
+    // for pending/declined) — reused here rather than re-querying
+    // doctor_patient directly, same as /:patientId/summary below.
+    const patients = await getDoctorPatients(authUser.userId);
+    const accepted = patients.filter((p) => p.linkStatus === 'accepted');
+
+    if (accepted.length === 0) {
+      return res.json({ sessions: [] });
+    }
+
+    const patientById = new Map(accepted.map((p) => [p.patientUserId, p]));
+    const sessions = await getIntakeQueueForPatients([...patientById.keys()], authUser.userId);
+
+    return res.json({
+      sessions: sessions.map((s) => ({
+        session_id: s.id,
+        patient_id: s.patient_id,
+        patient_name: patientById.get(s.patient_id)?.name || 'Patient',
+        chief_complaint: s.chief_complaint,
+        priority: s.priority,
+        red_flag_reason: s.red_flag_reason,
+        status: s.status,
+        origin: s.origin,
+        intake_method: s.intake_method,
+        doctor_action: s.doctor_action,
+        created_at: s.created_at,
+        completed_at: s.completed_at,
+      })),
+    });
+  } catch (error) {
+    console.error('Intake queue fetch error:', error);
+    return res.status(500).json({ message: 'Unable to load intake queue.' });
+  }
+});
+
+/**
+ * GET /api/doctor-patients/intake-queue/history
+ * DOCTOR-facing. Every session the caller-doctor has marked Completed or
+ * Removed from the live queue, newest action first — the audit trail for
+ * both actions (PRD ask: "keep a history of which he has completed and
+ * also which he has removed"). Same 'accepted' link gate as the queue list
+ * above.
+ *
+ * Declared BEFORE '/intake-queue/:sessionId' so Express matches "history"
+ * here rather than treating it as a :sessionId.
+ */
+router.get('/intake-queue/history', async (req, res) => {
+  const authUser = getAuthUser(req);
+
+  if (!authUser?.userId) {
+    return res.status(401).json({ message: 'Authentication required.' });
+  }
+
+  try {
+    const patients = await getDoctorPatients(authUser.userId);
+    const accepted = patients.filter((p) => p.linkStatus === 'accepted');
+
+    if (accepted.length === 0) {
+      return res.json({ history: [] });
+    }
+
+    const patientById = new Map(accepted.map((p) => [p.patientUserId, p]));
+    const history = await getIntakeActionHistoryForDoctor(authUser.userId, [...patientById.keys()]);
+
+    return res.json({
+      history: history.map((h) => ({
+        session_id: h.session_id,
+        patient_id: h.patient_id,
+        patient_name: patientById.get(h.patient_id)?.name || 'Patient',
+        chief_complaint: h.chief_complaint,
+        priority: h.priority,
+        red_flag_reason: h.red_flag_reason,
+        origin: h.origin,
+        intake_method: h.intake_method,
+        action: h.action,
+        acted_at: h.acted_at,
+        created_at: h.created_at,
+      })),
+    });
+  } catch (error) {
+    console.error('Intake queue history fetch error:', error);
+    return res.status(500).json({ message: 'Unable to load intake queue history.' });
+  }
+});
+
+/**
+ * GET /api/doctor-patients/intake-queue/:sessionId
+ * DOCTOR-facing. Full detail for one intake session — the structured
+ * SOCRATES/drug-allergy summary a doctor sees after clicking a queue row.
+ * Same 'accepted' link gate as the queue list above: a session only
+ * resolves if its patient_id belongs to one of the caller-doctor's
+ * accepted-linked patients, otherwise 404 (not 403 — doesn't confirm or
+ * deny whether the session id exists at all to an unauthorized caller).
+ *
+ * Declared before any other '/:param' route so Express doesn't match
+ * "intake-queue" as a :patientId, and before '/requests/:linkId/...' so the
+ * two nested-param routes don't collide.
+ */
+router.get('/intake-queue/:sessionId', async (req, res) => {
+  const authUser = getAuthUser(req);
+
+  if (!authUser?.userId) {
+    return res.status(401).json({ message: 'Authentication required.' });
+  }
+
+  const sessionId = String(req.params?.sessionId ?? '').trim();
+  if (!sessionId) {
+    return res.status(400).json({ message: 'Session ID is required.' });
+  }
+
+  try {
+    const patients = await getDoctorPatients(authUser.userId);
+    const accepted = patients.filter((p) => p.linkStatus === 'accepted');
+    const patientById = new Map(accepted.map((p) => [p.patientUserId, p]));
+
+    if (patientById.size === 0) {
+      return res.status(404).json({ message: 'Intake session not found.' });
+    }
+
+    const session = await getIntakeSessionForPatients(sessionId, [...patientById.keys()], authUser.userId);
+    if (!session) {
+      return res.status(404).json({ message: 'Intake session not found.' });
+    }
+
+    return res.json({
+      session_id: session.id,
+      patient_id: session.patient_id,
+      patient_name: patientById.get(session.patient_id)?.name || 'Patient',
+      chief_complaint: session.chief_complaint,
+      structured_history: session.structured_history,
+      priority: session.priority,
+      red_flag_reason: session.red_flag_reason,
+      status: session.status,
+      origin: session.origin,
+      intake_method: session.intake_method,
+      doctor_action: session.doctor_action,
+      created_at: session.created_at,
+      completed_at: session.completed_at,
+    });
+  } catch (error) {
+    console.error('Intake session detail fetch error:', error);
+    return res.status(500).json({ message: 'Unable to load intake session.' });
+  }
+});
+
+/**
+ * Shared handler for the Complete/Remove queue actions below — same
+ * ownership boundary as the detail route above: a session only resolves
+ * if its patient_id belongs to one of the caller-doctor's accepted-linked
+ * patients, otherwise 404 (never 403 — doesn't confirm or deny the session
+ * id exists to an unauthorized caller). Writes both the session's current
+ * doctor_action AND an append-only intake_session_actions audit row.
+ */
+async function handleIntakeQueueAction(req, res, action) {
+  const authUser = getAuthUser(req);
+
+  if (!authUser?.userId) {
+    return res.status(401).json({ message: 'Authentication required.' });
+  }
+
+  const sessionId = String(req.params?.sessionId ?? '').trim();
+  if (!sessionId) {
+    return res.status(400).json({ message: 'Session ID is required.' });
+  }
+
+  try {
+    const patients = await getDoctorPatients(authUser.userId);
+    const accepted = patients.filter((p) => p.linkStatus === 'accepted');
+    const patientIds = accepted.map((p) => p.patientUserId);
+
+    if (patientIds.length === 0) {
+      return res.status(404).json({ message: 'Intake session not found.' });
+    }
+
+    const updated = await setIntakeSessionDoctorAction({
+      sessionId,
+      doctorId: authUser.userId,
+      patientIds,
+      action,
+    });
+    if (!updated) {
+      return res.status(404).json({ message: 'Intake session not found.' });
+    }
+
+    return res.json({ session_id: updated.id, doctor_action: updated.doctor_action });
+  } catch (error) {
+    console.error(`Intake queue ${action} error:`, error);
+    return res.status(500).json({ message: `Unable to mark this session as ${action}.` });
+  }
+}
+
+/**
+ * POST /api/doctor-patients/intake-queue/:sessionId/complete
+ * DOCTOR-facing. Marks a queue row as Completed (doctor has seen/consulted
+ * this patient) — distinct from intake_sessions.status, which tracks
+ * whether the PATIENT finished answering the intake questions (see
+ * backend/db/intakeSessions.js's setIntakeSessionDoctorAction). Row drops
+ * out of the live queue and appears in intake-queue/history instead.
+ */
+router.post('/intake-queue/:sessionId/complete', (req, res) => handleIntakeQueueAction(req, res, 'completed'));
+
+/**
+ * POST /api/doctor-patients/intake-queue/:sessionId/remove
+ * DOCTOR-facing. Dismisses a queue row (e.g. a no-show, duplicate, or
+ * otherwise not worth keeping in the active queue) without deleting the
+ * underlying session — it drops out of the live queue and appears in
+ * intake-queue/history instead, same as Complete above.
+ */
+router.post('/intake-queue/:sessionId/remove', (req, res) => handleIntakeQueueAction(req, res, 'removed'));
 
 /**
  * POST /api/doctor-patients/requests/:linkId/accept
@@ -211,7 +494,7 @@ router.get('/email-action/accept', async (req, res) => {
     await resolveDoctorLinkRequestByToken(token, 'accepted');
     return renderEmailActionPage(res, {
       heading: 'Request accepted',
-      message: 'You have granted this doctor access to your health records. You can revoke access at any time from the Swastha app.',
+      message: 'You have granted this doctor access to your health records for the next 24 hours. Access expires automatically after that, and you can revoke it sooner at any time from the Swastha app.',
     });
   } catch (error) {
     return renderEmailActionPage(res, {
@@ -451,6 +734,47 @@ router.get('/:patientId/summary', async (req, res) => {
   } catch (error) {
     console.error('Doctor patient summary error:', error);
     return res.status(500).json({ message: 'Failed to load patient summary', error: error.message });
+  }
+});
+
+/**
+ * POST /api/doctor-patients/:patientId/re-request
+ * DOCTOR-facing: re-sends an access request for a patient whose previous
+ * 24h access window has expired — used by the "Request Access Again"
+ * button on an expired card, so the doctor doesn't have to re-type the
+ * patient code. Rejects (via requestAccessAgain) anything that isn't an
+ * actually-expired accepted link, e.g. a still-pending or declined pair.
+ */
+router.post('/:patientId/re-request', async (req, res) => {
+  const authUser = getAuthUser(req);
+
+  if (!authUser?.userId) {
+    return res.status(401).json({ message: 'Authentication required.' });
+  }
+
+  const patientId = String(req.params?.patientId ?? '').trim();
+  if (!patientId) {
+    return res.status(400).json({ message: 'Patient ID is required.' });
+  }
+
+  try {
+    const result = await requestAccessAgain({ doctorId: authUser.userId, patientUserId: patientId });
+
+    if (result.link.status === 'pending' && result.link.email_action_token && result.link.patient_email) {
+      try {
+        const backendUrl = process.env.BACKEND_URL || 'http://localhost:5001';
+        const acceptUrl = `${backendUrl}/api/doctor-patients/email-action/accept?token=${result.link.email_action_token}`;
+        const declineUrl = `${backendUrl}/api/doctor-patients/email-action/decline?token=${result.link.email_action_token}`;
+        await sendDoctorRequestEmail(result.link.patient_email, result.link.patient_name, acceptUrl, declineUrl);
+      } catch (emailError) {
+        console.warn('Doctor re-request email warning:', emailError?.message || emailError);
+      }
+    }
+
+    return res.json({ message: 'Request sent to patient.', patient: result.patient, link: { id: result.link.id, status: result.link.status } });
+  } catch (error) {
+    console.error('Doctor re-request error:', error);
+    return res.status(400).json({ message: error?.message || 'Unable to send request.' });
   }
 });
 

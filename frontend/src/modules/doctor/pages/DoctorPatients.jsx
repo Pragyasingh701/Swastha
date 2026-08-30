@@ -4,7 +4,7 @@ import { Sparkles, Bell, X, CalendarDays, Stethoscope, XCircle, ChevronDown, Che
 import NotificationBell from "../../../components/Common/NotificationBell";
 import DoctorSidebar from "../components/DoctorSidebar";
 import ProfileDropdown from "../../settings/components/ProfileDropdown";
-import { getDoctorPatients, linkPatientToDoctor, deletePatientFromDoctor } from "../../../services/doctorPatients";
+import { getDoctorPatients, linkPatientToDoctor, deletePatientFromDoctor, requestAccessAgain } from "../../../services/doctorPatients";
 import { getTimelineReports } from "../../../api/reports";
 import { useAuth } from "../../../context/AuthContext";
 import { usePolling } from "../../../hooks/usePolling";
@@ -42,6 +42,7 @@ export default function DoctorPatients() {
   const [isFetchingPatients, setIsFetchingPatients] = useState(false);
   const [openMenuId, setOpenMenuId] = useState(null);
   const [deletingPatientId, setDeletingPatientId] = useState(null);
+  const [requestingAgainLinkId, setRequestingAgainLinkId] = useState(null);
   const [categoryFilter, setCategoryFilter] = useState('');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
@@ -83,6 +84,19 @@ export default function DoctorPatients() {
   // refresh. This is specifically what turns a locked (pending) card into
   // a full unlocked card automatically once the patient responds.
   usePolling(() => fetchPatients({ showSpinner: false }), { intervalMs: 20000 });
+
+  // If a patient's 24h access window lapses while their profile is open,
+  // the next poll's refreshed `patients` list will carry linkStatus
+  // 'expired' for that card — this closes the open profile the moment that
+  // happens, rather than leaving the already-fetched timeline/vault data
+  // visible on screen indefinitely just because it was fetched before expiry.
+  useEffect(() => {
+    if (!selectedPatient) return;
+    const updated = patients.find((p) => p.linkId === selectedPatient.linkId);
+    if (!updated || (updated.linkStatus && updated.linkStatus !== 'accepted')) {
+      setSelectedPatient(null);
+    }
+  }, [patients]);
 
   useEffect(() => {
     // Defense in depth: LockedPatientCard never calls setSelectedPatient
@@ -170,6 +184,24 @@ export default function DoctorPatients() {
       alert('Failed to remove patient. Please try again.');
     } finally {
       setDeletingPatientId(null);
+    }
+  };
+
+  // Re-sends a request from an expired card — flips the local card to
+  // 'pending' immediately rather than waiting for the next 20s poll, same
+  // idea as handleAddPatient prepending the new card right away.
+  const handleRequestAgain = async (patient) => {
+    const patientUserId = patient.patientUserId;
+    setRequestingAgainLinkId(patient.linkId);
+    try {
+      await requestAccessAgain(patientUserId);
+      setPatients((prev) =>
+        prev.map((p) => (p.linkId === patient.linkId ? { ...p, linkStatus: 'pending' } : p))
+      );
+    } catch (err) {
+      alert(err.message || 'Failed to send request. Please try again.');
+    } finally {
+      setRequestingAgainLinkId(null);
     }
   };
 
@@ -306,16 +338,7 @@ export default function DoctorPatients() {
       <DoctorSidebar />
 
       <div className="flex-1 flex flex-col h-screen overflow-hidden min-w-0">
-        <header className="shrink-0 flex items-center gap-4 px-6 lg:px-8 py-5 border-b border-slate-200 bg-white ">
-          <button
-            type="button"
-            onClick={() => navigate('/doctor/clinical-intelligence')}
-            className="flex-1 flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-lg px-4 py-2.5 text-sm text-slate-400 transition-colors hover:border-blue-300 hover:text-blue-600 "
-          >
-            <Sparkles size={16} />
-            Ask Swastha about your health records...
-          </button>
-
+        <header className="shrink-0 flex items-center justify-end gap-4 px-6 lg:px-8 py-5 border-b border-slate-200 bg-white ">
           <NotificationBell />
           <ProfileDropdown />
         </header>
@@ -865,6 +888,8 @@ export default function DoctorPatients() {
                         setOpenMenuId={setOpenMenuId}
                         deletingPatientId={deletingPatientId}
                         onDelete={() => handleDeletePatient(patient)}
+                        onRequestAgain={() => handleRequestAgain(patient)}
+                        isRequestingAgain={requestingAgainLinkId === patient.linkId}
                       />
                     );
                   }
@@ -872,7 +897,7 @@ export default function DoctorPatients() {
                   return (
                   <div
                     key={`${patient.patientUserId || patient.id}-${patient.name}`}
-                    className="bg-white rounded-2xl p-6 shadow-[0_4px_12px_rgba(15,23,42,0.05)] border border-[#c3c6d7]/20 hover:shadow-[0_8px_24px_rgba(15,23,42,0.08)] transition-all"
+                    className="flex flex-col h-full bg-white rounded-2xl p-6 shadow-[0_4px_12px_rgba(15,23,42,0.05)] border border-[#c3c6d7]/20 hover:shadow-[0_8px_24px_rgba(15,23,42,0.08)] transition-all"
                     onClick={() => {
                       if (openMenuId === patient.linkId) {
                         setOpenMenuId(null);
@@ -945,7 +970,7 @@ export default function DoctorPatients() {
                     <button
                       type="button"
                       onClick={() => setSelectedPatient(patient)}
-                      className="w-full py-2.5 rounded-lg border border-[#c3c6d7]/60 text-[#434655] hover:bg-[#f3f3fe] hover:text-[#004ac6] hover:border-[#004ac6]/30 transition-all flex justify-center items-center gap-1"
+                      className="mt-auto w-full py-2.5 rounded-lg border border-[#c3c6d7]/60 text-[#434655] hover:bg-[#f3f3fe] hover:text-[#004ac6] hover:border-[#004ac6]/30 transition-all flex justify-center items-center gap-1"
                     >
                       View Profile
                       <span className="material-symbols-outlined text-[16px]">arrow_forward</span>
@@ -970,27 +995,37 @@ export default function DoctorPatients() {
   );
 }
 
-/* ==================== Locked Patient Card (pending/declined) ==================== */
+/* ==================== Locked Patient Card (pending/declined/expired) ==================== */
 
-// Renders for a link that isn't 'accepted' yet. Deliberately does NOT
+// Renders for a link that isn't currently 'accepted'. Deliberately does NOT
 // accept an onClick-to-detail handler — there is no prop wiring it to
 // setSelectedPatient anywhere, so no detail/timeline/vault/family API
 // call can ever fire from this card, matching the requirement that
-// clicking a pending card must not trigger a fetch at all. Only the name
+// clicking a locked card must not trigger a fetch at all. Only the name
 // and status badge are rendered; the card's own `patient` prop already
 // carries nothing else (see minimalDoctorPatientCard on the backend).
-function LockedPatientCard({ patient, linkStatus, openMenuId, setOpenMenuId, deletingPatientId, onDelete }) {
+//
+// 'expired' is a link that WAS accepted but whose 24h access window has
+// passed (see backend/db/doctorPatients.js's isAccessExpired) — shown as
+// an inactive/red card with a "Request Access Again" button in place of
+// the pending/declined status message.
+function LockedPatientCard({ patient, linkStatus, openMenuId, setOpenMenuId, deletingPatientId, onDelete, onRequestAgain, isRequestingAgain }) {
   const isPending = linkStatus === 'pending';
-  const badgeText = isPending ? 'Pending Verification' : 'Declined';
+  const isExpired = linkStatus === 'expired';
+  const badgeText = isPending ? 'Pending Verification' : isExpired ? 'Inactive' : 'Declined';
   const badgeTone = isPending
     ? 'bg-amber-50 text-amber-700 border-amber-200'
+    : isExpired
+    ? 'bg-rose-50 text-rose-700 border-rose-200'
     : 'bg-slate-100 text-slate-500 border-slate-200';
 
   return (
     <div
-      className={`rounded-2xl p-6 border transition-all ${
+      className={`flex flex-col h-full rounded-2xl p-6 border transition-all ${
         isPending
           ? 'bg-white border-[#c3c6d7]/20 shadow-[0_4px_12px_rgba(15,23,42,0.05)]'
+          : isExpired
+          ? 'bg-white border-rose-100 shadow-[0_4px_12px_rgba(15,23,42,0.05)]'
           : 'bg-slate-50 border-slate-200 opacity-70'
       }`}
       onClick={() => {
@@ -1001,15 +1036,19 @@ function LockedPatientCard({ patient, linkStatus, openMenuId, setOpenMenuId, del
         <div className="flex items-center gap-4">
           <div
             className={`w-14 h-14 rounded-full flex items-center justify-center border ${
-              isPending ? 'bg-amber-50 border-amber-100 text-amber-600' : 'bg-slate-200 border-slate-300 text-slate-400'
+              isPending
+                ? 'bg-amber-50 border-amber-100 text-amber-600'
+                : isExpired
+                ? 'bg-rose-50 border-rose-100 text-rose-600'
+                : 'bg-slate-200 border-slate-300 text-slate-400'
             }`}
           >
             <span className="material-symbols-outlined text-[24px]">
-              {isPending ? 'hourglass_top' : 'block'}
+              {isPending ? 'hourglass_top' : isExpired ? 'lock_clock' : 'block'}
             </span>
           </div>
           <div>
-            <h3 className={`font-semibold text-lg ${isPending ? 'text-[#191b23]' : 'text-slate-500'}`}>
+            <h3 className={`font-semibold text-lg ${isPending || isExpired ? 'text-[#191b23]' : 'text-slate-500'}`}>
               {patient.patient_name}
             </h3>
             <span className={`inline-block mt-1 px-2 py-0.5 rounded-full text-xs font-semibold border ${badgeTone}`}>
@@ -1041,22 +1080,40 @@ function LockedPatientCard({ patient, linkStatus, openMenuId, setOpenMenuId, del
                 className="w-full text-left px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 flex items-center gap-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <XCircle size={16} />
-                {deletingPatientId === patient.patientUserId ? 'Removing...' : 'Cancel Request'}
+                {deletingPatientId === patient.patientUserId ? 'Removing...' : isExpired ? 'Remove Patient' : 'Cancel Request'}
               </button>
             </div>
           )}
         </div>
       </div>
 
-      {/* No "View Profile" button — a pending/declined card is not
-          clickable-through to any detail view. This message replaces it
-          rather than a disabled button, so there's no interactive-looking
-          element that a doctor might expect to do something. */}
-      <p className="text-sm text-[#737686] text-center py-2 border-t border-dashed border-[#c3c6d7]/40">
-        {isPending
-          ? 'Waiting for patient to accept your request.'
-          : 'This patient has declined your request.'}
-      </p>
+      {isExpired ? (
+        <div className="mt-auto pt-4 border-t border-dashed border-[#c3c6d7]/40 space-y-3">
+          <p className="text-sm text-[#737686] text-center">Access expired after 24 hours.</p>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onRequestAgain();
+            }}
+            disabled={isRequestingAgain}
+            className="w-full py-2.5 rounded-lg border border-rose-200 text-rose-700 hover:bg-rose-50 transition-all flex justify-center items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {isRequestingAgain ? 'Sending request...' : 'Request Access Again'}
+            {!isRequestingAgain && <span className="material-symbols-outlined text-[16px]">refresh</span>}
+          </button>
+        </div>
+      ) : (
+        // No "View Profile" button — a pending/declined card is not
+        // clickable-through to any detail view. This message replaces it
+        // rather than a disabled button, so there's no interactive-looking
+        // element that a doctor might expect to do something.
+        <p className="mt-auto text-sm text-[#737686] text-center py-2 border-t border-dashed border-[#c3c6d7]/40">
+          {isPending
+            ? 'Waiting for patient to accept your request.'
+            : 'This patient has declined your request.'}
+        </p>
+      )}
     </div>
   );
 }
@@ -1266,7 +1323,7 @@ function EventDetails({ event, onClose }) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 px-4 py-6">
-      <div className="w-full max-w-4xl max-h-[90vh] overflow-y-auto rounded-3xl bg-white dark:bg-slate-900 p-6 shadow-2xl">
+      <div className="w-full max-w-5xl max-h-[90vh] overflow-y-auto rounded-3xl bg-white p-6 shadow-2xl">
         <div className="flex items-start justify-between gap-4">
           <div>
             <p className="text-sm font-semibold uppercase tracking-[0.24em] text-blue-600 ">
@@ -1321,22 +1378,22 @@ function EventDetails({ event, onClose }) {
             </div>
 
             {event.notes && (
-              <div className="rounded-2xl border border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 p-4">
-                <p className="text-sm text-slate-500 dark:text-slate-400">Notes</p>
-                <p className="mt-2 text-sm text-slate-900 dark:text-slate-100 whitespace-pre-line">{event.notes}</p>
+              <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
+                <p className="text-sm text-slate-500 ">Notes</p>
+                <p className="mt-2 text-sm text-slate-600 whitespace-pre-line">{event.notes}</p>
               </div>
             )}
           </div>
 
           <div className="space-y-4">
             {event.fileUrl ? (
-              <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 p-3 h-full flex flex-col">
-                <p className="text-sm text-slate-500 dark:text-slate-400">Document preview</p>
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3 h-full flex flex-col">
+                <p className="text-sm text-slate-500 ">Document preview</p>
                 {previewType === 'pdf' ? (
                   <iframe
                     src={previewUrl}
                     title="PDF preview"
-                    className="mt-3 flex-1 w-full rounded-xl border border-slate-200 dark:border-slate-800"
+                    className="mt-3 flex-1 w-full rounded-xl border border-slate-200 "
                     style={{ minHeight: 420 }}
                   />
                 ) : previewType === 'image' ? (
@@ -1346,28 +1403,28 @@ function EventDetails({ event, onClose }) {
                     className="mt-3 max-h-[520px] w-full rounded-xl object-contain"
                   />
                 ) : (
-                  <p className="mt-3 text-sm text-slate-500 dark:text-slate-400">Preview not available for this file type.</p>
+                  <p className="mt-3 text-sm text-slate-500 ">Preview not available for this file type.</p>
                 )}
 
                 <a
                   href={previewUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="mt-3 inline-flex items-center gap-2 rounded-2xl border border-blue-100 dark:border-blue-500/20 bg-blue-50 dark:bg-blue-500/10 px-4 py-2 text-blue-700 dark:text-blue-400 text-sm font-semibold transition-colors hover:bg-blue-100 dark:hover:bg-blue-500/20"
+                  className="mt-3 inline-flex items-center gap-2 rounded-2xl border border-blue-100 bg-blue-50 px-4 py-2 text-blue-700 text-sm font-semibold transition-colors hover:bg-blue-100 "
                 >
                   <FileText size={16} />
                   View original document
                 </a>
               </div>
             ) : event.fileName ? (
-              <div className="rounded-2xl border border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 p-4">
-                <p className="text-sm text-slate-500 dark:text-slate-400">Attached file</p>
-                <p className="mt-2 text-sm font-semibold text-slate-900 dark:text-slate-100 break-all">{event.fileName}</p>
-                <p className="mt-1 text-xs text-slate-400 dark:text-slate-500">Original document not stored yet — filename only.</p>
+              <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
+                <p className="text-sm text-slate-500 ">Attached file</p>
+                <p className="mt-2 text-sm font-semibold text-slate-900 break-all">{event.fileName}</p>
+                <p className="mt-1 text-xs text-slate-400 ">Original document not stored yet — filename only.</p>
               </div>
             ) : (
-              <div className="rounded-2xl border border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 p-4">
-                <p className="text-sm text-slate-500 dark:text-slate-400">No document attached</p>
+              <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
+                <p className="text-sm text-slate-500 ">No document attached</p>
               </div>
             )}
           </div>

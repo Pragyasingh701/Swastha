@@ -57,6 +57,16 @@ export async function deletePatientFromDoctor(patientId, linkId = null) {
 }
 
 /**
+ * DOCTOR-facing: re-sends an access request for a patient whose previous
+ * 24h access window has expired — no patient code re-entry needed, unlike
+ * linkPatientToDoctor. Used by the "Request Access Again" button on an
+ * expired card.
+ */
+export async function requestAccessAgain(patientId) {
+  return request(`/${patientId}/re-request`, { method: 'POST' });
+}
+
+/**
  * Doctor-facing single-patient detail. The server enforces status ===
  * 'accepted' and returns 403 otherwise — this call must only ever be
  * triggered for a card the UI already knows is accepted (never for a
@@ -85,6 +95,29 @@ export async function getPendingDoctorRequests() {
   return result.requests || [];
 }
 
+/**
+ * PATIENT-facing: whether this patient currently has any doctor with active
+ * (accepted, unexpired) access. Used by the Visit Intake gate — an intake
+ * started with no clinic code and no linked doctor produces a session no
+ * doctor queue can ever return, so the UI warns instead of letting the
+ * patient fill one in for nobody.
+ *
+ * Never throws: a failure resolves to hasActiveDoctor true (fail open),
+ * matching the backend helper, so a transient error only means the warning
+ * is not shown — it never blocks an intake.
+ */
+export async function hasActiveDoctorLink() {
+  try {
+    const result = await request('/my-doctors/active');
+    return {
+      hasActiveDoctor: result.hasActiveDoctor !== false,
+      doctorCount: result.doctorCount || 0,
+    };
+  } catch {
+    return { hasActiveDoctor: true, doctorCount: 0 };
+  }
+}
+
 /** PATIENT-facing: accept a pending doctor link request. */
 export async function acceptDoctorRequest(linkId) {
   return request(`/requests/${linkId}/accept`, { method: 'POST' });
@@ -106,14 +139,67 @@ export async function getDoctorPatientNotifications() {
   return result.notifications || [];
 }
 
+/**
+ * DOCTOR-facing: Module A intake queue (GET /api/doctor-patients/intake-queue).
+ * Sessions for every 'accepted'-linked patient, sorted priority desc
+ * (flagged first) then created_at asc — same order the server enforces,
+ * not re-sorted here.
+ */
+export async function getIntakeQueue() {
+  const result = await request('/intake-queue');
+  return result.sessions || [];
+}
+
+/**
+ * DOCTOR-facing: full detail for one intake session (structured_history
+ * included) — GET /api/doctor-patients/intake-queue/:sessionId.
+ */
+export async function getIntakeSessionDetail(sessionId) {
+  return request(`/intake-queue/${sessionId}`);
+}
+
+/**
+ * DOCTOR-facing: mark a queue row Completed (doctor has seen/consulted
+ * this patient) — distinct from the patient-driven intake `status`. Row
+ * drops out of the live queue and appears in getIntakeQueueHistory instead.
+ */
+export async function completeIntakeSession(sessionId) {
+  return request(`/intake-queue/${sessionId}/complete`, { method: 'POST' });
+}
+
+/**
+ * DOCTOR-facing: dismiss a queue row without deleting the underlying
+ * session (no-show, duplicate, etc.) — same "drops out of the live queue,
+ * appears in history" behavior as completeIntakeSession above.
+ */
+export async function removeIntakeSession(sessionId) {
+  return request(`/intake-queue/${sessionId}/remove`, { method: 'POST' });
+}
+
+/**
+ * DOCTOR-facing: every session this doctor has marked Completed or Removed,
+ * newest action first — GET /api/doctor-patients/intake-queue/history.
+ */
+export async function getIntakeQueueHistory() {
+  const result = await request('/intake-queue/history');
+  return result.history || [];
+}
+
 export default {
   getDoctorPatients,
   linkPatientToDoctor,
   deletePatientFromDoctor,
+  requestAccessAgain,
   getDoctorPatientDetail,
   getDoctorPatientSummary,
   getPendingDoctorRequests,
+  hasActiveDoctorLink,
   acceptDoctorRequest,
   declineDoctorRequest,
   getDoctorPatientNotifications,
+  getIntakeQueue,
+  getIntakeSessionDetail,
+  completeIntakeSession,
+  removeIntakeSession,
+  getIntakeQueueHistory,
 };

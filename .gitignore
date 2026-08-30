@@ -11,6 +11,11 @@ frontend/node_modules/
 .env.production.local
 backend/.env
 frontend/.env
+# Stray API-key files. Not used by the app (keys live in backend/.env),
+# but kept ignored so a key pasted into one by hand can never be
+# committed by an accidental `git add -A`.
+backend/sarvam.txt
+*.key.txt
 uploads
 
 # Local data & temporary fallback files

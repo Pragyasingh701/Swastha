@@ -231,6 +231,17 @@ export const createOrUpdateUser = async (userData) => {
     : (existingUser?.license_number || existingUser?.licenseNumber || null)) : null;
 
   const council = isDoctor ? (userData.council || existingUser?.council || null) : null;
+  // Immutable once set — Clinic-Check-In-&-Treatment-Method-Aware-Intake PRD
+  // §3.2/§4.3: "required at registration, no self-service edit path after".
+  // Prefers the EXISTING value over anything freshly submitted, the inverse
+  // of every other doctor field's "new value wins" priority above — this is
+  // the one field that must NOT be overwritable through this path once set.
+  // The only legitimate change route is the audited
+  // backend/db/clinicCheckin.js#recordMethodChange, which writes directly
+  // to the doctors table and bypasses this function entirely.
+  const treatmentMethod = isDoctor
+    ? (existingUser?.treatment_method || userData.treatmentMethod || userData.treatment_method || null)
+    : null;
   const degree = isDoctor ? (userData.degree || existingUser?.degree || null) : null;
   const experience = isDoctor ? (userData.experience !== undefined ? userData.experience : (existingUser?.experience || null)) : null;
   const hospitalName = isDoctor ? (userData.hospitalName || userData.hospital_name || existingUser?.hospitalName || existingUser?.hospital_name || null) : null;
@@ -289,6 +300,8 @@ export const createOrUpdateUser = async (userData) => {
     license_number: licenseNumber,
     licenseNumber,
     regNumber: licenseNumber,
+    treatment_method: treatmentMethod,
+    treatmentMethod,
     council,
     degree,
     experience,
@@ -331,7 +344,7 @@ export const createOrUpdateUser = async (userData) => {
           experience: experience ? parseInt(experience, 10) : null,
           hospital_name: hospitalName, address, reg_certificate_url: regCertificateUrl,
           cert_extracted_data: certExtractedData, license_expiry_date: licenseExpiryDate,
-          verification_status: verificationStatus, updated_at: nowIso,
+          verification_status: verificationStatus, treatment_method: treatmentMethod, updated_at: nowIso,
         };
       } else {
         dbPayload = {
@@ -402,6 +415,8 @@ export const createOrUpdateUser = async (userData) => {
           blood_group: userRow.blood_group || bloodGroup,
           gender: userRow.gender || gender,
           patient_code: userRow.patient_code || patientCode,
+          treatment_method: userRow.treatment_method || treatmentMethod,
+          treatmentMethod: userRow.treatment_method || treatmentMethod,
           hasSelectedRole: !!(role && role !== 'none'),
         };
       } else if (error) {

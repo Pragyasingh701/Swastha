@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "../../../context/AuthContext";
 import { getTimelineReports, generateReportSummary } from "../../../api/reports";
-import Logo from "../../../components/Common/Logo";
+import ResponsiveSidebar from "../../../components/Common/ResponsiveSidebar";
 import SettingsModal from "../../settings/components/SettingsModal";
 import ProfileDropdown from "../../settings/components/ProfileDropdown";
 import PatientIdBadge from "../../../components/Common/PatientIdBadge";
@@ -370,60 +370,13 @@ export default function MedicalVault() {
 /* ---------------------------- Sidebar ---------------------------- */
 
 function Sidebar({ onOpenSettings }) {
-  const navigate = useNavigate();
-  const location = useLocation();
-  const pathname = location.pathname;
-
   return (
-    <aside className="hidden lg:flex lg:flex-col w-64 shrink-0 bg-slate-50 border-r border-slate-200 h-screen overflow-y-auto px-4 py-6">
-      <div className="px-2 mb-8">
-        <Logo />
-      </div>
-
-      <nav className="flex-1 space-y-1">
-        {navItems.map(({ label, icon: Icon, active, route }) => {
-          const isActive = Boolean(route && (pathname === route || pathname.startsWith(`${route}/`))) || active;
-
-          return (
-            <button
-              key={label}
-              type="button"
-              onClick={() => route && navigate(route)}
-              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
-                isActive
-                  ? "bg-blue-100 text-blue-700 "
-                  : "text-slate-600 hover:bg-slate-100 "
-              }`}
-            >
-            <Icon size={18} />
-            {label}
-            </button>
-          );
-        })}
-      </nav>
-
-      <div className="space-y-3 pt-4">
-        <button
-          type="button"
-          onClick={() => navigate("/timeline?upload=true")}
-          className="w-full flex items-center justify-center gap-2 bg-blue-700 hover:bg-blue-800 transition-colors text-white text-sm font-semibold py-2.5 rounded-lg"
-        >
-          <PlusCircle size={18} />
-          Upload New Report
-        </button>
-
-        <div className="space-y-1 pt-2">
-          <button
-            type="button"
-            onClick={onOpenSettings}
-            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-100 "
-          >
-            <Settings size={18} />
-            Settings
-          </button>
-        </div>
-      </div>
-    </aside>
+    <ResponsiveSidebar
+      navItems={navItems}
+      action={{ label: "Upload New Report", icon: PlusCircle, route: "/timeline?upload=true" }}
+      onOpenSettings={onOpenSettings}
+      className="bg-slate-50"
+    />
   );
 }
 
@@ -433,16 +386,7 @@ function Header({ profile }) {
   const navigate = useNavigate();
 
   return (
-    <header className="shrink-0 flex items-center gap-4 px-6 lg:px-8 py-5 border-b border-slate-200 bg-white ">
-      <button
-        type="button"
-        onClick={() => navigate('/search')}
-        className="flex-1 flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-lg px-4 py-2.5 text-sm text-slate-400 transition-colors hover:border-blue-300 hover:text-blue-600 "
-      >
-        <Sparkles size={16} />
-        Ask Swastha about your health records...
-      </button>
-
+    <header className="shrink-0 flex items-center justify-end gap-4 px-6 lg:px-8 py-5 border-b border-slate-200 bg-white ">
       <PatientNotifications />
 
       <PatientIdBadge customProfile={profile} />

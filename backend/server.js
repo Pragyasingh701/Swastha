@@ -6,6 +6,7 @@ import familyRoutes from './routes/family.js';
 import reportsRoutes from './routes/reports.js';
 import doctorPatientsRoutes from './routes/doctorPatients.js';
 import notificationsRoutes from './routes/notifications.js';
+import clinicRoutes from './routes/clinic.js';
 
 import fs from 'fs';
 import path from 'path';
@@ -15,6 +16,13 @@ if (fs.existsSync('./backend/.env')) {
 } else {
   dotenv.config();
 }
+
+// Dynamic import (not a static one) so this runs after dotenv.config()
+// above — static imports are hoisted and would run first, before the
+// RAG sub-app's own env validation (backend/rag/config/env.js) sees
+// backend/.env's vars. One .env file for the whole merged process now;
+// see backend/.env.example for the combined var list.
+const { default: ragApp } = await import('./rag/app.js');
 
 const app = express();
 const DEFAULT_PORT = 5001;
@@ -29,7 +37,9 @@ app.use((req, res, next) => {
 });
 
 app.use(cors());
-app.use(express.json());
+// 2mb limit (not Express's 100kb default): shared with the /rag sub-app,
+// whose OCR'd report text can be long.
+app.use(express.json({ limit: '2mb' }));
 app.use('/uploads', express.static(path.resolve('uploads')));
 app.use('/uploads', express.static(path.resolve('backend/uploads')));
 
@@ -39,6 +49,12 @@ app.use('/api/family', familyRoutes);
 app.use('/api/reports', reportsRoutes);
 app.use('/api/doctor-patients', doctorPatientsRoutes);
 app.use('/api/notifications', notificationsRoutes);
+app.use('/api/clinic', clinicRoutes);
+
+// RAG microservice, merged in as a sub-app (was its own process/port/
+// Render service; see backend/rag/app.js) so the whole backend runs as
+// one Render service and doesn't split free-tier hours across two.
+app.use('/rag', ragApp);
 
 // Health check / Keep-alive endpoints for Render & cron-job.org
 app.get('/', (req, res) => res.status(200).send('OK'));

@@ -19,7 +19,8 @@ async function notifySafely(args) {
 //   pending   -> doctor requested, patient hasn't responded. No health
 //                data is ever returned for a pending link — only
 //                { id, patient_name, status } (see minimalDoctorPatientCard).
-//   accepted  -> patient approved. Full card + full health record access.
+//   accepted  -> patient approved. Full card + full health record access
+//                — but only until access_expires_at (see below).
 //   declined  -> patient rejected. Name-only, doctor cannot re-request
 //                (linkDoctorToPatient blocks re-linking a declined pair).
 //
@@ -28,6 +29,22 @@ async function notifySafely(args) {
 // requires status = 'accepted'. This is enforced here, at the single
 // shared source of truth, specifically so it cannot be bypassed by a
 // route that forgets to check status separately.
+//
+// ACCESS EXPIRY (access_expires_at column, added in
+// supabase/migrations/20260830010000_add_access_expires_at_to_doctor_patient.sql):
+// an 'accepted' link only grants access for ACCESS_DURATION_MS from the
+// moment of acceptance — isDoctorLinkedToPatient and getDoctorPatients
+// both treat an accepted-but-expired link as if it were no longer
+// accepted (surfaced to the frontend as linkStatus 'expired'), and
+// linkDoctorToPatient lets the doctor send a fresh request once that
+// happens rather than treating the pair as already linked.
+
+const ACCESS_DURATION_MS = 24 * 60 * 60 * 1000;
+
+function isAccessExpired(link) {
+  if (!link?.access_expires_at) return false;
+  return new Date(link.access_expires_at).getTime() <= Date.now();
+}
 
 function normalizeDoctorPatientCard(patient = {}) {
   const patientIdValue = patient.patient_code || patient.id;
@@ -67,17 +84,24 @@ function normalizeDoctorPatientCard(patient = {}) {
 }
 
 // Deliberately tiny — no age, phone, dob, blood group, avatar, or anything
-// else. A pending/declined card must not leak ANY patient data beyond the
-// name, so this is a hardcoded allowlist rather than a filtered version of
-// the full object (which would silently start leaking fields if someone
-// later adds to normalizeDoctorPatientCard without updating this too).
-function minimalDoctorPatientCard(link) {
+// else. A pending/declined/expired card must not leak ANY patient data
+// beyond the name, so this is a hardcoded allowlist rather than a filtered
+// version of the full object (which would silently start leaking fields if
+// someone later adds to normalizeDoctorPatientCard without updating this
+// too).
+//
+// statusOverride lets a caller report a derived status ('expired') that
+// differs from the raw link.status ('accepted') still on the row — used
+// when an accepted link's access_expires_at has passed but the DB row
+// hasn't been touched (expiry is computed live, not written back).
+function minimalDoctorPatientCard(link, statusOverride) {
   return {
     linkId: link.id,
     patientUserId: link.patient_id,
     patient_name: link.patient_name || 'Patient',
-    linkStatus: link.status, // 'pending' | 'declined' — kept distinct from
+    linkStatus: statusOverride || link.status, // 'pending' | 'declined' | 'expired' — kept distinct from
     linkedAt: link.created_at, // the unrelated display `status` field above
+    accessExpiresAt: link.access_expires_at || null,
   };
 }
 
@@ -114,6 +138,14 @@ export const getDoctorPatients = async (doctorId) => {
         // hasn't accepted.
         if (link.status !== 'accepted') {
           return minimalDoctorPatientCard(link);
+        }
+
+        // Accepted but the 24h access window has lapsed: same treatment as
+        // pending/declined — minimal, name-only card, no `patients` lookup.
+        // Surfaced as linkStatus 'expired' (not 'accepted') so the frontend
+        // renders it as inactive rather than as a full patient card.
+        if (isAccessExpired(link)) {
+          return minimalDoctorPatientCard(link, 'expired');
         }
 
         // Post-split: doctor_patient.patient_id always points at `patients`
@@ -162,10 +194,11 @@ export const getDoctorPatients = async (doctorId) => {
 
 /**
  * The authorization gate every other route/service uses before returning a
- * patient's health data to a doctor. Requires status = 'accepted' — a
- * pending or declined link returns false, same as no link at all. This is
- * the single place that decision is made; callers must not re-derive it
- * from a raw link-exists check.
+ * patient's health data to a doctor. Requires status = 'accepted' AND an
+ * unexpired access_expires_at — a pending, declined, or expired link
+ * returns false, same as no link at all. This is the single place that
+ * decision is made; callers must not re-derive it from a raw
+ * link-exists/status check.
  */
 export const isDoctorLinkedToPatient = async (doctorId, patientUserId) => {
   if (!doctorId || !patientUserId || !supabase) {
@@ -175,7 +208,7 @@ export const isDoctorLinkedToPatient = async (doctorId, patientUserId) => {
   try {
     const { data, error } = await supabase
       .from('doctor_patient')
-      .select('id')
+      .select('id, access_expires_at')
       .eq('doctor_id', doctorId)
       .eq('patient_id', patientUserId)
       .eq('status', 'accepted')
@@ -185,7 +218,8 @@ export const isDoctorLinkedToPatient = async (doctorId, patientUserId) => {
       throw error;
     }
 
-    return Boolean(data);
+    if (!data) return false;
+    return !isAccessExpired(data);
   } catch (error) {
     console.warn('Doctor-patient link check warning:', error?.message || error);
     return false;
@@ -254,11 +288,22 @@ export const linkDoctorToPatient = async ({ doctorId, patientCode }) => {
       // clear error rather than silently re-sending or silently no-op'ing.
       throw new Error('This patient has declined your request. You cannot re-request access.');
     }
-    // pending or accepted — idempotent, return the existing link as-is.
-    return {
-      link: existingLink,
-      patient: existingLink.status === 'accepted' ? normalizeDoctorPatientCard(patient) : minimalDoctorPatientCard(existingLink),
-    };
+
+    const expired = existingLink.status === 'accepted' && isAccessExpired(existingLink);
+
+    if (!expired) {
+      // pending, or still within its 24h access window — idempotent,
+      // return the existing link as-is.
+      return {
+        link: existingLink,
+        patient: existingLink.status === 'accepted' ? normalizeDoctorPatientCard(patient) : minimalDoctorPatientCard(existingLink),
+      };
+    }
+
+    // Access lapsed — re-open the SAME row as a fresh pending request
+    // rather than inserting a second one (doctor_patient_unique constrains
+    // one row per doctor/patient pair).
+    return reopenExpiredLink({ doctorId, patient, existingLink });
   }
 
   // One-shot token for the "Accept" / "Decline" links in the request email
@@ -292,11 +337,103 @@ export const linkDoctorToPatient = async ({ doctorId, patientCode }) => {
     throw error;
   }
 
-  // Notify the patient — this is the ONLY place a doctor's access request
-  // becomes visible to them (there is no separate "Doctor Requests" page
-  // anymore; it lives entirely in the notification bell). metadata.linkId
-  // is what lets the bell render Accept/Decline buttons directly on this
-  // notification and call the right endpoint.
+  await notifyPatientOfNewRequest({ doctorId, patient, link: data });
+
+  return {
+    link: data,
+    // Pending: return the minimal shape, not the full patient object —
+    // the requesting doctor doesn't get health data just by sending a
+    // request, only once (if) the patient accepts.
+    patient: minimalDoctorPatientCard(data),
+  };
+};
+
+// Re-opens an existing (accepted-but-expired) doctor_patient row as a fresh
+// pending request — refreshes the denormalized patient snapshot fields in
+// case they changed since the original request, and issues a new
+// email_action_token/notification exactly like a brand-new request would.
+// Shared by linkDoctorToPatient (re-requesting by patient code) and
+// requestAccessAgain (re-requesting straight from an expired card, by
+// patient id, no code re-entry needed).
+async function reopenExpiredLink({ doctorId, patient, existingLink }) {
+  const emailActionToken = crypto.randomBytes(20).toString('hex');
+  const { data: reopened, error: reopenError } = await supabase
+    .from('doctor_patient')
+    .update({
+      status: 'pending',
+      patient_email: patient.email || null,
+      patient_name: patient.name || patient.fullName || patient.email || 'Patient',
+      patient_phone: patient.phone || patient.mobile || patient.phone_number || null,
+      patient_gender: patient.gender || 'U',
+      patient_dob: patient.dob || patient.date_of_birth || patient.dateOfBirth || null,
+      patient_blood_group: patient.blood_group || patient.bloodGroup || patient.blood_type || null,
+      responded_at: null,
+      access_expires_at: null,
+      email_action_token: emailActionToken,
+    })
+    .eq('id', existingLink.id)
+    .select()
+    .single();
+
+  if (reopenError) throw reopenError;
+
+  await notifyPatientOfNewRequest({ doctorId, patient, link: reopened });
+
+  return {
+    link: reopened,
+    patient: minimalDoctorPatientCard(reopened),
+  };
+}
+
+/**
+ * Re-requests access straight from an expired card — no patient code
+ * re-entry needed, since the doctor is already linked to (and knows) this
+ * patient. Only valid when the existing link is 'accepted' and its access
+ * has actually expired; anything else is rejected so this can't be used to
+ * bypass the normal pending->accept flow or re-request a declined pair.
+ */
+export const requestAccessAgain = async ({ doctorId, patientUserId }) => {
+  if (!doctorId || !patientUserId) {
+    throw new Error('Doctor ID and patient ID are required.');
+  }
+  if (!supabase) throw new Error('Database connection is unavailable.');
+
+  const { data: existingLink, error: existingLinkError } = await supabase
+    .from('doctor_patient')
+    .select('*')
+    .eq('doctor_id', doctorId)
+    .eq('patient_id', patientUserId)
+    .maybeSingle();
+
+  if (existingLinkError && existingLinkError.code !== 'PGRST116') throw existingLinkError;
+  if (!existingLink) {
+    throw new Error('No previous request found for this patient.');
+  }
+  if (existingLink.status !== 'accepted' || !isAccessExpired(existingLink)) {
+    throw new Error('This request is not eligible to be re-sent.');
+  }
+
+  const { data: patient, error: patientError } = await supabase
+    .from('patients')
+    .select('*')
+    .eq('id', patientUserId)
+    .maybeSingle();
+
+  if (patientError && patientError.code !== 'PGRST116') throw patientError;
+  if (!patient) {
+    throw new Error('Patient not found.');
+  }
+
+  return reopenExpiredLink({ doctorId, patient, existingLink });
+};
+
+// Shared by both the brand-new-request path and the re-open-after-expiry
+// path above — this is the ONLY place a doctor's access request becomes
+// visible to the patient (there is no separate "Doctor Requests" page
+// anymore; it lives entirely in the notification bell). metadata.linkId is
+// what lets the bell render Accept/Decline buttons directly on this
+// notification and call the right endpoint.
+async function notifyPatientOfNewRequest({ doctorId, patient, link }) {
   const { data: doctor } = await supabase
     .from('doctors')
     .select('name')
@@ -310,17 +447,9 @@ export const linkDoctorToPatient = async ({ doctorId, patientCode }) => {
     eventType: 'doctor_request',
     title: 'New doctor access request',
     message: `Dr. ${doctorName} requested access to your health records.`,
-    metadata: { linkId: data.id, doctorName },
+    metadata: { linkId: link.id, doctorName },
   });
-
-  return {
-    link: data,
-    // Pending: return the minimal shape, not the full patient object —
-    // the requesting doctor doesn't get health data just by sending a
-    // request, only once (if) the patient accepts.
-    patient: minimalDoctorPatientCard(data),
-  };
-};
+}
 
 /**
  * All pending doctor link requests for a given patient — what the
@@ -492,9 +621,16 @@ export const getDoctorNotifications = async (doctorId) => {
 // double-applying. email_action_token is cleared on resolution so a
 // reused/stale email link can no longer act on this row either.
 async function resolveDoctorLinkRequest({ link, newStatus, resolvedByRole, resolvedByUserId }) {
+  const updatePayload = { status: newStatus, responded_at: new Date().toISOString(), email_action_token: null };
+  if (newStatus === 'accepted') {
+    // Access is time-boxed from the moment of acceptance, not permanent —
+    // see the ACCESS EXPIRY note above this file's status-column comment.
+    updatePayload.access_expires_at = new Date(Date.now() + ACCESS_DURATION_MS).toISOString();
+  }
+
   const { data, error } = await supabase
     .from('doctor_patient')
-    .update({ status: newStatus, responded_at: new Date().toISOString(), email_action_token: null })
+    .update(updatePayload)
     .eq('id', link.id)
     .eq('status', 'pending') // re-check at write time, not just at the read above — closes the race window between the two.
     .select()
@@ -511,13 +647,17 @@ async function resolveDoctorLinkRequest({ link, newStatus, resolvedByRole, resol
 
   const eventType = newStatus === 'accepted' ? 'doctor_request_accepted' : 'doctor_request_declined';
   const verb = newStatus === 'accepted' ? 'accepted' : 'declined';
+  const message =
+    newStatus === 'accepted'
+      ? `${data.patient_name || 'A patient'} accepted your access request. You have access to their records for the next 24 hours.`
+      : `${data.patient_name || 'A patient'} declined your access request.`;
   await notifySafely({
     recipientId: data.doctor_id,
     actorId: resolvedByUserId,
     actorRole: resolvedByRole,
     eventType,
     title: `Request ${verb}`,
-    message: `${data.patient_name || 'A patient'} ${verb} your access request.`,
+    message,
     metadata: { linkId: data.id },
   });
 
@@ -673,5 +813,53 @@ export const deleteDoctorPatient = async ({ doctorId, patientUserId, linkId }) =
   } catch (error) {
     console.error('Delete doctor patient error:', error);
     throw error;
+  }
+};
+
+/**
+ * Whether this patient currently has ANY doctor who can see their data —
+ * i.e. at least one 'accepted', unexpired link. The patient-side mirror of
+ * isDoctorLinkedToPatient, and it MUST stay consistent with it: same
+ * status='accepted' + isAccessExpired() gate, so "the patient thinks they
+ * have a doctor" and "a doctor can actually read their data" can never
+ * disagree. Re-uses that same helper rather than re-deriving the rule from
+ * a raw status check.
+ *
+ * Used by GET /api/doctor-patients/my-doctors/active to tell a patient
+ * starting a Visit Intake whether the resulting session will actually reach
+ * anyone's queue — an unlinked patient's session has doctor_id NULL and no
+ * accepted link, so it lands in NO doctor's queue (see
+ * db/intakeSessions.js getIntakeQueueForPatients). The intake UI uses this
+ * to steer them to the clinic check-in code instead of silently filling in
+ * an intake nobody will ever read.
+ *
+ * @param {string} patientUserId
+ * @returns {Promise<{ hasActiveDoctor: boolean, doctorCount: number }>}
+ */
+export const getActiveDoctorLinksForPatient = async (patientUserId) => {
+  if (!patientUserId || !supabase) {
+    return { hasActiveDoctor: false, doctorCount: 0 };
+  }
+
+  try {
+    const { data, error } = await supabase
+      .from('doctor_patient')
+      .select('id, doctor_id, access_expires_at')
+      .eq('patient_id', patientUserId)
+      .eq('status', 'accepted');
+
+    if (error && error.code !== 'PGRST116') {
+      throw error;
+    }
+
+    const active = (data || []).filter((link) => !isAccessExpired(link));
+    return { hasActiveDoctor: active.length > 0, doctorCount: active.length };
+  } catch (error) {
+    // Fail OPEN (as if they have a doctor) rather than closed: this only
+    // drives an advisory warning screen, and wrongly telling a patient
+    // "no doctor will see this" because of a transient DB hiccup would
+    // scare them off a perfectly valid intake.
+    console.warn('Active doctor link check warning:', error?.message || error);
+    return { hasActiveDoctor: true, doctorCount: 0 };
   }
 };
