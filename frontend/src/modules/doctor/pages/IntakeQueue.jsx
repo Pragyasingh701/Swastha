@@ -163,6 +163,23 @@ function hasAnswer(value) {
   return true;
 }
 
+// Fields where an EMPTY array is itself a real, complete answer ("asked,
+// patient said nothing else") — the backend's own convention for
+// hpi.associated_symptoms (see intakeService.js's hpiComplete()/
+// capturedFieldKeys(), which both accept Array.isArray(v) with no
+// length check). hasAnswer() above intentionally treats [] as "nothing to
+// show" for every OTHER field (a genuinely blank multi-select), so this
+// field needs its own carve-out rather than changing hasAnswer() globally.
+//
+// Without this, the summary silently omitted Associated Symptoms whenever
+// the patient's answer was "nothing else" — indistinguishable on screen
+// from the question never having been asked at all, which is exactly the
+// ambiguity the modal's dynamic-iteration rewrite was meant to eliminate
+// (live repro: session ec90922d-2d6e-45c7-a771-cb6ba294def3 — asked and
+// correctly answered "nothing else", card never appeared, jumped straight
+// from Radiation to Timing).
+const EMPTY_ARRAY_IS_AN_ANSWER = new Set(["associated_symptoms"]);
+
 /**
  * Orders an object's answered fields for display: fields named in
  * `labelPairs` first, in that order, then any remaining answered fields the
@@ -176,13 +193,15 @@ function orderedAnsweredFields(obj, labelPairs) {
   if (!obj || typeof obj !== "object") return [];
   const labels = new Map(labelPairs);
   const out = [];
+  const isAnswered = (key, value) =>
+    hasAnswer(value) || (EMPTY_ARRAY_IS_AN_ANSWER.has(key) && Array.isArray(value));
 
   for (const [key, label] of labelPairs) {
-    if (hasAnswer(obj[key])) out.push({ key, label, value: obj[key] });
+    if (isAnswered(key, obj[key])) out.push({ key, label, value: obj[key] });
   }
   for (const key of Object.keys(obj)) {
     if (labels.has(key) || NON_ANSWER_KEYS.has(key)) continue;
-    if (hasAnswer(obj[key])) out.push({ key, label: humanizeFieldKey(key), value: obj[key] });
+    if (isAnswered(key, obj[key])) out.push({ key, label: humanizeFieldKey(key), value: obj[key] });
   }
   return out;
 }

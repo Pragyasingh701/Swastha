@@ -87,7 +87,14 @@ const HPI_FIELD_KEYWORDS = [
   // live miss: "Which of the following describes how your symptoms behave
   // overall throughout the day?" matched NOTHING here, so the duplicate guard
   // had no field to compare and shipped it as a third timing question.
-  ['timing', ['timing', 'constant', 'comes and goes', 'come and go', 'pattern', 'time of day', 'throughout the day', 'during the day', 'all day', 'behave', 'overall', 'how often', 'frequency', 'intermittent']],
+  // 'the most'/'worst time'/'when is it worst' added after a second live
+  // miss (session ec90922d-2d6e-45c7-a771-cb6ba294def3): "When do you feel
+  // this bloating or heaviness the most?" also matched nothing, so this
+  // guard silently returned null for it — the dedup guard then had no field
+  // to compare against and a differently-worded timing question 10 turns
+  // later ("When during the day does this issue usually happen?") shipped
+  // as a repeat.
+  ['timing', ['timing', 'constant', 'comes and goes', 'come and go', 'pattern', 'time of day', 'throughout the day', 'during the day', 'all day', 'behave', 'overall', 'how often', 'frequency', 'intermittent', 'the most', 'worst time', 'when is it worst', 'usually happen']],
   ['associated_symptoms', ['associated', 'along with', 'other symptoms', 'also experienc', 'accompan', 'anything else']],
   ['character', ['character', 'describe the', 'what does it feel', 'feel like', 'type of', 'quality', 'burning', 'sharp', 'dull']],
   ['site', ['where', 'location', 'site', 'which part', 'which area']],
@@ -102,6 +109,87 @@ function hpiFieldForQuestion(questionText) {
   for (const [field, keywords] of HPI_FIELD_KEYWORDS) {
     if (keywords.some((k) => lower.includes(k))) return field;
   }
+  return null;
+}
+
+// Live-repro fix (fever/cold session eb8698eb-81f1-4ef3-bdb2-2eb223e7a364,
+// 2026-08-30): severity was asked twice in one session even though the
+// patient's first answer ("Severe (7-10)") should have filled it. Root
+// cause traced to the two deterministic extraction-miss rescues (the
+// direct-miss guard and the repeat-recovery guard in runIntakeTurn) BOTH
+// explicitly excluding 'severity' from ever being force-written — correctly
+// so for a plain string write (severity is schema-constrained to an integer
+// 1-10, and neither rescue previously parsed one out of raw text), but that
+// left severity as the one HPI field with NO fallback at all: a single
+// silent model-extraction miss went permanently unrescued until the
+// question happened to repeat, and even then nothing backfilled it — the
+// field-key dedup guard's capturedFieldKeys() never saw hpi.severity as
+// answered, so it couldn't recognize the repeat as a duplicate either. This
+// is a narrower, distinct bug from the Issue #2/#3 stuck-section mechanism
+// (verified against this session: the section tag advanced cleanly through
+// hpi -> ayurveda_profile -> drug_allergy -> finalize the whole way, so
+// nothing was stuck or mislabeled here).
+//
+// Parses a severity-like free-text answer into a clamped 1-10 integer, so
+// the two rescues above can safely fill hpi.severity too instead of
+// skipping it. Handles the common answer shapes actually observed:
+// bare numbers ("8", "7.5"), a "N/10" or "N out of 10" phrasing, and a
+// word-banded range like "Severe (7-10)" (the exact text from this
+// session — one of the HPI_FALLBACK_QUESTIONS.severity options) by taking
+// the midpoint of the bracketed range. Returns null (do nothing) rather
+// than guessing when nothing resembling a severity value is found — the
+// existing "never invent a value" principle applies here too.
+const SEVERITY_WORD_BANDS = [
+  [/\bworst\b/i, 10],
+  [/\bsevere\b/i, 8],
+  [/\bmoderate\b/i, 5],
+  [/\bmild\b/i, 2],
+];
+
+function parseSeverityFromText(text) {
+  const raw = String(text || '').trim();
+  if (!raw) return null;
+
+  // "N/10" or "N out of 10" — a score OUT OF ten, not a range: the value IS
+  // the first number, not a midpoint. Checked before the range pattern below
+  // so "7/10" reads as 7, not as a 7-to-10 range averaging to 9.
+  const fractionMatch = raw.match(/\b(\d{1,2})\s*(?:\/|out of)\s*10\b/i);
+  if (fractionMatch) {
+    const n = Number(fractionMatch[1]);
+    if (Number.isFinite(n)) return Math.max(1, Math.min(10, Math.round(n)));
+  }
+
+  // "7-10", "7 to 8" style range inside the answer — covers the
+  // fallback-question options ("Severe (7-10)") and a patient typing their
+  // own range ("7 to 8 I'd say"). Takes the midpoint, rounded, so "7-10"
+  // -> 9 rather than defaulting to either endpoint. Deliberately excludes
+  // "/" here (handled by the out-of-10 case above) so "7/10" isn't
+  // double-matched as a 7-to-10 range.
+  const rangeMatch = raw.match(/(\d{1,2})\s*(?:-|to)\s*(\d{1,2})/i);
+  if (rangeMatch) {
+    const lo = Number(rangeMatch[1]);
+    const hi = Number(rangeMatch[2]);
+    if (Number.isFinite(lo) && Number.isFinite(hi) && hi >= lo) {
+      return Math.max(1, Math.min(10, Math.round((lo + hi) / 2)));
+    }
+  }
+
+  // A single bare number anywhere in the text ("8", "about 7").
+  const singleMatch = raw.match(/\b(\d{1,2})\b/);
+  if (singleMatch) {
+    const n = Number(singleMatch[1]);
+    if (Number.isFinite(n)) return Math.max(1, Math.min(10, Math.round(n)));
+  }
+
+  // No digits at all — fall back to a coarse word-band mapping, checked in
+  // severity order so "worst" wins over "severe" if a reply somehow said
+  // both. Options in HPI_FALLBACK_QUESTIONS.severity all include a
+  // parenthesized number range alongside these words, so this branch is
+  // mainly a safety net for a patient's own free-text phrasing.
+  for (const [re, value] of SEVERITY_WORD_BANDS) {
+    if (re.test(raw)) return value;
+  }
+
   return null;
 }
 
@@ -371,7 +459,12 @@ const HPI_FALLBACK_QUESTIONS = {
     question_hi: 'किसी चीज़ से यह तकलीफ़ बढ़ती या कम होती है?',
     options: ['Worse with movement', 'Better with rest', 'Worse at night', 'Nothing changes it'],
     options_hi: ['चलने-फिरने से बढ़ता है', 'आराम करने से कम होता है', 'रात में ज़्यादा होता है', 'किसी चीज़ से फर्क नहीं पड़ता'],
-    allow_multiple: false,
+    // Multiple independent factors can genuinely apply at once (e.g. worse
+    // after eating AND better with warm water) — was false, forcing
+    // single-select tap-to-send chips on a question shape that clearly
+    // needs checkboxes (reported live: "Does anything make this bloating
+    // or heaviness better or worse?" rendered as 5 single-select chips).
+    allow_multiple: true,
   },
   severity: {
     question: 'On a scale of 1 to 10, how severe is the {complaint}?',
@@ -564,8 +657,19 @@ function capturedFieldKeys(history, intakeMethod) {
   }
   for (const f of HPI_FIELDS) {
     const v = history?.hpi?.[f];
+    // associated_symptoms: an EMPTY array is a legitimate, complete answer
+    // ("asked, patient said nothing else") — same convention hpiComplete()
+    // already uses (Array.isArray(v), not v.length > 0) and the same
+    // "asked but answer was none" pattern drug_allergy uses (["None"]
+    // rather than an empty array meaning "not asked"). This function used
+    // to require a NON-empty array, so a correctly-extracted "nothing else"
+    // answer was invisible to capturedFieldKeys — the field-key dedup guard
+    // could never recognize a repeat of this question as a duplicate no
+    // matter how many times it got re-answered "nothing else" (live repro:
+    // session ec90922d-2d6e-45c7-a771-cb6ba294def3, associated_symptoms
+    // asked and correctly answered "nothing else" 5 times in one session).
     const filled = f === 'associated_symptoms'
-      ? Array.isArray(v) && v.length > 0
+      ? Array.isArray(v)
       : f === 'severity'
         ? v !== null && v !== undefined && v !== ''
         : typeof v === 'string' && v.trim() !== '';
@@ -941,7 +1045,7 @@ Rules for the JSON:
 - "quick_reply_options.options" is REQUIRED and must NEVER be empty on any question turn (the only exception is the "finalize" closing message, which uses []). Always generate 3-5 short, tappable options, written fresh for THIS patient's specific complaint and THIS field — not generic filler, and not copied from some other complaint. Hairfall options must be about hairfall, headache options about headache, joint pain about joint pain.
 - This applies even to fields that feel inherently open-ended. There is always a sensible small answer set — generate it. e.g. radiation -> ["No, stays in one place", "Yes, spreads nearby", "Not sure"]; a free-text field like recent_stressors -> ["Work", "Family", "Health", "Nothing in particular"]. Never return a question with no options and expect the patient to type.
 - Options do NOT need to cover every possibility: the patient always has a free-text box available alongside them, so 3-5 likely answers plus an escape option like "Other" / "Not sure" is the right shape. Keep each option a single short phrase.
-- "quick_reply_options.allow_multiple" must be true whenever more than one answer can genuinely apply to the question just asked (e.g. multiple symptoms, multiple tastes, multiple moods) — false otherwise. Multi-select renders as checkboxes, single-select as tap-to-send chips.
+- "quick_reply_options.allow_multiple" must be true whenever more than one answer can genuinely apply to the question just asked — false otherwise. Multi-select renders as checkboxes, single-select as tap-to-send chips. This includes, but is not limited to: multiple symptoms, multiple tastes, multiple moods, AND any "what makes this better or worse" / exacerbating-relieving style question — a patient can easily have more than one factor apply at once (e.g. "worse after eating" AND "better with warm water" can both be true simultaneously), so this question type defaults to true, not false.
 - "target_field" must name the single field "next_question" is asking about, using the same key path as the structured history above. It must NOT be a field on the ALREADY ANSWERED list. If you genuinely cannot find an unanswered field left in this section, set section_complete: true instead of re-asking something.
 - CRITICAL RULE for "updated_fields" — if a field has not actually been asked about and answered by the patient, OMIT it entirely. Do NOT guess, do NOT invent a plausible-sounding value, do NOT fill in what a typical patient with this complaint "probably" would have said, and do NOT estimate a value from the rest of the history. A blank field the doctor can ask about in person is far better than a confident-looking wrong answer on a clinical record — a fabricated severity or duration could change how a patient is triaged. Only record what the patient actually told you, in the turn they told you.
 - Concretely: if you never asked about severity, "severity" must not appear in updated_fields at all. Never write a number there because 5 or 7 seems reasonable for this complaint. The same applies to every other field.
@@ -1283,12 +1387,66 @@ export async function runIntakeTurn({ section, structuredHistory, patientMessage
   // guards catch it later.
   if (lastQuestion && (patientMessage || '').trim()) {
     const answeredField = fieldForQuestion(section, lastQuestion, intakeMethod);
-    if (answeredField) {
+    // Live repro fix (session ec90922d-2d6e-45c7-a771-cb6ba294def3): the
+    // patient answered "Currently taking something" to ayurveda_profile's
+    // prior_treatments question — an ambiguous pick that isn't itself the
+    // free-text detail the field wants, so the model asked a legitimate
+    // same-field follow-up ("Which Ayurvedic medicine or treatment are you
+    // currently taking?") instead of extracting a final value. But this
+    // rescue ran anyway, force-writing the raw "Currently taking something"
+    // into prior_treatments — which made ayurvedaComplete() see every field
+    // as answered and advance the section to drug_allergy mid-follow-up.
+    // The NEXT turn's answer ("Other traditional remedy") then got
+    // extracted under drug_allergy's rules instead, where its keyword
+    // matcher read "medicine" and overwrote drug_allergy.current_medications
+    // — silently destroying the patient's earlier, correct "No, not taking
+    // any" answer. A real cross-schema key collision, not a rendering bug.
+    //
+    // Fix: skip this rescue when the model's OWN next_question this turn is
+    // still about the SAME field the patient just answered — that's a
+    // strong, direct signal the model deliberately deferred rather than
+    // silently failing to extract, and forcing a value in now would make
+    // that intentional follow-up self-defeating. The follow-up's own answer
+    // gets a normal, correctly-sectioned extraction attempt on the very
+    // next turn instead.
+    //
+    // Checked two ways, either sufficient: fieldForQuestion's text match
+    // (reliable for hpi/drug_allergy, and for an ayurveda_profile question
+    // that still resembles its canonical bank text) OR the model's own
+    // self-reported target_field (catches the case fieldForQuestion can't:
+    // an ad-hoc, freshly-worded ayurveda_profile follow-up with no
+    // resemblance to the canonical question text at all — exactly the
+    // "Which Ayurvedic medicine or treatment are you currently taking?"
+    // follow-up from the live repro, which AYURVEDA_QUESTION_INDEX's
+    // text-similarity match cannot recognize as still being prior_treatments,
+    // but which the model itself did label target_field: "prior_treatments"
+    // for). target_field alone is documented elsewhere as unreliable enough
+    // that it's never trusted alone for the duplicate-question guard further
+    // down — but OR'd here alongside the text-match, a false positive on
+    // this signal only means a real-but-unusually-worded answer waits one
+    // extra turn to be captured (never worse than what was happening
+    // before), while the case it correctly catches prevents a genuine
+    // cross-schema data corruption.
+    const modelStillOnSameField = !!answeredField && (
+      (typeof parsed.next_question === 'string' && fieldForQuestion(section, parsed.next_question, intakeMethod) === answeredField)
+      || leafFieldName(parsed.target_field) === answeredField
+    );
+    if (answeredField && !modelStillOnSameField) {
       const stillMissing = !capturedFieldKeys(mergedHistory, intakeMethod)
         .some((k) => leafFieldName(k) === answeredField);
       if (stillMissing) {
         const raw = patientMessage.trim();
-        if (section === 'hpi' && HPI_FIELDS.includes(answeredField)
+        if (section === 'hpi' && answeredField === 'severity') {
+          // See parseSeverityFromText's comment above — severity used to be
+          // excluded from this rescue entirely because a raw string can't
+          // satisfy the schema's integer-1-10 constraint. Parsing it first
+          // closes exactly the gap that let severity ship twice in the
+          // fever/cold session this fix was traced from.
+          const parsed = parseSeverityFromText(raw);
+          if (parsed !== null) {
+            mergedHistory = { ...mergedHistory, hpi: { ...mergedHistory.hpi, severity: parsed } };
+          }
+        } else if (section === 'hpi' && HPI_FIELDS.includes(answeredField)
             && answeredField !== 'associated_symptoms' && answeredField !== 'severity') {
           mergedHistory = { ...mergedHistory, hpi: { ...mergedHistory.hpi, [answeredField]: raw } };
         } else if (section === 'drug_allergy' && (answeredField === 'allergies' || answeredField === 'current_medications')) {
@@ -1352,7 +1510,18 @@ export async function runIntakeTurn({ section, structuredHistory, patientMessage
         : (lastQuestion && questionsLookRepeated(lastQuestion, repeatedQuestion) ? patientMessage.trim() : null);
 
       if (repeatedField && recovered) {
-        if (section === 'hpi' && HPI_FIELDS.includes(repeatedField)
+        if (section === 'hpi' && repeatedField === 'severity') {
+          // Same rescue as the direct extraction-miss guard above — parse
+          // the recovered answer into a valid integer rather than skipping
+          // severity entirely.
+          const empty = mergedHistory.hpi?.severity === null || mergedHistory.hpi?.severity === undefined || mergedHistory.hpi?.severity === '';
+          if (empty) {
+            const parsedSeverity = parseSeverityFromText(recovered);
+            if (parsedSeverity !== null) {
+              mergedHistory = { ...mergedHistory, hpi: { ...mergedHistory.hpi, severity: parsedSeverity } };
+            }
+          }
+        } else if (section === 'hpi' && HPI_FIELDS.includes(repeatedField)
             && repeatedField !== 'associated_symptoms' && repeatedField !== 'severity') {
           const empty = !(typeof mergedHistory.hpi?.[repeatedField] === 'string' && mergedHistory.hpi[repeatedField].trim() !== '');
           if (empty) {
@@ -1644,6 +1813,7 @@ export const __testing = {
   fieldForQuestion,
   drugAllergyFieldForQuestion,
   markStuckHpiFields,
+  parseSeverityFromText,
 };
 
 /**
