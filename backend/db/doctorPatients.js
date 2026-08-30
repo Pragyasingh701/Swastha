@@ -815,3 +815,51 @@ export const deleteDoctorPatient = async ({ doctorId, patientUserId, linkId }) =
     throw error;
   }
 };
+
+/**
+ * Whether this patient currently has ANY doctor who can see their data —
+ * i.e. at least one 'accepted', unexpired link. The patient-side mirror of
+ * isDoctorLinkedToPatient, and it MUST stay consistent with it: same
+ * status='accepted' + isAccessExpired() gate, so "the patient thinks they
+ * have a doctor" and "a doctor can actually read their data" can never
+ * disagree. Re-uses that same helper rather than re-deriving the rule from
+ * a raw status check.
+ *
+ * Used by GET /api/doctor-patients/my-doctors/active to tell a patient
+ * starting a Visit Intake whether the resulting session will actually reach
+ * anyone's queue — an unlinked patient's session has doctor_id NULL and no
+ * accepted link, so it lands in NO doctor's queue (see
+ * db/intakeSessions.js getIntakeQueueForPatients). The intake UI uses this
+ * to steer them to the clinic check-in code instead of silently filling in
+ * an intake nobody will ever read.
+ *
+ * @param {string} patientUserId
+ * @returns {Promise<{ hasActiveDoctor: boolean, doctorCount: number }>}
+ */
+export const getActiveDoctorLinksForPatient = async (patientUserId) => {
+  if (!patientUserId || !supabase) {
+    return { hasActiveDoctor: false, doctorCount: 0 };
+  }
+
+  try {
+    const { data, error } = await supabase
+      .from('doctor_patient')
+      .select('id, doctor_id, access_expires_at')
+      .eq('patient_id', patientUserId)
+      .eq('status', 'accepted');
+
+    if (error && error.code !== 'PGRST116') {
+      throw error;
+    }
+
+    const active = (data || []).filter((link) => !isAccessExpired(link));
+    return { hasActiveDoctor: active.length > 0, doctorCount: active.length };
+  } catch (error) {
+    // Fail OPEN (as if they have a doctor) rather than closed: this only
+    // drives an advisory warning screen, and wrongly telling a patient
+    // "no doctor will see this" because of a transient DB hiccup would
+    // scare them off a perfectly valid intake.
+    console.warn('Active doctor link check warning:', error?.message || error);
+    return { hasActiveDoctor: true, doctorCount: 0 };
+  }
+};

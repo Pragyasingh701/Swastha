@@ -3,6 +3,7 @@ import { useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "../../../context/AuthContext";
 import { startIntake, resumeIntake, sendIntakeTurn, finalizeIntake, transcribeIntakeAudio, replayIntakeAudio } from "../../../api/intake";
 import { verifyClinicCode, sendClinicOtp, verifyClinicOtp } from "../../../api/clinic";
+import { hasActiveDoctorLink } from "../../../services/doctorPatients";
 import ResponsiveSidebar from "../../../components/Common/ResponsiveSidebar";
 import ProfileDropdown from "../../settings/components/ProfileDropdown";
 import PatientIdBadge from "../../../components/Common/PatientIdBadge";
@@ -136,8 +137,10 @@ function normalizeQuickReplies(raw) {
 // Gate steps shown before the chat itself. "code" is the entry screen
 // (enter a clinic check-in code, or skip straight into a remote intake);
 // "confirm"/"otp" mirror the old standalone ClinicCheckIn.jsx flow;
+// "no_doctor" warns a patient with no linked doctor that a code-less
+// intake will not reach anyone (see skipClinicCheckIn below);
 // "chat" reveals the actual conversation UI below.
-const GATE_STEPS = { CODE: "code", CONFIRM: "confirm", OTP: "otp", LANGUAGE: "language", CHAT: "chat" };
+const GATE_STEPS = { CODE: "code", CONFIRM: "confirm", OTP: "otp", NO_DOCTOR: "no_doctor", LANGUAGE: "language", CHAT: "chat" };
 
 // Voice layer (PRD §6): language is resolved ONCE here, never per-turn.
 // Both labels are written in their own script so a patient who can't read
@@ -733,10 +736,39 @@ export default function IntakeChat() {
     }
   }
 
-  function skipClinicCheckIn() {
+  // Skipping the clinic code starts a session with doctor_id NULL. The
+  // doctor queue only ever returns sessions belonging to a doctor's own
+  // accepted-linked patients (backend/db/intakeSessions.js
+  // getIntakeQueueForPatients), so for a patient with NO active doctor link
+  // that session reaches nobody — it is saved to their own record and no
+  // doctor can ever open it. That used to happen silently: the patient
+  // answered a full intake believing a doctor was waiting on the other end.
+  //
+  // So the skip path now checks first, and a patient with no linked doctor
+  // gets the NO_DOCTOR screen pointing them at the clinic check-in code —
+  // the flow that actually creates the link (POST /api/clinic/verify-otp
+  // upserts it to 'accepted'). It stays a warning, not a block: they can
+  // still continue, since the intake is genuinely useful in their own
+  // record and a doctor linked later can see it.
+  async function skipClinicCheckIn() {
     setGateError("");
-    // Language is chosen before the session starts, since /intake/start
-    // stores it on the session row (PRD §6).
+    setGateLoading(true);
+    try {
+      const { hasActiveDoctor } = await hasActiveDoctorLink();
+      if (!hasActiveDoctor) {
+        setGateStep(GATE_STEPS.NO_DOCTOR);
+        return;
+      }
+      proceedToLanguage();
+    } finally {
+      setGateLoading(false);
+    }
+  }
+
+  // Language is chosen before the session starts, since /intake/start
+  // stores it on the session row (PRD §6).
+  function proceedToLanguage() {
+    setGateError("");
     setGateStep(GATE_STEPS.LANGUAGE);
   }
 
@@ -968,6 +1000,47 @@ export default function IntakeChat() {
                       className="w-full mt-4 text-sm font-semibold text-slate-500 hover:text-slate-700 disabled:opacity-50"
                     >
                       Skip — I don't have a code
+                    </button>
+                  </>
+                )}
+
+                {gateStep === GATE_STEPS.NO_DOCTOR && (
+                  <>
+                    <div className="text-center mb-6">
+                      <div className="w-14 h-14 mx-auto mb-4 bg-amber-50 text-amber-600 rounded-2xl flex items-center justify-center">
+                        <AlertTriangle size={28} />
+                      </div>
+                      <h2 className="text-xl font-bold text-slate-900">No doctor is linked yet</h2>
+                      <p className="text-sm text-slate-500 mt-2">
+                        Without a clinic check-in code, this intake won't appear in any doctor's queue — it will only be saved to your own health record.
+                      </p>
+                    </div>
+
+                    <div className="rounded-2xl border border-slate-100 bg-slate-50 p-5 mb-6">
+                      <p className="text-sm font-semibold text-slate-900 mb-1">To reach a doctor now</p>
+                      <p className="text-sm text-slate-500">
+                        Ask the front desk for today's check-in code and enter it — that links you to the doctor and sends your intake straight to their queue.
+                      </p>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setGateError("");
+                        setGateStep(GATE_STEPS.CODE);
+                      }}
+                      className="w-full h-12 flex items-center justify-center gap-2 bg-blue-700 hover:bg-blue-800 text-white font-semibold rounded-xl transition-colors"
+                    >
+                      <Building2 size={18} />
+                      Enter a check-in code
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={proceedToLanguage}
+                      className="w-full mt-4 text-sm font-semibold text-slate-500 hover:text-slate-700"
+                    >
+                      Continue anyway — save to my record only
                     </button>
                   </>
                 )}
