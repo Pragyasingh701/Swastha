@@ -1,5 +1,71 @@
-import React from "react";
+import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
+
+const FAQS = [
+  {
+    q: "What is Swastha?",
+    a: "A platform that organizes your family's medical records into one searchable timeline, and collects your medical history through an AI conversation before your clinic visit — so your doctor has it ready.",
+  },
+  {
+    q: "Can I use it in Hindi?",
+    a: "Yes. Clinic intake runs in Hindi or Indian English. Questions are read aloud and you can answer by speaking — including mixing Hindi and English naturally. You can also type at any point.",
+  },
+  {
+    q: "Does the AI diagnose me?",
+    a: "No. It asks follow-up questions and organizes your answers into a structured summary for your doctor. It does not suggest a diagnosis or treatment.",
+  },
+  {
+    q: "What if I mention something urgent?",
+    a: "If you describe symptoms that may need immediate attention, you'll see a priority alert and your session is flagged for the doctor. This is a safety prompt, not a medical assessment — in an emergency, contact emergency services directly.",
+  },
+  {
+    q: "Who can see my records?",
+    a: "Only you, unless you approve access. A doctor must send a request using your 6-digit patient code, and you accept or decline it. Adult family members authorize access by email.",
+  },
+  {
+    q: "Can it read handwritten prescriptions?",
+    a: "It extracts details from handwritten prescriptions and flags anything it couldn't read clearly for you to confirm — it won't guess.",
+  },
+  {
+    q: "Do I need a Swastha account to check in at a clinic?",
+    a: "Yes — check-in verifies your identity with a code sent to your registered email.",
+  },
+  {
+    q: "Which doctors can use Swastha?",
+    a: "Doctors practicing Allopathic or Ayurvedic medicine, verified against their medical registration certificate at signup.",
+  },
+  {
+    q: "Is it free?",
+    a: "Getting started is free.",
+  },
+];
+
+function FAQItem({ question, answer }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="rounded-2xl border border-outline-variant/40 bg-white overflow-hidden">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="w-full flex items-center justify-between gap-4 text-left px-6 py-5"
+      >
+        <span className="font-bold text-on-surface">{question}</span>
+        <span
+          className={`material-symbols-outlined text-primary transition-transform duration-200 ${
+            open ? "rotate-180" : ""
+          }`}
+        >
+          expand_more
+        </span>
+      </button>
+      {open && (
+        <div className="px-6 pb-5 text-on-surface-variant text-sm leading-relaxed">
+          {answer}
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function LandingPage() {
   const navigate = useNavigate();
@@ -21,9 +87,15 @@ export default function LandingPage() {
           </div>
           <nav className="hidden md:flex items-center gap-8">
             <a className="text-on-surface-variant hover:text-primary transition-colors font-body-md" href="#features">Features</a>
-            <a className="text-on-surface-variant hover:text-primary transition-colors font-body-md" href="#abha">ABHA Sync</a>
-            <a className="text-on-surface-variant hover:text-primary transition-colors font-body-md" href="#vault">Vault</a>
-            <a className="text-on-surface-variant hover:text-primary transition-colors font-body-md" href="#timeline">Timeline</a>
+            <a className="text-on-surface-variant hover:text-primary transition-colors font-body-md" href="#intake">How It Works</a>
+            <a className="text-on-surface-variant hover:text-primary transition-colors font-body-md" href="#faq">FAQ</a>
+            <button
+              type="button"
+              onClick={() => navigate("/doctor-register")}
+              className="text-primary font-bold hover:text-primary/80 transition-colors font-body-md"
+            >
+              For Doctors &amp; Clinics
+            </button>
           </nav>
           <div className="flex items-center gap-4">
             <button
@@ -47,15 +119,11 @@ export default function LandingPage() {
         <section className="relative overflow-hidden px-6 lg:px-2xl py-20 lg:py-3xl max-w-7xl mx-auto">
           <div className="grid lg:grid-cols-2 gap-12 items-center">
             <div className="z-10 text-center lg:text-left">
-              <div className="inline-flex items-center gap-2 px-3 py-1 bg-primary-container/10 text-primary rounded-full mb-6">
-                <span className="material-symbols-outlined text-[18px]">verified</span>
-                <span className="text-label-sm uppercase tracking-wider">HIPAA &amp; ABHA COMPLIANT</span>
-              </div>
               <h1 className="font-display text-display leading-tight mb-6">
                 Your Family&apos;s Health Records. Organized. <span className="text-primary">Intelligent.</span> Always Accessible.
               </h1>
               <p className="text-body-lg text-on-surface-variant mb-10 max-w-xl mx-auto lg:mx-0">
-                Stop hunting through WhatsApp chats and dusty folders. Swastha uses clinical-grade AI to digitize, structure, and secure your medical history automatically.
+                Stop hunting through scattered photos and dusty folders. Swastha uses AI to digitize, structure, and secure your medical history automatically.
               </p>
               <div className="flex flex-col sm:flex-row gap-4 justify-center lg:justify-start">
                 <button
@@ -65,14 +133,10 @@ export default function LandingPage() {
                   Get Started Free
                   <span className="material-symbols-outlined">arrow_forward</span>
                 </button>
-                <button className="bg-surface-container border border-outline-variant text-on-surface px-8 py-4 rounded-xl font-label-md font-bold text-lg hover:bg-surface-container-high transition-all flex items-center justify-center gap-2">
-                  <span className="material-symbols-outlined">play_circle</span>
-                  Watch Demo
-                </button>
               </div>
             </div>
             <div className="relative lg:block">
-              <div className="relative rounded-3xl overflow-hidden shadow-2xl animate-float">
+              <div className="relative rounded-3xl overflow-hidden shadow-2xl">
                 <img
                   className="w-full h-auto"
                   alt="A sophisticated 3D isometric illustration showcasing a digital health ecosystem."
@@ -90,16 +154,12 @@ export default function LandingPage() {
           <div className="max-w-7xl mx-auto px-6">
             <div className="flex flex-wrap justify-center gap-8 md:gap-16 items-center opacity-70 grayscale hover:grayscale-0 transition-all duration-500">
               <div className="flex items-center gap-2">
-                <span className="material-symbols-outlined text-primary" style={{ fontVariationSettings: "'FILL' 1" }}>hub</span>
-                <span className="font-label-md font-bold">ABHA Ecosystem</span>
-              </div>
-              <div className="flex items-center gap-2">
                 <span className="material-symbols-outlined text-primary" style={{ fontVariationSettings: "'FILL' 1" }}>auto_awesome</span>
                 <span className="font-label-md font-bold">AI Powered</span>
               </div>
               <div className="flex items-center gap-2">
                 <span className="material-symbols-outlined text-primary" style={{ fontVariationSettings: "'FILL' 1" }}>document_scanner</span>
-                <span className="font-label-md font-bold">OCR Enabled</span>
+                <span className="font-label-md font-bold">AI Document Extraction</span>
               </div>
               <div className="flex items-center gap-2">
                 <span className="material-symbols-outlined text-primary" style={{ fontVariationSettings: "'FILL' 1" }}>verified_user</span>
@@ -108,6 +168,10 @@ export default function LandingPage() {
               <div className="flex items-center gap-2">
                 <span className="material-symbols-outlined text-primary" style={{ fontVariationSettings: "'FILL' 1" }}>groups</span>
                 <span className="font-label-md font-bold">Family Records</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="material-symbols-outlined text-primary" style={{ fontVariationSettings: "'FILL' 1" }}>record_voice_over</span>
+                <span className="font-label-md font-bold">Voice Intake</span>
               </div>
             </div>
           </div>
@@ -127,10 +191,10 @@ export default function LandingPage() {
                   <span className="material-symbols-outlined">warning</span>
                 </div>
                 <h3 className="font-headline-md text-headline-md mb-4">The Digital Mess</h3>
-                <p className="text-on-surface-variant mb-8">Reports scattered across WhatsApp threads, email attachments, and lost PDFs. Finding a prescription from 6 months ago is impossible during emergencies.</p>
+                <p className="text-on-surface-variant mb-8">Reports scattered across chat threads, email attachments, and lost PDFs. Finding a prescription from 6 months ago is impossible during emergencies.</p>
                 <div className="space-y-4 opacity-50 grayscale group-hover:grayscale-0 transition-all">
                   <div className="flex items-center gap-4 p-4 bg-white rounded-xl shadow-sm border border-outline-variant/20 ">
-                    <span className="material-symbols-outlined text-[#25D366]">chat</span>
+                    <span className="material-symbols-outlined text-on-surface-variant">image</span>
                     <div className="flex-1 h-3 bg-surface-container rounded-full"></div>
                     <span className="text-xs font-mono">IMG_482.jpg</span>
                   </div>
@@ -150,7 +214,7 @@ export default function LandingPage() {
                   <span className="material-symbols-outlined">check_circle</span>
                 </div>
                 <h3 className="font-headline-md text-headline-md mb-4">The Swastha Timeline</h3>
-                <p className="text-on-surface-variant mb-8">Clinical-grade OCR extracts every lab value and medicine name, creating a searchable, intelligent health journey for your whole family.</p>
+                <p className="text-on-surface-variant mb-8">AI extracts every lab value and medicine name, creating a searchable, structured health record for your whole family.</p>
                 <div className="space-y-4">
                   <div className="ai-insight-glow p-4 rounded-xl flex items-center gap-4">
                     <div className="w-10 h-10 rounded-lg bg-primary flex items-center justify-center text-white">
@@ -184,7 +248,7 @@ export default function LandingPage() {
             <div className="flex flex-col md:flex-row items-end justify-between mb-16 gap-6">
               <div className="max-w-xl">
                 <h2 className="font-headline-lg text-headline-lg mb-4">How It Works</h2>
-                <p className="text-on-surface-variant ">From messy documents to medical intelligence in four simple steps.</p>
+                <p className="text-on-surface-variant ">From messy documents to an organized health record in four simple steps.</p>
               </div>
               <div className="flex gap-2">
                 <div className="w-12 h-1 bg-primary rounded-full"></div>
@@ -201,15 +265,15 @@ export default function LandingPage() {
                   <span className="material-symbols-outlined text-primary text-3xl group-hover:scale-110 transition-transform">cloud_upload</span>
                 </div>
                 <h4 className="font-bold text-lg mb-2">1. Upload</h4>
-                <p className="text-sm text-on-surface-variant ">Share files from WhatsApp, email, or snap a photo of a physical report.</p>
+                <p className="text-sm text-on-surface-variant ">Snap a photo, upload a PDF, or scan a physical report or prescription.</p>
               </div>
               {/* Step 2 */}
               <div className="relative z-10 flex flex-col items-center md:items-start text-center md:text-left">
                 <div className="w-20 h-20 bg-white shadow-lg rounded-2xl flex items-center justify-center mb-6 border border-outline-variant/30 group hover:border-primary transition-colors">
                   <span className="material-symbols-outlined text-primary text-3xl group-hover:scale-110 transition-transform">scan</span>
                 </div>
-                <h4 className="font-bold text-lg mb-2">2. OCR Analysis</h4>
-                <p className="text-sm text-on-surface-variant ">Our clinical AI extracts lab results, dosages, and diagnostic insights.</p>
+                <h4 className="font-bold text-lg mb-2">2. AI Extraction</h4>
+                <p className="text-sm text-on-surface-variant ">AI reads lab values, medicines, and diagnoses — including handwritten prescriptions.</p>
               </div>
               {/* Step 3 */}
               <div className="relative z-10 flex flex-col items-center md:items-start text-center md:text-left">
@@ -225,7 +289,109 @@ export default function LandingPage() {
                   <span className="material-symbols-outlined text-primary text-3xl group-hover:scale-110 transition-transform">auto_graph</span>
                 </div>
                 <h4 className="font-bold text-lg mb-2">4. Timeline</h4>
-                <p className="text-sm text-on-surface-variant ">Access a unified health timeline with trends, alerts, and instant search.</p>
+                <p className="text-sm text-on-surface-variant ">Access a unified health timeline with lab trends and instant search.</p>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* AI Voice Intake / Clinic Check-in */}
+        <section className="py-20 lg:py-32 px-6 bg-surface-container-lowest" id="intake">
+          <div className="max-w-7xl mx-auto">
+            <div className="grid lg:grid-cols-2 gap-16 items-center">
+              <div>
+                <div className="inline-flex items-center gap-2 px-3 py-1 bg-secondary-container/10 text-secondary rounded-full mb-6">
+                  <span className="material-symbols-outlined text-[18px]">mic</span>
+                  <span className="text-label-sm uppercase tracking-wider">Clinic Check-In</span>
+                </div>
+                <h2 className="font-headline-lg text-headline-lg mb-6">
+                  Walk into your consultation already prepared.
+                </h2>
+                <p className="text-on-surface-variant mb-10 max-w-xl">
+                  Check in at the clinic with a front-desk code, and answer a few
+                  questions before the doctor sees you — by speaking, in Hindi or
+                  English. Your doctor opens a structured summary instead of
+                  starting from a blank page.
+                </p>
+
+                <div className="space-y-6">
+                  <div className="flex gap-4">
+                    <div className="w-11 h-11 rounded-xl bg-primary/10 text-primary flex items-center justify-center shrink-0">
+                      <span className="material-symbols-outlined">record_voice_over</span>
+                    </div>
+                    <div>
+                      <h4 className="font-bold mb-1">Speak, in your language</h4>
+                      <p className="text-sm text-on-surface-variant">
+                        Hindi or Indian English, spoken naturally — the AI understands
+                        Hinglish too.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex gap-4">
+                    <div className="w-11 h-11 rounded-xl bg-error/10 text-error flex items-center justify-center shrink-0">
+                      <span className="material-symbols-outlined">priority_high</span>
+                    </div>
+                    <div>
+                      <h4 className="font-bold mb-1">Urgent symptoms flagged instantly</h4>
+                      <p className="text-sm text-on-surface-variant">
+                        Checked on every turn of the conversation, so nothing urgent
+                        gets buried in a busy queue.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex gap-4">
+                    <div className="w-11 h-11 rounded-xl bg-secondary/10 text-secondary flex items-center justify-center shrink-0">
+                      <span className="material-symbols-outlined">spa</span>
+                    </div>
+                    <div>
+                      <h4 className="font-bold mb-1">Ayurveda-aware intake</h4>
+                      <p className="text-sm text-on-surface-variant">
+                        Practicing Ayurvedic doctors get a structured constitution,
+                        digestion, and routine assessment built in.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <button
+                  onClick={() => navigate("/doctor-register")}
+                  className="mt-10 inline-flex items-center gap-2 bg-secondary text-on-secondary px-6 py-3.5 rounded-xl font-label-md font-bold hover:bg-secondary/90 transition-all"
+                >
+                  For Doctors &amp; Clinics
+                  <span className="material-symbols-outlined">arrow_forward</span>
+                </button>
+              </div>
+
+              {/* Mock intake conversation card */}
+              <div className="relative">
+                <div className="p-6 rounded-3xl bg-white border border-outline-variant/50 shadow-2xl shadow-primary/5">
+                  <div className="flex items-center gap-3 pb-4 mb-4 border-b border-outline-variant/30">
+                    <div className="w-10 h-10 rounded-full bg-primary flex items-center justify-center text-white">
+                      <span className="material-symbols-outlined">smart_toy</span>
+                    </div>
+                    <div>
+                      <p className="font-bold text-sm">Pre-visit check-in</p>
+                      <p className="text-xs text-on-surface-variant">Hindi / English</p>
+                    </div>
+                    <span className="ml-auto flex items-center gap-1 text-xs font-bold text-error">
+                      <span className="material-symbols-outlined text-[16px]">warning</span>
+                      Flagged
+                    </span>
+                  </div>
+                  <div className="space-y-3">
+                    <div className="bg-surface-container rounded-xl p-3 text-sm max-w-[85%]">
+                      Kal se fever hai, aur body pain bhi.
+                    </div>
+                    <div className="bg-primary/10 rounded-xl p-3 text-sm max-w-[90%] ml-auto">
+                      Got it — since yesterday, fever with body pain. Any breathing
+                      difficulty?
+                    </div>
+                  </div>
+                  <div className="mt-4 pt-4 border-t border-outline-variant/30 text-xs text-on-surface-variant flex items-center gap-2">
+                    <span className="material-symbols-outlined text-[16px] text-primary">check_circle</span>
+                    Structured summary ready for the doctor
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -236,31 +402,31 @@ export default function LandingPage() {
           <div className="max-w-7xl mx-auto">
             <div className="text-center mb-16">
               <h2 className="font-headline-lg text-headline-lg mb-4">Smarter Healthcare for Modern Families</h2>
-              <p className="text-on-surface-variant ">Advanced features designed for reliability and speed.</p>
+              <p className="text-on-surface-variant ">Real AI features built for reliability and speed.</p>
             </div>
             <div className="grid md:grid-cols-3 gap-6">
-              {/* WhatsApp Feature */}
+              {/* Upload Flexibility Feature */}
               <div className="md:col-span-2 p-8 rounded-3xl bg-white border border-outline-variant/50 shadow-sm hover:shadow-md transition-shadow relative overflow-hidden group">
                 <div className="absolute bottom-0 right-0 p-8 translate-y-8 translate-x-8 opacity-10 group-hover:opacity-20 group-hover:translate-y-0 group-hover:translate-x-0 transition-all duration-500">
-                  <span className="material-symbols-outlined text-[160px] text-primary">chat_bubble</span>
+                  <span className="material-symbols-outlined text-[160px] text-primary">upload_file</span>
                 </div>
                 <div className="relative z-10">
-                  <div className="w-12 h-12 rounded-xl bg-[#25D366]/10 flex items-center justify-center mb-6">
-                    <span className="material-symbols-outlined text-[#25D366]">send</span>
+                  <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center mb-6">
+                    <span className="material-symbols-outlined text-primary">photo_camera</span>
                   </div>
-                  <h3 className="font-headline-md text-headline-md mb-4">Forward from WhatsApp</h3>
-                  <p className="text-on-surface-variant max-w-md">Just forward any report to our verified number. Our AI picks it up instantly and files it in the right vault automatically.</p>
+                  <h3 className="font-headline-md text-headline-md mb-4">Upload However You Have It</h3>
+                  <p className="text-on-surface-variant max-w-md">Snap a photo, upload a PDF, or scan a handwritten prescription. Swastha reads it and files it in the right category automatically.</p>
                 </div>
               </div>
-              {/* AI OCR Feature */}
+              {/* AI Extraction Feature */}
               <div className="p-8 rounded-3xl bg-primary text-on-primary shadow-xl shadow-primary/20 flex flex-col justify-between">
                 <div>
                   <span className="material-symbols-outlined text-3xl mb-6">psychology</span>
-                  <h3 className="font-headline-md text-headline-md mb-4">Deep OCR</h3>
-                  <p className="opacity-90">Beyond simple text, we understand handwritten prescriptions and complex blood panel charts.</p>
+                  <h3 className="font-headline-md text-headline-md mb-4">AI Document Extraction</h3>
+                  <p className="opacity-90">Reads handwritten prescriptions and complex lab panels. Anything unclear is flagged for you to confirm — never guessed.</p>
                 </div>
                 <div className="mt-8 pt-6 border-t border-white/20">
-                  <span className="text-sm font-bold tracking-widest uppercase">99.8% ACCURACY</span>
+                  <span className="text-sm font-bold tracking-widest uppercase">Never Guesses</span>
                 </div>
               </div>
               {/* Drug Interactions */}
@@ -284,9 +450,24 @@ export default function LandingPage() {
                 <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center mb-6">
                   <span className="material-symbols-outlined text-primary">search</span>
                 </div>
-                <h3 className="font-headline-md text-headline-md mb-4">Smart Search</h3>
-                <p className="text-on-surface-variant ">Search for &quot;Diabetes reports 2022&quot; or &quot;Dr. Sharma prescriptions&quot; and get results in milliseconds.</p>
+                <h3 className="font-headline-md text-headline-md mb-4">Ask Swastha</h3>
+                <p className="text-on-surface-variant ">Ask &quot;What were my HbA1c levels last year?&quot; in plain language and get an answer grounded in your own records, with sources attached.</p>
               </div>
+            </div>
+          </div>
+        </section>
+
+        {/* FAQ */}
+        <section className="py-20 lg:py-32 px-6" id="faq">
+          <div className="max-w-3xl mx-auto">
+            <div className="text-center mb-12">
+              <h2 className="font-headline-lg text-headline-lg mb-4">Frequently Asked Questions</h2>
+              <p className="text-on-surface-variant">Everything you need to know before you get started.</p>
+            </div>
+            <div className="space-y-4">
+              {FAQS.map((item) => (
+                <FAQItem key={item.q} question={item.q} answer={item.a} />
+              ))}
             </div>
           </div>
         </section>
@@ -296,8 +477,8 @@ export default function LandingPage() {
           <div className="max-w-5xl mx-auto rounded-3xl bg-primary-container p-12 text-center text-on-primary-container relative overflow-hidden">
             <div className="absolute inset-0 bg-gradient-to-br from-primary to-secondary mix-blend-overlay opacity-30"></div>
             <div className="relative z-10">
-              <h2 className="font-display text-headline-lg mb-6">Ready to secure your family&apos;s health?</h2>
-              <p className="text-lg opacity-90 mb-10 max-w-xl mx-auto">Join thousands of families who trust Swastha for clinical record management.</p>
+              <h2 className="font-display text-headline-lg mb-6">Ready to organize your family&apos;s health records?</h2>
+              <p className="text-lg opacity-90 mb-10 max-w-xl mx-auto">Turn scattered documents into a searchable, structured health history — free to get started.</p>
               <div className="flex flex-col sm:flex-row gap-4 justify-center">
                 <button
                   onClick={() => navigate("/register")}
@@ -305,79 +486,17 @@ export default function LandingPage() {
                 >
                   Create Free Account
                 </button>
-                <button className="bg-transparent border-2 border-white/30 text-white px-10 py-4 rounded-xl font-bold text-lg hover:bg-white/10 transition-all">
-                  Talk to Sales
+                <button
+                  onClick={() => navigate("/login")}
+                  className="bg-transparent border-2 border-white/30 text-white px-10 py-4 rounded-xl font-bold text-lg hover:bg-white/10 transition-all"
+                >
+                  Log In
                 </button>
               </div>
-              <p className="mt-8 text-sm opacity-60">No credit card required • GDPR &amp; HIPAA Compliant</p>
             </div>
           </div>
         </section>
       </main>
-
-      {/* Footer */}
-      <footer className="bg-surface-container-low border-t border-outline-variant/50 pt-20 pb-12 px-6">
-        <div className="max-w-7xl mx-auto">
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-12 mb-16">
-            <div className="col-span-1 md:col-span-1">
-              <div className="flex items-center gap-3 mb-6">
-                <img
-                  alt="Swastha Logo"
-                  className="w-8 h-8"
-                  src="https://lh3.googleusercontent.com/aida-public/AB6AXuAJoSkUGc0Hv6hSwIbvCI4jXqfw51IEzG1-YtxI6ZPVQAgKF2gkF9bZKnreKdmbtKhGGVqaqifsmWUgklpWmQ5HOc8wCuxt1qRATJ_Lh2di1I5X4T6NAM789pr-DkSrLSej3v9HOhj7ZqEGyH6HQ8WcLrklNBJCzOHWE8w-F08fLnZHhFij-XNf_1_6ZyvNho1amapTks9-HG-P_KngfQr2YcLy_0llXOm7YKhNMA02JRcuWLpa7xSq"
-                />
-                <span className="font-headline-md text-headline-md font-bold text-primary tracking-tight">Swastha</span>
-              </div>
-              <p className="text-on-surface-variant text-sm mb-6">Clinical intelligence for families. Secure, organized, and accessible health records powered by AI.</p>
-              <div className="flex gap-4">
-                <a className="w-10 h-10 rounded-full bg-surface-container flex items-center justify-center hover:bg-primary/10 hover:text-primary transition-all" href="#">
-                  <span className="material-symbols-outlined text-[20px]">public</span>
-                </a>
-                <a className="w-10 h-10 rounded-full bg-surface-container flex items-center justify-center hover:bg-primary/10 hover:text-primary transition-all" href="#">
-                  <span className="material-symbols-outlined text-[20px]">alternate_email</span>
-                </a>
-              </div>
-            </div>
-            <div>
-              <h5 className="font-bold mb-6 text-sm uppercase tracking-widest">Platform</h5>
-              <ul className="space-y-4 text-sm text-on-surface-variant ">
-                <li><a className="hover:text-primary transition-colors" href="#">Digital Vault</a></li>
-                <li><a className="hover:text-primary transition-colors" href="#">AI Health Sync</a></li>
-                <li><a className="hover:text-primary transition-colors" href="#">Family Profiles</a></li>
-                <li><a className="hover:text-primary transition-colors" href="#">OCR Capabilities</a></li>
-              </ul>
-            </div>
-            <div>
-              <h5 className="font-bold mb-6 text-sm uppercase tracking-widest">Company</h5>
-              <ul className="space-y-4 text-sm text-on-surface-variant ">
-                <li><a className="hover:text-primary transition-colors" href="#">About Us</a></li>
-                <li><a className="hover:text-primary transition-colors" href="#">Privacy Architecture</a></li>
-                <li><a className="hover:text-primary transition-colors" href="#">Compliance Hub</a></li>
-                <li><a className="hover:text-primary transition-colors" href="#">Contact Support</a></li>
-              </ul>
-            </div>
-            <div>
-              <h5 className="font-bold mb-6 text-sm uppercase tracking-widest">Legal</h5>
-              <ul className="space-y-4 text-sm text-on-surface-variant ">
-                <li><a className="hover:text-primary transition-colors" href="#">Privacy Policy</a></li>
-                <li><a className="hover:text-primary transition-colors" href="#">Terms of Service</a></li>
-                <li><a className="hover:text-primary transition-colors" href="#">Security Audit</a></li>
-                <li><a className="hover:text-primary transition-colors" href="#">HIPAA Compliance</a></li>
-              </ul>
-            </div>
-          </div>
-          <div className="pt-8 border-t border-outline-variant/30 flex flex-col md:flex-row justify-between items-center gap-4">
-            <p className="text-body-sm text-on-surface-variant ">© 2024 Swastha Healthcare SaaS. HIPAA &amp; ABHA Compliant.</p>
-            <div className="flex items-center gap-6">
-              <span className="flex items-center gap-1 text-xs font-bold text-primary">
-                <span className="w-2 h-2 rounded-full bg-primary animate-pulse"></span>
-                SYSTEMS OPERATIONAL
-              </span>
-              <span className="text-xs text-on-surface-variant ">ISO 27001 Certified</span>
-            </div>
-          </div>
-        </div>
-      </footer>
     </div>
   );
 }
