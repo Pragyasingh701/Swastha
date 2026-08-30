@@ -95,6 +95,29 @@ export async function getPendingDoctorRequests() {
   return result.requests || [];
 }
 
+/**
+ * PATIENT-facing: whether this patient currently has any doctor with active
+ * (accepted, unexpired) access. Used by the Visit Intake gate — an intake
+ * started with no clinic code and no linked doctor produces a session no
+ * doctor queue can ever return, so the UI warns instead of letting the
+ * patient fill one in for nobody.
+ *
+ * Never throws: a failure resolves to hasActiveDoctor true (fail open),
+ * matching the backend helper, so a transient error only means the warning
+ * is not shown — it never blocks an intake.
+ */
+export async function hasActiveDoctorLink() {
+  try {
+    const result = await request('/my-doctors/active');
+    return {
+      hasActiveDoctor: result.hasActiveDoctor !== false,
+      doctorCount: result.doctorCount || 0,
+    };
+  } catch {
+    return { hasActiveDoctor: true, doctorCount: 0 };
+  }
+}
+
 /** PATIENT-facing: accept a pending doctor link request. */
 export async function acceptDoctorRequest(linkId) {
   return request(`/requests/${linkId}/accept`, { method: 'POST' });
@@ -170,6 +193,7 @@ export default {
   getDoctorPatientDetail,
   getDoctorPatientSummary,
   getPendingDoctorRequests,
+  hasActiveDoctorLink,
   acceptDoctorRequest,
   declineDoctorRequest,
   getDoctorPatientNotifications,

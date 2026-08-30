@@ -317,7 +317,7 @@ function IntakeQueueList({ sessions, isLoading, error, onSelect, onComplete, onR
         <div className="px-5 py-6 text-sm text-slate-400">Loading intake sessions…</div>
       ) : sessions.length === 0 ? (
         <div className="px-5 py-6 text-sm text-slate-400">
-          No patient intake sessions yet. Sessions appear here once a linked patient completes "Start Visit Intake".
+          No patient intake sessions yet. A session reaches this queue once a patient you're linked to completes "Start Visit Intake" — a walk-in can link themselves by entering your daily check-in code at the start of their intake.
         </div>
       ) : (
         <ul className="divide-y divide-slate-100">
