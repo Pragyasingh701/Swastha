@@ -39,7 +39,19 @@ async function notifySafely(args) {
 // linkDoctorToPatient lets the doctor send a fresh request once that
 // happens rather than treating the pair as already linked.
 
-const ACCESS_DURATION_MS = 24 * 60 * 60 * 1000;
+// Exported so every code path that moves a link INTO 'accepted' stamps the
+// same window from the same constant. Previously module-private, which is
+// how the clinic check-in flow (backend/routes/clinic.js's
+// upsertAcceptedLink) came to write status='accepted' with NO
+// access_expires_at at all: isAccessExpired() reads a null as "no expiry on
+// record" and returns false, so a check-in link silently granted PERMANENT
+// access while the remote request/accept flow correctly expired after 24h.
+export const ACCESS_DURATION_MS = 24 * 60 * 60 * 1000;
+
+/** The expiry instant for a link being accepted right now. */
+export function accessExpiryFromNow() {
+  return new Date(Date.now() + ACCESS_DURATION_MS).toISOString();
+}
 
 function isAccessExpired(link) {
   if (!link?.access_expires_at) return false;
@@ -625,7 +637,7 @@ async function resolveDoctorLinkRequest({ link, newStatus, resolvedByRole, resol
   if (newStatus === 'accepted') {
     // Access is time-boxed from the moment of acceptance, not permanent —
     // see the ACCESS EXPIRY note above this file's status-column comment.
-    updatePayload.access_expires_at = new Date(Date.now() + ACCESS_DURATION_MS).toISOString();
+    updatePayload.access_expires_at = accessExpiryFromNow();
   }
 
   const { data, error } = await supabase
