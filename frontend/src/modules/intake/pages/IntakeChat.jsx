@@ -147,6 +147,37 @@ const LANGUAGE_OPTIONS = [
   { code: "en-IN", label: "English", sublabel: "अंग्रेज़ी" },
 ];
 
+// Patient-facing chrome that is NOT model-generated, so it needs its own
+// translations or it reverts to English in an otherwise-Hindi session —
+// which is exactly what happened at the end of intake: every question was
+// Hindi and then the completion banner and its button were English. The
+// question text itself never needs an entry here; it arrives from the
+// backend already written in the session's language.
+const UI_TEXT = {
+  "hi-IN": {
+    backToDashboard: "डैशबोर्ड पर वापस जाएं",
+    disclaimer: "इसमें केवल वही दर्ज होता है जो आप बताते हैं — यह कोई रोग नहीं बताता और न ही कोई चिकित्सकीय सलाह देता है।",
+    thinking: "सोच रहे हैं...",
+    stillWorking: "अभी भी काम चल रहा है — इसमें थोड़ा ज़्यादा समय लग सकता है, कृपया प्रतीक्षा करें...",
+    typeAnswer: "अपना उत्तर लिखें...",
+    listening: "सुन रहे हैं...",
+    transcribing: "लिखा जा रहा है...",
+  },
+  "en-IN": {
+    backToDashboard: "Back to Dashboard",
+    disclaimer: "This only records what you tell us — it never diagnoses or gives medical advice.",
+    thinking: "Thinking...",
+    stillWorking: "Still working on it — this can take a bit longer than usual, hang tight...",
+    typeAnswer: "Type your answer...",
+    listening: "Listening...",
+    transcribing: "Transcribing...",
+  },
+};
+
+function uiText(language) {
+  return UI_TEXT[language] || UI_TEXT["hi-IN"];
+}
+
 // Pre-selected from browser locale, one-tap override (PRD §6). Anything
 // that isn't clearly English falls to Hindi: this is an Indian government
 // OPD context, so Hindi is the safer default when the locale is ambiguous.
@@ -160,9 +191,34 @@ function detectPreferredLanguage() {
   }
 }
 
+// ── Live (interim) transcription ────────────────────────────────────────
+// The recorded answer is still uploaded to /intake/transcribe on stop, and
+// Sarvam's result is still what gets used — it is the only path here that
+// handles Hinglish, which is the stated reason the ASR phase exists
+// (asrService.js's header). Sarvam's REST endpoint is single-blob with no
+// partial/interim results, and WebSocket streaming against it was
+// explicitly deferred as unproven on Render (asrService.js §8.1/§10), so
+// live text cannot come from the existing backend path without a provider
+// or transport change.
+//
+// What CAN provide it today, with no backend change and no extra API cost,
+// is the browser's own SpeechRecognition — it emits interim results while
+// the patient is still speaking, which is exactly the live-captioning UX
+// asked for. So it runs ALONGSIDE the existing MediaRecorder purely as a
+// live preview, and Sarvam's transcript overwrites that preview on stop.
+//
+// Deliberately a progressive enhancement, never a dependency: it is absent
+// in Firefox and in several Android WebViews, and in Chrome it round-trips
+// audio through Google's servers. If it is unavailable or errors, the
+// recording flow is byte-for-byte what it was before — record, stop,
+// upload, fill the field.
+function getSpeechRecognition() {
+  if (typeof window === "undefined") return null;
+  return window.SpeechRecognition || window.webkitSpeechRecognition || null;
+}
+
 // Mute is remembered across turns and across a page refresh, so a patient
 // who silenced the voice once doesn't have to re-mute on every question.
-const MUTE_STORAGE_KEY = "swastha_intake_muted";
 
 function readStoredMute() {
   try {
@@ -309,6 +365,18 @@ export default function IntakeChat() {
   const mediaRecorderRef = useRef(null);
   const audioChunksRef = useRef([]);
   const streamRef = useRef(null);
+  // Live-preview recognizer (see getSpeechRecognition). Held in a ref
+  // rather than state — it is an imperative object nothing renders off.
+  const recognitionRef = useRef(null);
+  // What the patient had already typed when recording started. The live
+  // preview is rendered as `typedBeforeRecording + interim`, so each
+  // interim update REPLACES the previous preview instead of appending to
+  // it — without this, "I have" -> "I have a" -> "I have a fever" would
+  // accumulate into "I haveI have aI have a fever".
+  const typedBeforeRecordingRef = useRef("");
+  // Interim text shown while speaking. Not the authoritative answer:
+  // Sarvam's transcript replaces it on stop.
+  const [liveTranscript, setLiveTranscript] = useState("");
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -536,6 +604,56 @@ export default function IntakeChat() {
   // The transcript lands in the SAME text field a typed answer uses, so
   // the patient reviews and edits before sending. There is deliberately no
   // separate confirmation dialog — the editable field is that step.
+  // Starts the browser's own recognizer for live interim text. Never
+  // throws into the caller and never blocks recording: any failure here
+  // just means no live preview, and the Sarvam path is untouched.
+  function startLivePreview() {
+    const SR = getSpeechRecognition();
+    if (!SR) return; // unsupported browser — silent, recording still works
+    try {
+      const recognition = new SR();
+      recognition.lang = language;
+      recognition.continuous = true;
+      recognition.interimResults = true;
+
+      recognition.onresult = (event) => {
+        // Rebuild the whole preview from every result each time rather than
+        // appending the latest one: interim results are REVISED as the
+        // recognizer hears more, so appending would duplicate the revised
+        // words instead of replacing them.
+        let text = "";
+        for (let i = 0; i < event.results.length; i += 1) {
+          text += event.results[i][0].transcript;
+        }
+        const preview = text.trim();
+        setLiveTranscript(preview);
+        const typed = typedBeforeRecordingRef.current;
+        const merged = typed ? `${typed} ${preview}` : preview;
+        setInput(merged.slice(0, MAX_MESSAGE_LENGTH));
+      };
+
+      // 'no-speech'/'aborted'/'not-allowed' all just mean no live preview.
+      // The recording itself is unaffected, and Sarvam still gets the audio.
+      recognition.onerror = () => {};
+
+      recognition.start();
+      recognitionRef.current = recognition;
+    } catch {
+      recognitionRef.current = null;
+    }
+  }
+
+  function stopLivePreview() {
+    const recognition = recognitionRef.current;
+    recognitionRef.current = null;
+    if (!recognition) return;
+    try {
+      recognition.stop();
+    } catch {
+      /* already stopped */
+    }
+  }
+
   async function startRecording() {
     setVoiceNote("");
     setError(null);
@@ -552,6 +670,12 @@ export default function IntakeChat() {
       recorder.onstop = handleRecordingStopped;
       recorder.start();
       setIsRecording(true);
+
+      // Snapshot what was already typed BEFORE any interim text arrives, so
+      // the live preview composes with it instead of overwriting it.
+      typedBeforeRecordingRef.current = input.trim();
+      setLiveTranscript("");
+      startLivePreview();
 
       // Speaking over the question is natural; keep the mic from picking
       // up our own TTS.
@@ -570,6 +694,7 @@ export default function IntakeChat() {
     } catch {
       /* already stopped */
     }
+    stopLivePreview();
     setIsRecording(false);
   }
 
@@ -589,15 +714,18 @@ export default function IntakeChat() {
     try {
       const { transcript } = await transcribeIntakeAudio(sessionId, blob);
       if (transcript) {
-        // Append rather than replace: if the patient had already typed
-        // something, silently destroying it would be worse than a slightly
-        // odd join they can edit.
-        setInput((prev) => {
-          const merged = prev.trim() ? `${prev.trim()} ${transcript}` : transcript;
-          return merged.slice(0, MAX_MESSAGE_LENGTH);
-        });
+        // Sarvam's transcript REPLACES whatever the live preview put in the
+        // box — the two describe the same speech, so appending would
+        // duplicate the whole answer. It composes against the text the
+        // patient had typed BEFORE recording (the same snapshot the live
+        // preview builds on), so anything they typed first still survives,
+        // which is what the original append-don't-replace note protects.
+        const typed = typedBeforeRecordingRef.current;
+        const merged = typed ? `${typed} ${transcript}` : transcript;
+        setInput(merged.slice(0, MAX_MESSAGE_LENGTH));
         setVoiceNote("");
       }
+      setLiveTranscript("");
     } catch (err) {
       // Never clears what the patient already typed.
       setVoiceNote(
@@ -614,6 +742,7 @@ export default function IntakeChat() {
   useEffect(() => {
     return () => {
       releaseMic();
+      stopLivePreview();
       audioRef.current?.pause();
       if (optionsTimerRef.current) clearTimeout(optionsTimerRef.current);
     };
@@ -1175,14 +1304,31 @@ export default function IntakeChat() {
                     <div className="flex items-center gap-2 text-slate-400 text-sm">
                       <Loader2 size={16} className="animate-spin" />
                       {sendingLongWait
-                        ? "Still working on it — this can take a bit longer than usual, hang tight..."
-                        : "Thinking..."}
+                        ? uiText(language).stillWorking
+                        : uiText(language).thinking}
                     </div>
                   )}
+                  {/* Completion marker. This used to repeat the closing
+                      message as a hardcoded English sentence, which is why
+                      a fully-Hindi session ended in English — and why the
+                      finalize step LOOKED like it had fired before the
+                      patient's medications answer was captured: the
+                      backend's own (correctly-ordered) closing message and
+                      this banner rendered as two nearly-identical bubbles
+                      at the bottom of the transcript, pushing the patient's
+                      answer up out of view. The answer was never lost —
+                      drug_allergy -> finalize is gated server-side on
+                      drugAllergyComplete(), which requires BOTH
+                      current_medications and allergies to be non-empty
+                      arrays before the section can advance at all. So this
+                      is now a plain status marker with no message text of
+                      its own: the closing message is the backend's, shown
+                      once, in the session's language, in its correct place
+                      in the transcript. */}
                   {done && (
                     <div className="flex items-center gap-2 text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-xl px-4 py-3 text-sm">
                       <CheckCircle2 size={16} />
-                      That's everything the doctor needs — please have a seat, you'll be called shortly.
+                      {language === "en-IN" ? "Intake complete" : "इंटेक पूरा हुआ"}
                     </div>
                   )}
                 </div>
@@ -1271,6 +1417,26 @@ export default function IntakeChat() {
                     </p>
                   )}
 
+                  {/* Live-captioning indicator. The interim words themselves
+                      go straight into the answer field (so the patient can
+                      edit them like anything else they typed); this only
+                      says the mic is live and echoes the current partial,
+                      which is what makes it read as real-time rather than
+                      as a field that fills in at the end. Absent entirely
+                      in browsers with no SpeechRecognition — there the
+                      recording flow is exactly as it was. */}
+                  {isRecording && (
+                    <p
+                      className="mb-2 text-xs text-blue-700 bg-blue-50 border border-blue-200 rounded-lg px-3 py-2 flex items-center gap-2"
+                      aria-live="polite"
+                    >
+                      <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse shrink-0" />
+                      <span className="truncate">
+                        {liveTranscript || uiText(language).listening}
+                      </span>
+                    </p>
+                  )}
+
                   <form onSubmit={handleSubmit} className="flex items-center gap-2">
                     {/* ONE speaker control: a mute toggle for autoplay of
                         new questions, with the icon reflecting the current
@@ -1322,7 +1488,13 @@ export default function IntakeChat() {
                           }
                         }}
                         maxLength={MAX_MESSAGE_LENGTH}
-                        placeholder={isRecording ? "Listening..." : isTranscribing ? "Transcribing..." : "Type your answer..."}
+                        placeholder={
+                          isRecording
+                            ? uiText(language).listening
+                            : isTranscribing
+                            ? uiText(language).transcribing
+                            : uiText(language).typeAnswer
+                        }
                         className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-200 focus:border-blue-400 "
                         disabled={sending}
                       />
@@ -1376,13 +1548,13 @@ export default function IntakeChat() {
                   onClick={() => navigate("/dashboard")}
                   className="self-start flex items-center justify-center gap-2 bg-blue-700 hover:bg-blue-800 text-white text-sm font-semibold px-5 py-2.5 rounded-xl transition-colors"
                 >
-                  Back to Dashboard
+                  {uiText(language).backToDashboard}
                 </button>
               )}
 
               <p className="flex items-center gap-1.5 text-xs text-slate-400 mt-3">
                 <ShieldCheck size={13} className="text-slate-400 shrink-0" />
-                This only records what you tell us — it never diagnoses or gives medical advice.
+                {uiText(language).disclaimer}
               </p>
             </>
           )}

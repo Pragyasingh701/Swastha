@@ -4,7 +4,7 @@ import supabase from '../config/supabase.js';
 import { resolveCheckinCode, getOrCreateTodayCode } from '../db/clinicCheckin.js';
 import { findUserById } from '../db/users.js';
 import { sendOTPEmail } from '../utils/mailer.js';
-import { isDoctorLinkedToPatient } from '../db/doctorPatients.js';
+import { accessExpiryFromNow } from '../db/doctorPatients.js';
 import { startIntakeSession } from '../rag/services/intakeService.js';
 import { synthesizeSpeech } from '../rag/services/ttsService.js';
 
@@ -326,13 +326,25 @@ router.get('/today-code', requireDoctorAuth, async (req, res) => {
  * approval (the remote-linking flow's whole point), which is the wrong
  * state transition here. This does the same idempotent upsert but writes
  * status='accepted' directly, matching isDoctorLinkedToPatient's gate.
+ *
+ * access_expires_at is stamped on BOTH branches below, from the same
+ * accessExpiryFromNow() the remote accept flow uses. It was previously
+ * omitted entirely here, which is an access-control bug rather than a
+ * cosmetic gap: isAccessExpired() reads a null access_expires_at as "no
+ * expiry on record" and returns false, so a link created by clinic
+ * check-in granted the doctor PERMANENT access to that patient's health
+ * data, while an otherwise-identical link created through the remote
+ * request/accept flow correctly lapsed after 24h. The two flows now agree.
  */
 async function upsertAcceptedLink({ doctorId, patientId }) {
   if (!supabase) throw new Error('Database connection is unavailable.');
 
-  const alreadyLinked = await isDoctorLinkedToPatient(doctorId, patientId);
-  if (alreadyLinked) return;
-
+  // Deliberately NOT short-circuiting on an already-linked pair the way
+  // this used to (`if (await isDoctorLinkedToPatient(...)) return;`). A
+  // patient physically checking in again at the clinic is a fresh in-person
+  // consent, and the doctor's 24h window should restart from that check-in
+  // — returning early left them on whatever window the previous link
+  // carried, or, for a row created before this fix, on no window at all.
   const { data: existingLink } = await supabase
     .from('doctor_patient')
     .select('id, status')
@@ -350,7 +362,12 @@ async function upsertAcceptedLink({ doctorId, patientId }) {
     // straight to 'accepted', matching PRD §3.1's "upsert ... to accepted".
     const { error } = await supabase
       .from('doctor_patient')
-      .update({ status: 'accepted', responded_at: nowIso, email_action_token: null })
+      .update({
+        status: 'accepted',
+        responded_at: nowIso,
+        email_action_token: null,
+        access_expires_at: accessExpiryFromNow(),
+      })
       .eq('id', existingLink.id);
     if (error) throw new Error(`upsertAcceptedLink: failed to accept existing link: ${error.message}`);
     return;
@@ -369,6 +386,7 @@ async function upsertAcceptedLink({ doctorId, patientId }) {
     status: 'accepted',
     created_at: nowIso,
     responded_at: nowIso,
+    access_expires_at: accessExpiryFromNow(),
   });
   if (error) throw new Error(`upsertAcceptedLink: failed to create accepted link: ${error.message}`);
 }
