@@ -1,5 +1,5 @@
-import React, { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import React, { useEffect, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 
 const FAQS = [
   {
@@ -69,6 +69,18 @@ function FAQItem({ question, answer }) {
 
 export default function LandingPage() {
   const navigate = useNavigate();
+  const { hash } = useLocation();
+
+  useEffect(() => {
+    if (hash !== "#faq") return;
+
+    const scrollToFaq = () => {
+      document.getElementById("faq")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    };
+
+    const frameId = window.requestAnimationFrame(scrollToFaq);
+    return () => window.cancelAnimationFrame(frameId);
+  }, [hash]);
 
   return (
     <div className="bg-background text-on-surface font-body-md selection:bg-primary/20">

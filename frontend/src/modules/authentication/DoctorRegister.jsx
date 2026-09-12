@@ -10,10 +10,13 @@ import {
   isValidFreeTextField,
   isValidFullName,
 } from "../../utils/formValidation";
+import PrivacyPolicyModal from "../../components/Common/PrivacyPolicyModal";
 
 export default function DoctorRegister() {
   const navigate = useNavigate();
   const { user, updateProfile, uploadDocument, setUserRole, logout } = useAuth();
+  const [showPrivacyPolicy, setShowPrivacyPolicy] = useState(false);
+  const [showTerms, setShowTerms] = useState(false);
 
   useEffect(() => {
     // Check if user has already completed registration
@@ -649,19 +652,21 @@ export default function DoctorRegister() {
               </button>
               <p className="text-center mt-6 font-body-sm text-body-sm text-on-surface-variant ">
                 By clicking "Complete Registration", you agree to our{" "}
-                <a className="text-primary hover:underline" href="#">
+                <button className="text-primary hover:underline" type="button" onClick={() => setShowTerms(true)}>
                   Terms of Service
-                </a>{" "}
+                </button>{" "}
                 and{" "}
-                <a className="text-primary hover:underline" href="#">
+                <button className="text-primary hover:underline" type="button" onClick={() => setShowPrivacyPolicy(true)}>
                   Privacy Policy
-                </a>
+                </button>
                 .
               </p>
             </div>
           </form>
         </div>
       </main>
+      {showPrivacyPolicy && <PrivacyPolicyModal onClose={() => setShowPrivacyPolicy(false)} />}
+      {showTerms && <PrivacyPolicyModal type="terms" onClose={() => setShowTerms(false)} />}
 
       {/* Footer */}
       <footer className="bg-surface-container-low p-12 mt-auto border-t border-outline-variant/50 ">

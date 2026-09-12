@@ -4,6 +4,7 @@ import { useAuth } from "../../context/AuthContext";
 import { startGoogleAuth } from "../../utils/googleAuth";
 import { sanitizePhoneInput, isValidIndianPhone, isValidEmail, isValidFullName } from "../../utils/formValidation";
 import swasthaLogo from "../../assets/swastha-logo.png"; // adjust this path to wherever you keep the logo asset
+import PrivacyPolicyModal from "../../components/Common/PrivacyPolicyModal";
 
 export default function Register() {
   const navigate = useNavigate();
@@ -20,6 +21,8 @@ export default function Register() {
   const [isSuccess, setIsSuccess] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
   const [showLoginPrompt, setShowLoginPrompt] = useState(false);
+  const [showPrivacyPolicy, setShowPrivacyPolicy] = useState(false);
+  const [showTerms, setShowTerms] = useState(false);
 
   const handleChange = (e) => {
     const { id, value } = e.target;
@@ -298,11 +301,15 @@ export default function Register() {
                 <label className="font-body-sm text-body-sm text-on-surface-variant leading-tight" htmlFor="terms">
                   I agree to the{" "}
                   <a className="text-primary hover:underline font-semibold" href="#">
-                    Terms of Service
+                    <button className="text-primary hover:underline font-medium" type="button" onClick={() => setShowTerms(true)}>
+                      Terms of Service
+                    </button>
                   </a>{" "}
                   and{" "}
                   <a className="text-primary hover:underline font-semibold" href="#">
-                    Privacy Policy
+                    <button className="text-primary hover:underline font-medium" type="button" onClick={() => setShowPrivacyPolicy(true)}>
+                      Privacy Policy
+                    </button>
                   </a>
                   .
                 </label>
@@ -385,6 +392,8 @@ export default function Register() {
           </div>
         </section>
       </main>
+      {showPrivacyPolicy && <PrivacyPolicyModal onClose={() => setShowPrivacyPolicy(false)} />}
+      {showTerms && <PrivacyPolicyModal type="terms" onClose={() => setShowTerms(false)} />}
 
       {/* Footer Component (Minimal) */}
       <footer className="fixed bottom-0 left-0 right-0 p-4 flex justify-between items-center z-50 pointer-events-none">
