@@ -10,11 +10,13 @@
     "build": "vite build frontend",
     "build:frontend": "vite build frontend",
     "start": "node backend/server.js",
-    "start:backend": "node backend/server.js"
+    "start:backend": "node backend/server.js",
+    "test": "node --test backend/test/*.test.js"
   },
   "dependencies": {
     "@langchain/core": "^1.2.8",
     "@supabase/supabase-js": "^2.110.7",
+    "bcryptjs": "^2.4.3",
     "concurrently": "^10.0.3",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",

@@ -1,4 +1,7 @@
+import bcrypt from 'bcryptjs';
 import supabase from '../config/supabase.js';
+
+const PASSWORD_HASH_ROUNDS = 12;
 
 // M4 cutover (Phase 3/4 of the DB reorg): `users` has been split into
 // `patients`, `doctors`, and `pending_registrations` (see db-reorg-plan.md).
@@ -185,7 +188,13 @@ export const createOrUpdateUser = async (userData) => {
     : (existingUser?.name || existingUser?.fullName || normalizedEmail.split('@')[0]);
 
   const picture = userData.picture || existingUser?.picture || null;
-  const passwordHash = userData.password || existingUser?.password_hash || null;
+  // Only hash when a fresh raw password came in on this call — every call
+  // site that carries forward an existing user (spreading `...existingUser`
+  // or `...user`) never has a bare `password` key, only `password_hash`, so
+  // this can't re-hash an already-hashed value.
+  const passwordHash = userData.password
+    ? await bcrypt.hash(userData.password, PASSWORD_HASH_ROUNDS)
+    : (existingUser?.password_hash || null);
   const authProvider = userData.authProvider || userData.auth_provider || existingUser?.authProvider || existingUser?.auth_provider || 'email';
 
   const phone = (userData.phone !== undefined && userData.phone !== null && userData.phone !== '')
@@ -468,8 +477,9 @@ export const updateUserPassword = async (email, newPassword) => {
   const targetTable = tableForRole(existingUser.role);
 
   try {
+    const passwordHash = await bcrypt.hash(newPassword, PASSWORD_HASH_ROUNDS);
     await supabase.from(targetTable)
-      .update({ password_hash: newPassword, updated_at: new Date().toISOString() })
+      .update({ password_hash: passwordHash, updated_at: new Date().toISOString() })
       .eq('id', existingUser.id);
   } catch (e) {
     console.warn('Supabase updateUserPassword warning:', e.message);

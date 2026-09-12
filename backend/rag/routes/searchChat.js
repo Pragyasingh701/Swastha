@@ -93,7 +93,7 @@ router.post('/', requireAuth, async (req, res) => {
     }
 
     console.error(
-      `[POST /api/search/chat] failed for caller ${callerId}, target ${targetUserId}, session ${sessionId}, query="${query}":`,
+      `[POST /api/search/chat] failed for caller ${callerId}, target ${targetUserId}, session ${sessionId}:`,
       err
     );
     return res.status(500).json({

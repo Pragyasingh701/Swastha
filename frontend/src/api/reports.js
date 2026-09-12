@@ -1,110 +1,74 @@
-﻿import { getAuthHeader } from './client';
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || `${window.location.origin}/api`;
+import { apiRequest, BASE_URL } from './client';
+import { attachEncryptedFields } from './pii/multipart.js';
+import { encryptParamsEnvelope } from './pii/walk.js';
 
-function getStoredToken() {
-  try {
-    return localStorage.getItem('swastha_token') || sessionStorage.getItem('swastha_token');
-  } catch {
-    return null;
-  }
+function request(path, options = {}, token) {
+  return apiRequest(options.method || 'GET', `/reports${path}`, { ...options, token });
 }
 
-async function request(path, options = {}, token) {
-  const authToken = token || getStoredToken();
-  const headers = {
-    ...(options.headers || {}),
-    ...(getAuthHeader(authToken)),
-  };
-
-  const response = await fetch(`${API_BASE_URL}/reports${path}`, {
-    ...options,
-    headers,
-  });
-
-  const data = await response.json();
-  if (!response.ok) {
-    const error = new Error(data.message || 'Report request failed');
-    error.details = data;
-    throw error;
-  }
-
-  return data;
-}
-
-function preparePayload(reportData, file) {
+// FormData bodies aren't run through apiRequest's automatic per-field
+// encryption (that only applies to plain JSON objects) — when a file is
+// attached, the non-file fields are bundled through attachEncryptedFields
+// instead, which uses the same sensitive-field walker.
+async function preparePayload(reportData, file) {
   const targetFile = file || (reportData?.file instanceof File ? reportData.file : null);
+  const { file: _ignored, ...cleanData } = reportData || {};
+
   if (!targetFile) {
-    const { file: _ignored, ...cleanData } = reportData || {};
-    return {
-      body: JSON.stringify(cleanData),
-      headers: { 'Content-Type': 'application/json' },
-    };
+    return { body: cleanData };
   }
 
   const formData = new FormData();
   formData.append('file', targetFile);
-
-  if (reportData) {
-    Object.keys(reportData).forEach((key) => {
-      if (key === 'file') return;
-      const value = reportData[key];
-      if (value !== undefined && value !== null) {
-        if (typeof value === 'object') {
-          formData.append(key, JSON.stringify(value));
-        } else {
-          formData.append(key, String(value));
-        }
-      }
-    });
-  }
-
-  return {
-    body: formData,
-    headers: {},
-  };
+  await attachEncryptedFields(formData, cleanData, BASE_URL);
+  return { body: formData };
 }
 
 export async function getTimelineReports(token, memberEmail, memberUserId) {
-  const params = new URLSearchParams();
-
-  if (memberEmail) {
-    params.set('email', memberEmail);
+  const headers = {};
+  if (memberEmail || memberUserId) {
+    const params = {};
+    if (memberEmail) params.email = memberEmail;
+    if (memberUserId) params.userId = memberUserId;
+    // email/userId used to ride in the URL query string, which is more
+    // exposed to incidental logging (proxy/access logs, browser history)
+    // than a request body or header — moved to one encrypted header value
+    // instead. backend/routes/reports.js still just reads req.query.email/
+    // req.query.userId, unchanged: the wire-crypto middleware decrypts this
+    // header and merges it into req.query before the route ever sees it.
+    headers['X-Enc-Params'] = await encryptParamsEnvelope(params, BASE_URL);
   }
-
-  if (memberUserId) {
-    params.set('userId', memberUserId);
-  }
-
-  const query = params.toString() ? `?${params.toString()}` : '';
-  return request(query || '/', {}, token);
+  return request('/', { headers }, token);
 }
 
 export async function createTimelineReport(reportData, token, file) {
-  const { body, headers } = preparePayload(reportData, file);
+  const { body } = await preparePayload(reportData, file);
   return request('/', {
     method: 'POST',
-    headers,
     body,
   }, token);
 }
 
 export async function updateTimelineReport(reportId, reportData, token, file) {
-  const { body, headers } = preparePayload(reportData, file);
+  const { body } = await preparePayload(reportData, file);
   return request(`/${encodeURIComponent(reportId)}`, {
     method: 'PUT',
-    headers,
     body,
   }, token);
 }
 
 export async function deleteTimelineReport(reportId, token, targetUserId, targetEmail) {
-  const params = new URLSearchParams();
-  if (targetUserId) params.set('userId', targetUserId);
-  if (targetEmail) params.set('email', targetEmail);
-  const query = params.toString() ? `?${params.toString()}` : '';
+  const headers = {};
+  if (targetUserId || targetEmail) {
+    const params = {};
+    if (targetUserId) params.userId = targetUserId;
+    if (targetEmail) params.email = targetEmail;
+    headers['X-Enc-Params'] = await encryptParamsEnvelope(params, BASE_URL);
+  }
 
-  return request(`/${encodeURIComponent(reportId)}${query}`, {
+  return request(`/${encodeURIComponent(reportId)}`, {
     method: 'DELETE',
+    headers,
   }, token);
 }
 

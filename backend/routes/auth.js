@@ -1,6 +1,7 @@
 import express from 'express';
 import { OAuth2Client } from 'google-auth-library';
 import jwt from 'jsonwebtoken';
+import bcrypt from 'bcryptjs';
 import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
@@ -353,7 +354,7 @@ router.post('/login', async (req, res) => {
   }
 
   // Password Verification
-  if (user.password_hash !== password) {
+  if (!(await bcrypt.compare(password, user.password_hash))) {
     return res.status(401).json({ message: 'Incorrect password. Please try again.' });
   }
 
@@ -1106,7 +1107,7 @@ router.post('/change-password/confirm', authenticateToken, async (req, res) => {
   }
 
   const existingUser = await findUserByEmail(email);
-  if (existingUser && existingUser.password_hash && existingUser.password_hash === newPassword) {
+  if (existingUser && existingUser.password_hash && (await bcrypt.compare(newPassword, existingUser.password_hash))) {
     return res.status(400).json({ message: 'This password is already being used. Please use a different password.' });
   }
 
@@ -1207,7 +1208,7 @@ router.post('/reset-password', async (req, res) => {
 
   // Check if new password is the same as previous password
   const existingUser = await findUserByEmail(targetEmail);
-  if (existingUser && existingUser.password_hash && existingUser.password_hash === newPassword) {
+  if (existingUser && existingUser.password_hash && (await bcrypt.compare(newPassword, existingUser.password_hash))) {
     return res.status(400).json({ message: 'This password is already being used. Please use a different password.' });
   }
 
@@ -1219,9 +1220,15 @@ router.post('/reset-password', async (req, res) => {
 
 /**
  * GET /api/auth/users/:userId
- * Looks up an application user by their ID or patient_code.
+ * Looks up the AUTHENTICATED CALLER's own record by their ID or
+ * patient_code. Previously had no auth middleware at all and would return
+ * any user's full record (name/dob/phone/gender/blood_group/address, and
+ * pre-bcrypt, password_hash) to anyone who could guess an id/patient_code —
+ * scoped here to the caller only. A mismatch returns the same 404 as "not
+ * found" rather than 403, so the response can't be used to confirm whether
+ * a given id/patient_code belongs to someone else.
  */
-router.get('/users/:userId', async (req, res) => {
+router.get('/users/:userId', authenticateToken, async (req, res) => {
   const { userId } = req.params;
   if (!userId) {
     return res.status(400).json({ message: 'User ID is required.' });
@@ -1233,7 +1240,7 @@ router.get('/users/:userId', async (req, res) => {
     // patient_code (the only table that has that column post-split).
     const user = await findUserByIdOrPatientCode(userId);
 
-    if (!user) {
+    if (!user || user.id !== req.user.userId) {
       return res.status(404).json({ message: 'No user found with this ID.' });
     }
 

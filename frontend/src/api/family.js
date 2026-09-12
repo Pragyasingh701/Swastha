@@ -1,46 +1,7 @@
-﻿import { getAuthHeader } from './client';
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5001/api';
+import { apiRequest } from './client';
 
-function getStoredAuth() {
-  try {
-    const localToken = localStorage.getItem('swastha_token');
-    const localUser = localStorage.getItem('swastha_user');
-    const sessionToken = sessionStorage.getItem('swastha_token');
-    const sessionUser = sessionStorage.getItem('swastha_user');
-
-    const token = localToken || sessionToken;
-    const user = localUser ? JSON.parse(localUser) : sessionUser ? JSON.parse(sessionUser) : null;
-    return { token, user };
-  } catch {
-    return { token: null, user: null };
-  }
-}
-
-async function request(path, options = {}, explicitToken = null) {
-  const { token: storedToken } = getStoredAuth();
-  const token = explicitToken || storedToken;
-  const headers = {
-    'Content-Type': 'application/json',
-    ...(options.headers || {}),
-    ...(getAuthHeader(token)),
-  };
-
-  const response = await fetch(`${API_BASE_URL}/family${path}`, {
-    ...options,
-    headers,
-  });
-
-  const data = await response.json();
-  if (!response.ok) {
-    const error = new Error(data.message || 'Family Vault request failed');
-    error.fieldErrors = data.fieldErrors || null;
-    error.errorCode = data.errorCode || null;
-    error.errorHint = data.errorHint || null;
-    error.errorDetails = data.errorDetails || null;
-    throw error;
-  }
-
-  return data;
+function request(path, options = {}, token) {
+  return apiRequest(options.method || 'GET', `/family${path}`, { ...options, token });
 }
 
 export async function getFamilyDashboard(token) {
@@ -64,21 +25,21 @@ export async function getFamilyMembers(token) {
 export async function createFamilyMember(memberData, token) {
   return request('/members', {
     method: 'POST',
-    body: JSON.stringify(memberData),
+    body: memberData,
   }, token);
 }
 
 export async function sendFamilyMemberAuthorization(memberData, token) {
   return request('/members/authorize', {
     method: 'POST',
-    body: JSON.stringify(memberData),
+    body: memberData,
   }, token);
 }
 
 export async function updateFamilyMember(memberId, memberData, token) {
   return request(`/members/${memberId}`, {
     method: 'PATCH',
-    body: JSON.stringify(memberData),
+    body: memberData,
   }, token);
 }
 

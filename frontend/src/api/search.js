@@ -1,46 +1,27 @@
-﻿// Talks to the standalone rag/ service (separate process/port from
-// backend/) — see rag/README.md. Uses the same stored JWT as the rest of
-// the app; the rag service verifies it itself.
-const RAG_BASE_URL = import.meta.env.VITE_RAG_BASE_URL || 'http://localhost:3010/api';
-import { getAuthHeader } from './client';
+// Talks to the rag/ sub-app, mounted inside this same backend process at
+// /rag (see backend/rag/app.js) — not a separate service, despite the
+// dedicated env var below.
+import { apiRequest, getAuthHeader } from './client';
+import { decryptPiiFields } from './pii/walk.js';
+import { ensureSession } from './pii/session.js';
 
-function getStoredToken() {
-  try {
-    return localStorage.getItem('swastha_token') || sessionStorage.getItem('swastha_token');
-  } catch {
-    return null;
-  }
-}
+const RAG_BASE_URL = import.meta.env.VITE_RAG_BASE_URL || 'http://localhost:5001/rag/api';
 
-async function request(path, options = {}) {
-  const token = getStoredToken();
-  const headers = {
-    'Content-Type': 'application/json',
-    ...(options.headers || {}),
-    ...(getAuthHeader(token)),
-  };
-
-  const response = await fetch(`${RAG_BASE_URL}${path}`, { ...options, headers });
-  const data = await response.json();
-  if (!response.ok) {
-    const error = new Error(data.error || data.message || 'Search request failed');
-    error.details = data;
-    throw error;
-  }
-  return data;
+function request(path, options = {}) {
+  return apiRequest(options.method || 'GET', path, { ...options, baseUrl: RAG_BASE_URL });
 }
 
 export async function searchReports(query) {
   return request('/search', {
     method: 'POST',
-    body: JSON.stringify({ query }),
+    body: { query },
   });
 }
 
 export async function indexReport(report) {
   return request('/reports/index', {
     method: 'POST',
-    body: JSON.stringify(report),
+    body: report,
   });
 }
 
@@ -53,32 +34,36 @@ export async function removeReportFromIndex(reportId) {
 export async function searchReportsConversational(query, sessionId, patientUserId) {
   return request('/search/chat', {
     method: 'POST',
-    body: JSON.stringify({
+    body: {
       query,
       session_id: sessionId,
       ...(patientUserId ? { patient_user_id: patientUserId } : {}),
-    }),
+    },
   });
 }
 
 export async function clearConversation(sessionId, patientUserId) {
   return request(`/search/chat/${encodeURIComponent(sessionId)}`, {
     method: 'DELETE',
-    body: JSON.stringify(patientUserId ? { patient_user_id: patientUserId } : {}),
+    body: patientUserId ? { patient_user_id: patientUserId } : {},
   });
 }
 
+// Not routed through request() above: this is a multipart upload (no PII
+// field of its own — just the file), so it only needs the response side
+// of the wire-crypto boundary, applied manually here.
 export async function extractReportFromFile(file) {
-  const token = getStoredToken();
   const form = new FormData();
   form.append('file', file);
 
+  const { sessionId } = await ensureSession(RAG_BASE_URL);
   const response = await fetch(`${RAG_BASE_URL}/extract`, {
     method: 'POST',
-    headers: token ? getAuthHeader(token) : undefined,
+    headers: { ...getAuthHeader(), 'X-Enc-Session-Id': sessionId },
     body: form, // no Content-Type header — browser sets the multipart boundary itself
   });
-  const data = await response.json();
+  let data = await response.json();
+  data = await decryptPiiFields(data, RAG_BASE_URL);
   if (!response.ok) {
     const error = new Error(data.error || data.message || 'Extraction request failed');
     error.details = data;

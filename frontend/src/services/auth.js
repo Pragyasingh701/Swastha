@@ -1,6 +1,4 @@
-﻿import { apiGet, apiPost, getAuthHeader } from '../api/client';
-
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5001/api';
+import { apiGet, apiPost, apiRequest } from '../api/client';
 
 export const authService = {
   async login(email, password) {
@@ -28,23 +26,13 @@ export const authService = {
   },
 
   async updateProfile(profileData, token) {
-    // apiPost attaches stored token; pass explicit header when token provided
-    const headers = token ? getAuthHeader(token) : undefined;
-    return apiPost('/auth/profile', profileData, { headers });
+    return apiPost('/auth/profile', profileData, { token });
   },
 
   async uploadDocument(file, token) {
     const formData = new FormData();
     formData.append('file', file);
-    const headers = token ? getAuthHeader(token) : getAuthHeader();
-    const response = await fetch(`${API_BASE_URL}/auth/upload`, {
-      method: 'POST',
-      headers: headers && Object.keys(headers).length ? headers : undefined,
-      body: formData,
-    });
-    const data = await response.json();
-    if (!response.ok) throw new Error(data.message || 'Document upload failed');
-    return data;
+    return apiRequest('POST', '/auth/upload', { body: formData, token });
   },
 
   async forgotPassword(email) {
@@ -52,7 +40,7 @@ export const authService = {
   },
 
   async verifyResetToken(token) {
-    return apiGet(`/auth/verify-reset-token?token=${encodeURIComponent(token)}`);
+    return apiGet('/auth/verify-reset-token', { query: { token } });
   },
 
   async resetPassword(token, newPassword) {
@@ -60,28 +48,28 @@ export const authService = {
   },
 
   async sendChangePasswordOTP(token) {
-    return apiPost('/auth/change-password/send-otp', {}, { headers: getAuthHeader(token) });
+    return apiPost('/auth/change-password/send-otp', {}, { token });
   },
 
   async verifyChangePasswordOTP(otpCode, token) {
-    return apiPost('/auth/change-password/verify-otp', { otpCode }, { headers: getAuthHeader(token) });
+    return apiPost('/auth/change-password/verify-otp', { otpCode }, { token });
   },
 
   async confirmChangePassword(changeToken, newPassword, token) {
-    return apiPost('/auth/change-password/confirm', { changeToken, newPassword }, { headers: getAuthHeader(token) });
+    return apiPost('/auth/change-password/confirm', { changeToken, newPassword }, { token });
   },
 
   async deleteAccount(token) {
-    return apiPost('/auth/user', {}, { headers: getAuthHeader(token), method: 'DELETE' });
+    return apiPost('/auth/user', {}, { token, method: 'DELETE' });
   },
 
   async getUserById(userId, token) {
-    return apiGet(`/auth/users/${encodeURIComponent(userId)}`, { headers: getAuthHeader(token) });
+    return apiGet(`/auth/users/${encodeURIComponent(userId)}`, { token });
   },
 
   async getProfile(token) {
     try {
-      const data = await apiGet('/auth/me', { headers: getAuthHeader(token) });
+      const data = await apiGet('/auth/me', { token });
       return data;
     } catch (err) {
       return null;

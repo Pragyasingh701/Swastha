@@ -1,39 +1,20 @@
 // Module A (Conversational History Engine) — talks to the rag/ sub-app's
 // intake routes (backend/rag/routes/intake.js), same merged server as
-// search.js. Uses the same stored JWT as the rest of the app.
+// search.js.
+import { apiRequest, getAuthHeader } from './client';
+import { decryptPiiFields } from './pii/walk.js';
+import { ensureSession } from './pii/session.js';
+
 const RAG_BASE_URL = import.meta.env.VITE_RAG_BASE_URL || 'http://localhost:5001/rag/api';
-import { getAuthHeader } from './client';
 
-function getStoredToken() {
-  try {
-    return localStorage.getItem('swastha_token') || sessionStorage.getItem('swastha_token');
-  } catch {
-    return null;
-  }
-}
-
-async function request(path, options = {}) {
-  const token = getStoredToken();
-  const headers = {
-    'Content-Type': 'application/json',
-    ...(options.headers || {}),
-    ...(getAuthHeader(token)),
-  };
-
-  const response = await fetch(`${RAG_BASE_URL}${path}`, { ...options, headers });
-  const data = await response.json();
-  if (!response.ok) {
-    const error = new Error(data.error || data.message || 'Intake request failed');
-    error.details = data;
-    throw error;
-  }
-  return data;
+function request(path, options = {}) {
+  return apiRequest(options.method || 'GET', path, { ...options, baseUrl: RAG_BASE_URL });
 }
 
 export async function startIntake(language) {
   return request('/intake/start', {
     method: 'POST',
-    body: JSON.stringify(language ? { language } : {}),
+    body: language ? { language } : {},
   });
 }
 
@@ -61,25 +42,28 @@ export async function resumeIntake(sessionId) {
  * only the (possibly corrected) text is then sent through sendIntakeTurn
  * exactly as a typed answer would be.
  *
- * Not routed through request() above: that helper sets a JSON content-type
- * and stringifies the body, whereas this needs multipart with the browser
- * setting its own boundary.
+ * Not routed through request() above: that helper JSON-encodes a plain
+ * object body, whereas this needs multipart with the browser setting its
+ * own boundary — and there's no PII field of its own here (just audio +
+ * session_id), so only the response side of the wire-crypto boundary
+ * applies, done manually below.
  */
 export async function transcribeIntakeAudio(sessionId, audioBlob) {
-  const token = getStoredToken();
   const form = new FormData();
   // Filename is required by some servers to infer type; the extension is
   // cosmetic since the backend trusts the blob's MIME type.
   form.append('file', audioBlob, 'answer.webm');
   form.append('session_id', sessionId);
 
+  const { sessionId: encSessionId } = await ensureSession(RAG_BASE_URL);
   const response = await fetch(`${RAG_BASE_URL}/intake/transcribe`, {
     method: 'POST',
-    headers: { ...(getAuthHeader(token)) },
+    headers: { ...getAuthHeader(), 'X-Enc-Session-Id': encSessionId },
     body: form,
   });
 
-  const data = await response.json();
+  let data = await response.json();
+  data = await decryptPiiFields(data, RAG_BASE_URL);
   if (!response.ok) {
     const error = new Error(data.error || 'Could not transcribe audio');
     error.code = data.error;
@@ -92,14 +76,14 @@ export async function transcribeIntakeAudio(sessionId, audioBlob) {
 export async function sendIntakeTurn(sessionId, message) {
   return request('/intake/turn', {
     method: 'POST',
-    body: JSON.stringify({ session_id: sessionId, message }),
+    body: { session_id: sessionId, message },
   });
 }
 
 export async function finalizeIntake(sessionId) {
   return request('/intake/finalize', {
     method: 'POST',
-    body: JSON.stringify({ session_id: sessionId }),
+    body: { session_id: sessionId },
   });
 }
 
@@ -111,7 +95,7 @@ export async function finalizeIntake(sessionId) {
 export async function replayIntakeAudio(sessionId, text) {
   return request('/intake/replay-audio', {
     method: 'POST',
-    body: JSON.stringify({ session_id: sessionId, text }),
+    body: { session_id: sessionId, text },
   });
 }
 

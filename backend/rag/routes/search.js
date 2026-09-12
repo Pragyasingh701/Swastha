@@ -29,7 +29,7 @@ router.post('/', requireAuth, async (req, res) => {
   } catch (err) {
     // Healthcare data: fail loudly, log full detail server-side, but don't
     // leak internals (stack traces, raw DB errors) to the client.
-    console.error(`[POST /api/search] failed for user ${userId}, query="${query}":`, err);
+    console.error(`[POST /api/search] failed for user ${userId}:`, err);
     return res.status(500).json({
       error: 'Search failed. Please try again; if this persists, contact support.',
     });

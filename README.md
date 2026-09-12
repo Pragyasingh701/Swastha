@@ -93,8 +93,8 @@ Swastha/
 
 **Patients and doctors are separate tables**, not a shared `users` table with a role column — that
 split (`patients` / `doctors` / `pending_registrations`, replacing the old single `users` table)
-landed in a dedicated DB reorg; see `db-schema-current.md`, `db-reorg-plan.md`, and
-`supabase/migrations/` at the repo root for the full history if you need it.
+landed in a dedicated DB reorg; see `supabase/migrations/` at the repo root for the migration
+history if you need it.
 
 `reports`, `report_embeddings`, `vault_table`, and `family_members` all reference `patients.id` via
 a **`patient_id`** column (renamed from `user_id` in the same reorg) — grep the codebase for
@@ -102,11 +102,11 @@ a **`patient_id`** column (renamed from `user_id` in the same reorg) — grep th
 
 ⚠️ **`doctor_patient`, `vault_table`, `family_members`, and `notifications` have no `CREATE TABLE`
 migration in this repo** — they were created by hand in the Supabase dashboard before migrations
-were adopted, so the definitions below are reconstructed from `db-schema-current.md`'s verified
-`pg_dump` capture and the application code (`backend/db/*.js`), not copied from a migration file.
-Cross-check against **Supabase Dashboard → Table Editor** before relying on this to bootstrap a
-fresh project. (`patients`, `doctors`, `pending_registrations`, `reports`' FKs/indexes, and
-`report_embeddings` *do* have real migrations — those blocks below are copied verbatim.)
+were adopted, so the definitions below are reconstructed from a verified `pg_dump` capture and the
+application code (`backend/db/*.js`), not copied from a migration file. Cross-check against
+**Supabase Dashboard → Table Editor** before relying on this to bootstrap a fresh project.
+(`patients`, `doctors`, `pending_registrations`, `reports`' FKs/indexes, and `report_embeddings`
+*do* have real migrations — those blocks below are copied verbatim.)
 
 Run the following in your **Supabase Dashboard > SQL Editor** to construct the schema:
 
@@ -347,14 +347,63 @@ $$;
 ```
 
 ⚠️ **RLS note**: every table above gets Row Level Security auto-enabled with **zero policies** the
-moment it's created (an `ensure_rls` event trigger in this Supabase project does this automatically
-— see `db-schema-current.md`). That means **deny-all** to the `anon`/`authenticated` keys; the app
+moment it's created (an `ensure_rls` event trigger in this Supabase project does this automatically).
+That means **deny-all** to the `anon`/`authenticated` keys; the app
 only works because both the main backend code and the RAG sub-app connect with `SUPABASE_SERVICE_ROLE_KEY`, which
 bypasses RLS. There is no database-level scoping — every query in the codebase must manually filter
 by `patient_id`/`recipient_id`/etc. If you ever add a direct browser→Supabase call, it will silently
 return nothing until real RLS policies are written.
 
 ---
+
+## 🔒 Wire-format PII encryption
+
+Designated sensitive fields (name, email, phone, DOB, address, and similar —
+see `backend/config/sensitiveFields.js` and its frontend mirror,
+`frontend/src/api/pii/fields.js`, the single source of truth for the field
+list) are encrypted in every request/response body between the frontend and
+backend, so a passive observer of the *wire* — a browser DevTools Network
+tab, a HAR export handed to a vendor, a TLS-terminating corporate/debugging
+proxy, or a future logging/APM/analytics integration that happens to record
+raw bodies — sees ciphertext (`{ "__enc": 1, "iv": "...", "data": "...",
+"wasSerialized": false }`) instead of plaintext for those fields. Everything
+else in a request/response — structure, non-sensitive fields, status codes —
+is untouched.
+
+Mechanism: a per-browser-tab AES-256-GCM session key, established once via
+an ECDH P-256 handshake (`POST /api/crypto/handshake`, no auth required —
+it has to work before login) and native WebCrypto only on both sides
+(`crypto.webcrypto` in Node, `window.crypto.subtle` in the browser — zero
+new crypto dependency). `backend/middleware/wireCrypto.js` decrypts matching
+request fields immediately after body-parsing and transparently encrypts
+matching response fields by wrapping `res.json` — no controller, route, or
+DB code anywhere had to change. `frontend/src/api/client.js`'s `apiRequest`
+does the same on the way out/in, so component code reads and writes plain
+JS values throughout.
+
+**What this does not protect against** (read this before treating it as a
+stronger guarantee than it is):
+- **Network eavesdropping** — HTTPS/TLS already fully encrypts this traffic
+  in transit; this feature is about what's visible *at the endpoints* of
+  that tunnel (a browser's own DevTools, a proxy that terminates and
+  re-issues TLS, a log line), not about adding confidentiality TLS doesn't
+  already provide.
+- **A fully compromised or malicious client** — the decryption key and logic
+  ship in the page's own JavaScript. Anyone who controls the browser
+  environment (a malicious extension, a modified build, direct console
+  access) can read the same plaintext the app itself needs to render.
+- **Anything the UI has to display** — if a screen shows a user's own
+  name/email/phone, that value is necessarily decrypted into the DOM/React
+  state to be shown, so it's visible there (Elements tab, a screenshot,
+  React DevTools) regardless of what the Network tab shows for the same
+  request.
+- **AI-generated narrative text** (`answer`, `summary`, `insights`, and
+  similar free-text fields from the `/rag` search/summarize endpoints) —
+  deliberately not field-encrypted; see the comment in
+  `backend/config/sensitiveFields.js` for why.
+- **Database/storage security** — entirely unrelated and unchanged. Data is
+  stored in Supabase exactly as it always was; this is a wire-format-only
+  concern layered on top, not an at-rest encryption scheme.
 
 ## ⚠️ RAG is no longer a separate service
 
