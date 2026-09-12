@@ -1,38 +1,7 @@
-import { getAuthHeader } from '../api/client';
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5001/api';
+import { apiRequest } from '../api/client';
 
-function getStoredAuth() {
-  try {
-    const localToken = localStorage.getItem('swastha_token');
-    const sessionToken = sessionStorage.getItem('swastha_token');
-    return {
-      token: localToken || sessionToken || null,
-    };
-  } catch {
-    return { token: null };
-  }
-}
-
-async function request(path, options = {}) {
-  const { token } = getStoredAuth();
-  const headers = {
-    'Content-Type': 'application/json',
-    ...(options.headers || {}),
-    ...(getAuthHeader(token)),
-  };
-
-  const response = await fetch(`${API_BASE_URL}/doctor-patients${path}`, {
-    ...options,
-    headers,
-    ...(options.body ? { body: JSON.stringify(options.body) } : {}),
-  });
-
-  const data = await response.json().catch(() => ({}));
-  if (!response.ok) {
-    throw new Error(data.message || 'Doctor patients request failed');
-  }
-
-  return data;
+function request(path, options = {}) {
+  return apiRequest(options.method || 'GET', `/doctor-patients${path}`, options);
 }
 
 export async function getDoctorPatients() {

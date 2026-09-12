@@ -31,7 +31,7 @@ async function sendEmailViaBrevo(to, subject, html) {
     });
 
     if (res.ok) {
-      console.log(`[Brevo HTTPS Mailer] Email delivered successfully to ${to}`);
+      console.log('[Brevo HTTPS Mailer] Email delivered successfully.');
       return true;
     }
 
@@ -60,7 +60,7 @@ export const sendOTPEmail = async (email, otpCode) => {
   `;
 
   await sendEmailViaBrevo(email, subject, html);
-  console.log(`📧 [SWASTHA MAILER] Verification code generated for ${email}`);
+  console.log('📧 [SWASTHA MAILER] Verification code generated and sent.');
 };
 
 export const sendPasswordResetEmail = async (email, resetToken) => {

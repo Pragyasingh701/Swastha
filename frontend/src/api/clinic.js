@@ -3,34 +3,10 @@
 // doctor-patients calls, NOT the /rag/api base api/intake.js uses — see
 // backend/routes/clinic.js's header comment for why these routes live in
 // the main backend rather than the rag/ sub-app).
-import { getAuthHeader } from './client';
+import { apiRequest } from './client';
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5001/api';
-
-function getStoredToken() {
-  try {
-    return localStorage.getItem('swastha_token') || sessionStorage.getItem('swastha_token');
-  } catch {
-    return null;
-  }
-}
-
-async function request(path, options = {}) {
-  const token = getStoredToken();
-  const headers = {
-    'Content-Type': 'application/json',
-    ...(options.headers || {}),
-    ...(getAuthHeader(token)),
-  };
-
-  const response = await fetch(`${API_BASE_URL}/clinic${path}`, { ...options, headers });
-  const data = await response.json().catch(() => ({}));
-  if (!response.ok) {
-    const error = new Error(data.message || 'Clinic check-in request failed');
-    error.details = data;
-    throw error;
-  }
-  return data;
+function request(path, options = {}) {
+  return apiRequest(options.method || 'GET', `/clinic${path}`, options);
 }
 
 /**
@@ -40,7 +16,7 @@ async function request(path, options = {}) {
 export async function verifyClinicCode(code) {
   return request('/verify-code', {
     method: 'POST',
-    body: JSON.stringify({ code }),
+    body: { code },
   });
 }
 
@@ -58,7 +34,7 @@ export async function sendClinicOtp() {
 export async function verifyClinicOtp({ doctorId, otpCode, language }) {
   return request('/verify-otp', {
     method: 'POST',
-    body: JSON.stringify({ doctorId, otpCode, ...(language ? { language } : {}) }),
+    body: { doctorId, otpCode, ...(language ? { language } : {}) },
   });
 }
 

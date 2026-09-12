@@ -59,8 +59,12 @@ Thumbs.db
 # Documentation / Temporary artifacts
 docs/
 
-# Claude Code project instructions (local-only)
-CLAUDE.md
+# Root-level planning/audit/instruction docs (design docs, phase audits,
+# CLAUDE.md, etc.) are kept out of version control — only README.md is
+# tracked at the repo root.
+/*.md
+!/README.md
+
 # Database backups — contain password hashes and patient health data.
 # Never commit these.
 backups/

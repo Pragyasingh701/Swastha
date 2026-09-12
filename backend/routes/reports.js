@@ -8,6 +8,7 @@ import { validateTimelineReportPayload } from '../utils/timelineValidation.js';
 import { uploadMemory, uploadFileToSupabase } from '../config/supabaseStorage.js';
 import supabase from '../config/supabase.js';
 import { createNotification } from '../db/notifications.js';
+import { decryptMultipartFields } from '../middleware/wireCrypto.js';
 
 const router = express.Router();
 const JWT_SECRET = process.env.JWT_SECRET || 'swastha_dev_secret_key_2026';
@@ -124,10 +125,21 @@ function handleReportFileUpload(req, res, next) {
     return next();
   }
 
-  uploadMemory.single('file')(req, res, (err) => {
+  uploadMemory.single('file')(req, res, async (err) => {
     if (err) {
       console.error('Report file upload error:', err);
       return res.status(400).json({ message: err.message || 'File upload failed.' });
+    }
+    try {
+      // Multer only populates req.body once this callback fires — the
+      // global piiWireBoundary middleware (mounted before any route) had
+      // already run against an empty body at that point, so the one
+      // encrypted `encryptedFields` form field it left behind
+      // (frontend/src/api/pii/multipart.js) needs unpacking here instead.
+      await decryptMultipartFields(req);
+    } catch (decryptErr) {
+      console.error('Report file upload: encrypted field decryption error:', decryptErr);
+      return res.status(400).json({ message: 'Malformed encrypted request.' });
     }
     next();
   });
