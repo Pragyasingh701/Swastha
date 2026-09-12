@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 import { sanitizePhoneInput, isValidIndianPhone, isValidPastDate } from "../../utils/formValidation";
 import swasthaLogo from "../../assets/swastha-logo.png";
+import PrivacyPolicyModal from "../../components/Common/PrivacyPolicyModal";
 
 export default function PatientRegister() {
   const navigate = useNavigate();
@@ -36,6 +37,8 @@ export default function PatientRegister() {
     confirmPassword: "",
   });
   const [agreedToTerms, setAgreedToTerms] = useState(false);
+  const [showPrivacyPolicy, setShowPrivacyPolicy] = useState(false);
+  const [showTerms, setShowTerms] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
 
@@ -314,9 +317,13 @@ export default function PatientRegister() {
                   />
                   <label className="font-body-sm text-body-sm text-on-surface-variant leading-relaxed" htmlFor="terms">
                     I agree to the{" "}
-                    <a className="text-primary hover:underline font-medium" href="#">Terms of Service</a>{" "}
+                    <button className="text-primary hover:underline font-medium" type="button" onClick={() => setShowTerms(true)}>
+                      Terms of Service
+                    </button>{" "}
                     and{" "}
-                    <a className="text-primary hover:underline font-medium" href="#">Privacy Policy</a>
+                    <button className="text-primary hover:underline font-medium" type="button" onClick={() => setShowPrivacyPolicy(true)}>
+                      Privacy Policy
+                    </button>
                     . I understand how my health data is stored and used.
                   </label>
                 </div>
@@ -370,6 +377,8 @@ export default function PatientRegister() {
           </div>
         </div>
       </main>
+      {showPrivacyPolicy && <PrivacyPolicyModal onClose={() => setShowPrivacyPolicy(false)} />}
+      {showTerms && <PrivacyPolicyModal type="terms" onClose={() => setShowTerms(false)} />}
     </div>
   );
 }
