@@ -1874,14 +1874,35 @@ export async function runIntakeTurn({ section, structuredHistory, patientMessage
   // follow-up for whichever section is still open so the conversation can
   // always continue. finalize is excluded — an empty closing message there
   // is harmless and shouldn't get a "please continue" prompt.
-  const finalNextQuestion = deAnnouncedNextQuestion || (
-    resolvedSection === 'finalize'
-      ? closingMessageFor(language)
-      : genericFollowupFor(language)
-  );
+  //
+  // On finalize, next_question is ALWAYS the closing message, never the
+  // model's own text — even when deAnnouncedNextQuestion is non-empty. Live
+  // repro: drug_allergy's belt-and-braces guard above (sectionComplete
+  // forced true once BOTH current_medications and allergies are captured)
+  // can flip resolvedSection to "finalize" on a turn where the model's own
+  // next_question is a STALE re-ask of a field already answered — observed
+  // with current_medications already ["None"] from an earlier turn, the
+  // patient answering "No known allergies" (correctly extracted into
+  // allergies this turn), and the model nonetheless mislabelling
+  // target_field back to current_medications and asking "Do you take any
+  // regular medicines?" again. Trusting that text here shipped a dead
+  // re-ask of an already-answered question immediately followed by the
+  // frontend's "Intake complete" marker, with no visible closing message in
+  // between. Our own resolvedSection is the verified source of truth for
+  // whether the session is over — once it says finalize, the model has no
+  // legitimate next question left to ask, so its text is never used.
+  const finalNextQuestion = resolvedSection === 'finalize'
+    ? closingMessageFor(language)
+    : (deAnnouncedNextQuestion || genericFollowupFor(language));
 
   const rawOptions = parsed.quick_reply_options;
-  let quickReplyOptions = rawOptions && typeof rawOptions === 'object' && !Array.isArray(rawOptions)
+  // Same reasoning as finalNextQuestion above: on finalize there is no more
+  // question, so the model's quick_reply_options — which belonged to
+  // whatever stale/discarded next_question it produced this turn — must
+  // never reach the patient as clickable options under the closing message.
+  let quickReplyOptions = resolvedSection === 'finalize'
+    ? { options: [], allow_multiple: false }
+    : rawOptions && typeof rawOptions === 'object' && !Array.isArray(rawOptions)
     ? {
         options: Array.isArray(rawOptions.options) ? rawOptions.options.map(String) : [],
         allow_multiple: !!rawOptions.allow_multiple,
