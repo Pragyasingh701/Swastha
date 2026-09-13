@@ -98,8 +98,17 @@ export const AuthProvider = ({ children }) => {
         if (!cancelled && result?.user) {
           setUser(result.user);
         }
-      } catch {
-        // Keep cached local auth state if backend unavailable
+      } catch (err) {
+        // 401/404 means this token's session is dead (invalid/expired, or
+        // the user it points to no longer exists — e.g. a stale token left
+        // over from before a DB migration) — clear it so the app doesn't
+        // stay stuck sending a doomed token to every other endpoint (the
+        // clinic check-in send-otp 401s that motivated this fix). Any other
+        // failure (network error, backend unreachable) keeps the cached
+        // local auth state, same as before.
+        if (!cancelled && (err?.status === 401 || err?.status === 404)) {
+          saveAuthSession(null, null, false);
+        }
       } finally {
         if (!cancelled) {
           setAuthReady(true);
