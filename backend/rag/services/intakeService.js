@@ -1983,6 +1983,30 @@ export async function runIntakeTurn({ section, structuredHistory, patientMessage
         quickReplyOptions = { options: replacement.options, allow_multiple: replacement.allow_multiple };
       }
     }
+  } else if (sectionComplete && resolvedSection !== 'finalize' && resolvedSection !== section) {
+    // Section-ADVANCING turn (e.g. hpi -> drug_allergy): the guard above is
+    // deliberately skipped here (its own section-scoped fallback bank
+    // belongs to the OLD section, per the comment above), but that left a
+    // real gap — nothing checked whether the model's next_question is
+    // actually a stale question from the OLD section rather than the new
+    // one's first question. Live repro: hpi completes (associated_symptoms
+    // already [] from an earlier turn, severity just answered this turn),
+    // section correctly resolves to drug_allergy, but the model's own
+    // next_question was still "क्या इस सिर दर्द के साथ आपको कोई और लक्षण भी
+    // महसूस हो रहे हैं?" — a re-ask of hpi.associated_symptoms, already
+    // answered — instead of drug_allergy's first question. fieldForQuestion
+    // is checked against the OLD section (the one just completed): if the
+    // text reads as one of ITS fields, it's stale regardless of what the
+    // model claims to be doing, and gets replaced with the new section's
+    // actual first question.
+    const staleOldSectionField = fieldForQuestion(section, finalNextQuestion, intakeMethod);
+    if (staleOldSectionField) {
+      const replacement = nextUnansweredQuestionFor(resolvedSection, mergedHistory, intakeMethod, language);
+      if (replacement) {
+        dedupedNextQuestion = replacement.question;
+        quickReplyOptions = { options: replacement.options, allow_multiple: replacement.allow_multiple };
+      }
+    }
   }
 
   // Options are contractually required on every question turn (see the
