@@ -276,7 +276,7 @@ export default function UploadReports({ onClose, onSubmit, token, initialEvent }
             {isEditing ? "Edit Medical Report" : "Upload New Medical Report"}
           </h2>
 
-          <button onClick={onClose}>
+          <button onClick={onClose} className="p-2 -m-2 rounded-lg hover:bg-gray-100" aria-label="Close">
             <X className="w-6 h-6" />
           </button>
 
@@ -418,8 +418,8 @@ export default function UploadReports({ onClose, onSubmit, token, initialEvent }
                 </div>
               )}
 
-              <div className="grid grid-cols-2 gap-5">
-              <div className="col-span-2">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+              <div className="sm:col-span-2">
                 <label className="font-medium">
                   Report Title <span className="text-red-500">*</span>
                 </label>
@@ -496,7 +496,7 @@ export default function UploadReports({ onClose, onSubmit, token, initialEvent }
               )}
 
               {categoryFields.medicines && (
-                <div className="col-span-2">
+                <div className="sm:col-span-2">
                   <FormField
                     label={categoryFields.medicines.label}
                     placeholder={categoryFields.medicines.placeholder}
@@ -510,7 +510,7 @@ export default function UploadReports({ onClose, onSubmit, token, initialEvent }
                 </div>
               )}
 
-              <div className="col-span-2">
+              <div className="sm:col-span-2">
                 <FormField
                   label="Notes"
                   name="notes"

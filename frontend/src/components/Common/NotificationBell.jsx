@@ -71,7 +71,7 @@ export default function NotificationBell() {
       <button
         type="button"
         onClick={handleToggle}
-        className="relative p-2 rounded-lg hover:bg-slate-100 shrink-0"
+        className="relative p-3 -m-1 rounded-lg hover:bg-slate-100 shrink-0"
         aria-label="Notifications"
       >
         <Bell size={20} className="text-slate-600 " />
