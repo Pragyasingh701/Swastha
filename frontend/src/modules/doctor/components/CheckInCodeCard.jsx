@@ -121,7 +121,7 @@ export default function CheckInCodeCard() {
   });
 
   return (
-    <div className="bg-white border border-slate-200 rounded-2xl shadow-sm p-6">
+    <div className="@container bg-white border border-slate-200 rounded-2xl shadow-sm p-6">
       <div className="flex items-center gap-2 mb-1 text-slate-500">
         <KeyRound size={16} />
         <span className="text-sm font-semibold uppercase tracking-wide">Today's Check-In Code</span>
@@ -136,8 +136,17 @@ export default function CheckInCodeCard() {
       ) : error ? (
         <div className="text-sm text-red-600 py-4 text-center">{error}</div>
       ) : (
-        <div className="text-center py-4">
-          <span className="text-5xl md:text-6xl font-black tracking-[0.25em] text-blue-700">
+        <div className="text-center py-4 overflow-hidden">
+          {/* Sized off the CARD's own width (@container, from
+              @tailwindcss/container-queries), not the viewport — this card
+              sits in a dashboard next to a sidebar, so vw units (which
+              measure the whole page) don't reflect how much space this
+              card actually has, which is why an earlier vw-based attempt
+              still overflowed. text-3xl is deliberately conservative: 6
+              tracked characters (tracking-[0.2em] adds ~20% width per
+              character) must fit even in the card's narrowest realistic
+              rendered width before any @container step kicks in. */}
+          <span className="inline-block font-black tracking-[0.2em] text-blue-700 whitespace-nowrap text-3xl @xs:text-4xl @sm:text-5xl @md:text-6xl">
             {code}
           </span>
         </div>

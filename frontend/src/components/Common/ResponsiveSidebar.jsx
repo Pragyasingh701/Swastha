@@ -47,7 +47,7 @@ export default function ResponsiveSidebar({
           <button
             type="button"
             onClick={() => setIsOpen(false)}
-            className="flex h-9 w-9 items-center justify-center rounded-lg text-slate-500 hover:bg-slate-100 lg:hidden"
+            className="flex h-11 w-11 items-center justify-center rounded-lg text-slate-500 hover:bg-slate-100 lg:hidden"
             aria-label="Close navigation menu"
           >
             <X size={20} />
