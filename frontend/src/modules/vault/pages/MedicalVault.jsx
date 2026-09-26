@@ -6,7 +6,6 @@ import ResponsiveSidebar from "../../../components/Common/ResponsiveSidebar";
 import SettingsModal from "../../settings/components/SettingsModal";
 import ProfileDropdown from "../../settings/components/ProfileDropdown";
 import PatientIdBadge from "../../../components/Common/PatientIdBadge";
-import PatientNotifications from "../../../components/Common/PatientNotifications";
 import {
   LayoutGrid,
   TrendingUp,
@@ -387,7 +386,7 @@ function Header({ profile }) {
 
   return (
     <header className="shrink-0 flex items-center justify-end gap-4 px-6 lg:px-8 py-5 border-b border-slate-200 bg-white ">
-      <PatientNotifications />
+      <NotificationBell />
 
       <PatientIdBadge customProfile={profile} />
 

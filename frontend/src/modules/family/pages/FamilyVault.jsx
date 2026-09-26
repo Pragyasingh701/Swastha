@@ -19,7 +19,6 @@ import NotificationBell from "../../../components/Common/NotificationBell";
 import { useAuth } from '../../../context/AuthContext';
 import ProfileDropdown from '../../settings/components/ProfileDropdown';
 import PatientIdBadge from '../../../components/Common/PatientIdBadge';
-import PatientNotifications from '../../../components/Common/PatientNotifications';
 import SettingsModal from '../../settings/components/SettingsModal';
 import ResponsiveSidebar from '../../../components/Common/ResponsiveSidebar';
 import {
@@ -211,7 +210,7 @@ function Header({ userName, userEmail }) {
 
   return (
     <header className="shrink-0 flex items-center justify-end gap-4 border-b border-slate-200 bg-white px-6 py-5 lg:px-8">
-      <PatientNotifications />
+      <NotificationBell />
 
       <PatientIdBadge />
 

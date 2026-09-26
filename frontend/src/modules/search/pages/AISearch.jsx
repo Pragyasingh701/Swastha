@@ -5,7 +5,6 @@ import { searchReports } from "../../../api/search";
 import ResponsiveSidebar from "../../../components/Common/ResponsiveSidebar";
 import ProfileDropdown from "../../settings/components/ProfileDropdown";
 import PatientIdBadge from "../../../components/Common/PatientIdBadge";
-import PatientNotifications from "../../../components/Common/PatientNotifications";
 import SettingsModal from "../../settings/components/SettingsModal";
 import {
   LayoutGrid,
@@ -143,7 +142,7 @@ export default function AISearch() {
 
       <div className="flex-1 flex flex-col min-w-0 h-screen overflow-hidden">
         <header className="shrink-0 flex items-center justify-end gap-4 px-6 lg:px-8 py-5 border-b border-slate-200 bg-white ">
-          <PatientNotifications />
+          <NotificationBell />
 
           <PatientIdBadge />
 
