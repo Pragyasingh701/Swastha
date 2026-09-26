@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
+import swasthaLogo from "../../../assets/swastha-logo.png";
 
 const FAQS = [
   {
@@ -90,12 +91,9 @@ export default function LandingPage() {
           <div className="flex items-center gap-3">
             <img
               alt="Swastha Health Logo"
-              className="w-10 h-10 object-contain"
-              src="https://lh3.googleusercontent.com/aida-public/AB6AXuAJoSkUGc0Hv6hSwIbvCI4jXqfw51IEzG1-YtxI6ZPVQAgKF2gkF9bZKnreKdmbtKhGGVqaqifsmWUgklpWmQ5HOc8wCuxt1qRATJ_Lh2di1I5X4T6NAM789pr-DkSrLSej3v9HOhj7ZqEGyH6HQ8WcLrklNBJCzOHWE8w-F08fLnZHhFij-XNf_1_6ZyvNho1amapTks9-HG-P_KngfQr2YcLy_0llXOm7YKhNMA02JRcuWLpa7xSq"
+              className="h-10 w-auto object-contain"
+              src={swasthaLogo}
             />
-            <span className="font-headline-md text-headline-md font-bold text-primary tracking-tight">
-              Swastha
-            </span>
           </div>
           <nav className="hidden md:flex items-center gap-8">
             <a className="text-on-surface-variant hover:text-primary transition-colors font-body-md" href="#features">Features</a>
