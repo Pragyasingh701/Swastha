@@ -25,11 +25,15 @@ function msUntilNextLocalMidnight() {
 
 function printCodeOnly({ code, dateLabel }) {
   const iframe = document.createElement("iframe");
+  // Needs a real pixel size (matching the printed page's aspect ratio) so
+  // the fit-to-width measurement below reflects what will actually print —
+  // but must stay fully off the visible page, so it's positioned far
+  // off-canvas rather than collapsed to 0x0 (which broke measurement).
   iframe.style.position = "fixed";
-  iframe.style.right = "0";
-  iframe.style.bottom = "0";
-  iframe.style.width = "0";
-  iframe.style.height = "0";
+  iframe.style.top = "0";
+  iframe.style.left = "-10000px";
+  iframe.style.width = "1100px";
+  iframe.style.height = "850px";
   iframe.style.border = "0";
   document.body.appendChild(iframe);
 
@@ -55,28 +59,51 @@ function printCodeOnly({ code, dateLabel }) {
       }
       .label { font-size: 28px; letter-spacing: 0.15em; text-transform: uppercase; color: #333; margin-bottom: 8px; }
       .date { font-size: 22px; color: #666; margin-bottom: 48px; }
-      /* vw-based so it scales to fill the landscape sheet regardless of
-         code length or paper size, capped so a very short code doesn't
-         balloon past a sensible max on large paper. */
-      .code { font-size: min(22vw, 260px); font-weight: 900; letter-spacing: 0.2em; line-height: 1; white-space: nowrap; }
+      /* Starting size only — a fixed vw-based guess overflowed for a
+         6-character code with 0.2em letter-spacing, clipping the first
+         character off the left edge of the page. The script below
+         measures the actual rendered width after layout and shrinks this
+         down to fit, so it's correct regardless of code length or paper
+         size instead of relying on a formula guess. */
+      .code {
+        font-size: min(22vw, 260px);
+        font-weight: 900;
+        letter-spacing: 0.2em;
+        line-height: 1;
+        white-space: nowrap;
+        display: inline-block;
+      }
       .instruction { font-size: 24px; color: #555; margin-top: 48px; }
     </style>
   </head>
   <body>
     <div class="label">Today's Check-In Code</div>
     <div class="date">${dateLabel}</div>
-    <div class="code">${code}</div>
+    <div class="code" id="code">${code}</div>
     <div class="instruction">Patients enter this code at Check-In to start their visit intake.</div>
   </body>
 </html>`);
   doc.close();
 
-  // Give the iframe a tick to lay out before invoking print, then remove
-  // it shortly after — printing is synchronous-enough in practice that a
-  // short delay is safe and avoids leaking iframes if the user cancels.
-  iframe.contentWindow.focus();
-  iframe.contentWindow.print();
-  setTimeout(() => document.body.removeChild(iframe), 1000);
+  function fitAndPrint() {
+    const codeEl = doc.getElementById("code");
+    const maxWidth = doc.body.clientWidth * 0.92;
+    let fontSize = 260;
+    codeEl.style.fontSize = `${fontSize}px`;
+    while (fontSize > 10 && codeEl.scrollWidth > maxWidth) {
+      fontSize -= 4;
+      codeEl.style.fontSize = `${fontSize}px`;
+    }
+
+    iframe.contentWindow.focus();
+    iframe.contentWindow.print();
+    setTimeout(() => document.body.removeChild(iframe), 1000);
+  }
+
+  // Wait a tick for the iframe's initial layout (from the new width/height)
+  // before measuring — doc.write's content isn't guaranteed laid out yet
+  // in the same tick it's written.
+  setTimeout(fitAndPrint, 50);
 }
 
 export default function CheckInCodeCard() {
