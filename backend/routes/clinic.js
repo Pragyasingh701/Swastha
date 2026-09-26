@@ -3,7 +3,6 @@ import jwt from 'jsonwebtoken';
 import supabase from '../config/supabase.js';
 import { resolveCheckinCode, getOrCreateTodayCode } from '../db/clinicCheckin.js';
 import { findUserById } from '../db/users.js';
-import { sendOTPEmail } from '../utils/mailer.js';
 import { accessExpiryFromNow } from '../db/doctorPatients.js';
 import { startIntakeSession } from '../rag/services/intakeService.js';
 import { synthesizeSpeech } from '../rag/services/ttsService.js';
@@ -13,54 +12,12 @@ const JWT_SECRET = process.env.JWT_SECRET || 'swastha_dev_secret_key_2026';
 
 // Clinic check-in flow (PRD §3). Lives in backend/routes/, not backend/rag/
 // routes/ — same reasoning as doctor-patients.js's intake-queue routes: this
-// is plain DB lookups + reuse of existing OTP logic, not generation-class
-// work. verify-otp creates the intake_sessions row directly via the same
-// intakeService.startIntakeSession() call POST /api/intake/start already
-// uses, rather than hopping across the /rag sub-app boundary with a second
-// HTTP call — the frontend then drives the rest of the conversation through
-// the existing, unchanged POST /api/intake/turn.
-
-// otpStoreRaw/otpStore is defined in routes/auth.js as a global singleton
-// (global.__otpStoreRaw) specifically so every router sharing OTP state
-// reads/writes the SAME store without importing across route files. Reusing
-// that same global here (rather than re-implementing send/verify) is what
-// "reuse existing OTP-send logic unchanged" (PRD §3.3) means in practice —
-// the actual code path (generate code, store with 10-min expiry, email it,
-// verify against the store) is identical to POST /api/auth/send-otp /
-// POST /api/auth/verify-otp; only the caller-identity and post-verify
-// side effects differ.
-if (!global.__otpStoreRaw) {
-  global.__otpStoreRaw = new Map();
-}
-const otpStoreRaw = global.__otpStoreRaw;
-const MAX_ACTIVE_CODES_PER_KEY = 5;
-
-const otpStore = {
-  set(key, value) {
-    const list = otpStoreRaw.get(key) || [];
-    list.push(value);
-    if (list.length > MAX_ACTIVE_CODES_PER_KEY) list.splice(0, list.length - MAX_ACTIVE_CODES_PER_KEY);
-    otpStoreRaw.set(key, list);
-  },
-  deleteCode(key, code) {
-    const list = otpStoreRaw.get(key);
-    if (!list) return;
-    const next = list.filter((e) => e.code !== code);
-    if (next.length === 0) otpStoreRaw.delete(key);
-    else otpStoreRaw.set(key, next);
-  },
-  verify(key, submittedCode) {
-    const list = otpStoreRaw.get(key);
-    if (!list || list.length === 0) return false;
-    const now = Date.now();
-    const idx = list.findIndex((e) => e.code === submittedCode && e.expiresAt > now);
-    if (idx === -1) return false;
-    list.splice(idx, 1);
-    if (list.length === 0) otpStoreRaw.delete(key);
-    else otpStoreRaw.set(key, list);
-    return true;
-  },
-};
+// is plain DB lookups, not generation-class work. verify-otp creates the
+// intake_sessions row directly via the same intakeService.startIntakeSession()
+// call POST /api/intake/start already uses, rather than hopping across the
+// /rag sub-app boundary with a second HTTP call — the frontend then drives
+// the rest of the conversation through the existing, unchanged
+// POST /api/intake/turn.
 
 // Role is read from the DATABASE here, never trusted off the JWT's own
 // `role` claim. The JWT is minted once at login/OTP-verify time and is NOT
@@ -164,34 +121,8 @@ router.post('/verify-code', rateLimitVerifyCode, async (req, res) => {
 });
 
 /**
- * POST /api/clinic/send-otp
- * JWT (patient) auth. Reuses the existing OTP-send logic unchanged,
- * targeting the AUTHENTICATED PATIENT's own account email — never a
- * client-supplied address, so a patient cannot trigger an OTP to someone
- * else's inbox.
- */
-router.post('/send-otp', requirePatientAuth, async (req, res) => {
-  const email = (req.user.email || '').toLowerCase().trim();
-  if (!email) {
-    return res.status(400).json({ message: 'No email on file for this account.' });
-  }
-
-  const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
-  otpStore.set(email, { code: otpCode, expiresAt: Date.now() + 10 * 60 * 1000 });
-
-  try {
-    await sendOTPEmail(email, otpCode);
-    return res.json({ message: `Verification code sent to ${email}` });
-  } catch (error) {
-    otpStore.deleteCode(email, otpCode);
-    console.error('Clinic send-otp error:', error);
-    return res.status(500).json({ message: 'Failed to send verification code.', error: error.message });
-  }
-});
-
-/**
  * POST /api/clinic/verify-otp
- * JWT (patient) auth. Body: { doctorId, otpCode }.
+ * JWT (patient) auth. Body: { doctorId }.
  * On success: upserts the doctor-patient link to accepted, creates an
  * intake_sessions row with origin='clinic_checkin' and intake_method
  * resolved from the DOCTOR's own row (never patient-supplied), then hands
@@ -202,19 +133,9 @@ router.post('/send-otp', requirePatientAuth, async (req, res) => {
 router.post('/verify-otp', requirePatientAuth, async (req, res) => {
   const patientId = req.user.userId;
   const doctorId = String(req.body?.doctorId ?? '').trim();
-  const otpCode = String(req.body?.otpCode ?? '').trim();
 
   if (!doctorId) {
     return res.status(400).json({ message: 'doctorId is required.' });
-  }
-  if (!otpCode || otpCode.length !== 6) {
-    return res.status(400).json({ message: 'Valid 6-digit OTP code is required.' });
-  }
-
-  const email = (req.user.email || '').toLowerCase().trim();
-  const isValid = otpStore.verify(email, otpCode);
-  if (!isValid) {
-    return res.status(400).json({ message: 'Invalid or expired verification code.' });
   }
 
   try {

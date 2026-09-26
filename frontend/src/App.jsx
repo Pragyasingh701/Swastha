@@ -38,7 +38,6 @@ import AISearch from "./modules/search/pages/AISearch";
 
 // Intake (Module A — Conversational History Engine)
 import IntakeChat from "./modules/intake/pages/IntakeChat";
-import ClinicCheckIn from "./modules/intake/pages/ClinicCheckIn";
 
 // Timeline
 import Timeline from "./modules/timeline/components/pages/Timeline";
@@ -362,15 +361,6 @@ export default function App() {
           element={
             <PatientRoute>
               <IntakeChat />
-            </PatientRoute>
-          }
-        />
-
-        <Route
-          path="/clinic-checkin"
-          element={
-            <PatientRoute>
-              <ClinicCheckIn />
             </PatientRoute>
           }
         />
