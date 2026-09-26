@@ -3,7 +3,6 @@ import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 import { sanitizePhoneInput, isValidIndianPhone, isValidPastDate } from "../../utils/formValidation";
 import swasthaLogo from "../../assets/swastha-logo.png";
-import PrivacyPolicyModal from "../../components/Common/PrivacyPolicyModal";
 
 export default function PatientRegister() {
   const navigate = useNavigate();
@@ -36,9 +35,6 @@ export default function PatientRegister() {
     password: "",
     confirmPassword: "",
   });
-  const [agreedToTerms, setAgreedToTerms] = useState(false);
-  const [showPrivacyPolicy, setShowPrivacyPolicy] = useState(false);
-  const [showTerms, setShowTerms] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
 
@@ -54,11 +50,6 @@ export default function PatientRegister() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setErrorMessage("");
-
-    if (!agreedToTerms) {
-      setErrorMessage("Please accept the Terms of Service & Privacy Policy before completing registration.");
-      return;
-    }
 
     if (!isValidIndianPhone(formData.phone)) {
       setErrorMessage("Please enter a valid 10-digit mobile number.");
@@ -297,56 +288,23 @@ export default function PatientRegister() {
               </div>
             </div>
 
-            <div className="glass-morphism rounded-[24px] shadow-sm border border-outline-variant/30 overflow-hidden">
-              <div className="p-8 md:p-10">
-                <div className="flex items-center gap-3 mb-8">
-                  <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center text-primary">
-                    <span className="material-symbols-outlined">privacy_tip</span>
-                  </div>
-                  <h2 className="font-headline-md text-headline-md text-on-surface">Consent & Security</h2>
-                </div>
-
-                <div className="flex items-start gap-3 py-2">
-                  <input
-                    required
-                    className="mt-1 w-5 h-5 rounded border-outline-variant text-primary focus:ring-primary/20 cursor-pointer"
-                    id="terms"
-                    type="checkbox"
-                    checked={agreedToTerms}
-                    onChange={(e) => setAgreedToTerms(e.target.checked)}
-                  />
-                  <label className="font-body-sm text-body-sm text-on-surface-variant leading-relaxed" htmlFor="terms">
-                    I agree to the{" "}
-                    <button className="text-primary hover:underline font-medium" type="button" onClick={() => setShowTerms(true)}>
-                      Terms of Service
-                    </button>{" "}
-                    and{" "}
-                    <button className="text-primary hover:underline font-medium" type="button" onClick={() => setShowPrivacyPolicy(true)}>
-                      Privacy Policy
-                    </button>
-                    . I understand how my health data is stored and used.
-                  </label>
-                </div>
-
-                <button
-                  className="w-full h-[52px] bg-primary-container text-on-primary-container font-label-md text-label-md font-semibold rounded-xl hover:shadow-lg hover:shadow-primary/10 transition-all active:scale-[0.99] mt-8 disabled:opacity-70 disabled:cursor-not-allowed disabled:active:scale-100 flex items-center justify-center gap-2"
-                  type="submit"
-                  disabled={isLoading}
-                >
-                  {isLoading ? (
-                    <>
-                      <svg className="animate-spin h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                      </svg>
-                      Creating Account...
-                    </>
-                  ) : (
-                    "Create My Health Account"
-                  )}
-                </button>
-              </div>
-            </div>
+            <button
+              className="w-full h-[52px] bg-primary-container text-on-primary-container font-label-md text-label-md font-semibold rounded-xl hover:shadow-lg hover:shadow-primary/10 transition-all active:scale-[0.99] disabled:opacity-70 disabled:cursor-not-allowed disabled:active:scale-100 flex items-center justify-center gap-2"
+              type="submit"
+              disabled={isLoading}
+            >
+              {isLoading ? (
+                <>
+                  <svg className="animate-spin h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                  Creating Account...
+                </>
+              ) : (
+                "Create My Health Account"
+              )}
+            </button>
           </form>
 
           <div className="text-center pt-6">
@@ -377,8 +335,6 @@ export default function PatientRegister() {
           </div>
         </div>
       </main>
-      {showPrivacyPolicy && <PrivacyPolicyModal onClose={() => setShowPrivacyPolicy(false)} />}
-      {showTerms && <PrivacyPolicyModal type="terms" onClose={() => setShowTerms(false)} />}
     </div>
   );
 }

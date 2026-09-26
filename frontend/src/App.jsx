@@ -3,7 +3,6 @@ import { useAuth } from "./context/AuthContext";
 
 // Landing Page
 import LandingPage from "./modules/landing/pages/LandingPage";
-import LegalPage from "./modules/landing/pages/LegalPage";
 
 // Authentication
 import Login from "./modules/authentication/Login";
@@ -221,8 +220,6 @@ export default function App() {
       <Routes>
         {/* Landing & Guest-only Auth Routes */}
         <Route path="/" element={<GuestRoute><LandingPage /></GuestRoute>} />
-        <Route path="/privacy-policy" element={<LegalPage />} />
-        <Route path="/terms-and-conditions" element={<LegalPage />} />
         <Route path="/login" element={<GuestRoute><Login /></GuestRoute>} />
         <Route path="/register" element={<GuestRoute><Register /></GuestRoute>} />
         <Route path="/doctor-login" element={<GuestRoute><DoctorLogin /></GuestRoute>} />

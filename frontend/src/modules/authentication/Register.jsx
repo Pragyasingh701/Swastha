@@ -4,7 +4,6 @@ import { useAuth } from "../../context/AuthContext";
 import { startGoogleAuth } from "../../utils/googleAuth";
 import { sanitizePhoneInput, isValidIndianPhone, isValidEmail, isValidFullName } from "../../utils/formValidation";
 import swasthaLogo from "../../assets/swastha-logo.png"; // adjust this path to wherever you keep the logo asset
-import PrivacyPolicyModal from "../../components/Common/PrivacyPolicyModal";
 
 export default function Register() {
   const navigate = useNavigate();
@@ -16,13 +15,10 @@ export default function Register() {
     password: "",
     confirmPassword: "",
   });
-  const [agreedToTerms, setAgreedToTerms] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
   const [showLoginPrompt, setShowLoginPrompt] = useState(false);
-  const [showPrivacyPolicy, setShowPrivacyPolicy] = useState(false);
-  const [showTerms, setShowTerms] = useState(false);
 
   const handleChange = (e) => {
     const { id, value } = e.target;
@@ -35,10 +31,6 @@ export default function Register() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!agreedToTerms) {
-      setErrorMessage("Please accept the Terms of Service & Privacy Policy.");
-      return;
-    }
     if (!isValidFullName(formData.fullname)) {
       setErrorMessage("Please enter your full name using letters only (2-60 characters).");
       return;
@@ -286,39 +278,11 @@ export default function Register() {
                 </div>
               </div>
 
-              {/* Terms & Privacy */}
-              <div className="flex items-start gap-3 py-2">
-                <div className="flex items-center h-5">
-                  <input
-                    className="w-5 h-5 rounded border-outline-variant text-primary focus:ring-primary/20 transition-all cursor-pointer"
-                    id="terms"
-                    type="checkbox"
-                    checked={agreedToTerms}
-                    onChange={(e) => setAgreedToTerms(e.target.checked)}
-                  />
-                </div>
-                <label className="font-body-sm text-body-sm text-on-surface-variant leading-tight" htmlFor="terms">
-                  I agree to the{" "}
-                  <a className="text-primary hover:underline font-semibold" href="#">
-                    <button className="text-primary hover:underline font-medium" type="button" onClick={() => setShowTerms(true)}>
-                      Terms of Service
-                    </button>
-                  </a>{" "}
-                  and{" "}
-                  <a className="text-primary hover:underline font-semibold" href="#">
-                    <button className="text-primary hover:underline font-medium" type="button" onClick={() => setShowPrivacyPolicy(true)}>
-                      Privacy Policy
-                    </button>
-                  </a>
-                  .
-                </label>
-              </div>
-
               {/* Actions */}
               <button
                 className="w-full bg-primary text-white h-12 rounded-xl font-body-md text-body-md font-bold shadow-lg hover:shadow-primary/20 hover:scale-[1.01] active:scale-[0.98] transition-all flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed disabled:hover:scale-100"
                 type="submit"
-                disabled={isLoading || !agreedToTerms}
+                disabled={isLoading}
               >
                 {isLoading ? (
                   <>
@@ -391,8 +355,6 @@ export default function Register() {
           </div>
         </section>
       </main>
-      {showPrivacyPolicy && <PrivacyPolicyModal onClose={() => setShowPrivacyPolicy(false)} />}
-      {showTerms && <PrivacyPolicyModal type="terms" onClose={() => setShowTerms(false)} />}
     </div>
   );
 }
