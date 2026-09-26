@@ -19,7 +19,6 @@ import {
   ClipboardList,
   Settings,
   PlusCircle,
-  ShieldCheck,
   AlertTriangle,
   FileText,
   Sparkles,
@@ -433,10 +432,6 @@ export default function Dashboard() {
                     : 'Your clinical intelligence overview for today.'}
               </p>
             </div>
-            <span className="flex items-center gap-2 bg-blue-50 text-blue-700 text-sm font-medium px-4 py-2 rounded-lg">
-              <ShieldCheck size={16} />
-              {profile?.email ? 'Profile Synced' : 'ABHA Synced'}
-            </span>
           </div>
 
           <div className="mb-6 flex flex-wrap gap-3">
