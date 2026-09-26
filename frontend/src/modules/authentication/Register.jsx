@@ -107,6 +107,15 @@ export default function Register() {
         <div className="absolute bottom-[-10%] left-[-10%] w-[30%] h-[30%] bg-secondary/5 rounded-full blur-[100px]"></div>
       </div>
 
+      {/* Back to Landing */}
+      <Link
+        to="/"
+        className="fixed top-6 left-6 z-50 inline-flex items-center gap-2 px-4 py-2 bg-surface-container-lowest rounded-full shadow-md font-label-md text-label-md font-semibold text-on-surface-variant hover:text-primary transition-colors"
+      >
+        <span className="material-symbols-outlined !text-[20px]">arrow_back</span>
+        Back
+      </Link>
+
       {/* Main Content Split Layout */}
       <main className="w-full max-w-[1440px] min-h-[90vh] md:min-h-[80vh] flex flex-col md:flex-row shadow-2xl rounded-3xl overflow-hidden mx-4 md:mx-12 my-8 bg-surface-container-lowest ">
         {/* Left Column: Visual/Atmospheric (Hidden on mobile) */}
@@ -132,16 +141,6 @@ export default function Register() {
             <p className="font-body-md text-body-md text-on-surface-variant">
               Smarter Insights. Better Decisions. Improved Outcomes.
             </p>
-            <div className="mt-12 pt-8 border-t border-outline-variant/30 flex items-center gap-4">
-              <div className="flex -space-x-3">
-                <div className="w-10 h-10 rounded-full border-2 border-white bg-surface-dim"></div>
-                <div className="w-10 h-10 rounded-full border-2 border-white bg-surface-dim"></div>
-                <div className="w-10 h-10 rounded-full border-2 border-white bg-surface-dim"></div>
-              </div>
-              <p className="font-label-md text-label-md text-on-surface-variant">
-                Joined by 10k+ health enthusiasts
-              </p>
-            </div>
           </div>
         </section>
 
@@ -394,23 +393,6 @@ export default function Register() {
       </main>
       {showPrivacyPolicy && <PrivacyPolicyModal onClose={() => setShowPrivacyPolicy(false)} />}
       {showTerms && <PrivacyPolicyModal type="terms" onClose={() => setShowTerms(false)} />}
-
-      {/* Footer Component (Minimal) */}
-      <footer className="fixed bottom-0 left-0 right-0 p-4 flex justify-between items-center z-50 pointer-events-none">
-        <div className="pointer-events-auto">
-          <span className="font-label-sm text-label-sm text-on-surface-variant/50 ">
-            © 2026 Swastha Healthcare SaaS.
-          </span>
-        </div>
-        <div className="pointer-events-auto flex gap-6">
-          <a className="font-label-sm text-label-sm text-on-surface-variant/50 hover:text-primary transition-colors" href="#">
-            Privacy
-          </a>
-          <a className="font-label-sm text-label-sm text-on-surface-variant/50 hover:text-primary transition-colors" href="#">
-            Terms
-          </a>
-        </div>
-      </footer>
     </div>
   );
 }
