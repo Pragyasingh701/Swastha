@@ -20,21 +20,16 @@ export async function verifyClinicCode(code) {
   });
 }
 
-/** PATIENT-facing: send an OTP to the logged-in patient's own account email. */
-export async function sendClinicOtp() {
-  return request('/send-otp', { method: 'POST' });
-}
-
 /**
- * PATIENT-facing: verify the OTP and complete check-in. On success returns
- * the same shape POST /api/intake/start does — { session_id, next_question,
- * quick_reply_options, section, red_flag } — ready to hand straight into
- * IntakeChat.jsx.
+ * PATIENT-facing: complete check-in for the confirmed doctor. On success
+ * returns the same shape POST /api/intake/start does — { session_id,
+ * next_question, quick_reply_options, section, red_flag } — ready to hand
+ * straight into IntakeChat.jsx.
  */
-export async function verifyClinicOtp({ doctorId, otpCode, language }) {
+export async function verifyClinicOtp({ doctorId, language }) {
   return request('/verify-otp', {
     method: 'POST',
-    body: { doctorId, otpCode, ...(language ? { language } : {}) },
+    body: { doctorId, ...(language ? { language } : {}) },
   });
 }
 
@@ -43,4 +38,4 @@ export async function getTodayCheckinCode() {
   return request('/today-code');
 }
 
-export default { verifyClinicCode, sendClinicOtp, verifyClinicOtp, getTodayCheckinCode };
+export default { verifyClinicCode, verifyClinicOtp, getTodayCheckinCode };

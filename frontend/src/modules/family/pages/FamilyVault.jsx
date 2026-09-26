@@ -19,7 +19,6 @@ import NotificationBell from "../../../components/Common/NotificationBell";
 import { useAuth } from '../../../context/AuthContext';
 import ProfileDropdown from '../../settings/components/ProfileDropdown';
 import PatientIdBadge from '../../../components/Common/PatientIdBadge';
-import PatientNotifications from '../../../components/Common/PatientNotifications';
 import SettingsModal from '../../settings/components/SettingsModal';
 import ResponsiveSidebar from '../../../components/Common/ResponsiveSidebar';
 import {
@@ -211,7 +210,7 @@ function Header({ userName, userEmail }) {
 
   return (
     <header className="shrink-0 flex items-center justify-end gap-4 border-b border-slate-200 bg-white px-6 py-5 lg:px-8">
-      <PatientNotifications />
+      <NotificationBell />
 
       <PatientIdBadge />
 
@@ -673,7 +672,17 @@ export default function FamilyVault() {
 
             <div className="mt-8 grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
               <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm min-h-[420px]">
-                <div className="h-full w-full rounded-2xl border border-dashed border-slate-200 bg-slate-50" />
+                <div className="flex h-full w-full flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-6 py-10 text-center">
+                  <Users size={28} className="text-slate-300" />
+                  <p className="text-sm font-medium text-slate-600">
+                    {members.length > 0 ? 'No health overview to show yet.' : 'No family members linked yet'}
+                  </p>
+                  <p className="max-w-xs text-sm text-slate-400">
+                    {members.length > 0
+                      ? 'Add a health overview to a family member to see it summarized here.'
+                      : 'Add your first family member using the form to start building your family vault.'}
+                  </p>
+                </div>
               </section>
 
               <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">

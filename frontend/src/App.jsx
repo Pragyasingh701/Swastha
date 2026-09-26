@@ -3,7 +3,6 @@ import { useAuth } from "./context/AuthContext";
 
 // Landing Page
 import LandingPage from "./modules/landing/pages/LandingPage";
-import LegalPage from "./modules/landing/pages/LegalPage";
 
 // Authentication
 import Login from "./modules/authentication/Login";
@@ -38,7 +37,6 @@ import AISearch from "./modules/search/pages/AISearch";
 
 // Intake (Module A — Conversational History Engine)
 import IntakeChat from "./modules/intake/pages/IntakeChat";
-import ClinicCheckIn from "./modules/intake/pages/ClinicCheckIn";
 
 // Timeline
 import Timeline from "./modules/timeline/components/pages/Timeline";
@@ -222,8 +220,6 @@ export default function App() {
       <Routes>
         {/* Landing & Guest-only Auth Routes */}
         <Route path="/" element={<GuestRoute><LandingPage /></GuestRoute>} />
-        <Route path="/privacy-policy" element={<LegalPage />} />
-        <Route path="/terms-and-conditions" element={<LegalPage />} />
         <Route path="/login" element={<GuestRoute><Login /></GuestRoute>} />
         <Route path="/register" element={<GuestRoute><Register /></GuestRoute>} />
         <Route path="/doctor-login" element={<GuestRoute><DoctorLogin /></GuestRoute>} />
@@ -362,15 +358,6 @@ export default function App() {
           element={
             <PatientRoute>
               <IntakeChat />
-            </PatientRoute>
-          }
-        />
-
-        <Route
-          path="/clinic-checkin"
-          element={
-            <PatientRoute>
-              <ClinicCheckIn />
             </PatientRoute>
           }
         />

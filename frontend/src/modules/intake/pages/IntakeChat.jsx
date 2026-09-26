@@ -2,13 +2,12 @@ import React, { useEffect, useRef, useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "../../../context/AuthContext";
 import { startIntake, resumeIntake, sendIntakeTurn, finalizeIntake, transcribeIntakeAudio, replayIntakeAudio } from "../../../api/intake";
-import { verifyClinicCode, sendClinicOtp, verifyClinicOtp } from "../../../api/clinic";
+import { verifyClinicCode, verifyClinicOtp } from "../../../api/clinic";
 import ResponsiveSidebar from "../../../components/Common/ResponsiveSidebar";
 import ProfileDropdown from "../../settings/components/ProfileDropdown";
 import PatientIdBadge from "../../../components/Common/PatientIdBadge";
-import PatientNotifications from "../../../components/Common/PatientNotifications";
+import NotificationBell from "../../../components/Common/NotificationBell";
 import SettingsModal from "../../settings/components/SettingsModal";
-import OtpInput from "../../../components/Common/OtpInput";
 import {
   LayoutGrid,
   TrendingUp,
@@ -134,10 +133,10 @@ function normalizeQuickReplies(raw) {
 }
 
 // Gate steps shown before the chat itself. "code" is the entry screen
-// (enter a clinic check-in code — mandatory, no skip path); "confirm"/"otp"
-// mirror the old standalone ClinicCheckIn.jsx flow; "chat" reveals the
+// (enter a clinic check-in code — mandatory, no skip path); "confirm"
+// mirrors the old standalone ClinicCheckIn.jsx flow; "chat" reveals the
 // actual conversation UI below.
-const GATE_STEPS = { CODE: "code", CONFIRM: "confirm", OTP: "otp", LANGUAGE: "language", CHAT: "chat" };
+const GATE_STEPS = { CODE: "code", CONFIRM: "confirm", LANGUAGE: "language", CHAT: "chat" };
 
 // Voice layer (PRD §6): language is resolved ONCE here, never per-turn.
 // Both labels are written in their own script so a patient who can't read
@@ -285,8 +284,6 @@ export default function IntakeChat() {
   const [gateStep, setGateStep] = useState(preStarted ? GATE_STEPS.CHAT : GATE_STEPS.CODE);
   const [clinicCode, setClinicCode] = useState("");
   const [clinicDoctor, setClinicDoctor] = useState(null); // { doctorId, doctorName, clinicName }
-  const [clinicOtp, setClinicOtp] = useState(["", "", "", "", "", ""]);
-  const [otpTimer, setOtpTimer] = useState(0);
   const [gateLoading, setGateLoading] = useState(false);
   // Same "still working on it" reassurance as sendingLongWait below, scoped
   // to the OTP-verify step specifically — that's the one gate request that
@@ -768,55 +765,10 @@ export default function IntakeChat() {
     }
   }
 
-  function startClinicOtpCountdown() {
-    const interval = setInterval(() => {
-      setOtpTimer((prev) => {
-        if (prev <= 1) {
-          clearInterval(interval);
-          return 0;
-        }
-        return prev - 1;
-      });
-    }, 1000);
-  }
-
-  async function startClinicOtpStep() {
-    setGateLoading(true);
-    setGateError("");
-    try {
-      await sendClinicOtp();
-      setGateStep(GATE_STEPS.OTP);
-      setOtpTimer(60);
-      startClinicOtpCountdown();
-    } catch (err) {
-      setGateError(err.message || "Failed to send verification code.");
-    } finally {
-      setGateLoading(false);
-    }
-  }
-
-  async function handleClinicOtpSubmit(e) {
-    e.preventDefault();
-    const otpCode = clinicOtp.join("");
-    if (otpCode.length !== 6) {
-      setGateError("Please enter the complete 6-digit code.");
-      return;
-    }
-
-    // OTP is verified as part of session creation, which now happens AFTER
-    // the language screen — /api/clinic/verify-otp stores the chosen
-    // language on the session row it creates, so the choice has to be made
-    // before that call, not after. Hold the code and move to the language
-    // step; handleLanguageChoice does the actual verify.
-    setGateError("");
-    setGateStep(GATE_STEPS.LANGUAGE);
-  }
-
   // Creates the clinic-check-in session once the language is known. Split
-  // out of handleClinicOtpSubmit so both entry paths (clinic check-in and
-  // the plain remote flow) pick a language before any session row exists.
+  // out so both entry paths (clinic check-in and the plain remote flow)
+  // pick a language before any session row exists.
   async function startClinicSession(languageCode) {
-    const otpCode = clinicOtp.join("");
     setGateLoading(true);
     setGateLoadingLongWait(false);
     setGateError("");
@@ -824,7 +776,6 @@ export default function IntakeChat() {
     try {
       const session = await verifyClinicOtp({
         doctorId: clinicDoctor.doctorId,
-        otpCode,
         language: languageCode,
       });
       // Same shape POST /api/intake/start returns — feed it straight into
@@ -839,26 +790,14 @@ export default function IntakeChat() {
       setGateStep(GATE_STEPS.CHAT);
       playQuestionAudio(session);
     } catch (err) {
-      // Send them back to the OTP screen — the code may have expired while
-      // they were choosing, and retyping it is the recovery.
-      setGateStep(GATE_STEPS.OTP);
-      setGateError(err.message || "Invalid OTP code. Please try again.");
+      // Send them back to the confirm screen — the code may have expired
+      // while they were choosing, and re-confirming is the recovery.
+      setGateStep(GATE_STEPS.CONFIRM);
+      setGateError(err.message || "Could not complete check-in. Please try again.");
     } finally {
       clearTimeout(longWaitTimer);
       setGateLoading(false);
       setGateLoadingLongWait(false);
-    }
-  }
-
-  async function handleClinicOtpResend() {
-    setClinicOtp(["", "", "", "", "", ""]);
-    setGateError("");
-    try {
-      await sendClinicOtp();
-      setOtpTimer(60);
-      startClinicOtpCountdown();
-    } catch (err) {
-      setGateError(err.message || "Failed to resend verification code.");
     }
   }
 
@@ -868,8 +807,8 @@ export default function IntakeChat() {
   //
   // Both entry paths land here before any session row exists, so the
   // choice is always honoured:
-  //   - clinic check-in: verify the OTP now, passing the language into the
-  //     session /api/clinic/verify-otp creates.
+  //   - clinic check-in: create the session now, passing the language into
+  //     the session /api/clinic/verify-otp creates.
   //   - plain remote flow: just enter chat; the start effect calls
   //     /intake/start with this language.
   function handleLanguageChoice(code) {
@@ -1027,7 +966,7 @@ export default function IntakeChat() {
 
       <div className="flex-1 flex flex-col min-w-0 h-screen overflow-hidden">
         <header className="shrink-0 flex items-center justify-end gap-4 px-6 lg:px-8 py-5 border-b border-slate-200 bg-white ">
-          <PatientNotifications />
+          <NotificationBell />
           <PatientIdBadge />
           <ProfileDropdown />
         </header>
@@ -1119,61 +1058,12 @@ export default function IntakeChat() {
                       </button>
                       <button
                         type="button"
-                        onClick={startClinicOtpStep}
+                        onClick={() => setGateStep(GATE_STEPS.LANGUAGE)}
                         disabled={gateLoading}
                         className="flex-1 h-12 flex items-center justify-center gap-2 bg-blue-700 hover:bg-blue-800 disabled:opacity-50 text-white font-semibold rounded-xl transition-colors"
                       >
                         {gateLoading ? <Loader2 size={18} className="animate-spin" /> : "Yes, continue"}
                       </button>
-                    </div>
-                  </>
-                )}
-
-                {gateStep === GATE_STEPS.OTP && (
-                  <>
-                    <div className="text-center mb-8">
-                      <div className="w-14 h-14 mx-auto mb-4 bg-blue-50 text-blue-600 rounded-2xl flex items-center justify-center">
-                        <ShieldCheck size={28} />
-                      </div>
-                      <h2 className="text-xl font-bold text-slate-900">Verify it's you</h2>
-                      <p className="text-sm text-slate-500 mt-2">
-                        We've sent a 6-digit verification code to your account email.
-                      </p>
-                    </div>
-
-                    {gateError && (
-                      <div className="mb-6 p-4 rounded-xl bg-red-50 text-red-700 text-sm">{gateError}</div>
-                    )}
-
-                    <form onSubmit={handleClinicOtpSubmit} className="space-y-8">
-                      <OtpInput value={clinicOtp} onChange={setClinicOtp} disabled={gateLoading} />
-
-                      <button
-                        type="submit"
-                        disabled={gateLoading}
-                        className="w-full h-12 flex items-center justify-center gap-2 bg-blue-700 hover:bg-blue-800 disabled:opacity-50 text-white font-semibold rounded-xl transition-colors"
-                      >
-                        {gateLoading
-                          ? gateLoadingLongWait
-                            ? "Still setting up your session — hang tight..."
-                            : "Verifying..."
-                          : "Continue"}
-                      </button>
-                    </form>
-
-                    <div className="mt-6 text-center">
-                      {otpTimer > 0 ? (
-                        <p className="text-sm text-slate-500">
-                          Resend code in <span className="font-semibold text-blue-700">{otpTimer}s</span>
-                        </p>
-                      ) : (
-                        <button
-                          onClick={handleClinicOtpResend}
-                          className="text-sm font-semibold text-blue-700 hover:underline"
-                        >
-                          Resend Verification Code
-                        </button>
-                      )}
                     </div>
                   </>
                 )}

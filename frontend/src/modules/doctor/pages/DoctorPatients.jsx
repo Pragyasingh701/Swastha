@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo } from "react";
+import React, { useEffect, useState, useMemo, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { Sparkles, Bell, X, CalendarDays, Stethoscope, XCircle, ChevronDown, ChevronRight, AlertTriangle, FlaskConical, ClipboardList, ScanLine, Syringe, FileText } from "lucide-react";
 import NotificationBell from "../../../components/Common/NotificationBell";
@@ -52,6 +52,29 @@ export default function DoctorPatients() {
   const [showFilterPanel, setShowFilterPanel] = useState(false);
   const [vaultCategoryFilter, setVaultCategoryFilter] = useState(null);
   const [vaultSearchQuery, setVaultSearchQuery] = useState('');
+  const profileCardRef = useRef(null);
+  const [profileCardHeight, setProfileCardHeight] = useState(null);
+
+  // The history card on the right is capped to whatever height the profile
+  // card on the left actually renders at (not a viewport-relative guess) so
+  // it never grows taller than its sibling — a ResizeObserver rather than a
+  // one-time measurement because switching patients changes the profile
+  // card's own content height (more/fewer filled fields).
+  useEffect(() => {
+    if (!selectedPatient || !profileCardRef.current) {
+      setProfileCardHeight(null);
+      return;
+    }
+
+    const node = profileCardRef.current;
+    const observer = new ResizeObserver((entries) => {
+      const entry = entries[0];
+      if (entry) setProfileCardHeight(entry.contentRect.height);
+    });
+    observer.observe(node);
+
+    return () => observer.disconnect();
+  }, [selectedPatient]);
 
   // showSpinner=false for background polls/focus-refetches — only the
   // very first load should show "Loading patient list...". This is also
@@ -446,7 +469,7 @@ export default function DoctorPatients() {
           {selectedPatient && (
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
               {/* Profile Card */}
-              <div className="lg:col-span-1 rounded-[22px] border border-[#dfe5ef] bg-[#dfeaf6] shadow-[0_10px_30px_rgba(19,31,60,0.06)] overflow-hidden">
+              <div ref={profileCardRef} className="lg:col-span-1 rounded-[22px] border border-[#dfe5ef] bg-[#dfeaf6] shadow-[0_10px_30px_rgba(19,31,60,0.06)] overflow-hidden">
                   <div className="border-b border-[#d8e1ef] bg-[#dfeaf6] p-6">
                     <div className="flex flex-col items-center text-center gap-4 mb-5">
                       <div className="flex h-28 w-28 items-center justify-center rounded-full bg-[#2d3a4a] text-[4rem] font-semibold text-white shadow-[inset_0_0_0_2px_rgba(255,255,255,0.18)]">
@@ -530,7 +553,10 @@ export default function DoctorPatients() {
                 </div>
 
               {/* Timeline & Vault Content */}
-              <div className="lg:col-span-2 rounded-2xl border border-slate-200 bg-white shadow-md overflow-hidden flex flex-col max-h-[calc(100vh-200px)]">
+              <div
+                className="lg:col-span-2 rounded-2xl border border-slate-200 bg-white shadow-md overflow-hidden flex flex-col"
+                style={profileCardHeight ? { maxHeight: profileCardHeight } : undefined}
+              >
 
               {/* Tabs */}
               <div className="shrink-0 border-b border-slate-200 px-6 py-4 bg-white flex gap-3">

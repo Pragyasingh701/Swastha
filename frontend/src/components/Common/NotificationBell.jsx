@@ -1,6 +1,10 @@
 import React, { useEffect, useRef, useState, useCallback } from "react";
-import { Bell, Stethoscope, CheckCircle2, XCircle } from "lucide-react";
-import { getDoctorPatientNotifications } from "../../services/doctorPatients";
+import { Bell, Check, X, Stethoscope, CheckCircle2, XCircle } from "lucide-react";
+import {
+  getDoctorPatientNotifications,
+  acceptDoctorRequest,
+  declineDoctorRequest,
+} from "../../services/doctorPatients";
 import { usePolling } from "../../hooks/usePolling";
 
 /**
@@ -13,11 +17,22 @@ import { usePolling } from "../../hooks/usePolling";
  * The red dot on the bell counts only 'request'/'request-sent' entries
  * (an actual pending item needing attention) — accepted/declined events
  * are history, not something to badge as "new" forever.
+ *
+ * A PATIENT-side 'request' row is also actionable (Accept/Decline) right
+ * here — the only side that ever needs this, since a doctor's own
+ * 'request-sent' row is just history of a request THEY sent. Whether a
+ * given 'request' is still pending is derived from the same notifications
+ * list: getPatientNotifications (backend/db/doctorPatients.js) always
+ * emits the original 'request' row PLUS a second 'accepted'/'declined' row
+ * for the same linkId once resolved, so a request linkId with no such
+ * partner row is still awaiting a response.
  */
 export default function NotificationBell() {
   const [notifications, setNotifications] = useState([]);
   const [isOpen, setIsOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [busyLinkId, setBusyLinkId] = useState(null);
+  const [actionError, setActionError] = useState("");
   const containerRef = useRef(null);
 
   const load = useCallback(async () => {
@@ -32,6 +47,34 @@ export default function NotificationBell() {
       setIsLoading(false);
     }
   }, []);
+
+  async function handleAccept(event, linkId) {
+    event.stopPropagation();
+    setBusyLinkId(linkId);
+    setActionError("");
+    try {
+      await acceptDoctorRequest(linkId);
+      await load();
+    } catch (err) {
+      setActionError(err.message || "Could not accept this request.");
+    } finally {
+      setBusyLinkId(null);
+    }
+  }
+
+  async function handleDecline(event, linkId) {
+    event.stopPropagation();
+    setBusyLinkId(linkId);
+    setActionError("");
+    try {
+      await declineDoctorRequest(linkId);
+      await load();
+    } catch (err) {
+      setActionError(err.message || "Could not decline this request.");
+    } finally {
+      setBusyLinkId(null);
+    }
+  }
 
   useEffect(() => {
     load();
@@ -62,8 +105,14 @@ export default function NotificationBell() {
     });
   }
 
+  // A 'request' row's own type never changes once resolved — the resolved
+  // status is a SECOND row (type 'accepted'/'declined') sharing the same
+  // linkId, so "still pending" means no such partner row exists yet.
+  const resolvedLinkIds = new Set(
+    notifications.filter((n) => n.type === "accepted" || n.type === "declined").map((n) => n.linkId)
+  );
   const pendingCount = notifications.filter(
-    (n) => n.type === "request" || n.type === "request-sent"
+    (n) => n.type === "request-sent" || (n.type === "request" && !resolvedLinkIds.has(n.linkId))
   ).length;
 
   return (
@@ -86,6 +135,10 @@ export default function NotificationBell() {
             <p className="text-sm font-semibold text-slate-800">Notifications</p>
           </div>
 
+          {actionError && (
+            <p className="px-4 py-2 text-xs text-red-600 bg-red-50 border-b border-red-100">{actionError}</p>
+          )}
+
           {isLoading ? (
             <p className="px-4 py-6 text-sm text-slate-400 text-center">Loading...</p>
           ) : notifications.length === 0 ? (
@@ -93,7 +146,14 @@ export default function NotificationBell() {
           ) : (
             <ul className="divide-y divide-slate-100">
               {notifications.map((n) => (
-                <NotificationRow key={n.id} notification={n} />
+                <NotificationRow
+                  key={n.id}
+                  notification={n}
+                  isActionable={n.type === "request" && !resolvedLinkIds.has(n.linkId)}
+                  busy={busyLinkId === n.linkId}
+                  onAccept={handleAccept}
+                  onDecline={handleDecline}
+                />
               ))}
             </ul>
           )}
@@ -146,7 +206,7 @@ function notificationText(n) {
   }
 }
 
-function NotificationRow({ notification }) {
+function NotificationRow({ notification, isActionable, busy, onAccept, onDecline }) {
   const meta = TYPE_META[notification.type] || TYPE_META.request;
   const Icon = meta.icon;
 
@@ -158,6 +218,29 @@ function NotificationRow({ notification }) {
       <div className="min-w-0">
         <p className="text-sm text-slate-700">{notificationText(notification)}</p>
         <p className="text-xs text-slate-400 mt-0.5">{formatDateTime(notification.at)}</p>
+
+        {isActionable && (
+          <div className="mt-2 flex gap-2">
+            <button
+              type="button"
+              disabled={busy}
+              onClick={(event) => onAccept(event, notification.linkId)}
+              className="flex items-center gap-1 rounded-lg bg-blue-700 px-2.5 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-blue-800 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <Check size={12} />
+              Accept
+            </button>
+            <button
+              type="button"
+              disabled={busy}
+              onClick={(event) => onDecline(event, notification.linkId)}
+              className="flex items-center gap-1 rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs font-semibold text-slate-600 transition-colors hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <X size={12} />
+              Decline
+            </button>
+          </div>
+        )}
       </div>
     </li>
   );

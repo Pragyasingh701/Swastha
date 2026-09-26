@@ -56,6 +56,15 @@ export default function Login() {
 
   return (
     <main className="flex min-h-screen w-full flex-col md:flex-row bg-surface font-body-md text-on-surface antialiased overflow-hidden selection:bg-primary-fixed">
+      {/* Back to Landing */}
+      <Link
+        to="/"
+        className="fixed top-6 left-6 z-50 inline-flex items-center gap-2 px-4 py-2 bg-white rounded-full shadow-md font-label-md text-label-md font-semibold text-on-surface-variant hover:text-primary transition-colors"
+      >
+        <span className="material-symbols-outlined !text-[20px]">arrow_back</span>
+        Back
+      </Link>
+
       {/* LEFT SIDE: Marketing / Illustration */}
       <section className="relative hidden lg:flex lg:w-1/2 xl:w-7/12 flex-col items-center justify-center p-xl overflow-hidden bg-surface-container-low ">
         <div className="absolute -top-24 -left-24 w-96 h-96 bg-primary-container/10 rounded-full blur-3xl"></div>

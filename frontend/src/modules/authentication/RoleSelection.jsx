@@ -46,9 +46,6 @@ export default function RoleSelection({ onSelectRole }) {
         <div className="max-w-screen-2xl mx-auto px-6 md:px-8 py-4 flex justify-between items-center">
           <div className="flex items-center gap-3">
             <img src={swasthaLogo} alt="Swastha" className="h-9 w-auto" />
-            <span className="font-label-md text-label-md text-on-surface-variant font-medium">
-              Select Experience
-            </span>
           </div>
 
           <div className="flex items-center gap-4">

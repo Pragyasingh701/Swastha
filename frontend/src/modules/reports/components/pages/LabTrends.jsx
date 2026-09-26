@@ -34,7 +34,6 @@ import { getLabInsights } from "../../../../api/reports";
 import SettingsModal from "../../../settings/components/SettingsModal";
 import ProfileDropdown from "../../../settings/components/ProfileDropdown";
 import PatientIdBadge from "../../../../components/Common/PatientIdBadge";
-import PatientNotifications from "../../../../components/Common/PatientNotifications";
 
 // Same nav list as Dashboard.jsx, with Lab Insights marked active
 const navItems = [
@@ -154,7 +153,7 @@ export default function LabInsights() {
 
       <div className="flex-1 flex flex-col min-w-0 h-screen overflow-hidden">
         <header className="shrink-0 flex items-center justify-end gap-4 px-6 lg:px-8 py-5 border-b border-slate-200 bg-white ">
-          <PatientNotifications />
+          <NotificationBell />
 
           <PatientIdBadge />
 
