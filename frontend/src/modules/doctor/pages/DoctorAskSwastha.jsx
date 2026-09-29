@@ -228,7 +228,7 @@ export default function DoctorAskSwastha() {
 
           {/* Patient picker card */}
           <div className="bg-white border border-slate-100 shadow-sm rounded-2xl p-5 mb-5">
-            <div className="flex flex-col lg:flex-row lg:items-end gap-4">
+            <div className="flex flex-col md:flex-row md:items-end gap-4">
               <div className="flex-1 relative" ref={pickerRef}>
                 <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">
                   Select a patient
@@ -305,8 +305,8 @@ export default function DoctorAskSwastha() {
                 )}
               </div>
 
-              <div className="flex items-center gap-2 shrink-0">
-                <div className="flex items-center gap-2.5 bg-blue-50/80 border border-blue-100 rounded-xl px-3.5 py-3 text-xs text-blue-700 max-w-xs">
+              <div className="flex items-center gap-2 md:shrink-0">
+                <div className="flex items-center gap-2.5 bg-blue-50/80 border border-blue-100 rounded-xl px-3.5 py-3 text-xs text-blue-700 w-full md:w-auto md:max-w-xs">
                   <Clock size={16} className="text-blue-500 shrink-0" />
                   <span>Answers are based only on the selected patient's uploaded records.</span>
                 </div>

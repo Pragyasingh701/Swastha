@@ -12,7 +12,6 @@ import {
   CheckCircle2,
   Trash2,
   History,
-  Leaf,
 } from "lucide-react";
 import {
   getIntakeQueue,
@@ -42,77 +41,6 @@ const HPI_FIELD_LABELS = [
   ["timing", "Timing"],
   ["exacerbating_relieving", "Exacerbating / Relieving"],
   ["severity", "Severity"],
-];
-
-// Mirrors backend/rag/services/intakeQuestions.js's AYURVEDA_SUBSECTIONS
-// shape (group key -> title, field key -> label, in the same fixed order
-// patients are asked) — this is what was previously entirely missing from
-// the doctor's summary: ayurveda_profile was being collected on Ayurvedic
-// sessions but the modal never rendered it, so only HPI + Medications &
-// Allergies showed even though the patient answered a full Prakriti/
-// Vikriti/etc. questionnaire (bug, confirmed with the user). Kept as a
-// frontend-local mirror rather than importing the backend file directly
-// (separate deployables) — field/group KEYS must stay in sync with that
-// file if it ever changes, but labels here are free to differ slightly for
-// display (e.g. "Body Frame" vs internal "body_frame").
-const AYURVEDA_GROUPS = [
-  {
-    key: "prakriti",
-    title: "Prakriti (Constitution)",
-    fields: [
-      ["body_frame", "Body Frame"],
-      ["skin_type", "Skin Type"],
-      ["appetite_pattern", "Appetite Pattern"],
-      ["temperament", "Temperament"],
-      ["sleep_tendency", "Sleep Tendency"],
-    ],
-  },
-  {
-    key: "agni_ahara",
-    title: "Agni & Ahara (Digestion & Diet)",
-    fields: [
-      ["digestion_strength", "Digestion Strength"],
-      ["bowel_pattern", "Bowel Pattern"],
-      ["thirst_level", "Thirst Level"],
-      ["taste_cravings", "Taste Cravings"],
-      ["food_intolerances", "Food Intolerances"],
-    ],
-  },
-  {
-    key: "nidra_dinacharya",
-    title: "Nidra & Dinacharya (Sleep & Routine)",
-    fields: [
-      ["sleep_hours", "Sleep Hours"],
-      ["sleep_quality", "Sleep Quality"],
-      ["wake_routine", "Wake Routine"],
-      ["activity_level", "Activity Level"],
-      ["work_stress_pattern", "Work / Stress Pattern"],
-    ],
-  },
-  {
-    key: "manas",
-    title: "Manas (Mental-Emotional State)",
-    fields: [
-      ["current_mood", "Current Mood"],
-      ["recent_stressors", "Recent Stressors"],
-    ],
-  },
-  {
-    // vikruti_qualities is flat at the top level of ayurveda_profile (not
-    // nested under a "vikruti" object) — matches AYURVEDA_FIELD_GROUPS'
-    // null-group convention in intakeQuestions.js.
-    key: null,
-    title: "Vikruti (Current Complaint Quality)",
-    fields: [["vikruti_qualities", "Vikruti Qualities"]],
-  },
-  {
-    key: "history_ayurvedic",
-    title: "History (Prior Ayurvedic Treatment)",
-    fields: [
-      ["prior_treatments", "Prior Treatments"],
-      ["home_remedies", "Home Remedies"],
-    ],
-  },
 ];
 
 // Curated order + wording for drug_allergy, same role as HPI_FIELD_LABELS.
@@ -204,46 +132,6 @@ function orderedAnsweredFields(obj, labelPairs) {
     if (isAnswered(key, obj[key])) out.push({ key, label: humanizeFieldKey(key), value: obj[key] });
   }
   return out;
-}
-
-/**
- * Same idea for ayurveda_profile, which is grouped one level deeper.
- * Returns only groups that actually have answers, so an untouched
- * sub-section doesn't render as an empty heading.
- */
-function orderedAyurvedaGroups(profile) {
-  if (!profile || typeof profile !== "object") return [];
-  const known = new Set();
-  const groups = [];
-
-  for (const { key, title, fields } of AYURVEDA_GROUPS) {
-    // key === null means the fields live flat on the profile itself
-    // (vikruti_qualities), matching AYURVEDA_FIELD_GROUPS' convention.
-    const source = key ? profile[key] : profile;
-    if (key) known.add(key);
-    fields.forEach(([f]) => known.add(f));
-    const items = orderedAnsweredFields(source, fields)
-      // For the flat group, only take its own declared fields — otherwise it
-      // would swallow every other top-level key on the profile.
-      .filter((it) => (key ? true : fields.some(([f]) => f === it.key)));
-    if (items.length > 0) groups.push({ title, items });
-  }
-
-  // Anything on the profile these groups don't cover — a new sub-section, or
-  // a new field inside one — still gets shown rather than dropped.
-  const extras = [];
-  for (const [k, v] of Object.entries(profile)) {
-    if (known.has(k) || NON_ANSWER_KEYS.has(k)) continue;
-    if (v && typeof v === "object" && !Array.isArray(v)) {
-      const items = orderedAnsweredFields(v, []);
-      if (items.length > 0) groups.push({ title: humanizeFieldKey(k), items });
-    } else if (hasAnswer(v)) {
-      extras.push({ key: k, label: humanizeFieldKey(k), value: v });
-    }
-  }
-  if (extras.length > 0) groups.push({ title: "Other", items: extras });
-
-  return groups;
 }
 
 function formatIntakeTimestamp(value) {
@@ -357,23 +245,6 @@ function IntakeQueueRows({ sessions, onSelect, onComplete, onRemove, actioningId
                       </p>
                       <p className="text-sm text-slate-500 truncate flex items-center gap-2">
                         <span className="truncate">{s.chief_complaint || "No chief complaint recorded yet"}</span>
-                        {/* Treatment-method badge — lets a doctor tell at a
-                            glance which intake question set this patient
-                            went through (Ayurvedic sessions include the
-                            extra ayurveda_profile section). Doesn't affect
-                            queue ordering — see getIntakeQueueForPatients'
-                            doctorId-scoping comment for why every session
-                            shown here already belongs to this doctor
-                            (or is unclaimed) regardless of method. */}
-                        <span
-                          className={`shrink-0 text-[11px] font-medium px-1.5 py-0.5 rounded ${
-                            s.intake_method === "ayurvedic"
-                              ? "bg-amber-50 text-amber-700"
-                              : "bg-slate-100 text-slate-500"
-                          }`}
-                        >
-                          {s.intake_method === "ayurvedic" ? "Ayurvedic" : "Allopathic"}
-                        </span>
                       </p>
                     </div>
                   </button>
@@ -528,20 +399,6 @@ function IntakeHistoryList({ history, isLoading, error }) {
                   <p className="text-sm font-semibold text-slate-900 truncate">{h.patient_name}</p>
                   <p className="text-sm text-slate-500 truncate flex items-center gap-2">
                     <span className="truncate">{h.chief_complaint || "No chief complaint recorded"}</span>
-                    {/* Same treatment-method badge as the active queue and
-                        the summary modal (Issue #9 — this was previously
-                        the only place showing intake_method even though
-                        the backend already returns it on every history
-                        row, see getIntakeActionHistoryForDoctor). */}
-                    <span
-                      className={`shrink-0 text-[11px] font-medium px-1.5 py-0.5 rounded ${
-                        h.intake_method === "ayurvedic"
-                          ? "bg-amber-50 text-amber-700"
-                          : "bg-slate-100 text-slate-500"
-                      }`}
-                    >
-                      {h.intake_method === "ayurvedic" ? "Ayurvedic" : "Allopathic"}
-                    </span>
                   </p>
                 </div>
               </div>
@@ -596,13 +453,11 @@ function IntakeSessionModal({ sessionId, onClose }) {
 
   const hpi = detail?.structured_history?.hpi || {};
   const drugAllergy = detail?.structured_history?.drug_allergy || {};
-  const ayurvedaProfile = detail?.structured_history?.ayurveda_profile || null;
 
   // Built from what the SESSION actually captured, with the tables above
   // supplying order and wording — see the "Dynamic field rendering" note.
   const hpiFields = orderedAnsweredFields(hpi, HPI_FIELD_LABELS);
   const drugAllergyFields = orderedAnsweredFields(drugAllergy, DRUG_ALLERGY_FIELD_LABELS);
-  const ayurvedaGroups = orderedAyurvedaGroups(ayurvedaProfile);
 
   return (
     <div
@@ -620,15 +475,6 @@ function IntakeSessionModal({ sessionId, onClose }) {
             </p>
             <h3 className="text-xl font-bold text-slate-900 flex items-center gap-2">
               {isLoading ? "Loading…" : detail?.patient_name || "Patient"}
-              {!isLoading && detail && (
-                <span
-                  className={`text-[11px] font-medium px-1.5 py-0.5 rounded ${
-                    detail.intake_method === "ayurvedic" ? "bg-amber-50 text-amber-700" : "bg-slate-100 text-slate-500"
-                  }`}
-                >
-                  {detail.intake_method === "ayurvedic" ? "Ayurvedic" : "Allopathic"}
-                </span>
-              )}
             </h3>
             {!isLoading && detail?.chief_complaint && (
               <p className="text-sm text-slate-500 mt-1">Chief complaint: {detail.chief_complaint}</p>
@@ -687,38 +533,6 @@ function IntakeSessionModal({ sessionId, onClose }) {
                   ))}
                 </div>
               </div>
-
-              {/* Ayurveda constitutional/lifestyle profile — only present on
-                      intake_method: "ayurvedic" sessions. Groups and fields are
-                      ordered by AYURVEDA_GROUPS but sourced from the session, so
-                      a sub-section the patient never reached is omitted rather
-                      than shown empty, and a group this file doesn't know about
-                      still appears. */}
-              {ayurvedaGroups.length > 0 && (
-                <div>
-                  <h4 className="text-sm font-semibold text-slate-700 uppercase tracking-wide mb-2 flex items-center gap-1.5">
-                    <Leaf size={14} />
-                    Ayurveda / Dashavidha Profile
-                  </h4>
-                  <div className="space-y-4">
-                    {ayurvedaGroups.map(({ title, items }) => (
-                      <div key={title}>
-                        <p className="text-xs font-semibold text-slate-500 mb-1.5">{title}</p>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                          {items.map(({ key, label, value }) => (
-                            <div key={key} className="rounded-xl border border-slate-100 bg-slate-50 p-3">
-                              <p className="text-xs text-slate-500">{label}</p>
-                              <p className="text-sm font-medium text-slate-900 mt-0.5">
-                                {formatFieldValue(value)}
-                              </p>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
 
               <div>
                 <h4 className="text-sm font-semibold text-slate-700 uppercase tracking-wide mb-2 flex items-center gap-1.5">

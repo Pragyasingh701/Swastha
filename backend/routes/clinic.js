@@ -124,11 +124,10 @@ router.post('/verify-code', rateLimitVerifyCode, async (req, res) => {
  * POST /api/clinic/verify-otp
  * JWT (patient) auth. Body: { doctorId }.
  * On success: upserts the doctor-patient link to accepted, creates an
- * intake_sessions row with origin='clinic_checkin' and intake_method
- * resolved from the DOCTOR's own row (never patient-supplied), then hands
- * back the same shape POST /api/intake/start returns so the frontend can
- * drop straight into the existing chat UI and call POST /api/intake/turn
- * for every subsequent message, unchanged.
+ * intake_sessions row with origin='clinic_checkin', then hands back the
+ * same shape POST /api/intake/start returns so the frontend can drop
+ * straight into the existing chat UI and call POST /api/intake/turn for
+ * every subsequent message, unchanged.
  */
 router.post('/verify-otp', requirePatientAuth, async (req, res) => {
   const patientId = req.user.userId;
@@ -139,28 +138,22 @@ router.post('/verify-otp', requirePatientAuth, async (req, res) => {
   }
 
   try {
-    // Resolve intake_method from the doctor's OWN row, server-side — PRD
-    // §3.4: "resolved from the doctor's own row, never patient-supplied".
     // A bad/unknown doctorId at this stage (after the code-verify screen
-    // already confirmed identity) fails safe rather than defaulting silently.
+    // already confirmed identity) fails safe rather than proceeding silently.
     const doctor = await findUserById(doctorId);
     if (!doctor || doctor.role !== 'doctor') {
       return res.status(400).json({ message: 'Unable to complete check-in for this doctor.' });
     }
-    const intakeMethod = doctor.treatment_method === 'ayurvedic' ? 'ayurvedic' : 'allopathic';
 
     await upsertAcceptedLink({ doctorId, patientId });
 
     // Patient-chosen on the language screen shown before this call (Voice
-    // Layer PRD §6 — asked once, stored on the session row). Unlike
-    // intakeMethod above this IS patient-supplied, since it's their own
-    // reading/listening preference rather than a clinical setting; an
+    // Layer PRD §6 — asked once, stored on the session row). An
     // unrecognised value falls back to the default rather than failing.
     const language = req.body?.language === 'en-IN' ? 'en-IN' : 'hi-IN';
 
     const { session, turn } = await startIntakeSession(patientId, {
       doctorId,
-      intakeMethod,
       origin: 'clinic_checkin',
       language,
     });

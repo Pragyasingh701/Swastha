@@ -16,10 +16,10 @@ import supabase from '../config/supabase.js';
  * doctorId scoping: a session created via clinic check-in (routes/clinic.js)
  * has doctor_id set to that SPECIFIC doctor and must only ever appear in
  * their queue — a patient accepted-linked to multiple doctors (e.g. a
- * remote allopathic doctor AND a walk-in Ayurvedic doctor scanned via a
- * clinic code) was otherwise showing that session in every one of their
- * linked doctors' queues, not just the doctor it actually belongs to (bug,
- * confirmed with the user). A session with doctor_id IS NULL (started via
+ * remote doctor AND a walk-in doctor scanned via a clinic code) was
+ * otherwise showing that session in every one of their linked doctors'
+ * queues, not just the doctor it actually belongs to (bug, confirmed with
+ * the user). A session with doctor_id IS NULL (started via
  * the plain "Start Visit Intake" flow, no doctor picked) is unchanged —
  * still visible to every one of the patient's linked doctors, since nothing
  * has claimed it yet.
@@ -35,7 +35,7 @@ export async function getIntakeQueueForPatients(patientIds, doctorId) {
 
   const { data, error } = await supabase
     .from('intake_sessions')
-    .select('id, patient_id, doctor_id, chief_complaint, priority, red_flag_reason, status, origin, intake_method, doctor_action, created_at, completed_at')
+    .select('id, patient_id, doctor_id, chief_complaint, priority, red_flag_reason, status, origin, doctor_action, created_at, completed_at')
     .in('patient_id', patientIds)
     // Only this doctor's own claimed sessions, or unclaimed (doctor_id null)
     // ones — see the doctorId-scoping note above.
@@ -96,7 +96,7 @@ export async function getIntakeSessionForPatients(sessionId, patientIds, doctorI
 
   const { data, error } = await supabase
     .from('intake_sessions')
-    .select('id, patient_id, doctor_id, chief_complaint, structured_history, priority, red_flag_reason, status, origin, intake_method, doctor_action, created_at, completed_at')
+    .select('id, patient_id, doctor_id, chief_complaint, structured_history, priority, red_flag_reason, status, origin, doctor_action, created_at, completed_at')
     .eq('id', sessionId)
     .in('patient_id', patientIds)
     .or(`doctor_id.is.null,doctor_id.eq.${doctorId}`)
@@ -194,7 +194,7 @@ export async function getIntakeActionHistoryForDoctor(doctorId, patientIds) {
   const sessionIds = [...new Set(actions.map((a) => a.session_id))];
   const { data: sessions, error: sessionsError } = await supabase
     .from('intake_sessions')
-    .select('id, chief_complaint, priority, red_flag_reason, origin, intake_method, created_at')
+    .select('id, chief_complaint, priority, red_flag_reason, origin, created_at')
     .in('id', sessionIds);
 
   if (sessionsError) {

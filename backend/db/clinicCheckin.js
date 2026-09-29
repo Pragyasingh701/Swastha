@@ -4,9 +4,9 @@ import supabase from '../config/supabase.js';
 // Clinic check-in flow (PRD §3) — walk-in patients read a doctor-specific
 // code displayed at the clinic instead of following a remote intake link.
 // This module owns the code lifecycle (lazy daily generation, public
-// lookup) and the audited treatment_method change record. Ownership/auth
-// decisions stay in the route layer (backend/routes/clinic.js), same
-// boundary as doctorPatients.js not deciding auth for its callers.
+// lookup). Ownership/auth decisions stay in the route layer
+// (backend/routes/clinic.js), same boundary as doctorPatients.js not
+// deciding auth for its callers.
 
 // Excludes 0/O, 1/I/l for wall-display legibility (PRD §3.2) — a doctor or
 // clinic staff reading this off a printed sheet or a TV screen across a
@@ -135,47 +135,10 @@ export async function resolveCheckinCode(code) {
 
   // Deliberately minimal — display identity ONLY (PRD §3.4: "a bare code
   // never exposes sensitive data"). No specialty, no license, no email,
-  // no treatment_method, nothing else from the doctors row.
+  // nothing else from the doctors row.
   return {
     doctorId: doctor.id,
     doctorName: doctor.name || 'Doctor',
     clinicName: doctor.hospital_name || null,
   };
-}
-
-/**
- * Writes an audited row for a treatment_method change (PRD §3.2/§4.3).
- * There is no HTTP route calling this yet — no admin-auth model exists in
- * this codebase to gate one safely — but the audit trail + this db-layer
- * function exist so a future admin tool (or a one-off support script) has
- * a single correct place to record the change rather than hand-writing SQL
- * against doctors + doctor_method_changes separately.
- *
- * @param {{ doctorId: string, oldMethod: string|null, newMethod: string, changedBy: string }} params
- */
-export async function recordMethodChange({ doctorId, oldMethod, newMethod, changedBy }) {
-  if (!doctorId || !newMethod || !changedBy) {
-    throw new Error('recordMethodChange: doctorId, newMethod, and changedBy are required');
-  }
-  if (!['allopathic', 'ayurvedic'].includes(newMethod)) {
-    throw new Error('recordMethodChange: newMethod must be "allopathic" or "ayurvedic"');
-  }
-  if (!supabase) throw new Error('Database connection is unavailable.');
-
-  const { error: updateError } = await supabase
-    .from('doctors')
-    .update({ treatment_method: newMethod, updated_at: new Date().toISOString() })
-    .eq('id', doctorId);
-
-  if (updateError) {
-    throw new Error(`recordMethodChange: failed to update doctor: ${updateError.message}`);
-  }
-
-  const { error: auditError } = await supabase
-    .from('doctor_method_changes')
-    .insert({ doctor_id: doctorId, old_method: oldMethod || null, new_method: newMethod, changed_by: changedBy });
-
-  if (auditError) {
-    throw new Error(`recordMethodChange: failed to write audit row: ${auditError.message}`);
-  }
 }
