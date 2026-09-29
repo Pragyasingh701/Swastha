@@ -67,7 +67,7 @@ export default function VerifyOTP() {
   return (
     <main className="min-h-screen w-full flex flex-col justify-center items-center p-6 bg-surface font-body-md text-on-surface selection:bg-primary-fixed">
       <div className="w-full max-w-[440px]">
-        <div className="bg-white shadow-[0_8px_40px_-12px_rgba(15,23,42,0.08)] rounded-[20px] p-8 lg:p-10 border border-outline-variant/20 ">
+        <div className="bg-white shadow-[0_8px_40px_-12px_rgba(15,23,42,0.08)] rounded-[20px] p-5 sm:p-8 lg:p-10 border border-outline-variant/20 ">
           <div className="text-center mb-8">
             <div className="w-14 h-14 mx-auto mb-4 bg-primary-container/10 text-primary rounded-2xl flex items-center justify-center">
               <span className="material-symbols-outlined text-[30px]">phonelink_ring</span>

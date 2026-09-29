@@ -835,8 +835,8 @@ export default function DoctorPatients() {
 
                         return (
                           <div key={report.id} className={`rounded-2xl border border-slate-200 p-5 transition-all duration-200 hover:shadow-md ${meta.tone}`}>
-                            <div className="flex items-start justify-between gap-4 flex-wrap">
-                              <div className="flex items-start gap-4 flex-1 min-w-0">
+                            <div className="flex flex-col-reverse sm:flex-row items-start justify-between gap-3 sm:gap-4">
+                              <div className="flex items-start gap-4 flex-1 min-w-0 w-full">
                                 <Icon size={20} className="shrink-0 mt-1" />
                                 <div className="min-w-0 flex-1">
                                   <h4 className="font-semibold text-base text-slate-900 line-clamp-2">
@@ -868,7 +868,7 @@ export default function DoctorPatients() {
                                 </div>
                               </div>
 
-                              <span className="inline-flex items-center rounded-full bg-white px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-slate-600 shrink-0">
+                              <span className="inline-flex items-center rounded-full bg-white px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-slate-600 shrink-0 self-start">
                                 {report.category || 'Record'}
                               </span>
                             </div>

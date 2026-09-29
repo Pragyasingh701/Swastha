@@ -33,7 +33,7 @@ const FAQS = [
   },
   {
     q: "Which doctors can use Swastha?",
-    a: "Doctors practicing Allopathic or Ayurvedic medicine, verified against their medical registration certificate at signup.",
+    a: "Any licensed doctor, verified against their medical registration certificate at signup.",
   },
   {
     q: "Is it free?",
@@ -346,18 +346,6 @@ export default function LandingPage() {
                       <p className="text-sm text-on-surface-variant">
                         Checked on every turn of the conversation, so nothing urgent
                         gets buried in a busy queue.
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex gap-4">
-                    <div className="w-11 h-11 rounded-xl bg-secondary/10 text-secondary flex items-center justify-center shrink-0">
-                      <span className="material-symbols-outlined">spa</span>
-                    </div>
-                    <div>
-                      <h4 className="font-bold mb-1">Ayurveda-aware intake</h4>
-                      <p className="text-sm text-on-surface-variant">
-                        Practicing Ayurvedic doctors get a structured constitution,
-                        digestion, and routine assessment built in.
                       </p>
                     </div>
                   </div>
