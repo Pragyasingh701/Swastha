@@ -11,7 +11,7 @@
     "build:frontend": "vite build frontend",
     "start": "node backend/server.js",
     "start:backend": "node backend/server.js",
-    "test": "node --test backend/test/*.test.js"
+    "test": "node --experimental-test-module-mocks --test backend/test/*.test.js"
   },
   "dependencies": {
     "@langchain/core": "^1.2.8",
