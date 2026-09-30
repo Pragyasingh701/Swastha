@@ -488,6 +488,24 @@ OPENROUTER_API_KEY=your_openrouter_api_key_here
 # posture. Any value other than exactly "true" is treated as false.
 # ALLOW_OPENROUTER_FALLBACK=false
 
+# Sarvam AI — TTS (Bulbul v3) + ASR (Saaras) for the Module A voice intake
+# layer. Comma-separate multiple keys as SARVAM_API_KEYS to rotate past an
+# exhausted/rejected one; singular SARVAM_API_KEY also works. Optional —
+# without a key, or if Sarvam TTS fails, a turn simply has no audio (see
+# ALLOW_EDGE_TTS_FALLBACK below for the one exception); ASR has no fallback
+# and is simply unavailable without a working key.
+SARVAM_API_KEYS=your_sarvam_api_key_here
+
+# WARNING — provider-safety flag, same reasoning as ALLOW_OPENROUTER_FALLBACK
+# above. Defaults to false. When false, the Sarvam-TTS fallback NEVER sends a
+# request to Microsoft's speech.platform.bing.com (via the edge-tts-universal
+# library) — that fallback sends the assistant's generated question text
+# (built from patient intake context) to a third-party host outside Sarvam's
+# terms. On a Sarvam TTS failure with this flag false, the turn simply has no
+# audio (text/tap still works) instead of falling back to Microsoft's TTS.
+# Any value other than exactly "true" is treated as false.
+# ALLOW_EDGE_TTS_FALLBACK=false
+
 # Only needed if you deliberately run RAG as a separate external service again —
 # defaults to an in-process loopback call otherwise.
 # RAG_BASE_URL=http://localhost:5001/rag/api
@@ -508,14 +526,14 @@ VITE_RAG_BASE_URL=http://localhost:5001/rag/api
 
 ## 🌐 External hosts that can receive patient text
 
-Every external host the RAG sub-app (`backend/rag/`) can send patient/report text or document images to, as of the `ALLOW_OPENROUTER_FALLBACK` provider-safety change — not what it always does send, but what it *can* reach given how it's configured:
+Every external host the RAG sub-app (`backend/rag/`) can send patient/report text or document images to, as of the `ALLOW_OPENROUTER_FALLBACK`/`ALLOW_EDGE_TTS_FALLBACK` provider-safety changes — not what it always does send, but what it *can* reach given how it's configured:
 
 | Host | Features that reach it | What text/data is sent |
 | :--- | :--- | :--- |
 | `generativelanguage.googleapis.com` (Google Gemini) | Embeddings, grounded search/chat answers, report/lab/timeline summarization, patient intake dialogue, prescription/report OCR, doctor certificate OCR | Report chunk text (`report_embeddings.chunk_text`), diagnosis/medicines/notes fields, doctor questions, patient intake chat messages and accumulated structured medical history, and — for OCR — the uploaded document image itself (prescription, lab report, medical certificate) |
 | `openrouter.ai` | Same generation/vision-ocr/intake-dialogue features as Gemini above, but **only reachable when `ALLOW_OPENROUTER_FALLBACK=true`** and only as a last resort after every Gemini key/model is exhausted. **Unreachable for any request when the flag is false (the default).** | Same content as the Gemini row above, for whichever specific request triggered the fallback |
 | `api.sarvam.ai` (Sarvam AI) | Voice intake: speech-to-text (patient's spoken answer) and text-to-speech (the assistant's next question, generated from patient context) | The patient's voice recording (transcribed to their spoken symptom/history answer) and the assistant's generated question text |
-| `speech.platform.bing.com` (Microsoft Edge TTS, via the `edge-tts-universal` library) | Voice intake text-to-speech, **only as a fallback if Sarvam TTS fails** | The assistant's generated question text (same content as the Sarvam TTS row, for whichever turn triggered the fallback) |
+| `speech.platform.bing.com` (Microsoft Edge TTS, via the `edge-tts-universal` library) | Voice intake text-to-speech, but **only reachable when `ALLOW_EDGE_TTS_FALLBACK=true`** and only as a last resort if Sarvam TTS fails. **Unreachable for any request when the flag is false (the default) — the turn simply has no audio instead.** | The assistant's generated question text (same content as the Sarvam TTS row), for whichever turn triggered the fallback |
 
 Not included above: Supabase (`*.supabase.co`) stores patient data as your own database/file storage, not as an AI/ML inference provider processing it — it's infrastructure you control, not a third party your patient text is sent *to* for processing. Brevo (transactional email) sends OTPs and account notifications, never clinical/medical content, and isn't part of the RAG sub-app.
 

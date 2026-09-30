@@ -50,6 +50,16 @@ export const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
 // Any string other than exactly "true" (case-insensitive) is treated as
 // false — an unset, empty, or typo'd value fails safe.
 export const ALLOW_OPENROUTER_FALLBACK = String(process.env.ALLOW_OPENROUTER_FALLBACK || '').toLowerCase() === 'true';
+// Same provider-safety reasoning as ALLOW_OPENROUTER_FALLBACK above, for the
+// voice-intake TTS path: edge-tts-universal (ttsService.js's Sarvam
+// fallback) sends the assistant's generated question text — built from the
+// patient's intake context — to Microsoft's speech.platform.bing.com over a
+// WebSocket, outside Sarvam's terms. Defaults to false; any value other
+// than exactly "true" (case-insensitive, same rule as the flag above) is
+// treated as false. When false, ttsService.js's Sarvam fallback returns its
+// existing ok:false/no-audio result instead of trying edge-tts — see
+// ttsService.js's synthesizeWithEdge for the enforcement.
+export const ALLOW_EDGE_TTS_FALLBACK = String(process.env.ALLOW_EDGE_TTS_FALLBACK || '').toLowerCase() === 'true';
 export const JWT_SECRET = process.env.JWT_SECRET;
 export const PORT = process.env.PORT || 3010;
 export const CORS_ORIGIN = (process.env.CORS_ORIGIN || 'http://localhost:5173')
