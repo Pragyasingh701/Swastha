@@ -15,7 +15,7 @@ the **Frontend SPA** (Vite/React, `:5173`).
 | **Frontend** (`frontend/`) | **React 18**, **Vite**, **Tailwind CSS**, **React Router v6**, **Recharts**, **Lucide Icons** | Modern responsive SPA featuring medical timeline UI, lab trends chart visualizer, dark mode styling, and redirect-based Google Sign-In. |
 | **Backend API** (`backend/`) | **Node.js**, **Express.js** (`:5001`), **Supabase Client SDK**, **Brevo REST API**, **Multer**, **`google-auth-library`**, **JWT** | Core API for user auth, Brevo-powered 6-digit email OTPs, password resets, family vault management, doctor license validation, and local document uploads. |
 | **RAG Sub-App** (`backend/rag/`, mounted at `/rag`) | **Google Gemini API**, **OpenRouter API**, **Supabase Client SDK** | Vector search & prescription OCR, running **inside the same Express process and port as the Backend API** (not a separate service — see below). Generates 768-dim embeddings (`gemini-embedding-001`) and synthesizes grounded answers via OpenRouter LLMs. |
-| **Database & Vector Storage** | **Supabase PostgreSQL**, **`pgvector`** extension | Cloud Postgres database with dedicated `patients`/`doctors`/`pending_registrations` identity tables (patients and doctors are separate tables, not a shared `users` table with a role column), plus `reports`, `report_embeddings`, `vault_table`, `family_members`, `doctor_patient`, and `notifications`, with an HNSW cosine vector index on embeddings. |
+| **Database & Vector Storage** | **Supabase PostgreSQL**, **`pgvector`** extension | Cloud Postgres database with dedicated `patients`/`doctors`/`pending_registrations` identity tables (patients and doctors are separate tables, not a shared `users` table with a role column), plus `reports`, `report_embeddings`, `vault_table`, `family_members`, `doctor_patient`, and `notifications`. Retrieval scans one patient's own embeddings via a plain `patient_id` btree index, not an HNSW/ANN index — see the note below the `report_embeddings` DDL for why. |
 
 ---
 
@@ -216,7 +216,14 @@ CREATE TABLE IF NOT EXISTS public.report_embeddings (
 );
 
 CREATE INDEX IF NOT EXISTS report_embeddings_user_id_idx ON public.report_embeddings (patient_id);
-CREATE INDEX IF NOT EXISTS report_embeddings_embedding_hnsw_idx ON public.report_embeddings USING hnsw (embedding vector_cosine_ops);
+-- No HNSW/ANN index on `embedding`: every retrieval query
+-- (match_report_embeddings) filters `WHERE patient_id = p_user_id` before
+-- ordering by vector distance — the candidate set is always one patient's
+-- own chunks, narrowed by the btree index above, never a cross-patient ANN
+-- search over the whole table. An exact scan over that already-small,
+-- already-scoped set is not meaningfully slower than an ANN lookup would
+-- be, and it's exact rather than approximate. See
+-- supabase/migrations/20260930051136_drop_report_embeddings_hnsw_idx.sql.
 
 -- 6. Family Vault Table (⚠️ hand-created, see note above)
 CREATE TABLE public.vault_table (

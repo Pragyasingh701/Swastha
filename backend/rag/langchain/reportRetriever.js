@@ -7,8 +7,8 @@
 // match_report_embeddings(p_user_id, p_query_embedding, p_match_count).
 // Using SupabaseVectorStore would mean creating a second table and
 // re-embedding everything. Subclassing BaseRetriever instead reuses the
-// existing table, the existing HNSW index, and — critically — the existing
-// RPC, which applies the user_id filter INSIDE the SQL (see
+// existing table, the existing patient_id btree index, and — critically —
+// the existing RPC, which applies the user_id filter INSIDE the SQL (see
 // migrations/002_match_report_embeddings_function.sql). That is a stronger
 // guarantee than a caller-supplied metadata filter, which is what
 // SupabaseVectorStore would have given us.
