@@ -440,7 +440,9 @@ Return ONLY a single JSON object (no prose, no markdown fences) with this exact 
 
 Rules for the JSON:
 - "keyFacts" should have 0-6 items. Omit it (empty array) if the answer is a single simple fact already fully captured in "headline" — don't pad with redundant restatements.
-- Every keyFacts item must be traceable to a specific excerpt number.`;
+- Every keyFacts item must be traceable to a specific excerpt number.
+- If the same fact appears in more than one excerpt (e.g. two excerpts both mention the same report date), include it in "keyFacts" ONLY ONCE — never list the same label+detail combination twice just because multiple excerpts happen to state it.
+- "caveat" must add something genuinely NEW that isn't already said in "headline" or "keyFacts" — real uncertainty, an incomplete/older record, or a limitation of what was found. If "headline" is already a complete, confident answer with nothing further worth flagging, leave "caveat" as an empty string. Never use "caveat" to just restate or rephrase the headline.`;
 }
 
 /**
@@ -496,6 +498,24 @@ function extractJson(text) {
   return JSON.parse(candidate.slice(start, end + 1));
 }
 
+// A keyFacts entry counts as a duplicate of an earlier one if its label and
+// detail match (case/whitespace-insensitive) — this happens when the same
+// fact appears in more than one retrieved excerpt (e.g. two chunks from the
+// same report both mention the report date) and the model lists it once per
+// excerpt instead of once overall. The prompt now also instructs against
+// this, but that's a probabilistic guardrail, not a guarantee — a free-tier
+// model can and does ignore instructions, so this filter is what actually
+// keeps a duplicate from reaching the user regardless of what the model did.
+function dedupeKeyFacts(keyFacts) {
+  const seen = new Set();
+  return keyFacts.filter((f) => {
+    const dedupeKey = `${f.label.toLowerCase()}|${f.detail.toLowerCase()}`;
+    if (seen.has(dedupeKey)) return false;
+    seen.add(dedupeKey);
+    return true;
+  });
+}
+
 // Falls back to treating the whole raw response as the headline if the
 // model didn't return valid JSON — the feature degrades to a plain-text
 // answer rather than failing outright.
@@ -509,21 +529,23 @@ function parseStructuredAnswer(raw, excerpts) {
 
   const excerptByIndex = new Map(excerpts.map((e) => [e.index, e]));
 
+  const keyFacts = Array.isArray(parsed.keyFacts)
+    ? parsed.keyFacts
+        .filter((f) => f && f.detail)
+        .map((f) => {
+          const excerpt = excerptByIndex.get(Number(f.excerpt));
+          return {
+            label: typeof f.label === 'string' ? f.label.trim() : '',
+            detail: String(f.detail).trim(),
+            reportId: excerpt?.reportId || null,
+            reportTitle: excerpt?.title || null,
+          };
+        })
+    : [];
+
   return {
     headline: typeof parsed.headline === 'string' && parsed.headline.trim() ? parsed.headline.trim() : raw.trim(),
-    keyFacts: Array.isArray(parsed.keyFacts)
-      ? parsed.keyFacts
-          .filter((f) => f && f.detail)
-          .map((f) => {
-            const excerpt = excerptByIndex.get(Number(f.excerpt));
-            return {
-              label: typeof f.label === 'string' ? f.label.trim() : '',
-              detail: String(f.detail).trim(),
-              reportId: excerpt?.reportId || null,
-              reportTitle: excerpt?.title || null,
-            };
-          })
-      : [],
+    keyFacts: dedupeKeyFacts(keyFacts),
     caveat: typeof parsed.caveat === 'string' ? parsed.caveat.trim() : '',
   };
 }
