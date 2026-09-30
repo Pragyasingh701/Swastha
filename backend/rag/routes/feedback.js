@@ -1,15 +1,8 @@
 import express from 'express';
 import { recordFeedback } from '../../db/askSwasthaFeedback.js';
 import { requireAuth } from '../middleware/auth.js';
-import { createUserRateLimiter } from '../middleware/rateLimit.js';
-import { FEEDBACK_RATE_LIMIT_WINDOW_MS, FEEDBACK_RATE_LIMIT_MAX } from '../config/env.js';
 
 const router = express.Router();
-
-const feedbackRateLimiter = createUserRateLimiter({
-  windowMs: FEEDBACK_RATE_LIMIT_WINDOW_MS,
-  max: FEEDBACK_RATE_LIMIT_MAX,
-});
 
 const VALID_RATINGS = ['up', 'down'];
 const VALID_MODES = ['full_context', 'retrieval', 'aggregate'];
@@ -31,7 +24,7 @@ const MAX_SOURCE_REPORT_IDS = 50;
  * Never accepts or stores question/answer text — this is a rating, not a
  * transcript.
  */
-router.post('/', requireAuth, feedbackRateLimiter, async (req, res) => {
+router.post('/', requireAuth, async (req, res) => {
   const { rating, mode, source_report_ids: sourceReportIds, degraded } = req.body || {};
   const userId = req.user.userId;
 

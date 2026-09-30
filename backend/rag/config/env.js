@@ -79,23 +79,6 @@ export const CORS_ORIGIN = (process.env.CORS_ORIGIN || 'http://localhost:5173')
   .map((s) => s.trim())
   .filter(Boolean);
 
-// Rate limits for the heaviest per-request AI call chains: an Ask Swastha
-// chat turn (embed + vector search + generate), a report indexing call
-// (embed every chunk sequentially), the one-shot search endpoint (same
-// chain as chat, minus conversation memory), and vision-OCR extraction
-// (the slowest single call — 45s timeout — so it gets the tightest cap).
-// Defaults match what a normal doctor/patient session actually does; all
-// are env-overridable without a code change if the free-tier AI quota
-// needs a tighter cap.
-export const SEARCH_CHAT_RATE_LIMIT_WINDOW_MS = Number(process.env.SEARCH_CHAT_RATE_LIMIT_WINDOW_MS) || 60_000;
-export const SEARCH_CHAT_RATE_LIMIT_MAX = Number(process.env.SEARCH_CHAT_RATE_LIMIT_MAX) || 20;
-export const REPORTS_INDEX_RATE_LIMIT_WINDOW_MS = Number(process.env.REPORTS_INDEX_RATE_LIMIT_WINDOW_MS) || 60_000;
-export const REPORTS_INDEX_RATE_LIMIT_MAX = Number(process.env.REPORTS_INDEX_RATE_LIMIT_MAX) || 30;
-export const SEARCH_RATE_LIMIT_WINDOW_MS = Number(process.env.SEARCH_RATE_LIMIT_WINDOW_MS) || 60_000;
-export const SEARCH_RATE_LIMIT_MAX = Number(process.env.SEARCH_RATE_LIMIT_MAX) || 20;
-export const EXTRACT_RATE_LIMIT_WINDOW_MS = Number(process.env.EXTRACT_RATE_LIMIT_WINDOW_MS) || 60_000;
-export const EXTRACT_RATE_LIMIT_MAX = Number(process.env.EXTRACT_RATE_LIMIT_MAX) || 5;
-
 // Below this many total characters of embeddable chunk text, a patient's
 // whole history is small enough to hand to the generation model directly —
 // skip embedding + vector search entirely and just load every chunk. See
@@ -110,8 +93,3 @@ export const FULL_CONTEXT_MAX_CHARS = Number(process.env.FULL_CONTEXT_MAX_CHARS)
 // (e.g. a daily cron) outside this process.
 export const AUDIT_LOG_RETENTION_DAYS = Number(process.env.AUDIT_LOG_RETENTION_DAYS) || 365;
 
-// Rate limit on POST /rag/api/search/feedback — a plain DB insert (no AI
-// call chain), so its default cap is looser than the AI-call-chain limits
-// above; still capped to prevent one user from flooding the feedback table.
-export const FEEDBACK_RATE_LIMIT_WINDOW_MS = Number(process.env.FEEDBACK_RATE_LIMIT_WINDOW_MS) || 60_000;
-export const FEEDBACK_RATE_LIMIT_MAX = Number(process.env.FEEDBACK_RATE_LIMIT_MAX) || 30;

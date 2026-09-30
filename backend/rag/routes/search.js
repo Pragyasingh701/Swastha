@@ -1,17 +1,10 @@
 import express from 'express';
 import { searchReports } from '../services/searchService.js';
 import { requireAuth } from '../middleware/auth.js';
-import { createUserRateLimiter } from '../middleware/rateLimit.js';
 import { requireNoticeAck } from '../middleware/requireNoticeAck.js';
 import { logAccess } from '../../db/askSwasthaAccessLog.js';
-import { SEARCH_RATE_LIMIT_WINDOW_MS, SEARCH_RATE_LIMIT_MAX } from '../config/env.js';
 
 const router = express.Router();
-
-const searchRateLimiter = createUserRateLimiter({
-  windowMs: SEARCH_RATE_LIMIT_WINDOW_MS,
-  max: SEARCH_RATE_LIMIT_MAX,
-});
 
 /**
  * POST /api/search
@@ -25,7 +18,7 @@ const searchRateLimiter = createUserRateLimiter({
  * it needs the same disclosure/acknowledgement, not a separate one — an
  * acknowledgement given via either endpoint satisfies both.
  */
-router.post('/', requireAuth, searchRateLimiter, requireNoticeAck('ask_swastha'), async (req, res) => {
+router.post('/', requireAuth, requireNoticeAck('ask_swastha'), async (req, res) => {
   const { query } = req.body || {};
   const userId = req.user.userId;
 

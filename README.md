@@ -511,11 +511,6 @@ SARVAM_API_KEYS=your_sarvam_api_key_here
 # is NOT automatic — run that script on a schedule (e.g. a daily cron).
 # AUDIT_LOG_RETENTION_DAYS=365
 
-# Rate limit on POST /rag/api/search/feedback (a plain DB insert, no AI call
-# chain — looser default than the AI-call-chain limits above).
-# FEEDBACK_RATE_LIMIT_WINDOW_MS=60000
-# FEEDBACK_RATE_LIMIT_MAX=30
-
 # Only needed if you deliberately run RAG as a separate external service again —
 # defaults to an in-process loopback call otherwise.
 # RAG_BASE_URL=http://localhost:5001/rag/api

@@ -2,15 +2,8 @@ import express from 'express';
 import multer from 'multer';
 import { extractReportFromImage } from '../config/gemini.js';
 import { requireAuth } from '../middleware/auth.js';
-import { createUserRateLimiter } from '../middleware/rateLimit.js';
-import { EXTRACT_RATE_LIMIT_WINDOW_MS, EXTRACT_RATE_LIMIT_MAX } from '../config/env.js';
 
 const router = express.Router();
-
-const extractRateLimiter = createUserRateLimiter({
-  windowMs: EXTRACT_RATE_LIMIT_WINDOW_MS,
-  max: EXTRACT_RATE_LIMIT_MAX,
-});
 
 // In-memory storage — the file is only needed transiently to send to
 // Gemini Vision, never persisted here. If the caller wants the file kept
@@ -39,7 +32,7 @@ const upload = multer({
  * handwriting), for the user to review/fill in before saving via
  * backend/api/reports. Never saves anything itself.
  */
-router.post('/', requireAuth, extractRateLimiter, (req, res) => {
+router.post('/', requireAuth, (req, res) => {
   upload.single('file')(req, res, async (err) => {
     if (err) {
       return res.status(400).json({ error: err.message || 'File upload failed.' });

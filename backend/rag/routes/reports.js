@@ -1,15 +1,8 @@
 import express from 'express';
 import { processReportEmbeddings, deleteReportEmbeddings } from '../services/embeddingService.js';
 import { requireAuth } from '../middleware/auth.js';
-import { createUserRateLimiter } from '../middleware/rateLimit.js';
-import { REPORTS_INDEX_RATE_LIMIT_WINDOW_MS, REPORTS_INDEX_RATE_LIMIT_MAX } from '../config/env.js';
 
 const router = express.Router();
-
-const reportsIndexRateLimiter = createUserRateLimiter({
-  windowMs: REPORTS_INDEX_RATE_LIMIT_WINDOW_MS,
-  max: REPORTS_INDEX_RATE_LIMIT_MAX,
-});
 
 // This service does NOT own report storage — backend/ does that (see
 // backend/routes/reports.js, backend/db/reports.js). These endpoints exist
@@ -29,7 +22,7 @@ const reportsIndexRateLimiter = createUserRateLimiter({
  * would find the right report but the chunk had no drug names in it).
  * user_id comes from the JWT, not the body.
  */
-router.post('/index', requireAuth, reportsIndexRateLimiter, async (req, res) => {
+router.post('/index', requireAuth, async (req, res) => {
   const userId = req.user.userId;
   const { id, title, diagnosis, medicines, notes, reportDate, report_date } = req.body || {};
 
