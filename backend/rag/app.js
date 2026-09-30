@@ -13,6 +13,7 @@ import summarizeRouter from './routes/summarize.js';
 import labInsightsRouter from './routes/labInsights.js';
 import patientSummaryRouter from './routes/patientSummary.js';
 import intakeRouter from './routes/intake.js';
+import noticesRouter from './routes/notices.js';
 
 const app = express();
 
@@ -31,6 +32,7 @@ app.use('/api/patient-summary', patientSummaryRouter);
 // start/turn/finalize. Priority queue (GET /api/intake/queue) is a
 // separate later task — not mounted here yet.
 app.use('/api/intake', intakeRouter);
+app.use('/api/notices', noticesRouter);
 
 // Central error handler as a last resort net — routes already catch and
 // respond themselves, but this guards against anything unhandled.

@@ -4,6 +4,7 @@ import { isDoctorLinkedToPatient } from '../../db/doctorPatients.js';
 import { clearSession } from '../langchain/sessionStore.js';
 import { requireAuth } from '../middleware/auth.js';
 import { createUserRateLimiter } from '../middleware/rateLimit.js';
+import { requireNoticeAck } from '../middleware/requireNoticeAck.js';
 import { SEARCH_CHAT_RATE_LIMIT_WINDOW_MS, SEARCH_CHAT_RATE_LIMIT_MAX } from '../config/env.js';
 
 const router = express.Router();
@@ -36,8 +37,13 @@ const SESSION_ID_PATTERN = /^[A-Za-z0-9_-]{8,128}$/;
  * own. It is verified against the doctor_patient table on every request
  * (never cached, never trusted on its own) — a doctor with no link to that
  * patient gets 403, same as the main backend's linking flow requires.
+ *
+ * requireNoticeAck gates on the CALLER's own acknowledgement (req.user.userId)
+ * regardless of which patient's records are being searched — it's the
+ * caller who needs to have been told their question is sent to Gemini, not
+ * the patient being asked about.
  */
-router.post('/', requireAuth, searchChatRateLimiter, async (req, res) => {
+router.post('/', requireAuth, searchChatRateLimiter, requireNoticeAck('ask_swastha'), async (req, res) => {
   const { query, session_id: sessionId, patient_user_id: patientUserId } = req.body || {};
   const callerId = req.user.userId;
 

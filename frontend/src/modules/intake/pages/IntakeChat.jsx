@@ -3,6 +3,8 @@ import { useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "../../../context/AuthContext";
 import { startIntake, resumeIntake, sendIntakeTurn, finalizeIntake, transcribeIntakeAudio, replayIntakeAudio } from "../../../api/intake";
 import { verifyClinicCode, verifyClinicOtp } from "../../../api/clinic";
+import { getNoticeAckStatus, acknowledgeNotice } from "../../../api/notices";
+import { AiNoticeAckModal } from "../../../components/Common/AiNotice";
 import ResponsiveSidebar from "../../../components/Common/ResponsiveSidebar";
 import ProfileDropdown from "../../settings/components/ProfileDropdown";
 import PatientIdBadge from "../../../components/Common/PatientIdBadge";
@@ -136,7 +138,14 @@ function normalizeQuickReplies(raw) {
 // (enter a clinic check-in code — mandatory, no skip path); "confirm"
 // mirrors the old standalone ClinicCheckIn.jsx flow; "chat" reveals the
 // actual conversation UI below.
-const GATE_STEPS = { CODE: "code", CONFIRM: "confirm", LANGUAGE: "language", CHAT: "chat" };
+// ACK sits between LANGUAGE and CHAT: it's the AI-processing notice
+// (backend/rag/config/aiNotices.js's voice_intake entry — "audio and its
+// transcript are processed by Sarvam") shown once before recording can
+// start. The server-side gate (requireNoticeAck on POST /intake/start, and
+// the equivalent inline check on POST /clinic/verify-otp) is what actually
+// enforces this; this step exists so a patient sees the notice instead of
+// a confusing failure on session start.
+const GATE_STEPS = { CODE: "code", CONFIRM: "confirm", LANGUAGE: "language", ACK: "ack", CHAT: "chat" };
 
 // Voice layer (PRD §6): language is resolved ONCE here, never per-turn.
 // Both labels are written in their own script so a patient who can't read
@@ -293,6 +302,57 @@ export default function IntakeChat() {
   // only ever rendered on the OTP submit button.
   const [gateLoadingLongWait, setGateLoadingLongWait] = useState(false);
   const [gateError, setGateError] = useState("");
+
+  // Server-side enforcement (requireNoticeAck on POST /intake/start, and the
+  // equivalent check on POST /clinic/verify-otp) is the real gate; this only
+  // decides whether the ACK screen needs to ask or can pass straight
+  // through for a patient who already acknowledged in an earlier visit.
+  // null = not checked yet.
+  const [voiceNoticeAcknowledged, setVoiceNoticeAcknowledged] = useState(null);
+  const [acknowledgingVoiceNotice, setAcknowledgingVoiceNotice] = useState(false);
+
+  useEffect(() => {
+    if (gateStep !== GATE_STEPS.ACK) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const { acknowledged } = await getNoticeAckStatus("voice_intake");
+        if (cancelled) return;
+        if (acknowledged) {
+          // Already acknowledged in an earlier visit — skip straight past
+          // this screen instead of asking again.
+          handleAckContinue();
+        } else {
+          setVoiceNoticeAcknowledged(false);
+        }
+      } catch {
+        // Status check failing shouldn't block intake entirely — the
+        // server-side gate on session start is the real backstop, so show
+        // the notice screen as a safe default rather than getting stuck.
+        if (!cancelled) setVoiceNoticeAcknowledged(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // handleAckContinue reads clinicDoctor/language via closure, not as a
+    // dependency — this effect should only re-run when the gate step itself
+    // changes, not on every language/doctor state update.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [gateStep]);
+
+  async function handleAcknowledgeVoiceNotice() {
+    setAcknowledgingVoiceNotice(true);
+    try {
+      await acknowledgeNotice("voice_intake");
+      handleAckContinue();
+    } catch {
+      // Leave the screen up — session start's own 403 is the backstop if
+      // this keeps failing, but retrying here is the better first path.
+    } finally {
+      setAcknowledgingVoiceNotice(false);
+    }
+  }
 
   const [sessionId, setSessionId] = useState(preStarted?.session_id || null);
   const [section, setSection] = useState(preStarted?.section || "chief_complaint");
@@ -814,9 +874,17 @@ export default function IntakeChat() {
   function handleLanguageChoice(code) {
     setLanguage(code);
     setGateError("");
+    setGateStep(GATE_STEPS.ACK);
+  }
 
+  // ACK screen -> chat/clinic session. Deliberately re-checks acknowledgement
+  // status here rather than assuming this screen only shows once per
+  // browser: a patient could have already acknowledged in an earlier visit,
+  // in which case this step should pass straight through without an extra
+  // tap. See the ACK gate-step effect below for that check.
+  function handleAckContinue() {
     if (clinicDoctor) {
-      startClinicSession(code);
+      startClinicSession(language);
       return;
     }
     setGateStep(GATE_STEPS.CHAT);
@@ -963,6 +1031,14 @@ export default function IntakeChat() {
   return (
     <div className="flex h-screen overflow-hidden bg-slate-50 text-slate-900 ">
       <Sidebar onOpenSettings={() => setIsSettingsOpen(true)} />
+
+      {gateStep === GATE_STEPS.ACK && voiceNoticeAcknowledged === false && (
+        <AiNoticeAckModal
+          feature="voice_intake"
+          onAccept={handleAcknowledgeVoiceNotice}
+          accepting={acknowledgingVoiceNotice}
+        />
+      )}
 
       <div className="flex-1 flex flex-col min-w-0 h-screen overflow-hidden">
         <header className="shrink-0 flex items-center justify-end gap-4 px-6 lg:px-8 py-5 border-b border-slate-200 bg-white ">

@@ -14,6 +14,7 @@ import {
   RefreshCw,
 } from "lucide-react";
 import { extractReportFromFile } from "../../../../api/search";
+import { AiNoticeBanner } from "../../../../components/Common/AiNotice";
 
 // PDFs and common image formats can be sent to the RAG extraction endpoint.
 const EXTRACTABLE_TYPES = ["image/jpeg", "image/png", "image/webp", "application/pdf"];
@@ -327,6 +328,7 @@ export default function UploadReports({ onClose, onSubmit, token, initialEvent }
 
           {!isEditing && activeTab === "upload" && (
             <>
+              <AiNoticeBanner feature="report_upload" className="mb-4" />
               <div className="border-2 border-dashed rounded-xl p-8 text-center">
                 <UploadCloud className="mx-auto w-12 h-12 text-blue-600 mb-3" />
 
