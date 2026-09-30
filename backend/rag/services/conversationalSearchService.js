@@ -79,11 +79,16 @@ export async function conversationalSearch({ query, userId, sessionId }) {
   if (!sessionId) throw new Error('conversationalSearch: sessionId is required');
 
   const history = await getHistory(sessionId, userId);
-  const standaloneQuestion = await condenseQuestion(query.trim(), history);
+  const trimmedQuery = query.trim();
+  const standaloneQuestion = await condenseQuestion(trimmedQuery, history);
+  const wasCondensed = standaloneQuestion !== trimmedQuery;
 
-  if (standaloneQuestion !== query.trim()) {
+  if (wasCondensed) {
+    // Never log the raw query/rewrite text — only shape, so this stays
+    // useful for debugging the condense step without putting patient
+    // question content in server logs.
     console.log(
-      `[conversationalSearch] session ${sessionId}: condensed "${query.trim()}" -> "${standaloneQuestion}"`
+      `[conversationalSearch] session ${sessionId}: condensed query (${trimmedQuery.length} chars -> ${standaloneQuestion.length} chars)`
     );
   }
 
@@ -95,7 +100,7 @@ export async function conversationalSearch({ query, userId, sessionId }) {
   if (isAggregateQuestion(standaloneQuestion)) {
     const result = await answerAggregateQuestion(standaloneQuestion, userId);
     if (!result.noResultsFound) {
-      await appendTurn(sessionId, userId, query.trim(), result.structured.headline);
+      await appendTurn(sessionId, userId, trimmedQuery, result.structured.headline);
     }
     return { ...result, standaloneQuestion, sessionId };
   }
@@ -177,7 +182,7 @@ export async function conversationalSearch({ query, userId, sessionId }) {
   // Remember the ORIGINAL question (what the doctor actually typed) paired
   // with the answer — the rewrite is a retrieval detail, and storing it
   // would compound rewrites of rewrites over a long conversation.
-  await appendTurn(sessionId, userId, query.trim(), structured.headline);
+  await appendTurn(sessionId, userId, trimmedQuery, structured.headline);
 
   return {
     answer: structured.headline,
