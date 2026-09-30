@@ -1,7 +1,8 @@
-// Provider-safety gate: with ALLOW_EDGE_TTS_FALLBACK unset/false (the
-// default) and Sarvam failing, ttsService.js's synthesizeSpeech must never
-// reach speech.platform.bing.com (edge-tts-universal's backend) and must
-// return the existing no-audio/text-only result instead.
+// Fallback gate: with ALLOW_EDGE_TTS_FALLBACK explicitly "false" (the flag
+// now DEFAULTS to true — see env.js) and Sarvam failing, ttsService.js's
+// synthesizeSpeech must never reach speech.platform.bing.com
+// (edge-tts-universal's backend) and must return the existing
+// no-audio/text-only result instead.
 //
 // Sets process.env.ALLOW_EDGE_TTS_FALLBACK explicitly BEFORE importing
 // env.js (transitively, via ttsService.js) — that module reads it once
@@ -17,8 +18,11 @@ import dotenv from 'dotenv';
 
 dotenv.config({ path: new URL('../.env', import.meta.url).pathname });
 
-test('with the flag false and Sarvam failing, no request reaches speech.platform.bing.com and the result is a plain no-audio failure', async () => {
-  delete process.env.ALLOW_EDGE_TTS_FALLBACK;
+test('with the flag explicitly false and Sarvam failing, no request reaches speech.platform.bing.com and the result is a plain no-audio failure', async () => {
+  // Explicit "false", not unset — the flag now defaults to true, so this
+  // test only exercises the OFF state when the value is deliberately set
+  // to the literal string "false".
+  process.env.ALLOW_EDGE_TTS_FALLBACK = 'false';
   // No Sarvam keys configured -> currentKey() returns null -> Sarvam fails
   // with NO_KEY before ever calling fetch. Deterministic, no network mock
   // needed for the Sarvam leg itself.
@@ -60,7 +64,7 @@ test('with the flag false and Sarvam failing, no request reaches speech.platform
     const { synthesizeSpeech, __clearTtsCache, __resetSarvamKeyState } = await import('../rag/services/ttsService.js');
     const { ALLOW_EDGE_TTS_FALLBACK } = await import('../rag/config/env.js');
 
-    assert.equal(ALLOW_EDGE_TTS_FALLBACK, false, 'the flag must default to false for this test to be meaningful');
+    assert.equal(ALLOW_EDGE_TTS_FALLBACK, false, 'the flag must resolve to false for this test to be meaningful');
 
     __clearTtsCache();
     __resetSarvamKeyState();

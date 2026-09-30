@@ -5,17 +5,23 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
-// Provider-safety gate: OpenRouter is a third-party model provider outside
-// Google's Gemini terms — every generation/vision-ocr call in this service
-// carries real patient/report text or document images (there is no
+// Fallback gate: OpenRouter is a third-party model provider outside
+// Google's Gemini terms, used only as a last resort once every configured
+// Gemini key/model is exhausted — every generation/vision-ocr call in this
+// service carries real patient/report text or document images (there is no
 // patient-data-free call site left to special-case; see aiClient.js's
-// runAI for where this is enforced). Defaults to false, i.e. Gemini-only,
-// so patient data is never sent to OpenRouter unless explicitly opted in.
-// Any string other than exactly "true" (case-insensitive) is treated as
-// false — an unset, empty, or typo'd value fails safe. Computed here,
-// before the required-vars check below, since OPENROUTER_API_KEY's
-// requiredness depends on it.
-export const ALLOW_OPENROUTER_FALLBACK = String(process.env.ALLOW_OPENROUTER_FALLBACK || '').toLowerCase() === 'true';
+// runAI for where this is enforced). Defaults to true: the AI-processing
+// notice every user acknowledges before first use (see
+// backend/rag/config/aiNotices.js) discloses "an AI service" generically
+// rather than naming Gemini specifically, so that consent already covers
+// this fallback — availability (a real answer via OpenRouter beats a
+// degraded "please try again" when Gemini is down) wins over restricting
+// to a single named vendor. Set ALLOW_OPENROUTER_FALLBACK=false to disable
+// it again. Any string other than exactly "false" (case-insensitive) is
+// treated as true — an unset or typo'd value fails toward availability.
+// Computed here, before the required-vars check below, since
+// OPENROUTER_API_KEY's requiredness depends on it.
+export const ALLOW_OPENROUTER_FALLBACK = String(process.env.ALLOW_OPENROUTER_FALLBACK ?? 'true').toLowerCase() !== 'false';
 
 const required = [
   'SUPABASE_URL',
@@ -62,16 +68,19 @@ export const GEMINI_API_KEY = GEMINI_API_KEYS[0];
 export const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
 // (ALLOW_OPENROUTER_FALLBACK is exported above, before the required-vars
 // check, since OPENROUTER_API_KEY's requiredness depends on it.)
-// Same provider-safety reasoning as ALLOW_OPENROUTER_FALLBACK above, for the
+// Same fallback-gate reasoning as ALLOW_OPENROUTER_FALLBACK above, for the
 // voice-intake TTS path: edge-tts-universal (ttsService.js's Sarvam
 // fallback) sends the assistant's generated question text — built from the
 // patient's intake context — to Microsoft's speech.platform.bing.com over a
-// WebSocket, outside Sarvam's terms. Defaults to false; any value other
-// than exactly "true" (case-insensitive, same rule as the flag above) is
-// treated as false. When false, ttsService.js's Sarvam fallback returns its
+// WebSocket, outside Sarvam's terms. Defaults to true, same reasoning as
+// above (the acknowledged notice already covers "an AI service" generically,
+// and a spoken question beats a silent turn when Sarvam TTS fails). Set
+// ALLOW_EDGE_TTS_FALLBACK=false to disable it again; any value other than
+// exactly "false" (case-insensitive, same rule as the flag above) is
+// treated as true. When false, ttsService.js's Sarvam fallback returns its
 // existing ok:false/no-audio result instead of trying edge-tts — see
 // ttsService.js's synthesizeWithEdge for the enforcement.
-export const ALLOW_EDGE_TTS_FALLBACK = String(process.env.ALLOW_EDGE_TTS_FALLBACK || '').toLowerCase() === 'true';
+export const ALLOW_EDGE_TTS_FALLBACK = String(process.env.ALLOW_EDGE_TTS_FALLBACK ?? 'true').toLowerCase() !== 'false';
 export const JWT_SECRET = process.env.JWT_SECRET;
 export const PORT = process.env.PORT || 3010;
 export const CORS_ORIGIN = (process.env.CORS_ORIGIN || 'http://localhost:5173')

@@ -1,6 +1,7 @@
-// Provider-safety gate: with ALLOW_OPENROUTER_FALLBACK unset/false (the
-// default) and every Gemini key/model failing, runAI must never make a
-// request to OpenRouter and must return degraded:true instead.
+// Fallback gate: with ALLOW_OPENROUTER_FALLBACK explicitly "false" (the
+// flag now DEFAULTS to true — see env.js) and every Gemini key/model
+// failing, runAI must never make a request to OpenRouter and must return
+// degraded:true instead.
 //
 // Sets process.env.ALLOW_OPENROUTER_FALLBACK explicitly BEFORE importing
 // env.js (transitively, via aiClient.js) — that module reads it once into a
@@ -13,15 +14,11 @@ import dotenv from 'dotenv';
 
 dotenv.config({ path: new URL('../.env', import.meta.url).pathname });
 
-test('with the flag false and every Gemini key failing, no request reaches OpenRouter and the result is degraded:true', async () => {
-  // Explicit, not just "leave it unset" — this test must hold even if the
-  // real .env someday sets it, and makes the scenario unambiguous to a
-  // reader. Deleting first, since dotenv.config() above does NOT override
-  // an already-set process.env value, so if this process already had it
-  // set to "true" for some other reason, plain assignment below would
-  // still win (assignment always overwrites), but delete+assign leaves no
-  // doubt.
-  delete process.env.ALLOW_OPENROUTER_FALLBACK;
+test('with the flag explicitly false and every Gemini key failing, no request reaches OpenRouter and the result is degraded:true', async () => {
+  // Explicit "false", not unset — the flag now defaults to true, so this
+  // test only exercises the OFF state when the value is deliberately set
+  // to the literal string "false".
+  process.env.ALLOW_OPENROUTER_FALLBACK = 'false';
 
   const requestedHosts = [];
   const realFetch = global.fetch;
@@ -55,7 +52,7 @@ test('with the flag false and every Gemini key failing, no request reaches OpenR
     const { runAI } = await import('../rag/config/aiClient.js');
     const { ALLOW_OPENROUTER_FALLBACK } = await import('../rag/config/env.js');
 
-    assert.equal(ALLOW_OPENROUTER_FALLBACK, false, 'the flag must default to false for this test to be meaningful');
+    assert.equal(ALLOW_OPENROUTER_FALLBACK, false, 'the flag must resolve to false for this test to be meaningful');
 
     const result = await runAI({
       task: 'generation',

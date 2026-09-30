@@ -1,7 +1,8 @@
-// Startup validation: OPENROUTER_API_KEY must be required only when
-// ALLOW_OPENROUTER_FALLBACK === "true" — with the flag false (the
-// default), a missing key must not fail startup, since runAI's OpenRouter
-// branch can never run anyway (see aiClient.js's gate).
+// Startup validation: OPENROUTER_API_KEY must be required whenever
+// ALLOW_OPENROUTER_FALLBACK resolves to true — which is the default (unset
+// counts as true; only the literal string "false" turns it off). With the
+// flag explicitly false, a missing key must not fail startup, since runAI's
+// OpenRouter branch can never run anyway (see aiClient.js's gate).
 //
 // Runs backend/rag/config/env.js in a real child process with a
 // controlled environment, rather than importing it in-process: env.js
@@ -45,10 +46,10 @@ test('startup validation passes without OPENROUTER_API_KEY when ALLOW_OPENROUTER
   assert.ok(!result.stderr.includes('OPENROUTER_API_KEY'), 'stderr must not mention OPENROUTER_API_KEY as missing');
 });
 
-test('startup validation ALSO passes without OPENROUTER_API_KEY when the flag is entirely unset (default false)', () => {
+test('startup validation FAILS without OPENROUTER_API_KEY when the flag is entirely unset (default true)', () => {
   const result = runEnvJs({ OPENROUTER_API_KEY: '' });
-  assert.equal(result.status, 0, `expected clean exit, got status ${result.status}, stderr: ${result.stderr}`);
-  assert.ok(!result.stderr.includes('OPENROUTER_API_KEY'));
+  assert.equal(result.status, 1, 'expected startup to fail — the flag defaults to true, so a key is required');
+  assert.match(result.stderr, /OPENROUTER_API_KEY/);
 });
 
 test('startup validation FAILS without OPENROUTER_API_KEY when ALLOW_OPENROUTER_FALLBACK is true', () => {

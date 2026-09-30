@@ -5,10 +5,10 @@
 //
 // Two things verified: (1) a successful Gemini extraction flows all the
 // way through to a correctly-shaped result, and (2) on total Gemini
-// failure, the shared client's ALLOW_OPENROUTER_FALLBACK gate (default
-// false) means certificate parsing also degrades gracefully instead of
-// ever reaching OpenRouter — confirming the merge didn't silently carve
-// out an exception for this call site.
+// failure, the shared client's ALLOW_OPENROUTER_FALLBACK gate — whatever
+// it resolves to from the real environment (defaults to true; see env.js)
+// — is honored the same way here as everywhere else, confirming the merge
+// didn't silently carve out an exception for this call site.
 //
 // Mocks fetch only (not aiClient.js itself), since this test wants to
 // exercise the REAL shared client's real logic, not a stand-in for it.
@@ -77,7 +77,7 @@ test('certificate parsing succeeds through the shared aiClient on a normal Gemin
   }
 });
 
-test('certificate parsing degrades gracefully (never reaching OpenRouter) on total Gemini failure', async () => {
+test('on total Gemini failure, certificate parsing honors the shared ALLOW_OPENROUTER_FALLBACK gate like every other call site', async () => {
   const requestedHosts = [];
   const realFetch = global.fetch;
   global.fetch = async (url, ...args) => {
@@ -87,12 +87,17 @@ test('certificate parsing degrades gracefully (never reaching OpenRouter) on tot
       return { ok: false, status: 500, text: async () => 'simulated total Gemini failure (test only)' };
     }
     if (urlStr.includes('openrouter.ai')) {
-      throw new Error('TEST FAILURE: fetch() was called with an OpenRouter URL — the shared gate should have prevented this');
+      // Simulated OpenRouter failure too, so this test's outcome doesn't
+      // depend on live OpenRouter credentials/network either way — the
+      // point here is confirming whether the gate lets the request THROUGH,
+      // not whether OpenRouter itself succeeds.
+      return { ok: false, status: 500, text: async () => 'simulated total OpenRouter failure (test only)' };
     }
     return realFetch(url, ...args);
   };
 
   try {
+    const { ALLOW_OPENROUTER_FALLBACK } = await import('../rag/config/env.js');
     const { processMedicalCertificate } = await import('../services/certificateParserService.js');
     const result = await processMedicalCertificate(TINY_PNG_DATA_URL, { regNumber: 'MCI-99999' });
 
@@ -101,10 +106,14 @@ test('certificate parsing degrades gracefully (never reaching OpenRouter) on tot
     assert.match(result.validationError, /Vision AI extraction failed/);
 
     const openRouterRequests = requestedHosts.filter((h) => h.includes('openrouter.ai'));
-    assert.equal(openRouterRequests.length, 0, 'no request of any kind should have been made to openrouter.ai');
-
     const geminiRequests = requestedHosts.filter((h) => h.includes('generativelanguage.googleapis.com'));
     assert.ok(geminiRequests.length > 0, 'the test must have actually exercised the Gemini failure path');
+
+    if (ALLOW_OPENROUTER_FALLBACK) {
+      assert.ok(openRouterRequests.length > 0, 'with the fallback enabled, OpenRouter must actually be tried after Gemini is exhausted');
+    } else {
+      assert.equal(openRouterRequests.length, 0, 'with the fallback disabled, no request of any kind should reach openrouter.ai');
+    }
   } finally {
     global.fetch = realFetch;
   }
