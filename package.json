@@ -22,6 +22,7 @@
     "dotenv": "^16.4.5",
     "edge-tts-universal": "^1.4.0",
     "express": "^4.19.2",
+    "express-rate-limit": "^8.7.0",
     "google-auth-library": "^10.9.1",
     "jsonwebtoken": "^9.0.3",
     "lucide-react": "^1.25.0",
