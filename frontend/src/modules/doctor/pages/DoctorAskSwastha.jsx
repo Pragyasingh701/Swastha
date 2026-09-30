@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import DoctorSidebar from "../components/DoctorSidebar";
 import ProfileDropdown from "../../settings/components/ProfileDropdown";
 import { getDoctorPatients } from "../../../services/doctorPatients";
-import { searchReportsConversational, clearConversation } from "../../../api/search";
+import { searchReportsConversational, clearConversation, submitAnswerFeedback } from "../../../api/search";
 import { getNoticeAckStatus, acknowledgeNotice } from "../../../api/notices";
 import { AiNoticeInfoLink, AiNoticeAckModal } from "../../../components/Common/AiNotice";
 import {
@@ -17,6 +17,8 @@ import {
   Search,
   ShieldCheck,
   Clock,
+  ThumbsUp,
+  ThumbsDown,
 } from "lucide-react";
 import NotificationBell from "../../../components/Common/NotificationBell";
 
@@ -223,6 +225,9 @@ export default function DoctorAskSwastha() {
               // an ordinary grounded response.
               isDegraded: Boolean(result.degraded),
               retryQuery: result.degraded ? trimmed : undefined,
+              // Carried along only to echo back on a feedback submission
+              // (POST /api/search/feedback) — never displayed.
+              mode: result.mode || null,
             },
           ],
         },
@@ -484,6 +489,11 @@ export default function DoctorAskSwastha() {
 
 function ChatBubble({ message, onRetry, disabled }) {
   const isUser = message.role === "user";
+  // Local to this bubble — feedback doesn't need to survive a session clear
+  // or reload, and each bubble is a distinct answer, so there's no need to
+  // lift this into the parent's threads state.
+  const [feedbackRating, setFeedbackRating] = useState(null);
+  const [feedbackSubmitting, setFeedbackSubmitting] = useState(false);
 
   if (isUser) {
     return (
@@ -503,6 +513,26 @@ function ChatBubble({ message, onRetry, disabled }) {
   const isErrorLike = message.isError || message.isDegraded;
   const structured = message.isDegraded ? null : message.structured;
   const hasKeyFacts = structured?.keyFacts && structured.keyFacts.length > 0;
+
+  async function handleFeedback(rating) {
+    if (feedbackSubmitting || feedbackRating) return;
+    setFeedbackSubmitting(true);
+    try {
+      await submitAnswerFeedback({
+        rating,
+        mode: message.mode,
+        sourceReportIds: (message.sources || []).map((s) => s.report_id).filter(Boolean),
+        degraded: false, // this branch never renders for a degraded/error bubble
+      });
+      setFeedbackRating(rating);
+    } catch {
+      // Feedback is a nice-to-have, not a critical action — fail silently
+      // rather than showing an error banner over an answer the doctor
+      // already has and can keep using.
+    } finally {
+      setFeedbackSubmitting(false);
+    }
+  }
 
   return (
     <div className="flex justify-start">
@@ -554,6 +584,46 @@ function ChatBubble({ message, onRetry, disabled }) {
             {message.sources.map((s) => (
               <SourceRow key={s.report_id} source={s} />
             ))}
+          </div>
+        )}
+
+        {/* Omitted for degraded/error bubbles — there's no real answer to
+            rate, just a fallback sentence or a retry prompt. */}
+        {!isErrorLike && (
+          <div className="mt-3 pt-3 border-t border-slate-200 flex items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => handleFeedback("up")}
+              disabled={feedbackSubmitting || !!feedbackRating}
+              title="Helpful"
+              aria-label="Mark this answer as helpful"
+              aria-pressed={feedbackRating === "up"}
+              className={`p-1.5 rounded-lg transition-colors disabled:cursor-not-allowed ${
+                feedbackRating === "up"
+                  ? "text-emerald-600 bg-emerald-50"
+                  : "text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 disabled:hover:text-slate-400 disabled:hover:bg-transparent"
+              }`}
+            >
+              <ThumbsUp size={14} />
+            </button>
+            <button
+              type="button"
+              onClick={() => handleFeedback("down")}
+              disabled={feedbackSubmitting || !!feedbackRating}
+              title="Not helpful"
+              aria-label="Mark this answer as not helpful"
+              aria-pressed={feedbackRating === "down"}
+              className={`p-1.5 rounded-lg transition-colors disabled:cursor-not-allowed ${
+                feedbackRating === "down"
+                  ? "text-red-600 bg-red-50"
+                  : "text-slate-400 hover:text-red-600 hover:bg-red-50 disabled:hover:text-slate-400 disabled:hover:bg-transparent"
+              }`}
+            >
+              <ThumbsDown size={14} />
+            </button>
+            {feedbackRating && (
+              <span className="text-xs text-slate-400">Thanks for the feedback</span>
+            )}
           </div>
         )}
       </div>

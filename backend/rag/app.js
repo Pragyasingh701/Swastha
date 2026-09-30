@@ -14,15 +14,17 @@ import labInsightsRouter from './routes/labInsights.js';
 import patientSummaryRouter from './routes/patientSummary.js';
 import intakeRouter from './routes/intake.js';
 import noticesRouter from './routes/notices.js';
+import feedbackRouter from './routes/feedback.js';
 
 const app = express();
 
 app.get('/health', (req, res) => res.json({ ok: true, service: 'swastha-rag' }));
 
 app.use('/api/reports', reportsRouter);
-// Mounted before /api/search so the more specific conversational path
-// wins; the one-shot endpoint below is unchanged and still in use.
+// Mounted before /api/search so the more specific paths win; the one-shot
+// endpoint below is unchanged and still in use.
 app.use('/api/search/chat', searchChatRouter);
+app.use('/api/search/feedback', feedbackRouter);
 app.use('/api/search', searchRouter);
 app.use('/api/extract', extractRouter);
 app.use('/api/summarize', summarizeRouter);

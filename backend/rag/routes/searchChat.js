@@ -117,6 +117,9 @@ router.post('/', requireAuth, searchChatRateLimiter, requireNoticeAck('ask_swast
       noResultsFound: result.noResultsFound,
       degraded: Boolean(result.degraded),
       session_id: result.sessionId,
+      // Echoed back so the frontend can attach it to a feedback submission
+      // (POST /api/search/feedback) without re-deriving which path answered.
+      mode: result.mode || null,
     });
   } catch (err) {
     // A session_id belonging to another user/patient scope is a client
