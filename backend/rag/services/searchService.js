@@ -267,7 +267,12 @@ function buildGroundedPrompt(query, excerpts) {
   const excerptBlock = excerpts
     .map(
       (e) =>
-        `<excerpt n="${e.index}" report="${e.title}"${e.reportDate ? ` date="${e.reportDate}"` : ''}>\n${escapeAngleBrackets(e.text)}\n</excerpt>`
+        // report/date go in the OPENING tag's attributes, same as the
+        // chunk text inside it — a report title is user-controlled (typed
+        // manually, or OCR-extracted from an uploaded document) and could
+        // otherwise break out of the report="..." attribute to inject a
+        // fake excerpt tag of its own.
+        `<excerpt n="${e.index}" report="${escapeAngleBrackets(e.title)}"${e.reportDate ? ` date="${escapeAngleBrackets(e.reportDate)}"` : ''}>\n${escapeAngleBrackets(e.text)}\n</excerpt>`
     )
     .join('\n\n');
 
