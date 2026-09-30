@@ -22,14 +22,14 @@ export const AI_NOTICE_VERSION = 1;
 export const AI_NOTICES = {
   ask_swastha: {
     short:
-      'Ask Swastha uses Google Gemini to read the selected records and generate answers to your questions.',
+      'Ask Swastha uses AI to read the selected records and generate answers to your questions.',
   },
   voice_intake: {
     short:
-      'Your voice and its transcript are sent to Sarvam to convert speech to text and to read questions aloud.',
+      'Your voice and its transcript are sent to an AI service to convert speech to text and to read questions aloud.',
   },
   report_upload: {
-    short: 'Uploaded documents are read by Google Gemini Vision to auto-fill this form.',
+    short: 'Uploaded documents are read by AI to auto-fill this form.',
   },
 };
 

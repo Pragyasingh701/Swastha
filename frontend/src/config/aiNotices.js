@@ -15,16 +15,16 @@ export const AI_NOTICES = {
   ask_swastha: {
     title: 'How Ask Swastha uses AI',
     body:
-      'Ask Swastha uses Google Gemini to read the selected patient’s records and questions, and to generate answers. Records and questions are sent to Gemini for this purpose.',
+      'Ask Swastha uses AI to read the selected patient’s records and questions, and to generate answers. Records and questions are sent to an AI service for this purpose.',
   },
   voice_intake: {
     title: 'How voice intake uses AI',
     body:
-      'Your voice recording and its transcript are sent to Sarvam to convert your speech to text, and to read questions aloud to you.',
+      'Your voice recording and its transcript are sent to an AI service to convert your speech to text, and to read questions aloud to you.',
   },
   report_upload: {
     title: 'How report scanning uses AI',
-    body: 'Uploaded documents are read by Google Gemini Vision to automatically fill in this form.',
+    body: 'Uploaded documents are read by AI to automatically fill in this form.',
   },
 };
 
