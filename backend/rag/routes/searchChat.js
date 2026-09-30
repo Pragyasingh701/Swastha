@@ -1,6 +1,6 @@
 import express from 'express';
 import { conversationalSearch } from '../services/conversationalSearchService.js';
-import { isDoctorLinkedToPatient } from '../services/doctorAuthService.js';
+import { isDoctorLinkedToPatient } from '../../db/doctorPatients.js';
 import { clearSession } from '../langchain/sessionStore.js';
 import { requireAuth } from '../middleware/auth.js';
 
