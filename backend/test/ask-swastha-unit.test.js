@@ -14,6 +14,16 @@
 // this reason).
 import { test, mock } from 'node:test';
 import assert from 'node:assert/strict';
+import dotenv from 'dotenv';
+
+// Loads .env WITHOUT importing app.js — conversationalSearchService.js
+// (dynamically imported below, after mocks are set up) now also imports
+// backend/rag/config/env.js for FULL_CONTEXT_MAX_CHARS, and that module
+// validates required env vars and process.exit(1)s at import time if
+// they're missing. app.js would load .env too, but statically importing it
+// here would also eagerly load the real aiClient.js/supabase.js before the
+// mocks below are registered, defeating the whole point of this file.
+dotenv.config({ path: new URL('../.env', import.meta.url).pathname });
 
 test('conversationalSearch returns degraded:true when generation is exhausted, without writing to memory', async () => {
   const FRIENDLY_FALLBACK = "Swastha couldn't process this right now. Please try again shortly.";
@@ -57,21 +67,36 @@ test('conversationalSearch returns degraded:true when generation is exhausted, w
   // backend/rag/config/supabase.js exactly (named export `supabase`), not
   // the unrelated backend/config/supabase.js (default export) other parts
   // of the app use.
+  //
+  // from() branches by table name, since conversationalSearch now queries
+  // TWO tables before generation: tryFullContextAnswer's report_embeddings
+  // chunk-load (must resolve to zero chunks here, so it falls through to
+  // the retrieval path this test actually means to exercise) and the
+  // retrieval path's own reports metadata join (unchanged from before).
   const fakeSupabase = {
     rpc: async () => ({
       data: [{ id: 1, report_id: 'r1', chunk_text: 'Fake chunk for mocked retrieval.', chunk_index: 0, similarity: 0.99 }],
       error: null,
     }),
-    from: () => ({
-      select: () => ({
-        eq: () => ({
-          in: async () => ({
-            data: [{ id: 'r1', title: 'Fake Report', category: 'Consultation', report_date: '2026-01-01', file_url: null }],
-            error: null,
+    from: (table) => {
+      if (table === 'report_embeddings') {
+        const emptyChain = {
+          order: () => emptyChain,
+          then: (resolve) => resolve({ data: [], error: null, count: 0 }),
+        };
+        return { select: () => ({ eq: () => emptyChain }) };
+      }
+      return {
+        select: () => ({
+          eq: () => ({
+            in: async () => ({
+              data: [{ id: 'r1', title: 'Fake Report', category: 'Consultation', report_date: '2026-01-01', file_url: null }],
+              error: null,
+            }),
           }),
         }),
-      }),
-    }),
+      };
+    },
   };
   mock.module(new URL('../rag/config/supabase.js', import.meta.url).href, {
     namedExports: { supabase: fakeSupabase },

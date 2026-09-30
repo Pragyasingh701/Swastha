@@ -64,3 +64,11 @@ export const SEARCH_RATE_LIMIT_WINDOW_MS = Number(process.env.SEARCH_RATE_LIMIT_
 export const SEARCH_RATE_LIMIT_MAX = Number(process.env.SEARCH_RATE_LIMIT_MAX) || 20;
 export const EXTRACT_RATE_LIMIT_WINDOW_MS = Number(process.env.EXTRACT_RATE_LIMIT_WINDOW_MS) || 60_000;
 export const EXTRACT_RATE_LIMIT_MAX = Number(process.env.EXTRACT_RATE_LIMIT_MAX) || 5;
+
+// Below this many total characters of embeddable chunk text, a patient's
+// whole history is small enough to hand to the generation model directly —
+// skip embedding + vector search entirely and just load every chunk. See
+// conversationalSearchService.js's tryFullContextAnswer for the full
+// reasoning (avoids similarity-threshold misses / top-K truncation for a
+// patient with only a handful of short reports).
+export const FULL_CONTEXT_MAX_CHARS = Number(process.env.FULL_CONTEXT_MAX_CHARS) || 100_000;
