@@ -564,6 +564,37 @@ node scripts/purge-audit-log.js --dry-run   # report how many rows would be dele
 node scripts/purge-audit-log.js             # actually delete them
 ```
 
+## 🧪 Ask Swastha eval harness
+
+`backend/rag/evals/` runs a set of questions through the REAL search pipeline (`searchReports`, the same code `POST /rag/api/search` uses) against whatever DB `backend/.env` points at, and reports whether each one found what it should have.
+
+**Format** (see `backend/rag/evals/questions.example.json`): a JSON array of
+
+```json
+{
+  "question": "What medicines is this patient currently prescribed?",
+  "patient_id": "the patient's real user id",
+  "expected_report_ids": ["report ids that must appear in the answer's sources"],
+  "must_contain": ["optional", "keywords the answer text must contain"]
+}
+```
+
+`expected_report_ids` and `must_contain` are both optional — omit either to skip that check for a given question.
+
+**Real patient data warning**: a useful eval set references real `patient_id`/`report_id` values, so it must never be committed. Questions are read from `backend/rag/evals/questions.local.json`, which is gitignored — only the placeholder `questions.example.json` is tracked. Copy the example, fill in real ids from your own dev/staging DB, and run:
+
+```bash
+cp backend/rag/evals/questions.example.json backend/rag/evals/questions.local.json
+# edit questions.local.json with real ids, then:
+node backend/rag/evals/run-evals.js
+# or point at a different file:
+node backend/rag/evals/run-evals.js --file=path/to/other-questions.json
+```
+
+Each question reports pass/fail, which mode answered it (`retrieval` | `aggregate`), latency, and — on failure — which expected report ids or keywords were missing, followed by a summary table and an overall pass count. Exits non-zero if anything failed (suitable for a CI gate once you have a question set worth gating on).
+
+**Never run this against production data** as part of routine development — point `backend/.env` at a dev/staging Supabase project, not the live database, unless you specifically intend to eval against real patient records with proper authorization.
+
 ## 🏃 Running the Application
 
 ### Installation

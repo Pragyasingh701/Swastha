@@ -1,0 +1,19 @@
+[
+  {
+    "question": "What medicines is this patient currently prescribed?",
+    "patient_id": "REPLACE_WITH_REAL_PATIENT_ID",
+    "expected_report_ids": ["REPLACE_WITH_REAL_REPORT_ID"],
+    "must_contain": ["Metformin"]
+  },
+  {
+    "question": "Summarize the most recent lab results.",
+    "patient_id": "REPLACE_WITH_REAL_PATIENT_ID",
+    "expected_report_ids": ["REPLACE_WITH_REAL_REPORT_ID"]
+  },
+  {
+    "question": "How many reports does this patient have on file?",
+    "patient_id": "REPLACE_WITH_REAL_PATIENT_ID",
+    "expected_report_ids": [],
+    "must_contain": ["report"]
+  }
+]
