@@ -156,6 +156,7 @@ async function answerAggregateQuestion(query, userId) {
       structured: { headline: NO_RESULTS_MESSAGE, keyFacts: [], caveat: '' },
       sources: [],
       noResultsFound: true,
+      mode: 'aggregate',
     };
   }
 
@@ -197,6 +198,7 @@ async function answerAggregateQuestion(query, userId) {
       sources: [],
       noResultsFound: false,
       degraded: true,
+      mode: 'aggregate',
     };
   }
 
@@ -220,7 +222,7 @@ async function answerAggregateQuestion(query, userId) {
     file_url: verifiedUrls[i],
   }));
 
-  return { answer: structured.headline, structured, sources, noResultsFound: false };
+  return { answer: structured.headline, structured, sources, noResultsFound: false, mode: 'aggregate' };
 }
 
 /**
@@ -274,6 +276,7 @@ export async function searchReports(query, userId) {
       structured: { headline: NO_RESULTS_MESSAGE, keyFacts: [], caveat: '' },
       sources: [],
       noResultsFound: true,
+      mode: 'retrieval',
     };
   }
 
@@ -321,6 +324,7 @@ export async function searchReports(query, userId) {
       sources: [],
       noResultsFound: false,
       degraded: true,
+      mode: 'retrieval',
     };
   }
 
@@ -337,7 +341,7 @@ export async function searchReports(query, userId) {
     file_url: verifiedUrls[i],
   }));
 
-  return { answer: structured.headline, structured, sources, noResultsFound: false };
+  return { answer: structured.headline, structured, sources, noResultsFound: false, mode: 'retrieval' };
 }
 
 // Some reports in the DB have a file_url that can never resolve — a bare

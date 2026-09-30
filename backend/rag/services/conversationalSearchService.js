@@ -78,9 +78,13 @@ Standalone question:`;
  * response — identical generation/degraded-detection/citation/memory
  * behavior regardless of how the excerpts were sourced.
  *
- * @param {{ standaloneQuestion: string, trimmedQuery: string, excerpts: object[], sourceReports: object[], sessionId: string, userId: string }} params
+ * `mode` is passed straight through onto the returned object (never used
+ * internally) — it exists only so the caller (searchChat.js) can write it
+ * into the access audit log without re-deriving which path actually ran.
+ *
+ * @param {{ standaloneQuestion: string, trimmedQuery: string, excerpts: object[], sourceReports: object[], sessionId: string, userId: string, mode: 'full_context'|'retrieval' }} params
  */
-async function generateAndRespond({ standaloneQuestion, trimmedQuery, excerpts, sourceReports, sessionId, userId }) {
+async function generateAndRespond({ standaloneQuestion, trimmedQuery, excerpts, sourceReports, sessionId, userId, mode }) {
   // Grounding uses the SAME prompt builder as the one-shot endpoint, so the
   // strict "only use the excerpts / say you couldn't find it" behaviour is
   // identical by construction rather than by a second copy that can drift.
@@ -103,6 +107,7 @@ async function generateAndRespond({ standaloneQuestion, trimmedQuery, excerpts, 
       degraded: true,
       standaloneQuestion,
       sessionId,
+      mode,
     };
   }
 
@@ -128,6 +133,7 @@ async function generateAndRespond({ standaloneQuestion, trimmedQuery, excerpts, 
     sources,
     noResultsFound: false,
     standaloneQuestion,
+    mode,
     sessionId,
   };
 }
@@ -244,7 +250,7 @@ async function tryFullContextAnswer({ standaloneQuestion, trimmedQuery, userId, 
     `[conversationalSearch] session ${sessionId}: mode=full-context (${reports.length} reports, ${totalChars} chars)`
   );
 
-  return generateAndRespond({ standaloneQuestion, trimmedQuery, excerpts, sourceReports, sessionId, userId });
+  return generateAndRespond({ standaloneQuestion, trimmedQuery, excerpts, sourceReports, sessionId, userId, mode: 'full_context' });
 }
 
 /**
@@ -311,6 +317,7 @@ export async function conversationalSearch({ query, userId, sessionId }) {
       noResultsFound: true,
       standaloneQuestion,
       sessionId,
+      mode: 'retrieval',
     };
   }
 
@@ -350,5 +357,5 @@ export async function conversationalSearch({ query, userId, sessionId }) {
     `[conversationalSearch] session ${sessionId}: mode=retrieval (${excerpts.length} chunks, ${sourceReports.length} reports)`
   );
 
-  return generateAndRespond({ standaloneQuestion, trimmedQuery, excerpts, sourceReports, sessionId, userId });
+  return generateAndRespond({ standaloneQuestion, trimmedQuery, excerpts, sourceReports, sessionId, userId, mode: 'retrieval' });
 }

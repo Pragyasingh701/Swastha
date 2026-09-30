@@ -103,3 +103,15 @@ export const EXTRACT_RATE_LIMIT_MAX = Number(process.env.EXTRACT_RATE_LIMIT_MAX)
 // reasoning (avoids similarity-threshold misses / top-K truncation for a
 // patient with only a handful of short reports).
 export const FULL_CONTEXT_MAX_CHARS = Number(process.env.FULL_CONTEXT_MAX_CHARS) || 100_000;
+
+// How long a row in ask_swastha_access_log (see backend/db/askSwasthaAccessLog.js)
+// is kept before scripts/purge-audit-log.js deletes it. Not enforced
+// automatically — the purge script is meant to be run on a schedule
+// (e.g. a daily cron) outside this process.
+export const AUDIT_LOG_RETENTION_DAYS = Number(process.env.AUDIT_LOG_RETENTION_DAYS) || 365;
+
+// Rate limit on POST /rag/api/search/feedback — a plain DB insert (no AI
+// call chain), so its default cap is looser than the AI-call-chain limits
+// above; still capped to prevent one user from flooding the feedback table.
+export const FEEDBACK_RATE_LIMIT_WINDOW_MS = Number(process.env.FEEDBACK_RATE_LIMIT_WINDOW_MS) || 60_000;
+export const FEEDBACK_RATE_LIMIT_MAX = Number(process.env.FEEDBACK_RATE_LIMIT_MAX) || 30;

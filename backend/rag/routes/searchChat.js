@@ -5,6 +5,7 @@ import { clearSession } from '../langchain/sessionStore.js';
 import { requireAuth } from '../middleware/auth.js';
 import { createUserRateLimiter } from '../middleware/rateLimit.js';
 import { requireNoticeAck } from '../middleware/requireNoticeAck.js';
+import { logAccess } from '../../db/askSwasthaAccessLog.js';
 import { SEARCH_CHAT_RATE_LIMIT_WINDOW_MS, SEARCH_CHAT_RATE_LIMIT_MAX } from '../config/env.js';
 
 const router = express.Router();
@@ -80,6 +81,18 @@ router.post('/', requireAuth, searchChatRateLimiter, requireNoticeAck('ask_swast
       console.warn(
         `[POST /api/search/chat] user ${callerId} requested patient ${patientUserId} with no doctor_patient link`
       );
+      // Best-effort: an audit-log write failure must never affect this
+      // response, which is why logAccess is fire-and-forget (never awaited
+      // into the response path's error handling) and never throws itself.
+      logAccess({
+        callerUserId: callerId,
+        targetPatientId: patientUserId.trim(),
+        isCrossPatient: true,
+        route: 'search_chat',
+        mode: null,
+        resultCount: null,
+        degraded: false,
+      });
       return res.status(403).json({ error: 'You are not linked to this patient.' });
     }
 
@@ -88,6 +101,15 @@ router.post('/', requireAuth, searchChatRateLimiter, requireNoticeAck('ask_swast
 
   try {
     const result = await conversationalSearch({ query, userId: targetUserId, sessionId });
+    logAccess({
+      callerUserId: callerId,
+      targetPatientId: targetUserId,
+      isCrossPatient: targetUserId !== callerId,
+      route: 'search_chat',
+      mode: result.mode || null,
+      resultCount: Array.isArray(result.sources) ? result.sources.length : null,
+      degraded: Boolean(result.degraded),
+    });
     return res.status(200).json({
       answer: result.answer,
       structured: result.structured,

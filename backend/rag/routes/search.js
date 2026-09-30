@@ -2,6 +2,7 @@ import express from 'express';
 import { searchReports } from '../services/searchService.js';
 import { requireAuth } from '../middleware/auth.js';
 import { createUserRateLimiter } from '../middleware/rateLimit.js';
+import { logAccess } from '../../db/askSwasthaAccessLog.js';
 import { SEARCH_RATE_LIMIT_WINDOW_MS, SEARCH_RATE_LIMIT_MAX } from '../config/env.js';
 
 const router = express.Router();
@@ -27,6 +28,18 @@ router.post('/', requireAuth, searchRateLimiter, async (req, res) => {
 
   try {
     const result = await searchReports(query, userId);
+    // /api/search has no patient-targeting capability (unlike
+    // /api/search/chat's patient_user_id) — the caller is always the
+    // target, so is_cross_patient is always false here.
+    logAccess({
+      callerUserId: userId,
+      targetPatientId: userId,
+      isCrossPatient: false,
+      route: 'search',
+      mode: result.mode || null,
+      resultCount: Array.isArray(result.sources) ? result.sources.length : null,
+      degraded: Boolean(result.degraded),
+    });
     return res.status(200).json({
       answer: result.answer,
       structured: result.structured,

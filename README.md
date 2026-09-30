@@ -506,6 +506,16 @@ SARVAM_API_KEYS=your_sarvam_api_key_here
 # Any value other than exactly "true" is treated as false.
 # ALLOW_EDGE_TTS_FALLBACK=false
 
+# How long a row in ask_swastha_access_log (see "Ask Swastha access audit
+# log" below) is kept before scripts/purge-audit-log.js deletes it. Purging
+# is NOT automatic — run that script on a schedule (e.g. a daily cron).
+# AUDIT_LOG_RETENTION_DAYS=365
+
+# Rate limit on POST /rag/api/search/feedback (a plain DB insert, no AI call
+# chain — looser default than the AI-call-chain limits above).
+# FEEDBACK_RATE_LIMIT_WINDOW_MS=60000
+# FEEDBACK_RATE_LIMIT_MAX=30
+
 # Only needed if you deliberately run RAG as a separate external service again —
 # defaults to an in-process loopback call otherwise.
 # RAG_BASE_URL=http://localhost:5001/rag/api
@@ -536,6 +546,23 @@ Every external host the RAG sub-app (`backend/rag/`) can send patient/report tex
 | `speech.platform.bing.com` (Microsoft Edge TTS, via the `edge-tts-universal` library) | Voice intake text-to-speech, but **only reachable when `ALLOW_EDGE_TTS_FALLBACK=true`** and only as a last resort if Sarvam TTS fails. **Unreachable for any request when the flag is false (the default) — the turn simply has no audio instead.** | The assistant's generated question text (same content as the Sarvam TTS row), for whichever turn triggered the fallback |
 
 Not included above: Supabase (`*.supabase.co`) stores patient data as your own database/file storage, not as an AI/ML inference provider processing it — it's infrastructure you control, not a third party your patient text is sent *to* for processing. Brevo (transactional email) sends OTPs and account notifications, never clinical/medical content, and isn't part of the RAG sub-app.
+
+## 📋 Ask Swastha access audit log
+
+Every request to `POST /rag/api/search/chat` and `POST /rag/api/search` writes one row to `ask_swastha_access_log` — who accessed which patient's records, when, by which route/mode, and whether it was a doctor accessing a patient other than themselves. A 403 for an unlinked or access-expired doctor is logged too (with `mode`/`result_count` left `null`, since no search ever ran).
+
+**Columns**: `id`, `created_at`, `caller_user_id`, `target_patient_id`, `is_cross_patient`, `route` (`search_chat` | `search`), `mode` (`full_context` | `retrieval` | `aggregate`, nullable), `result_count` (nullable), `degraded`.
+
+**Deliberately excluded**: the question text, any excerpt/chunk text, and the generated answer. This table is an access log, not a transcript — it answers "did doctor X look at patient Y's records, and when," not "what did they ask."
+
+Writes are best-effort (`backend/db/askSwasthaAccessLog.js`): an insert failure is logged (ids only) and never fails the underlying search request.
+
+**Retention**: rows older than `AUDIT_LOG_RETENTION_DAYS` (default 365 — see Environment Configuration above) are deleted by `scripts/purge-audit-log.js`, which is not run automatically — schedule it yourself (e.g. a daily cron):
+
+```bash
+node scripts/purge-audit-log.js --dry-run   # report how many rows would be deleted
+node scripts/purge-audit-log.js             # actually delete them
+```
 
 ## 🏃 Running the Application
 
