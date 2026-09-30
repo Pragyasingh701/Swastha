@@ -1,7 +1,14 @@
 import dotenv from 'dotenv';
 import fs from 'fs';
 import path from 'path';
-import { runAI } from './aiClient.js';
+// Was a byte-mirrored local copy (backend/services/aiClient.js) until this
+// import — see backend/rag/config/aiClient.js's own header comment for why
+// one shared module works now: this process already merges backend/ and
+// backend/rag/ together (backend/app.js dynamically imports rag/app.js
+// before the server starts listening), so importing the rag/ copy adds no
+// new startup dependency — rag/config/env.js's validation was already a
+// precondition for this process to boot at all.
+import { runAI } from '../rag/config/aiClient.js';
 
 if (fs.existsSync('./backend/.env')) {
   dotenv.config({ path: './backend/.env' });
@@ -54,8 +61,9 @@ async function fileToBase64Payload(fileInput) {
 /**
  * Vision AI Medical Certificate Engine.
  *
- * Routed through the shared failover client (backend/services/aiClient.js):
- * rotates all 4 Gemini keys, then flash-lite -> flash -> 3.1-flash-lite. The
+ * Routed through the shared failover client (backend/rag/config/aiClient.js,
+ * same one the RAG sub-app uses): rotates all Gemini keys, then
+ * flash-lite -> flash -> 3.1-flash-lite. The
  * previous inline implementation had a `let lastError` declared inside an
  * `if (geminiKey)` block but read outside it — every failure path threw a
  * ReferenceError instead of returning `{ error }`. Fixed as part of this

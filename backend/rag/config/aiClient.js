@@ -1,9 +1,10 @@
 // Shared AI failover client — every Gemini/OpenRouter call goes through here.
-//
-// MIRRORED FILE: backend/services/aiClient.js is a byte-identical copy except
-// for the key/env resolution at the top (backend has no config/env.js). If you
-// change one, change the other. See ai-failover-design.md §1 for why this is
-// vendored rather than shared via a workspace package.
+// The single copy: backend/services/certificateParserService.js (doctor
+// medical-certificate OCR, the one AI feature outside backend/rag/) imports
+// this file directly rather than a separate mirrored copy — this process
+// already merges backend/ and backend/rag/ into one Express app
+// (backend/app.js dynamically imports rag/app.js before the server starts
+// listening), so there was no real boundary left to vendor a copy across.
 //
 // Design contract (ai-failover-design.md):
 //   - rotate all keys before changing model, all models before changing provider

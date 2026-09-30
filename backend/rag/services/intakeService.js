@@ -1147,10 +1147,9 @@ export async function runIntakeTurn({ section, structuredHistory, patientMessage
     // retry the same turn.
     //
     // aiClient's FRIENDLY_FALLBACK is English-only and lives in a shared
-    // transport layer with no session context (and is byte-mirrored in
-    // backend/services/aiClient.js, which must stay identical), so the
-    // localized wording is chosen HERE, where the session's language is
-    // known. Otherwise a Hindi session ends a turn in English.
+    // transport layer with no session context, so the localized wording is
+    // chosen HERE, where the session's language is known. Otherwise a
+    // Hindi session ends a turn in English.
     return {
       ok: false,
       next_question: exhaustionMessageFor(language),
