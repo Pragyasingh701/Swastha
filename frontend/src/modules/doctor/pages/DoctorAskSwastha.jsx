@@ -176,6 +176,11 @@ export default function DoctorAskSwastha() {
               structured: result.structured || null,
               sources: result.sources || [],
               noResultsFound: result.noResultsFound,
+              // The AI provider failed and this is a fallback sentence, not
+              // a real answer — render it as an error with a retry, not as
+              // an ordinary grounded response.
+              isDegraded: Boolean(result.degraded),
+              retryQuery: result.degraded ? trimmed : undefined,
             },
           ],
         },
@@ -376,7 +381,7 @@ export default function DoctorAskSwastha() {
                 ) : (
                   <div className="space-y-4">
                     {messages.map((m, i) => (
-                      <ChatBubble key={i} message={m} />
+                      <ChatBubble key={i} message={m} onRetry={runSearch} disabled={loading} />
                     ))}
                     {loading && (
                       <div className="flex items-center gap-2 text-slate-400 text-sm">
@@ -420,7 +425,7 @@ export default function DoctorAskSwastha() {
   );
 }
 
-function ChatBubble({ message }) {
+function ChatBubble({ message, onRetry, disabled }) {
   const isUser = message.role === "user";
 
   if (isUser) {
@@ -433,14 +438,20 @@ function ChatBubble({ message }) {
     );
   }
 
-  const structured = message.structured;
+  // isDegraded: the AI provider failed (all keys/models/fallbacks
+  // exhausted) and the backend returned a friendly placeholder sentence
+  // instead of a real grounded answer — render it as an error with a
+  // retry, not as an ordinary answer, so a doctor doesn't mistake a
+  // fallback sentence for a real record-backed response.
+  const isErrorLike = message.isError || message.isDegraded;
+  const structured = message.isDegraded ? null : message.structured;
   const hasKeyFacts = structured?.keyFacts && structured.keyFacts.length > 0;
 
   return (
     <div className="flex justify-start">
       <div
         className={`text-sm rounded-2xl rounded-bl-sm px-4 py-3 max-w-[85%] ${
-          message.isError
+          isErrorLike
             ? "bg-red-50 text-red-700 border border-red-100"
             : "bg-slate-50 text-slate-700 border border-slate-100"
         }`}
@@ -448,6 +459,17 @@ function ChatBubble({ message }) {
         <p className="whitespace-pre-wrap font-medium text-slate-800">
           {structured?.headline || message.text}
         </p>
+
+        {message.isDegraded && message.retryQuery && (
+          <button
+            type="button"
+            onClick={() => onRetry?.(message.retryQuery)}
+            disabled={disabled}
+            className="mt-2 text-xs font-semibold text-red-700 hover:text-red-800 underline disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            Retry
+          </button>
+        )}
 
         {hasKeyFacts && (
           <ul className="mt-3 space-y-2">

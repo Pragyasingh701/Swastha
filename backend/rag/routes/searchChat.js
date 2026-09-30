@@ -80,6 +80,7 @@ router.post('/', requireAuth, async (req, res) => {
       structured: result.structured,
       sources: result.sources,
       noResultsFound: result.noResultsFound,
+      degraded: Boolean(result.degraded),
       session_id: result.sessionId,
     });
   } catch (err) {

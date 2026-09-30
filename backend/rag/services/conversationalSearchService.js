@@ -7,6 +7,7 @@
 // tuning stays in one place.
 import { supabase } from '../config/supabase.js';
 import { chatModel } from '../langchain/openRouterChatModel.js';
+import { runAI } from '../config/aiClient.js';
 import { ReportEmbeddingsRetriever } from '../langchain/reportRetriever.js';
 import { getHistory, appendTurn } from '../langchain/sessionStore.js';
 import {
@@ -159,15 +160,27 @@ export async function conversationalSearch({ query, userId, sessionId }) {
   // conversational context without the history being available to invent from.
   const prompt = buildGroundedPrompt(standaloneQuestion, excerpts);
 
-  let raw;
-  try {
-    const response = await chatModel.invoke(prompt);
-    raw = String(response.content ?? response);
-  } catch (err) {
-    throw new Error(`conversationalSearch: answer generation failed: ${err.message}`);
+  // Same detection as the one-shot /api/search path: call runAI directly
+  // (not chatModel.invoke, which only returns text and discards `.ok`) so a
+  // total provider failure surfaces as degraded:true instead of being
+  // rendered as an ordinary answer.
+  const gen = await runAI({ task: 'generation', input: prompt, label: 'chat' });
+
+  if (!gen.ok) {
+    // Do NOT write this turn to memory — the fallback sentence isn't a
+    // real answer, and storing it as context would poison a later rewrite.
+    return {
+      answer: gen.text,
+      structured: { headline: gen.text, keyFacts: [], caveat: '' },
+      sources: [],
+      noResultsFound: false,
+      degraded: true,
+      standaloneQuestion,
+      sessionId,
+    };
   }
 
-  const structured = parseStructuredAnswer(raw, excerpts);
+  const structured = parseStructuredAnswer(gen.text, excerpts);
 
   const sourceReports = reportIds.map((id) => reportById.get(id)).filter(Boolean);
   const verifiedUrls = await Promise.all(sourceReports.map((r) => verifyFileUrl(r.file_url)));
