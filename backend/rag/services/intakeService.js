@@ -329,13 +329,23 @@ function markInapplicableHpiFields(history, modelVerdict) {
   if (!history?.hpi || !isSystemicComplaint(history.chief_complaint, modelVerdict)) return history;
   let changed = false;
   const hpi = { ...history.hpi };
+  // Only fields actually stamped with the marker below go into
+  // hpi_na_fields — a field the patient had somehow already answered for
+  // real BEFORE the complaint was classified systemic (the `if` guard
+  // below leaves that value untouched) must not be listed as N/A just
+  // because it's in HPI_FIELDS_NA_FOR_SYSTEMIC; it's a real answer.
+  const newlyMarked = [];
   for (const f of HPI_FIELDS_NA_FOR_SYSTEMIC) {
     if (!(typeof hpi[f] === 'string' && hpi[f].trim() !== '')) {
       hpi[f] = HPI_NA_MARKER;
+      newlyMarked.push(f);
       changed = true;
     }
   }
-  return changed ? { ...history, hpi } : history;
+  if (!changed) return history;
+  const existingNaFields = Array.isArray(history.hpi_na_fields) ? history.hpi_na_fields : [];
+  const hpi_na_fields = [...new Set([...existingNaFields, ...newlyMarked])];
+  return { ...history, hpi, hpi_na_fields };
 }
 
 // Which field a drug_allergy question is about, by keyword. That section
@@ -687,6 +697,17 @@ function emptyStructuredHistory() {
       exacerbating_relieving: '',
       severity: null,
     },
+    // Which hpi field keys markInapplicableHpiFields has stamped with
+    // HPI_NA_MARKER (e.g. site/radiation for a systemic complaint like
+    // fatigue or fever) — kept as its own explicit list, sibling to hpi
+    // itself, so a consumer of structured_history (the doctor's intake
+    // summary view) can tell "genuinely not applicable, never asked" apart
+    // from "a real string the patient said," without needing to know or
+    // match against the internal marker string. hpi.site/hpi.radiation
+    // still hold HPI_NA_MARKER as before — that's what hpiComplete() and
+    // capturedFieldKeys() key off of, unchanged — this is purely an
+    // additional, display-oriented signal.
+    hpi_na_fields: [],
     drug_allergy: {
       current_medications: [],
       allergies: [],
