@@ -204,7 +204,14 @@ export default function UploadReports({ onClose, onSubmit, token, initialEvent }
       // misread handwriting, dosages, or dates.
       setActiveTab("manual");
     } catch (err) {
-      setExtractError(err.message || "Could not read this file automatically. Please fill the form manually.");
+      // A 429 gets its own page-specific copy rather than the rate
+      // limiter's generic server message, since "wait before extracting
+      // another file" is more useful here than "too many requests."
+      const message =
+        err.status === 429
+          ? "You've extracted a few files quickly — please wait a moment before trying another, or fill the form manually."
+          : err.message || "Could not read this file automatically. Please fill the form manually.";
+      setExtractError(message);
     } finally {
       setExtracting(false);
     }

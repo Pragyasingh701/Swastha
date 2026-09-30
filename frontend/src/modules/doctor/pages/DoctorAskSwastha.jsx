@@ -186,7 +186,16 @@ export default function DoctorAskSwastha() {
         },
       }));
     } catch (err) {
-      setError(err.message || "Search failed. Please try again.");
+      // A 429 gets its own page-specific copy rather than the rate
+      // limiter's generic server message. Both the top error banner and
+      // the chat bubble show the same text, rather than the banner
+      // falling back to the server's generic message while the bubble
+      // shows the friendlier one.
+      const errorText =
+        err.status === 429
+          ? "You're asking questions a bit too quickly. Please wait a moment and try again."
+          : err.message || "Something went wrong answering that. Please try again.";
+      setError(errorText);
       setThreads((prev) => ({
         ...prev,
         [patientUserId]: {
@@ -195,9 +204,10 @@ export default function DoctorAskSwastha() {
             ...prev[patientUserId].messages,
             {
               role: "assistant",
-              text: "Something went wrong answering that. Please try again.",
+              text: errorText,
               sources: [],
               isError: true,
+              retryQuery: trimmed,
             },
           ],
         },
@@ -460,7 +470,7 @@ function ChatBubble({ message, onRetry, disabled }) {
           {structured?.headline || message.text}
         </p>
 
-        {message.isDegraded && message.retryQuery && (
+        {(message.isDegraded || message.isError) && message.retryQuery && (
           <button
             type="button"
             onClick={() => onRetry?.(message.retryQuery)}

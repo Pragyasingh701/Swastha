@@ -66,6 +66,7 @@ export async function extractReportFromFile(file) {
   data = await decryptPiiFields(data, RAG_BASE_URL);
   if (!response.ok) {
     const error = new Error(data.error || data.message || 'Extraction request failed');
+    error.status = response.status;
     error.details = data;
     throw error;
   }

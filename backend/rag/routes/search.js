@@ -1,8 +1,15 @@
 import express from 'express';
 import { searchReports } from '../services/searchService.js';
 import { requireAuth } from '../middleware/auth.js';
+import { createUserRateLimiter } from '../middleware/rateLimit.js';
+import { SEARCH_RATE_LIMIT_WINDOW_MS, SEARCH_RATE_LIMIT_MAX } from '../config/env.js';
 
 const router = express.Router();
+
+const searchRateLimiter = createUserRateLimiter({
+  windowMs: SEARCH_RATE_LIMIT_WINDOW_MS,
+  max: SEARCH_RATE_LIMIT_MAX,
+});
 
 /**
  * POST /api/search
@@ -10,7 +17,7 @@ const router = express.Router();
  * user_id comes from the JWT (req.user.userId), never from the request
  * body — a client can't ask to search someone else's records.
  */
-router.post('/', requireAuth, async (req, res) => {
+router.post('/', requireAuth, searchRateLimiter, async (req, res) => {
   const { query } = req.body || {};
   const userId = req.user.userId;
 

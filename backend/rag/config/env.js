@@ -48,12 +48,19 @@ export const CORS_ORIGIN = (process.env.CORS_ORIGIN || 'http://localhost:5173')
   .map((s) => s.trim())
   .filter(Boolean);
 
-// Rate limits for the two heaviest per-request AI call chains: an Ask
-// Swastha chat turn (embed + vector search + generate) and a report
-// indexing call (embed every chunk sequentially). Defaults match what a
-// normal doctor/patient session actually does; both are env-overridable
-// without a code change if the free-tier AI quota needs a tighter cap.
+// Rate limits for the heaviest per-request AI call chains: an Ask Swastha
+// chat turn (embed + vector search + generate), a report indexing call
+// (embed every chunk sequentially), the one-shot search endpoint (same
+// chain as chat, minus conversation memory), and vision-OCR extraction
+// (the slowest single call — 45s timeout — so it gets the tightest cap).
+// Defaults match what a normal doctor/patient session actually does; all
+// are env-overridable without a code change if the free-tier AI quota
+// needs a tighter cap.
 export const SEARCH_CHAT_RATE_LIMIT_WINDOW_MS = Number(process.env.SEARCH_CHAT_RATE_LIMIT_WINDOW_MS) || 60_000;
 export const SEARCH_CHAT_RATE_LIMIT_MAX = Number(process.env.SEARCH_CHAT_RATE_LIMIT_MAX) || 20;
 export const REPORTS_INDEX_RATE_LIMIT_WINDOW_MS = Number(process.env.REPORTS_INDEX_RATE_LIMIT_WINDOW_MS) || 60_000;
 export const REPORTS_INDEX_RATE_LIMIT_MAX = Number(process.env.REPORTS_INDEX_RATE_LIMIT_MAX) || 30;
+export const SEARCH_RATE_LIMIT_WINDOW_MS = Number(process.env.SEARCH_RATE_LIMIT_WINDOW_MS) || 60_000;
+export const SEARCH_RATE_LIMIT_MAX = Number(process.env.SEARCH_RATE_LIMIT_MAX) || 20;
+export const EXTRACT_RATE_LIMIT_WINDOW_MS = Number(process.env.EXTRACT_RATE_LIMIT_WINDOW_MS) || 60_000;
+export const EXTRACT_RATE_LIMIT_MAX = Number(process.env.EXTRACT_RATE_LIMIT_MAX) || 5;
