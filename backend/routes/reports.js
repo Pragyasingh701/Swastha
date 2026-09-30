@@ -99,7 +99,21 @@ async function resolveTargetUser(req, authUser) {
   }
 
   if (authUser.role === 'doctor') {
-    const linked = await isDoctorLinkedToPatient(authUser.userId, targetUserId);
+    let linked;
+    try {
+      linked = await isDoctorLinkedToPatient(authUser.userId, targetUserId);
+    } catch (err) {
+      // A genuine DB/network failure inside the link check, not "not
+      // linked" — isDoctorLinkedToPatient throws on a real error rather
+      // than swallowing it (see backend/db/doctorPatients.js). Tag this so
+      // every call site below can return 500 here instead of folding a
+      // real server error into the same 403 an unlinked/expired doctor
+      // gets — those are different failures and shouldn't look the same.
+      const wrapped = new Error('Could not verify patient access. Please try again.');
+      wrapped.status = 500;
+      wrapped.cause = err;
+      throw wrapped;
+    }
     if (!linked) {
       throw new Error('You are not linked to this patient.');
     }
@@ -323,7 +337,11 @@ router.post('/', handleReportFileUpload, async (req, res) => {
     try {
       targetUserId = await resolveTargetUser(req, user);
     } catch (targetError) {
-      return res.status(403).json({ message: targetError.message });
+      // A tagged 500 (a real DB/network failure in the link check itself,
+      // not "not linked") is distinct from the default 403 for a
+      // genuinely unlinked/expired doctor or unauthorized family member —
+      // see resolveTargetUser's isDoctorLinkedToPatient catch above.
+      return res.status(targetError.status || 403).json({ message: targetError.message });
     }
 
     const validation = validateTimelineReportPayload(req.body);
@@ -402,7 +420,11 @@ router.put('/:id', handleReportFileUpload, async (req, res) => {
     try {
       targetUserId = await resolveTargetUser(req, user);
     } catch (targetError) {
-      return res.status(403).json({ message: targetError.message });
+      // A tagged 500 (a real DB/network failure in the link check itself,
+      // not "not linked") is distinct from the default 403 for a
+      // genuinely unlinked/expired doctor or unauthorized family member —
+      // see resolveTargetUser's isDoctorLinkedToPatient catch above.
+      return res.status(targetError.status || 403).json({ message: targetError.message });
     }
 
     const reportId = req.params.id?.trim();
@@ -531,7 +553,11 @@ router.delete('/:id', async (req, res) => {
     try {
       targetUserId = await resolveTargetUser(req, user);
     } catch (targetError) {
-      return res.status(403).json({ message: targetError.message });
+      // A tagged 500 (a real DB/network failure in the link check itself,
+      // not "not linked") is distinct from the default 403 for a
+      // genuinely unlinked/expired doctor or unauthorized family member —
+      // see resolveTargetUser's isDoctorLinkedToPatient catch above.
+      return res.status(targetError.status || 403).json({ message: targetError.message });
     }
 
     const reportId = req.params.id?.trim();
