@@ -29,6 +29,14 @@ const { default: ragApp } = await import('./rag/app.js');
 
 const app = express();
 
+// This deploys behind exactly one reverse-proxy hop (Render's own edge —
+// see comments elsewhere about the merged backend+rag Render service).
+// Without this, req.ip reports the proxy's address for every request, not
+// the real client's — currently only matters for the rate limiters'
+// unauthenticated-caller IP fallback (backend/rag/middleware/rateLimit.js),
+// but that fallback is silently wrong without this set.
+app.set('trust proxy', 1);
+
 // Set Security & Cross-Origin-Opener-Policy Headers for Google OAuth
 app.use((req, res, next) => {
   res.setHeader('Cross-Origin-Opener-Policy', 'same-origin-allow-popups');
