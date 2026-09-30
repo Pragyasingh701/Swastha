@@ -5,12 +5,31 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
+// Provider-safety gate: OpenRouter is a third-party model provider outside
+// Google's Gemini terms — every generation/vision-ocr call in this service
+// carries real patient/report text or document images (there is no
+// patient-data-free call site left to special-case; see aiClient.js's
+// runAI for where this is enforced). Defaults to false, i.e. Gemini-only,
+// so patient data is never sent to OpenRouter unless explicitly opted in.
+// Any string other than exactly "true" (case-insensitive) is treated as
+// false — an unset, empty, or typo'd value fails safe. Computed here,
+// before the required-vars check below, since OPENROUTER_API_KEY's
+// requiredness depends on it.
+export const ALLOW_OPENROUTER_FALLBACK = String(process.env.ALLOW_OPENROUTER_FALLBACK || '').toLowerCase() === 'true';
+
 const required = [
   'SUPABASE_URL',
   'SUPABASE_SERVICE_ROLE_KEY',
-  'OPENROUTER_API_KEY', // grounded answer generation — see config/openrouter.js
   'JWT_SECRET',
 ];
+
+// OPENROUTER_API_KEY is only required when the provider-safety flag opts
+// into using it at all — with the flag false (the default), runAI's
+// OpenRouter branch never runs, so requiring a key for a provider that can
+// never be called would fail startup for no reason.
+if (ALLOW_OPENROUTER_FALLBACK) {
+  required.push('OPENROUTER_API_KEY');
+}
 
 const missing = required.filter((key) => !process.env[key]);
 
@@ -41,15 +60,8 @@ export const GEMINI_API_KEYS = (process.env.GEMINI_API_KEYS || process.env.GEMIN
 // Kept for anything still importing the singular name directly.
 export const GEMINI_API_KEY = GEMINI_API_KEYS[0];
 export const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
-// Provider-safety gate: OpenRouter is a third-party model provider outside
-// Google's Gemini terms — every generation/vision-ocr call in this service
-// carries real patient/report text or document images (there is no
-// patient-data-free call site left to special-case; see aiClient.js's
-// runAI for where this is enforced). Defaults to false, i.e. Gemini-only,
-// so patient data is never sent to OpenRouter unless explicitly opted in.
-// Any string other than exactly "true" (case-insensitive) is treated as
-// false — an unset, empty, or typo'd value fails safe.
-export const ALLOW_OPENROUTER_FALLBACK = String(process.env.ALLOW_OPENROUTER_FALLBACK || '').toLowerCase() === 'true';
+// (ALLOW_OPENROUTER_FALLBACK is exported above, before the required-vars
+// check, since OPENROUTER_API_KEY's requiredness depends on it.)
 // Same provider-safety reasoning as ALLOW_OPENROUTER_FALLBACK above, for the
 // voice-intake TTS path: edge-tts-universal (ttsService.js's Sarvam
 // fallback) sends the assistant's generated question text — built from the
