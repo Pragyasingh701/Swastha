@@ -82,6 +82,11 @@ export function installFullContextMocks({
               const rows = sorted.map(({ _patientId, ...rest }) => rest);
               const chain = {
                 order: () => chain,
+                // loadPatientReportsForPrompt requests limit + 1 rows to
+                // detect truncation; this fake table is always small enough
+                // in these 3 tests that the real .limit() would never bite,
+                // so it's a no-op here (chain returns itself unchanged).
+                limit: () => chain,
                 then: (resolve) => resolve({ data: rows, error: null }),
                 // Also usable for the retrieval path's citation join
                 // (.select().eq().in()), which doesn't chain .order().

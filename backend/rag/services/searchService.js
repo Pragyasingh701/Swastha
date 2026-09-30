@@ -3,6 +3,7 @@ import { supabase } from '../config/supabase.js';
 // Gemini -> OpenRouter fallback). embedText still throws on exhaustion;
 // runAI('generation') never throws — check `.ok` before parsing.
 import { embedText, runAI } from '../config/aiClient.js';
+import { FULL_CONTEXT_MAX_CHARS } from '../config/env.js';
 
 const MATCH_COUNT = 5;
 // Cosine similarity threshold below which a chunk is considered irrelevant.
@@ -40,6 +41,17 @@ function isAggregateQuestion(query) {
   return AGGREGATE_QUESTION_PATTERN.test(query) || WHY_ONLY_PATTERN.test(query) || WHOLE_HISTORY_PATTERN.test(query);
 }
 
+// Safety cap on how many `reports` rows loadPatientReportsForPrompt will
+// ever hand back in one call. Bounds the worst case for a patient with an
+// unusually large number of reports — without this, a single patient could
+// force one query to pull an unbounded number of rows, and (for
+// full-context mode specifically) an unbounded prompt size before the char
+// check even runs. 1000 is comfortably above any real patient's report
+// count observed so far; callers decide what "over the limit" means for
+// them (see DEFAULT_REPORTS_LIMIT usage in tryFullContextAnswer and
+// answerAggregateQuestion).
+const DEFAULT_REPORTS_LIMIT = 1000;
+
 /**
  * Single shared loader for every code path that needs a patient's full
  * `reports` history read directly from the table (as opposed to a
@@ -51,23 +63,72 @@ function isAggregateQuestion(query) {
  * Ordered by report_date then id (a stable tiebreaker for same-date
  * reports) so both callers see reports in the same, deterministic order.
  *
+ * Requests `limit + 1` rows so a patient with MORE than `limit` reports can
+ * be detected (`truncated: true`) without needing a separate count query —
+ * the extra row, if present, is dropped before returning.
+ *
  * @param {string} patientId
- * @returns {Promise<object[]>} every `reports` row for this patient, oldest
- *   first — never throws on "no rows" (returns []), only on a real DB error.
+ * @param {{ limit?: number }} [opts]
+ * @returns {Promise<{ reports: object[], truncated: boolean }>} up to
+ *   `limit` rows for this patient, oldest first, plus whether more exist —
+ *   never throws on "no rows" (returns { reports: [], truncated: false }),
+ *   only on a real DB error.
  */
-async function loadPatientReportsForPrompt(patientId) {
-  const { data: reports, error } = await supabase
+async function loadPatientReportsForPrompt(patientId, { limit = DEFAULT_REPORTS_LIMIT } = {}) {
+  const { data, error } = await supabase
     .from('reports')
     .select('id, title, report_date, category, hospital, doctor, diagnosis, medicines, notes, file_url')
     .eq('patient_id', patientId)
     .order('report_date', { ascending: true })
-    .order('id', { ascending: true });
+    .order('id', { ascending: true })
+    .limit(limit + 1);
 
   if (error) {
     throw new Error(`loadPatientReportsForPrompt: failed to load reports: ${error.message}`);
   }
 
-  return reports || [];
+  const rows = data || [];
+  const truncated = rows.length > limit;
+  return { reports: truncated ? rows.slice(0, limit) : rows, truncated };
+}
+
+function reportExcerptText(r) {
+  return `Title: ${r.title || 'Untitled'}\nCategory: ${r.category || 'Unspecified'}${r.diagnosis ? `\nDiagnosis: ${r.diagnosis}` : ''}${r.report_date ? `\nDate: ${r.report_date}` : ''}`;
+}
+
+/**
+ * Caps a patient's full report list to what fits under FULL_CONTEXT_MAX_CHARS,
+ * keeping the MOST RECENT reports (an aggregate/summary question is far more
+ * likely to matter for recent history than for the oldest record on file),
+ * then returns that kept set reordered oldest-first again so display/
+ * citation order stays consistent with the uncapped case.
+ *
+ * `reports` must already be sorted oldest-first (loadPatientReportsForPrompt's
+ * own order) — this function reverses a copy internally rather than assuming
+ * anything about the caller's array beyond that order.
+ *
+ * @param {object[]} reports - oldest-first, as returned by loadPatientReportsForPrompt
+ * @returns {{ kept: object[], droppedCount: number }}
+ */
+function capReportsToCharBudget(reports) {
+  const newestFirst = [...reports].reverse();
+  const kept = [];
+  let runningChars = 0;
+
+  for (const r of newestFirst) {
+    const textLength = reportExcerptText(r).length;
+    if (kept.length > 0 && runningChars + textLength >= FULL_CONTEXT_MAX_CHARS) {
+      // Always keep at least the single most recent report, even if its
+      // own excerpt alone is at/over budget — an aggregate answer with
+      // zero reports because the newest one is huge is worse than one
+      // slightly-over-budget report plus an honest caveat.
+      break;
+    }
+    kept.push(r);
+    runningChars += textLength;
+  }
+
+  return { kept: kept.reverse(), droppedCount: reports.length - kept.length };
 }
 
 /**
@@ -77,11 +138,19 @@ async function loadPatientReportsForPrompt(patientId) {
  * embeddings: the point is completeness, and report count/title/diagnosis
  * are already plain columns, so no vector search is needed to see all of
  * them.
+ *
+ * Capped (newest reports kept, oldest dropped) when the patient is over
+ * loadPatientReportsForPrompt's row limit OR the built excerpt text would
+ * exceed FULL_CONTEXT_MAX_CHARS — in either case the model is told plainly
+ * that only the most recent N reports were included, and the same caveat is
+ * forced onto the returned answer regardless of whether the model itself
+ * mentioned it, since a count/summary answer is actively misleading without
+ * that disclosure.
  */
 async function answerAggregateQuestion(query, userId) {
-  const reports = await loadPatientReportsForPrompt(userId);
+  const { reports: allReports, truncated: rowLimitTruncated } = await loadPatientReportsForPrompt(userId);
 
-  if (reports.length === 0) {
+  if (allReports.length === 0) {
     return {
       answer: NO_RESULTS_MESSAGE,
       structured: { headline: NO_RESULTS_MESSAGE, keyFacts: [], caveat: '' },
@@ -90,16 +159,35 @@ async function answerAggregateQuestion(query, userId) {
     };
   }
 
+  const { kept: charBudgetKept, droppedCount: charBudgetDropped } = capReportsToCharBudget(allReports);
+  const capped = rowLimitTruncated || charBudgetDropped > 0;
+  const reports = capped ? charBudgetKept : allReports;
+
+  // Over the row limit, loadPatientReportsForPrompt already silently
+  // dropped rows before this function ever saw them — the true total is
+  // more than `allReports.length`, so the honest description is "more
+  // than N", not the exact number. Under the row limit but over the char
+  // budget, `allReports.length` IS the exact true total.
+  const totalDescription = rowLimitTruncated ? `more than ${allReports.length}` : `${allReports.length}`;
+
   const excerpts = reports.map((r, i) => ({
     index: i + 1,
     reportId: r.id,
     title: r.title || 'Untitled report',
     reportDate: r.report_date || null,
-    text: `Title: ${r.title || 'Untitled'}\nCategory: ${r.category || 'Unspecified'}${r.diagnosis ? `\nDiagnosis: ${r.diagnosis}` : ''}${r.report_date ? `\nDate: ${r.report_date}` : ''}`,
+    text: reportExcerptText(r),
     similarity: 1,
   }));
 
-  const prompt = buildGroundedPrompt(query, excerpts);
+  // Appended to the question itself (not a separate prompt section) so the
+  // model treats it as part of what it's answering, not incidental framing
+  // it might skip past — the same reasoning buildGroundedPrompt already
+  // applies to keeping instructions close to what they govern.
+  const cappedNote = capped
+    ? ` (Note: this patient has ${totalDescription} report(s) on file; only the ${reports.length} most recent are included below — any count or total you give must say it may be incomplete.)`
+    : '';
+
+  const prompt = buildGroundedPrompt(`${query}${cappedNote}`, excerpts);
   const gen = await runAI({ task: 'generation', input: prompt, label: 'search-aggregate' });
 
   if (!gen.ok) {
@@ -113,6 +201,16 @@ async function answerAggregateQuestion(query, userId) {
   }
 
   const structured = parseStructuredAnswer(gen.text, excerpts);
+
+  // Forced regardless of what the model's own "caveat" field said — a
+  // capped count/summary answer is actively misleading without this, and
+  // free-tier models don't reliably follow the "must say incomplete"
+  // instruction every time.
+  if (capped) {
+    const cappedCaveat = `Only the ${reports.length} most recent of ${totalDescription} report(s) on file were checked, so this count/summary may be incomplete.`;
+    structured.caveat = structured.caveat ? `${structured.caveat} ${cappedCaveat}` : cappedCaveat;
+  }
+
   const verifiedUrls = await Promise.all(reports.map((r) => verifyFileUrl(r.file_url)));
   const sources = reports.map((r, i) => ({
     report_id: r.id,
@@ -388,6 +486,7 @@ export {
   buildGroundedPrompt,
   escapeAngleBrackets,
   loadPatientReportsForPrompt,
+  capReportsToCharBudget,
   isAggregateQuestion,
   answerAggregateQuestion,
 };

@@ -181,19 +181,32 @@ function buildFullContextExcerptText(report) {
  * embeddingService.js's fire-and-forget trigger) still appears here, unlike
  * the old chunk-based version of this function.
  *
- * Returns null (never throws) only if the patient is over the char budget,
- * in which case retrieval below runs exactly as before.
+ * Returns null (never throws) if the patient is over the char budget, or if
+ * loadPatientReportsForPrompt's row limit was hit (a patient with more
+ * reports than that limit is exactly the kind of large history this mode
+ * isn't meant for) — in either case retrieval below runs exactly as before.
  *
  * @param {{ standaloneQuestion: string, trimmedQuery: string, userId: string, sessionId: string }} params
  * @returns {Promise<object|null>}
  */
 async function tryFullContextAnswer({ standaloneQuestion, trimmedQuery, userId, sessionId }) {
-  const reports = await loadPatientReportsForPrompt(userId);
+  const { reports, truncated } = await loadPatientReportsForPrompt(userId);
 
   if (reports.length === 0) {
     // No reports at all for this patient — not this function's job to
     // decide what that means (the caller's retrieval path already has a
     // well-defined "nothing found" contract). Let it fall through.
+    return null;
+  }
+
+  // A patient with more reports than loadPatientReportsForPrompt's row
+  // limit is, by definition, too large a history for "hand the model
+  // everything" — treat exactly like being over the char budget, without
+  // spending time building excerpts for reports we'd only discard.
+  if (truncated) {
+    console.warn(
+      `[conversationalSearch] session ${sessionId}: full-context row limit exceeded — falling back to retrieval`
+    );
     return null;
   }
 

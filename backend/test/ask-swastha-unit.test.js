@@ -87,6 +87,7 @@ test('conversationalSearch returns degraded:true when generation is exhausted, w
         eq: () => {
           const chain = {
             order: () => chain,
+            limit: () => chain,
             then: (resolve) => resolve({ data: [], error: null }),
             in: async () => ({
               data: [{ id: 'r1', title: 'Fake Report', category: 'Consultation', report_date: '2026-01-01', file_url: null }],

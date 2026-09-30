@@ -45,6 +45,7 @@ test('the aggregate path (answerAggregateQuestion) uses the same reports loader 
           eq: (col, val) => {
             const chain = {
               order: () => chain,
+              limit: () => chain,
               then: (resolve) => resolve({ data: val === patientId ? [fakeReport] : [], error: null }),
             };
             return chain;

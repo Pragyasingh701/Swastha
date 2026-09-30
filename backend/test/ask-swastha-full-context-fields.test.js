@@ -51,6 +51,7 @@ test('a report with zero embedding rows still appears in full-context mode, and 
         eq: (col, val) => {
           const chain = {
             order: () => chain,
+            limit: () => chain,
             then: (resolve) =>
               resolve({
                 data: val === patientId ? [neverIndexedReport] : [],
