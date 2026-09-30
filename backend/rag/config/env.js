@@ -41,6 +41,15 @@ export const GEMINI_API_KEYS = (process.env.GEMINI_API_KEYS || process.env.GEMIN
 // Kept for anything still importing the singular name directly.
 export const GEMINI_API_KEY = GEMINI_API_KEYS[0];
 export const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
+// Provider-safety gate: OpenRouter is a third-party model provider outside
+// Google's Gemini terms — every generation/vision-ocr call in this service
+// carries real patient/report text or document images (there is no
+// patient-data-free call site left to special-case; see aiClient.js's
+// runAI for where this is enforced). Defaults to false, i.e. Gemini-only,
+// so patient data is never sent to OpenRouter unless explicitly opted in.
+// Any string other than exactly "true" (case-insensitive) is treated as
+// false — an unset, empty, or typo'd value fails safe.
+export const ALLOW_OPENROUTER_FALLBACK = String(process.env.ALLOW_OPENROUTER_FALLBACK || '').toLowerCase() === 'true';
 export const JWT_SECRET = process.env.JWT_SECRET;
 export const PORT = process.env.PORT || 3010;
 export const CORS_ORIGIN = (process.env.CORS_ORIGIN || 'http://localhost:5173')

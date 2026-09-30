@@ -14,7 +14,7 @@ the **Frontend SPA** (Vite/React, `:5173`).
 | :--- | :--- | :--- |
 | **Frontend** (`frontend/`) | **React 18**, **Vite**, **Tailwind CSS**, **React Router v6**, **Recharts**, **Lucide Icons** | Modern responsive SPA featuring medical timeline UI, lab trends chart visualizer, dark mode styling, and redirect-based Google Sign-In. |
 | **Backend API** (`backend/`) | **Node.js**, **Express.js** (`:5001`), **Supabase Client SDK**, **Brevo REST API**, **Multer**, **`google-auth-library`**, **JWT** | Core API for user auth, Brevo-powered 6-digit email OTPs, password resets, family vault management, doctor license validation, and local document uploads. |
-| **RAG Sub-App** (`backend/rag/`, mounted at `/rag`) | **Google Gemini API**, **OpenRouter API**, **Supabase Client SDK** | Vector search & prescription OCR, running **inside the same Express process and port as the Backend API** (not a separate service — see below). Generates 768-dim embeddings (`gemini-embedding-001`) and synthesizes grounded answers via OpenRouter LLMs. |
+| **RAG Sub-App** (`backend/rag/`, mounted at `/rag`) | **Google Gemini API** (primary; requires a **paid-tier** key for real patient data), **OpenRouter API** (opt-in fallback only, off by default — see `ALLOW_OPENROUTER_FALLBACK`), **Supabase Client SDK** | Vector search & prescription OCR, running **inside the same Express process and port as the Backend API** (not a separate service — see below). Generates 768-dim embeddings (`gemini-embedding-001`) and synthesizes grounded answers, both via Gemini. |
 | **Database & Vector Storage** | **Supabase PostgreSQL**, **`pgvector`** extension | Cloud Postgres database with dedicated `patients`/`doctors`/`pending_registrations` identity tables (patients and doctors are separate tables, not a shared `users` table with a role column), plus `reports`, `report_embeddings`, `vault_table`, `family_members`, `doctor_patient`, and `notifications`. Retrieval scans one patient's own embeddings via a plain `patient_id` btree index, not an HNSW/ANN index — see the note below the `report_embeddings` DDL for why. |
 
 ---
@@ -24,7 +24,7 @@ the **Frontend SPA** (Vite/React, `:5173`).
 - **🛡️ Secure Multi-Role Authentication**: Patient and Doctor onboarding with redirect-based Google OAuth 2.0 (full-page redirect to Google + `/auth/google/callback`, with account deduplication — avoids ad-blockers breaking popup-based auth), 6-digit email OTP verification via **Brevo HTTPS REST API**, password resets, and JWT session tokens.
 - **🔬 Doctor Certificate AI Verification**: Automated parsing and credential validation of medical registration certificates using **Google Gemini 2.0 Flash AI** vision capabilities upon doctor signup.
 - **📜 Smart Medical Timeline & OCR Ingestion**: Chronological visual record of consultations, prescriptions, lab reports, and diagnoses. Automatically flags **unclear fields** (e.g. illegible doctor handwriting) to alert clinicians.
-- **🔍 Grounded RAG Semantic Search**: The RAG sub-app (mounted inside the backend at `/rag`) performs `pgvector` similarity search over patient records and synthesizes natural-language answers via **OpenRouter AI**.
+- **🔍 Grounded RAG Semantic Search**: The RAG sub-app (mounted inside the backend at `/rag`) performs `pgvector` similarity search over patient records and synthesizes natural-language answers via **Google Gemini** (OpenRouter is an opt-in fallback only — disabled by default, see `ALLOW_OPENROUTER_FALLBACK`).
 - **👨‍👩‍👧‍👦 Family Vault & Authorization Network**: Centralized health management for families. Manage dependants (children/elders) and send email-authorized consent requests for adult family members.
 - **📊 AI Lab Trends Visualizer**: Interactive trend analysis powered by **Recharts**, tracking blood work, lab parameters, and vital metrics over time.
 - **👨‍⚕️ Doctor Clinical Dashboard**: Dedicated portal allowing verified healthcare professionals to link patients by their unique 6-digit **patient code** (or user ID), then search records, view past diagnoses, active medications, and medical history. Access is patient-approved and **time-limited to 24 hours** per approval — after that, the link goes inactive and the doctor must send a fresh request rather than retaining standing access.
@@ -456,15 +456,37 @@ SUPABASE_REPORTS_BUCKET=reports
 BREVO_API_KEY=your_brevo_api_key_here
 
 # Google Gemini API key(s) — vision/OCR (doctor certificate parsing, report
-# extraction) AND, for the RAG sub-app, embeddings (gemini-embedding-001).
-# Comma-separate multiple keys as GEMINI_API_KEYS to rotate on rate-limit (429);
-# singular GEMINI_API_KEY also still works. Free at https://aistudio.google.com/app/apikey
+# extraction) AND, for the RAG sub-app, embeddings (gemini-embedding-001) and
+# grounded-answer generation. Comma-separate multiple keys as GEMINI_API_KEYS
+# to rotate on rate-limit (429); singular GEMINI_API_KEY also still works.
+# Get a key at https://aistudio.google.com/app/apikey — a FREE-TIER key is
+# fine for local development, but a PAID-TIER key is required before this
+# service processes any real patient data: the free tier's usage caps are
+# per-project-wide (shared across every user of the app, not per-request),
+# so real traffic will exhaust it and either fail closed (see
+# ALLOW_OPENROUTER_FALLBACK below) or interrupt service for patients.
 GEMINI_API_KEY=your_gemini_api_key_here
 # GEMINI_API_KEYS=key_one,key_two
 
-# OpenRouter — required by the RAG sub-app for grounded answer generation.
-# Free key at https://openrouter.ai/keys
+# OpenRouter — a THIRD-PARTY provider, used only as a last-resort fallback
+# when every configured Gemini key/model is exhausted, and ONLY if
+# ALLOW_OPENROUTER_FALLBACK=true (see below). Not required for normal
+# operation with paid-tier Gemini keys. Get a key at https://openrouter.ai/keys
+# if you intend to opt into the fallback.
 OPENROUTER_API_KEY=your_openrouter_api_key_here
+
+# WARNING — provider-safety flag, defaults to false (recommended for any
+# deployment handling real patient data). When false, the RAG sub-app's AI
+# failover client (backend/rag/config/aiClient.js) NEVER sends a request to
+# OpenRouter, for any call — every generation/vision-ocr/intake-dialogue call
+# site in this service sends real patient/report text or a document image,
+# and OpenRouter is a provider outside Google's Gemini terms of service. On
+# total Gemini exhaustion with this flag false, the request fails gracefully
+# (a degraded:true response with a friendly "try again" message) instead of
+# falling back to OpenRouter. Only set this to true if you have reviewed and
+# accepted sending patient data to OpenRouter under your own compliance
+# posture. Any value other than exactly "true" is treated as false.
+# ALLOW_OPENROUTER_FALLBACK=false
 
 # Only needed if you deliberately run RAG as a separate external service again —
 # defaults to an in-process loopback call otherwise.
@@ -483,6 +505,19 @@ VITE_RAG_BASE_URL=http://localhost:5001/rag/api
 ```
 
 ---
+
+## 🌐 External hosts that can receive patient text
+
+Every external host the RAG sub-app (`backend/rag/`) can send patient/report text or document images to, as of the `ALLOW_OPENROUTER_FALLBACK` provider-safety change — not what it always does send, but what it *can* reach given how it's configured:
+
+| Host | Features that reach it | What text/data is sent |
+| :--- | :--- | :--- |
+| `generativelanguage.googleapis.com` (Google Gemini) | Embeddings, grounded search/chat answers, report/lab/timeline summarization, patient intake dialogue, prescription/report OCR, doctor certificate OCR | Report chunk text (`report_embeddings.chunk_text`), diagnosis/medicines/notes fields, doctor questions, patient intake chat messages and accumulated structured medical history, and — for OCR — the uploaded document image itself (prescription, lab report, medical certificate) |
+| `openrouter.ai` | Same generation/vision-ocr/intake-dialogue features as Gemini above, but **only reachable when `ALLOW_OPENROUTER_FALLBACK=true`** and only as a last resort after every Gemini key/model is exhausted. **Unreachable for any request when the flag is false (the default).** | Same content as the Gemini row above, for whichever specific request triggered the fallback |
+| `api.sarvam.ai` (Sarvam AI) | Voice intake: speech-to-text (patient's spoken answer) and text-to-speech (the assistant's next question, generated from patient context) | The patient's voice recording (transcribed to their spoken symptom/history answer) and the assistant's generated question text |
+| `speech.platform.bing.com` (Microsoft Edge TTS, via the `edge-tts-universal` library) | Voice intake text-to-speech, **only as a fallback if Sarvam TTS fails** | The assistant's generated question text (same content as the Sarvam TTS row, for whichever turn triggered the fallback) |
+
+Not included above: Supabase (`*.supabase.co`) stores patient data as your own database/file storage, not as an AI/ML inference provider processing it — it's infrastructure you control, not a third party your patient text is sent *to* for processing. Brevo (transactional email) sends OTPs and account notifications, never clinical/medical content, and isn't part of the RAG sub-app.
 
 ## 🏃 Running the Application
 
