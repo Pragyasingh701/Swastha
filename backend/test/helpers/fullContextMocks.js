@@ -10,29 +10,47 @@ import { mock } from 'node:test';
 export const FRIENDLY_FALLBACK = "Swastha couldn't process this right now. Please try again shortly.";
 
 /**
- * Builds a fake report_embeddings row shaped exactly like the real
- * .select('chunk_text, chunk_index, report_id, reports(title, report_date, category, file_url)')
- * join tryFullContextAnswer performs. `_patientId` is test-only bookkeeping,
- * stripped before the mock "returns" a row (the real query never has a
- * patient_id column selected on report_embeddings rows themselves in this
- * join shape).
+ * Builds a fake `reports` row shaped exactly like the real
+ * .select('id, title, report_date, category, hospital, doctor, diagnosis,
+ * medicines, notes, file_url') that loadPatientReportsForPrompt performs —
+ * full-context mode now reads reports directly, not report_embeddings.
+ * `_patientId` is test-only bookkeeping, stripped before the mock "returns"
+ * a row (the real query filters by patient_id but doesn't select it back).
  */
-export function chunkRow({ patientId, reportId, chunkIndex, text, reportDate, title = 'Fake Report' }) {
+export function reportRow({
+  patientId,
+  reportId,
+  title = 'Fake Report',
+  reportDate,
+  category = 'Consultation',
+  hospital = null,
+  doctor = null,
+  diagnosis = null,
+  medicines = null,
+  notes = null,
+  fileUrl = null,
+}) {
   return {
     _patientId: patientId,
-    chunk_text: text,
-    chunk_index: chunkIndex,
-    report_id: reportId,
-    reports: { title, report_date: reportDate, category: 'Consultation', file_url: null },
+    id: reportId,
+    title,
+    report_date: reportDate,
+    category,
+    hospital,
+    doctor,
+    diagnosis,
+    medicines,
+    notes,
+    file_url: fileUrl,
   };
 }
 
 /**
  * Installs both mocked modules conversationalSearch depends on before
- * generation: the Supabase client (whose report_embeddings query actually
- * respects .eq('patient_id', ...) — real patient scoping, not a canned
- * response — and returns rows sorted by report_date then chunk_index, same
- * as the real .order().order() chain would) and the AI failover client
+ * generation: the Supabase client (whose `reports` query actually respects
+ * .eq('patient_id', ...) — real patient scoping, not a canned response —
+ * and returns rows sorted by report_date then id, same as the real
+ * .order().order() chain would) and the AI failover client
  * (embedText/runAI). `calls` gets `.embedText`/`.rpc` counters bumped on
  * every real invocation, so a test can assert full-context mode genuinely
  * skipped them, not just assert on the final answer shape.
@@ -41,7 +59,7 @@ export function chunkRow({ patientId, reportId, chunkIndex, text, reportDate, ti
  * it exactly once, at module scope or inside its single test()).
  */
 export function installFullContextMocks({
-  allRows,
+  allReportRows,
   retrieverMatches = [],
   retrieverReports = [],
   calls = { embedText: 0, rpc: 0 },
@@ -52,26 +70,30 @@ export function installFullContextMocks({
       return { data: retrieverMatches, error: null };
     },
     from: (table) => {
-      if (table === 'report_embeddings') {
+      if (table === 'reports') {
         return {
           select: () => ({
             eq: (col, val) => {
-              const filtered = allRows.filter((r) => r._patientId === val);
+              const filtered = allReportRows.filter((r) => r._patientId === val);
               const sorted = [...filtered].sort((a, b) => {
-                const dateCmp = String(a.reports.report_date).localeCompare(String(b.reports.report_date));
-                return dateCmp !== 0 ? dateCmp : a.chunk_index - b.chunk_index;
+                const dateCmp = String(a.report_date).localeCompare(String(b.report_date));
+                return dateCmp !== 0 ? dateCmp : String(a.id).localeCompare(String(b.id));
               });
               const rows = sorted.map(({ _patientId, ...rest }) => rest);
               const chain = {
                 order: () => chain,
-                then: (resolve) => resolve({ data: rows, error: null, count: rows.length }),
+                then: (resolve) => resolve({ data: rows, error: null }),
+                // Also usable for the retrieval path's citation join
+                // (.select().eq().in()), which doesn't chain .order().
+                in: async () => ({ data: retrieverReports, error: null }),
               };
               return chain;
             },
           }),
         };
       }
-      // 'reports' — used only by the retrieval path's citation join.
+      // Anything else (unused in these tests, but kept safe) falls through
+      // to the retrieval-path citation join shape.
       return {
         select: () => ({
           eq: () => ({

@@ -18,15 +18,15 @@ import dotenv from 'dotenv';
 // the mocks below are registered).
 dotenv.config({ path: new URL('../.env', import.meta.url).pathname });
 
-const { installFullContextMocks, chunkRow } = await import('./helpers/fullContextMocks.js');
+const { installFullContextMocks, reportRow } = await import('./helpers/fullContextMocks.js');
 
 test('a patient with a small total history uses full-context mode (skips embedding/retrieval)', async () => {
   const patientId = `usr_smallhistory_${Date.now()}`;
   const calls = { embedText: 0, rpc: 0 };
   installFullContextMocks({
-    allRows: [
-      chunkRow({ patientId, reportId: 'r1', chunkIndex: 0, text: 'Short note one.', reportDate: '2026-01-01' }),
-      chunkRow({ patientId, reportId: 'r2', chunkIndex: 0, text: 'Short note two.', reportDate: '2026-02-01' }),
+    allReportRows: [
+      reportRow({ patientId, reportId: 'r1', notes: 'Short note one.', reportDate: '2026-01-01' }),
+      reportRow({ patientId, reportId: 'r2', notes: 'Short note two.', reportDate: '2026-02-01' }),
     ],
     calls,
   });
@@ -39,7 +39,7 @@ test('a patient with a small total history uses full-context mode (skips embeddi
   assert.equal(result.degraded, undefined);
   assert.equal(result.noResultsFound, false);
   assert.equal(result.answer, 'Mock answer.');
-  // 2 reports, 1 chunk each -> 2 sources, both from THIS patient's rows.
+  // 2 reports -> 2 sources, both from THIS patient's rows.
   assert.equal(result.sources.length, 2);
   assert.deepEqual(
     result.sources.map((s) => s.report_id).sort(),

@@ -16,26 +16,24 @@ import dotenv from 'dotenv';
 
 dotenv.config({ path: new URL('../.env', import.meta.url).pathname });
 
-const { installFullContextMocks, chunkRow } = await import('./helpers/fullContextMocks.js');
+const { installFullContextMocks, reportRow } = await import('./helpers/fullContextMocks.js');
 
 test("patient scoping holds in full-context mode: one patient's chunks never appear for another", async () => {
   const patientA = `usr_scopeA_${Date.now()}`;
   const patientB = `usr_scopeB_${Date.now()}`;
   installFullContextMocks({
-    allRows: [
-      chunkRow({
+    allReportRows: [
+      reportRow({
         patientId: patientA,
         reportId: 'a1',
-        chunkIndex: 0,
-        text: 'Patient A note.',
+        notes: 'Patient A note.',
         reportDate: '2026-01-01',
         title: 'Patient A Report',
       }),
-      chunkRow({
+      reportRow({
         patientId: patientB,
         reportId: 'b1',
-        chunkIndex: 0,
-        text: 'Patient B note.',
+        notes: 'Patient B note.',
         reportDate: '2026-01-01',
         title: 'Patient B Report',
       }),

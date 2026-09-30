@@ -41,6 +41,36 @@ function isAggregateQuestion(query) {
 }
 
 /**
+ * Single shared loader for every code path that needs a patient's full
+ * `reports` history read directly from the table (as opposed to a
+ * similarity-ranked subset of `report_embeddings` chunks) — used by
+ * answerAggregateQuestion below and by conversationalSearchService.js's
+ * full-context mode, so there is exactly one query, one field list, and one
+ * ordering for "give me everything this patient has."
+ *
+ * Ordered by report_date then id (a stable tiebreaker for same-date
+ * reports) so both callers see reports in the same, deterministic order.
+ *
+ * @param {string} patientId
+ * @returns {Promise<object[]>} every `reports` row for this patient, oldest
+ *   first — never throws on "no rows" (returns []), only on a real DB error.
+ */
+async function loadPatientReportsForPrompt(patientId) {
+  const { data: reports, error } = await supabase
+    .from('reports')
+    .select('id, title, report_date, category, hospital, doctor, diagnosis, medicines, notes, file_url')
+    .eq('patient_id', patientId)
+    .order('report_date', { ascending: true })
+    .order('id', { ascending: true });
+
+  if (error) {
+    throw new Error(`loadPatientReportsForPrompt: failed to load reports: ${error.message}`);
+  }
+
+  return reports || [];
+}
+
+/**
  * Answers a question about the whole record set (counts, full listings)
  * directly from `reports` metadata — every row belonging to the user, not
  * a similarity-ranked top-K subset. This is deliberately NOT grounded via
@@ -49,17 +79,9 @@ function isAggregateQuestion(query) {
  * them.
  */
 async function answerAggregateQuestion(query, userId) {
-  const { data: reports, error } = await supabase
-    .from('reports')
-    .select('id, title, category, report_date, diagnosis, file_url')
-    .eq('patient_id', userId)
-    .order('report_date', { ascending: false });
+  const reports = await loadPatientReportsForPrompt(userId);
 
-  if (error) {
-    throw new Error(`answerAggregateQuestion: failed to load reports: ${error.message}`);
-  }
-
-  if (!reports || reports.length === 0) {
+  if (reports.length === 0) {
     return {
       answer: NO_RESULTS_MESSAGE,
       structured: { headline: NO_RESULTS_MESSAGE, keyFacts: [], caveat: '' },
@@ -352,9 +374,11 @@ function parseStructuredAnswer(raw, excerpts) {
   };
 }
 
-// parseStructuredAnswer, verifyFileUrl and buildGroundedPrompt are also exported
-// so conversationalSearchService.js can reuse the exact same grounding
-// prompt, JSON parsing and dead-link checking rather than copying them.
+// parseStructuredAnswer, verifyFileUrl, buildGroundedPrompt,
+// escapeAngleBrackets and loadPatientReportsForPrompt are also exported so
+// conversationalSearchService.js can reuse the exact same grounding prompt,
+// JSON parsing, dead-link checking, field escaping and reports loader
+// rather than copying them.
 export {
   SIMILARITY_THRESHOLD,
   MATCH_COUNT,
@@ -362,6 +386,8 @@ export {
   parseStructuredAnswer,
   verifyFileUrl,
   buildGroundedPrompt,
+  escapeAngleBrackets,
+  loadPatientReportsForPrompt,
   isAggregateQuestion,
   answerAggregateQuestion,
 };

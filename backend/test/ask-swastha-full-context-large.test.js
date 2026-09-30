@@ -12,21 +12,21 @@ import dotenv from 'dotenv';
 
 dotenv.config({ path: new URL('../.env', import.meta.url).pathname });
 
-const { installFullContextMocks, chunkRow } = await import('./helpers/fullContextMocks.js');
+const { installFullContextMocks, reportRow } = await import('./helpers/fullContextMocks.js');
 
 test('a patient with a large total history uses retrieval mode (falls back past the char budget)', async () => {
   const patientId = `usr_largehistory_${Date.now()}`;
-  // FULL_CONTEXT_MAX_CHARS defaults to 100000 — one chunk well over that on
-  // its own is the simplest way to force the fallback deterministically,
-  // without depending on the exact default staying 100000 forever (still
-  // exercises the real comparison against whatever the env resolves to,
-  // since this chunk exceeds any sane threshold).
-  const hugeChunk = 'x'.repeat(150_000);
+  // FULL_CONTEXT_MAX_CHARS defaults to 100000 — one report's notes well
+  // over that on its own is the simplest way to force the fallback
+  // deterministically, without depending on the exact default staying
+  // 100000 forever (still exercises the real comparison against whatever
+  // the env resolves to, since this exceeds any sane threshold).
+  const hugeNotes = 'x'.repeat(150_000);
   const calls = { embedText: 0, rpc: 0 };
   installFullContextMocks({
-    allRows: [chunkRow({ patientId, reportId: 'r1', chunkIndex: 0, text: hugeChunk, reportDate: '2026-01-01' })],
+    allReportRows: [reportRow({ patientId, reportId: 'r1', notes: hugeNotes, reportDate: '2026-01-01' })],
     retrieverMatches: [
-      { id: 1, report_id: 'r1', chunk_text: hugeChunk.slice(0, 500), chunk_index: 0, similarity: 0.9 },
+      { id: 1, report_id: 'r1', chunk_text: hugeNotes.slice(0, 500), chunk_index: 0, similarity: 0.9 },
     ],
     retrieverReports: [
       { id: 'r1', title: 'Fake Report', category: 'Consultation', report_date: '2026-01-01', file_url: null },

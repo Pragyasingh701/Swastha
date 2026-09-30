@@ -68,35 +68,35 @@ test('conversationalSearch returns degraded:true when generation is exhausted, w
   // the unrelated backend/config/supabase.js (default export) other parts
   // of the app use.
   //
-  // from() branches by table name, since conversationalSearch now queries
-  // TWO tables before generation: tryFullContextAnswer's report_embeddings
-  // chunk-load (must resolve to zero chunks here, so it falls through to
-  // the retrieval path this test actually means to exercise) and the
-  // retrieval path's own reports metadata join (unchanged from before).
+  // Both tryFullContextAnswer's loadPatientReportsForPrompt AND the
+  // retrieval path's citation join now query the SAME 'reports' table
+  // (full-context mode reads reports directly, not report_embeddings, as
+  // of the fix that made it include never-indexed reports) — distinguished
+  // here by call shape: the full-context load chains .order().order() (a
+  // thenable, per Supabase's real query builder) and must resolve to zero
+  // rows so this test falls through to the retrieval path it actually
+  // means to exercise; the citation join calls .in() and returns the one
+  // fake report retrieval needs.
   const fakeSupabase = {
     rpc: async () => ({
       data: [{ id: 1, report_id: 'r1', chunk_text: 'Fake chunk for mocked retrieval.', chunk_index: 0, similarity: 0.99 }],
       error: null,
     }),
-    from: (table) => {
-      if (table === 'report_embeddings') {
-        const emptyChain = {
-          order: () => emptyChain,
-          then: (resolve) => resolve({ data: [], error: null, count: 0 }),
-        };
-        return { select: () => ({ eq: () => emptyChain }) };
-      }
-      return {
-        select: () => ({
-          eq: () => ({
+    from: () => ({
+      select: () => ({
+        eq: () => {
+          const chain = {
+            order: () => chain,
+            then: (resolve) => resolve({ data: [], error: null }),
             in: async () => ({
               data: [{ id: 'r1', title: 'Fake Report', category: 'Consultation', report_date: '2026-01-01', file_url: null }],
               error: null,
             }),
-          }),
-        }),
-      };
-    },
+          };
+          return chain;
+        },
+      }),
+    }),
   };
   mock.module(new URL('../rag/config/supabase.js', import.meta.url).href, {
     namedExports: { supabase: fakeSupabase },

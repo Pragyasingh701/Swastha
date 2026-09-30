@@ -16,6 +16,8 @@ import {
   parseStructuredAnswer,
   verifyFileUrl,
   buildGroundedPrompt,
+  escapeAngleBrackets,
+  loadPatientReportsForPrompt,
   isAggregateQuestion,
   answerAggregateQuestion,
 } from './searchService.js';
@@ -130,99 +132,103 @@ async function generateAndRespond({ standaloneQuestion, trimmedQuery, excerpts, 
   };
 }
 
+// Fields folded into a full-context excerpt, in display order, each as its
+// own labeled line — skipped entirely when empty rather than printed with a
+// blank value, so a report missing (say) a hospital doesn't leave a
+// dangling "Hospital: " line in the prompt.
+const FULL_CONTEXT_FIELD_LABELS = [
+  ['title', 'Title'],
+  ['report_date', 'Date'],
+  ['category', 'Category'],
+  ['hospital', 'Hospital'],
+  ['doctor', 'Doctor'],
+  ['diagnosis', 'Diagnosis'],
+  ['medicines', 'Medicines'],
+  ['notes', 'Notes'],
+];
+
 /**
- * Adaptive full-context mode: if a patient's entire embeddable chunk
- * history fits under FULL_CONTEXT_MAX_CHARS, skip embedding and vector
- * search entirely and hand the model every chunk directly. This avoids two
- * failure modes similarity search has for a patient with only a handful of
- * short reports: a chunk that's genuinely relevant but happens to fall
+ * Builds one report's excerpt text as labeled lines, escaping EVERY field
+ * individually (not just notes) before it goes anywhere near the prompt —
+ * same reasoning as buildGroundedPrompt's own excerpt-text escaping: any of
+ * these fields can be user-controlled (typed manually, or OCR-extracted
+ * from an uploaded document) and none of them should be able to inject a
+ * fake label line or break out of the excerpt's own delimiters.
+ */
+function buildFullContextExcerptText(report) {
+  return FULL_CONTEXT_FIELD_LABELS.filter(([field]) => report[field] && String(report[field]).trim())
+    .map(([field, label]) => `${label}: ${escapeAngleBrackets(String(report[field]).trim())}`)
+    .join('\n');
+}
+
+/**
+ * Adaptive full-context mode: if a patient's entire report history (every
+ * field a doctor might need to answer from — title, date, category,
+ * hospital, doctor, diagnosis, medicines, notes) fits under
+ * FULL_CONTEXT_MAX_CHARS once built into excerpt text, skip embedding and
+ * vector search entirely and hand the model every report directly. This
+ * avoids two failure modes similarity search has for a patient with only a
+ * handful of reports: a chunk that's genuinely relevant but happens to fall
  * below SIMILARITY_THRESHOLD for an oddly-phrased question, and MATCH_COUNT
  * silently truncating to 5 chunks when a patient has more than 5 but the
  * question doesn't itself look like an aggregate question (isAggregateQuestion
  * only catches count/list-style phrasing, not "compare my last two visits"
  * style questions that also need more than 5 chunks to answer correctly).
  *
- * Returns null (never throws) if the patient is over the char budget, or if
- * the row count returned doesn't match the true total (a defensive check
- * against PostgREST's default row cap silently truncating the result) —
- * both cases fall through to the existing retrieval path unchanged.
+ * Reads directly from `reports` via the same loadPatientReportsForPrompt
+ * used by answerAggregateQuestion — NOT from report_embeddings — so a
+ * report that was never indexed (or whose indexing failed; see
+ * embeddingService.js's fire-and-forget trigger) still appears here, unlike
+ * the old chunk-based version of this function.
+ *
+ * Returns null (never throws) only if the patient is over the char budget,
+ * in which case retrieval below runs exactly as before.
  *
  * @param {{ standaloneQuestion: string, trimmedQuery: string, userId: string, sessionId: string }} params
  * @returns {Promise<object|null>}
  */
 async function tryFullContextAnswer({ standaloneQuestion, trimmedQuery, userId, sessionId }) {
-  // count:'exact' lets us detect a truncated fetch (see the null-return
-  // case below) rather than silently answering from a partial history.
-  const { data: rows, error, count } = await supabase
-    .from('report_embeddings')
-    .select('chunk_text, chunk_index, report_id, reports(title, report_date, category, file_url)', {
-      count: 'exact',
-    })
-    .eq('patient_id', userId)
-    .order('reports(report_date)', { ascending: true })
-    .order('chunk_index', { ascending: true });
+  const reports = await loadPatientReportsForPrompt(userId);
 
-  if (error) {
-    throw new Error(`tryFullContextAnswer: failed to load chunks: ${error.message}`);
-  }
-
-  const chunks = rows || [];
-  const totalChars = chunks.reduce((sum, r) => sum + (r.chunk_text?.length || 0), 0);
-
-  if (chunks.length === 0) {
-    // No embeddings at all for this patient — not this function's job to
+  if (reports.length === 0) {
+    // No reports at all for this patient — not this function's job to
     // decide what that means (the caller's retrieval path already has a
     // well-defined "nothing found" contract). Let it fall through.
     return null;
   }
 
-  // Defensive: if PostgREST's row cap silently truncated the result, `count`
-  // (the true total) won't match what we actually got back. Don't guess at
-  // a partial history — fall through to retrieval, which pages correctly
-  // via LIMIT/p_match_count.
-  if (typeof count === 'number' && count !== chunks.length) {
-    console.warn(
-      `[conversationalSearch] full-context fetch returned ${chunks.length} of ${count} chunks for a patient — falling back to retrieval`
-    );
-    return null;
-  }
+  const excerpts = reports.map((r, i) => ({
+    index: i + 1,
+    reportId: r.id,
+    title: r.title || 'Untitled report',
+    reportDate: r.report_date || null,
+    text: buildFullContextExcerptText(r),
+    similarity: 1, // not a similarity-ranked result — every report is included
+  }));
+
+  // Sized on the excerpt text actually built (labeled fields), not raw
+  // chunk length — this is what the char budget is meant to bound, since
+  // it's what actually goes into the prompt.
+  const totalChars = excerpts.reduce((sum, e) => sum + e.text.length, 0);
 
   if (totalChars >= FULL_CONTEXT_MAX_CHARS) {
     return null;
   }
 
-  // reportId -> report metadata, so the excerpt label and the final source
-  // list both come from the same join instead of a second query — every
-  // report with at least one chunk here has non-null `reports` data, since
-  // report_embeddings.report_id is NOT NULL and foreign-keys to reports.
-  const reportById = new Map();
-  for (const r of chunks) {
-    if (!reportById.has(r.report_id)) reportById.set(r.report_id, r.reports);
-  }
-
-  const excerpts = chunks.map((r, i) => ({
-    index: i + 1,
-    reportId: r.report_id,
-    title: r.reports?.title || 'Untitled report',
-    reportDate: r.reports?.report_date || null,
-    text: r.chunk_text,
-    similarity: 1, // not a similarity-ranked result — every chunk is included
+  // One source per report included — every report has one, since this
+  // reads `reports` directly rather than joining from report_embeddings.
+  const sourceReports = reports.map((r) => ({
+    id: r.id,
+    title: r.title || 'Untitled report',
+    category: r.category || null,
+    report_date: r.report_date || null,
+    file_url: r.file_url || null,
   }));
 
-  // Sources: one row per report actually included (not per chunk) — the
-  // same de-duplication searchService.js's retrieval path does.
-  const sourceReports = [...reportById.entries()].map(([reportId, report]) => ({
-    id: reportId,
-    title: report?.title || 'Untitled report',
-    category: report?.category || null,
-    report_date: report?.report_date || null,
-    file_url: report?.file_url || null,
-  }));
-
-  // Counts only — never chunk/report content — matching the existing
+  // Counts only — never report content — matching the existing
   // condense-question log line's privacy convention.
   console.log(
-    `[conversationalSearch] session ${sessionId}: mode=full-context (${chunks.length} chunks, ${totalChars} chars, ${sourceReports.length} reports)`
+    `[conversationalSearch] session ${sessionId}: mode=full-context (${reports.length} reports, ${totalChars} chars)`
   );
 
   return generateAndRespond({ standaloneQuestion, trimmedQuery, excerpts, sourceReports, sessionId, userId });
@@ -267,10 +273,10 @@ export async function conversationalSearch({ query, userId, sessionId }) {
   }
 
   // Adaptive full-context: a patient with a small enough total history gets
-  // every chunk handed to the model directly, skipping embedding + vector
+  // every report handed to the model directly, skipping embedding + vector
   // search — see tryFullContextAnswer's own doc comment for why. Returns
-  // null (never throws) when the patient is over budget or the fetch looks
-  // truncated, in which case retrieval below runs exactly as before.
+  // null (never throws) when the patient is over budget, in which case
+  // retrieval below runs exactly as before.
   const fullContextResult = await tryFullContextAnswer({ standaloneQuestion, trimmedQuery, userId, sessionId });
   if (fullContextResult) {
     return fullContextResult;
