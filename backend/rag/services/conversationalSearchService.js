@@ -12,10 +12,10 @@ import { ReportEmbeddingsRetriever } from '../langchain/reportRetriever.js';
 import { getHistory, appendTurn } from '../langchain/sessionStore.js';
 import { FULL_CONTEXT_MAX_CHARS } from '../config/env.js';
 import {
-  NO_RESULTS_MESSAGE,
   parseStructuredAnswer,
   verifyFileUrl,
   buildGroundedPrompt,
+  generateNoMatchAnswer,
   escapeAngleBrackets,
   loadPatientReportsForPrompt,
   isAggregateQuestion,
@@ -307,12 +307,15 @@ export async function conversationalSearch({ query, userId, sessionId }) {
   const docs = await retriever.invoke(standaloneQuestion);
 
   if (docs.length === 0) {
-    // Nothing above threshold: return the same no-results contract as the
-    // one-shot endpoint, and do NOT write this turn to memory — recording
+    // Nothing above threshold: tailor the reply to the actual question
+    // (same reasoning/helper as the one-shot endpoint — see
+    // generateNoMatchAnswer) rather than one fixed sentence for every
+    // zero-match case, and do NOT write this turn to memory — recording
     // "I couldn't find that" as context would poison later rewrites.
+    const noMatch = await generateNoMatchAnswer(standaloneQuestion, 'chat-no-match');
     return {
-      answer: NO_RESULTS_MESSAGE,
-      structured: { headline: NO_RESULTS_MESSAGE, keyFacts: [], caveat: '' },
+      answer: noMatch.headline,
+      structured: noMatch,
       sources: [],
       noResultsFound: true,
       standaloneQuestion,
