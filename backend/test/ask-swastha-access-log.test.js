@@ -24,10 +24,13 @@ mock.module(new URL('../db/askSwasthaAccessLog.js', import.meta.url).href, {
 
 // Notice-ack gate (Part 1) is unrelated to this feature — pre-acknowledged
 // for every caller so these tests exercise the audit log, not the ack gate.
+// checkNoticeAck is also mocked here since routes/clinic.js (loaded
+// transitively via app.js) now imports it from this same module.
 mock.module(new URL('../db/aiNoticeAcknowledgements.js', import.meta.url).href, {
   namedExports: {
     hasAcknowledged: async () => true,
     recordAcknowledgement: async () => {},
+    checkNoticeAck: async () => ({ ok: true }),
   },
 });
 

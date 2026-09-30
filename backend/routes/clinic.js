@@ -6,8 +6,7 @@ import { findUserById } from '../db/users.js';
 import { accessExpiryFromNow } from '../db/doctorPatients.js';
 import { startIntakeSession } from '../rag/services/intakeService.js';
 import { synthesizeSpeech } from '../rag/services/ttsService.js';
-import { hasAcknowledged } from '../db/aiNoticeAcknowledgements.js';
-import { AI_NOTICE_VERSION } from '../rag/config/aiNotices.js';
+import { checkNoticeAck } from '../db/aiNoticeAcknowledgements.js';
 
 const router = express.Router();
 const JWT_SECRET = process.env.JWT_SECRET || 'swastha_dev_secret_key_2026';
@@ -140,25 +139,25 @@ router.post('/verify-otp', requirePatientAuth, async (req, res) => {
   }
 
   // This is the OTHER entry point into voice intake besides POST
-  // /rag/api/intake/start (see requireNoticeAck.js for the primary one) —
-  // it creates its own intake_sessions row directly rather than hopping
-  // through the rag sub-app, so the same server-side ack gate has to be
-  // duplicated here or a clinic check-in patient could start a voice
-  // session (and have their audio sent to Sarvam) without ever having
-  // acknowledged the notice. Same fail-closed contract: a lookup failure
-  // is a 500, never a silent allow.
-  try {
-    const acknowledged = await hasAcknowledged(patientId, 'voice_intake', AI_NOTICE_VERSION);
-    if (!acknowledged) {
+  // /rag/api/intake/start (see rag/middleware/requireNoticeAck.js for the
+  // primary one) — it creates its own intake_sessions row directly rather
+  // than hopping through the rag sub-app, so the same server-side ack gate
+  // has to be checked here too or a clinic check-in patient could start a
+  // voice session (and have their audio sent to Sarvam) without ever having
+  // acknowledged the notice. Shares the actual check (and its fail-closed
+  // behavior) with requireNoticeAck via checkNoticeAck — this route just
+  // builds its own response shape (`message`, matching this file's
+  // convention, vs. the rag sub-app's `error`) from the same result.
+  const ackResult = await checkNoticeAck(patientId, 'voice_intake');
+  if (!ackResult.ok) {
+    if (ackResult.status === 403) {
       return res.status(403).json({
         message: 'You must acknowledge how this feature uses AI before continuing.',
-        code: 'AI_NOTICE_ACK_REQUIRED',
-        feature: 'voice_intake',
-        notice_version: AI_NOTICE_VERSION,
+        code: ackResult.code,
+        feature: ackResult.feature,
+        notice_version: ackResult.noticeVersion,
       });
     }
-  } catch (err) {
-    console.error(`[POST /api/clinic/verify-otp] notice ack check failed for patient ${patientId}:`, err);
     return res.status(500).json({ message: 'Could not verify notice acknowledgement. Please try again.' });
   }
 

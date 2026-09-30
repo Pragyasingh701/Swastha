@@ -26,16 +26,36 @@ function ackKey(userId, feature, version) {
 // an already-mocked specifier within one process).
 const SIMULATE_DB_FAILURE_USER_ID = '__SIMULATE_DB_FAILURE__';
 
+// AI_NOTICE_VERSION is real (unmocked) — checkNoticeAck below mirrors the
+// real module's own implementation (db/aiNoticeAcknowledgements.js) against
+// this file's mocked hasAcknowledged/ackStore, since checkNoticeAck itself
+// is also mocked here (routes/clinic.js, loaded transitively via app.js,
+// now imports it from this same module).
+const { AI_NOTICE_VERSION } = await import(new URL('../rag/config/aiNotices.js', import.meta.url).href);
+
+async function mockedHasAcknowledged(userId, feature, version) {
+  if (userId === SIMULATE_DB_FAILURE_USER_ID) {
+    throw new Error('simulated Supabase outage');
+  }
+  return ackStore.has(ackKey(userId, feature, version));
+}
+
 mock.module(new URL('../db/aiNoticeAcknowledgements.js', import.meta.url).href, {
   namedExports: {
-    hasAcknowledged: async (userId, feature, version) => {
-      if (userId === SIMULATE_DB_FAILURE_USER_ID) {
-        throw new Error('simulated Supabase outage');
-      }
-      return ackStore.has(ackKey(userId, feature, version));
-    },
+    hasAcknowledged: mockedHasAcknowledged,
     recordAcknowledgement: async (userId, feature, version) => {
       ackStore.add(ackKey(userId, feature, version));
+    },
+    checkNoticeAck: async (userId, feature) => {
+      try {
+        const acknowledged = await mockedHasAcknowledged(userId, feature, AI_NOTICE_VERSION);
+        if (!acknowledged) {
+          return { ok: false, status: 403, code: 'AI_NOTICE_ACK_REQUIRED', feature, noticeVersion: AI_NOTICE_VERSION };
+        }
+        return { ok: true };
+      } catch {
+        return { ok: false, status: 500 };
+      }
     },
   },
 });

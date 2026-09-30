@@ -61,6 +61,7 @@ test('the search route still returns 200 even when the audit-log write fails', a
     namedExports: {
       hasAcknowledged: async () => true,
       recordAcknowledgement: async () => {},
+      checkNoticeAck: async () => ({ ok: true }),
     },
   });
 
