@@ -348,12 +348,16 @@ function markInapplicableHpiFields(history, modelVerdict) {
   return { ...history, hpi, hpi_na_fields };
 }
 
-// Which field a drug_allergy question is about, by keyword. That section
-// only has two turn-worthy questions, so simple term matching is enough.
+// Which field a drug_allergy question is about, by keyword. "notes" has no
+// entry here deliberately (it's opportunistic/optional, never a repeat-guard
+// target) — dietary_preference gets one anyway, cheap insurance so a repeat
+// of this specific question is still recognized by the dedup guard, even
+// though (like notes) it's never required for section_complete.
 function drugAllergyFieldForQuestion(questionText) {
   const t = String(questionText || '').toLowerCase();
   if (/allerg/.test(t)) return 'allergies';
   if (/medicat|medicine|prescription|taking any|drugs you/.test(t)) return 'current_medications';
+  if (/vegetarian|non-veg|nonveg|veg or|diet\b/.test(t)) return 'dietary_preference';
   return null;
 }
 
@@ -481,15 +485,28 @@ const DRUG_ALLERGY_FALLBACK_QUESTIONS = {
   current_medications: {
     question: 'Are you currently taking any medications?',
     question_hi: 'क्या आप अभी कोई दवा ले रहे हैं?',
-    options: ['None', 'Yes — prescription', 'Yes — over the counter', 'Not sure'],
-    options_hi: ['कोई नहीं', 'हाँ — डॉक्टर की लिखी दवा', 'हाँ — मेडिकल से ली हुई दवा', 'पता नहीं'],
+    // "Not sure" -> "I don't remember" per request: a patient (especially
+    // an elderly one, or one on several medicines) genuinely may not recall
+    // every name, and this phrasing says that plainly rather than hedging.
+    options: ['None', 'Yes — prescription', 'Yes — over the counter', "I don't remember"],
+    options_hi: ['कोई नहीं', 'हाँ — डॉक्टर की लिखी दवा', 'हाँ — मेडिकल से ली हुई दवा', 'याद नहीं है'],
     allow_multiple: false,
   },
   allergies: {
     question: 'Do you have any known drug or food allergies?',
     question_hi: 'क्या आपको किसी दवा या खाने से एलर्जी है?',
-    options: ['No known allergies', 'Yes — to a medicine', 'Yes — to a food', 'Not sure'],
-    options_hi: ['कोई एलर्जी नहीं', 'हाँ — किसी दवा से', 'हाँ — किसी खाने से', 'पता नहीं'],
+    options: ['No known allergies', 'Yes — to a medicine', 'Yes — to a food', "I don't remember"],
+    options_hi: ['कोई एलर्जी नहीं', 'हाँ — किसी दवा से', 'हाँ — किसी खाने से', 'याद नहीं है'],
+    allow_multiple: false,
+  },
+  // Optional (see emptyStructuredHistory's drug_allergy.dietary_preference
+  // comment) — clinically relevant because some vitamin/supplement tablets
+  // contain fish oil or other animal-derived ingredients.
+  dietary_preference: {
+    question: 'Are you vegetarian or non-vegetarian?',
+    question_hi: 'क्या आप शाकाहारी हैं या मांसाहारी?',
+    options: ['Vegetarian', 'Non-vegetarian', 'Eggetarian'],
+    options_hi: ['शाकाहारी', 'मांसाहारी', 'अंडा खाने वाला शाकाहारी'],
     allow_multiple: false,
   },
 };
@@ -655,6 +672,13 @@ function capturedFieldKeys(history) {
       keys.push(`drug_allergy.${f}`);
     }
   }
+  // Unlike `notes` (never a model-prompted question, only opportunistically
+  // extracted), dietary_preference IS an explicit question the section rule
+  // asks for — it needs dedup protection here or the model has no record it
+  // was already asked and could repeat it later in the same session.
+  if (typeof history?.drug_allergy?.dietary_preference === 'string' && history.drug_allergy.dietary_preference.trim()) {
+    keys.push('drug_allergy.dietary_preference');
+  }
   return keys;
 }
 
@@ -712,6 +736,13 @@ function emptyStructuredHistory() {
       current_medications: [],
       allergies: [],
       notes: '',
+      // Clinically relevant for supplement/vitamin safety — some contain
+      // fish oil or other animal-derived ingredients. Optional, same
+      // treatment as `notes` above: asked once in this section (see its
+      // rule text below) but never required for section_complete, so a
+      // model that skips it can never strand the patient here — same
+      // reasoning that already applies to `notes`.
+      dietary_preference: '',
     },
     red_flag: false,
     red_flag_reason: null,
@@ -819,7 +850,7 @@ function buildSystemPrompt(section, structuredHistory, lastQuestion, language) {
   const sectionRuleFor = {
     chief_complaint: `- "chief_complaint": ask the patient to state their main complaint if not yet captured. One short question. Once they answer, extract chief_complaint (a short clinical phrase for what's wrong) AND, only if the patient actually volunteered them in this same message, also capture duration into hpi.onset and any aggravating/relieving factor into hpi.exacerbating_relieving — never ask separate follow-up questions for those here, only capture what they already said unprompted (this avoids re-asking the same thing again once "hpi" starts). Once chief_complaint is captured, move to "hpi".`,
     hpi: `- "hpi": ask SOCRATES-style follow-ups (Site, Onset, Character, Radiation, Associated symptoms, Timing, Exacerbating/relieving factors, Severity) ONE OR TWO AT A TIME — never ask all 8 in one question. Only ask about fields still empty in hpi above (skip any already filled from chief_complaint's extraction). Only ask what's clinically relevant to THIS chief_complaint — do not ask a generic fixed checklist. Tailor which fields you probe and how to the complaint type, for example: pain/ache complaints -> site, character, radiation, severity, aggravating/relieving factors; headache -> location, duration, severity, triggers, vision changes, nausea/vomiting; cough -> duration, dry vs productive, fever, breathing difficulty, blood in sputum; skin complaints -> location, itching, duration, rash appearance, triggers; joint complaints -> which joint(s), duration, swelling, stiffness, pain on movement. Always also check associated_symptoms relevant to that complaint type (e.g. vomiting/fever/loose motion/constipation/bloating/loss of appetite for abdominal complaints). SITE vs RADIATION boundary (a real live mix-up, confirmed with the user): site's quick_reply_options must describe WHERE the complaint is located ONLY (e.g. "Upper stomach", "Lower abdomen", "All over", "Near the navel", "Not sure") — NEVER include movement or spreading language like "moves around" or "spreads" in site's options, since that is radiation's question, not site's. Answering site with movement language produces radiation-shaped information under the wrong field, and the patient then gets asked the real radiation question right after, which reads as a near-duplicate of the question they just answered. Phrase each question short and direct, clinical-questionnaire style (e.g. "How is your pain normally?" / "How would you describe X?"), NOT a long or casual sentence with asides. Offer more than a minimal set of short quick_reply_options where a patient would naturally pick from a small set (more than 2 closed options where the option set supports it — e.g. severity 1-10 buttons, or 3+ options for a symptom quality rather than a bare yes/no where richer options make sense), each option a single short phrase (one attribute, not several stacked together). When every hpi field is filled, set section_complete: true for this turn and the caller will advance to "drug_allergy". This section is ONLY about the patient's chief complaint — never ask about their general constitution, lifestyle, diet, sleep, or temperament here. If the complaint is generalized rather than localized (fatigue, fever, dizziness, nausea, weakness, poor sleep, low mood), do NOT ask about site or radiation — "where exactly is the fatigue?" and "does the tiredness spread?" are meaningless to a patient; those two fields are pre-marked not-applicable for such complaints and appear in the ALREADY ANSWERED list above. On the turn where every hpi field finally becomes filled and you set section_complete: true, your next_question must go STRAIGHT into asking the first thing the next section needs — never a wrap-up line asking the patient's permission to continue, and never announcing or previewing what the next section is about (e.g. never "Now let's talk about your general health and lifestyle — is that okay?"). Treat moving into the next section exactly like turning a page, with no announcement.`,
-    drug_allergy: `- "drug_allergy": ask about current medications and known drug/food allergies — TWO separate questions (medications first, then allergies), never bundled into one, and never ask either one more than once. When the patient answers "none"/"no" to either, still write a non-empty array for it — e.g. current_medications: ["None"] or allergies: ["None"] — NEVER leave it as an empty array or omit it, since an empty array cannot be distinguished from "not asked yet". Once BOTH current_medications and allergies are each a non-empty array, set section_complete: true.`,
+    drug_allergy: `- "drug_allergy": ask about current medications and known drug/food allergies — TWO separate questions (medications first, then allergies), never bundled into one. When the patient answers "none"/"no" to either, still write a non-empty array for it — e.g. current_medications: ["None"] or allergies: ["None"] — NEVER leave it as an empty array or omit it, since an empty array cannot be distinguished from "not asked yet". If the patient's answer to either question is an unqualified yes with no specific name given (e.g. they tapped a quick-reply option like "Yes — prescription" or just said "yes"/"haan" with nothing else), ask ONE follow-up naming the specific medicine or allergy (e.g. "What medicine is it?" / "What are you allergic to?") before marking that field's array final — this is the one legitimate exception to "never ask either one more than once". If the patient already named it in their first answer (e.g. "yes, metformin" or "allergic to penicillin"), do not ask the follow-up — record it directly and move on. Once BOTH current_medications and allergies are each a non-empty array (and, for a "yes" answer, actually contain the name rather than just a bare "yes"), set section_complete: true. Also ask, once, whether the patient is vegetarian or non-vegetarian (record into drug_allergy.dietary_preference) — this matters because some vitamin/supplement tablets contain fish oil or other animal-derived ingredients; this question is optional and never blocks section_complete, so if the patient skips or deflects it, move on without re-asking.`,
     finalize: `- "finalize": no more questions — the session is being closed. Return next_question as a short closing message (e.g. "Thanks, that's everything the doctor needs — please have a seat.") and quick_reply_options as { "options": [], "allow_multiple": false }.`,
   };
   const sectionRules = [sectionRuleFor[section] || `- "${section}": (no rule defined — advance or ask a safe generic follow-up)`];
@@ -887,6 +918,7 @@ Rules for the JSON:
 - "quick_reply_options.options" is REQUIRED and must NEVER be empty on any question turn (the only exception is the "finalize" closing message, which uses []). Always generate 3-5 short, tappable options, written fresh for THIS patient's specific complaint and THIS field — not generic filler, and not copied from some other complaint. Hairfall options must be about hairfall, headache options about headache, joint pain about joint pain.
 - This applies even to fields that feel inherently open-ended. There is always a sensible small answer set — generate it. e.g. radiation -> ["No, stays in one place", "Yes, spreads nearby", "Not sure"]; a free-text field like recent_stressors -> ["Work", "Family", "Health", "Nothing in particular"]. Never return a question with no options and expect the patient to type.
 - Options do NOT need to cover every possibility: the patient always has a free-text box available alongside them, so 3-5 likely answers plus an escape option like "Other" / "Not sure" is the right shape. Keep each option a single short phrase.
+- Specifically for the drug_allergy section's current_medications and allergies questions: always include "I don't remember" as one of the options (not just "Not sure") — a patient, especially an elderly one or one taking several medicines, may genuinely not recall every name, and this answer is a complete, final one for that field (the doctor can verify it from prescriptions in person); it is not a reason to keep probing.
 - "quick_reply_options.allow_multiple" must be true whenever more than one answer can genuinely apply to the question just asked — false otherwise. Multi-select renders as checkboxes, single-select as tap-to-send chips. This includes, but is not limited to: multiple symptoms, multiple tastes, multiple moods, AND any "what makes this better or worse" / exacerbating-relieving style question — a patient can easily have more than one factor apply at once (e.g. "worse after eating" AND "better with warm water" can both be true simultaneously), so this question type defaults to true, not false.
 - "target_field" must name the single field "next_question" is asking about, using the same key path as the structured history above. It must NOT be a field on the ALREADY ANSWERED list. If you genuinely cannot find an unanswered field left in this section, set section_complete: true instead of re-asking something.
 - CRITICAL RULE for "updated_fields" — if a field has not actually been asked about and answered by the patient, OMIT it entirely. Do NOT guess, do NOT invent a plausible-sounding value, do NOT fill in what a typical patient with this complaint "probably" would have said, and do NOT estimate a value from the rest of the history. A blank field the doctor can ask about in person is far better than a confident-looking wrong answer on a clinical record — a fabricated severity or duration could change how a patient is triaged. Only record what the patient actually told you, in the turn they told you.
@@ -1013,6 +1045,9 @@ function mergeStructuredHistory(current, updatedFields) {
     }
     if (typeof da.notes === 'string') {
       next.drug_allergy.notes = da.notes.trim();
+    }
+    if (typeof da.dietary_preference === 'string') {
+      next.drug_allergy.dietary_preference = da.dietary_preference.trim();
     }
   }
   return next;
@@ -1848,6 +1883,9 @@ export const __testing = {
   drugAllergyFieldForQuestion,
   markStuckHpiFields,
   parseSeverityFromText,
+  mergeStructuredHistory,
+  drugAllergyComplete,
+  buildSystemPrompt,
 };
 
 /**
