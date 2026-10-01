@@ -32,15 +32,18 @@ import {
 // "Dynamic field rendering" note below. This only says how to word and
 // order the fields we know about; anything captured that isn't listed here
 // still renders, it just sorts after these and gets a humanized label.
+// Wording is plain-language rather than clinical shorthand (Site, Character,
+// Radiation, etc.) so a patient/doctor reading this screen doesn't need to
+// already know what SOCRATES stands for to understand each box.
 const HPI_FIELD_LABELS = [
-  ["site", "Site"],
-  ["onset", "Onset"],
-  ["character", "Character"],
-  ["radiation", "Radiation"],
-  ["associated_symptoms", "Associated Symptoms"],
-  ["timing", "Timing"],
-  ["exacerbating_relieving", "Exacerbating / Relieving"],
-  ["severity", "Severity"],
+  ["site", "Location"],
+  ["onset", "When it started"],
+  ["character", "What it feels like"],
+  ["radiation", "Spreads to"],
+  ["associated_symptoms", "Other symptoms"],
+  ["timing", "Pattern"],
+  ["exacerbating_relieving", "What makes it better or worse"],
+  ["severity", "Severity (1–10)"],
 ];
 
 // Curated order + wording for drug_allergy, same role as HPI_FIELD_LABELS.
@@ -115,14 +118,22 @@ const EMPTY_ARRAY_IS_AN_ANSWER = new Set(["associated_symptoms"]);
  *
  * @param {object} obj    the captured section from structured_history
  * @param {Array}  labelPairs  [[key, label], ...] curated order + wording
+ * @param {Set<string>} [excludeKeys] - keys to skip even though they have a
+ *   value — used for hpi.site/hpi.radiation on a systemic complaint (see
+ *   structured_history.hpi_na_fields): those fields hold a real string
+ *   internally (the backend's own "not applicable" bookkeeping marker, kept
+ *   so its conversation state machine can tell the section is complete),
+ *   but that marker was never an answer the PATIENT gave, so it must not
+ *   render as if it were one.
  * @returns {Array<{key, label, value}>}
  */
-function orderedAnsweredFields(obj, labelPairs) {
+function orderedAnsweredFields(obj, labelPairs, excludeKeys) {
   if (!obj || typeof obj !== "object") return [];
   const labels = new Map(labelPairs);
   const out = [];
   const isAnswered = (key, value) =>
-    hasAnswer(value) || (EMPTY_ARRAY_IS_AN_ANSWER.has(key) && Array.isArray(value));
+    !excludeKeys?.has(key) &&
+    (hasAnswer(value) || (EMPTY_ARRAY_IS_AN_ANSWER.has(key) && Array.isArray(value)));
 
   for (const [key, label] of labelPairs) {
     if (isAnswered(key, obj[key])) out.push({ key, label, value: obj[key] });
@@ -453,10 +464,17 @@ function IntakeSessionModal({ sessionId, onClose }) {
 
   const hpi = detail?.structured_history?.hpi || {};
   const drugAllergy = detail?.structured_history?.drug_allergy || {};
+  // Fields the backend marked structurally not-applicable (e.g. site/
+  // radiation for a systemic complaint like fatigue or fever) rather than
+  // ones the patient actually answered — see orderedAnsweredFields' own
+  // comment on excludeKeys.
+  const hpiNaFields = new Set(
+    Array.isArray(detail?.structured_history?.hpi_na_fields) ? detail.structured_history.hpi_na_fields : []
+  );
 
   // Built from what the SESSION actually captured, with the tables above
   // supplying order and wording — see the "Dynamic field rendering" note.
-  const hpiFields = orderedAnsweredFields(hpi, HPI_FIELD_LABELS);
+  const hpiFields = orderedAnsweredFields(hpi, HPI_FIELD_LABELS, hpiNaFields);
   const drugAllergyFields = orderedAnsweredFields(drugAllergy, DRUG_ALLERGY_FIELD_LABELS);
 
   return (
@@ -476,9 +494,6 @@ function IntakeSessionModal({ sessionId, onClose }) {
             <h3 className="text-xl font-bold text-slate-900 flex items-center gap-2">
               {isLoading ? "Loading…" : detail?.patient_name || "Patient"}
             </h3>
-            {!isLoading && detail?.chief_complaint && (
-              <p className="text-sm text-slate-500 mt-1">Chief complaint: {detail.chief_complaint}</p>
-            )}
           </div>
           <button
             type="button"
@@ -513,9 +528,16 @@ function IntakeSessionModal({ sessionId, onClose }) {
                 </div>
               )}
 
+              {detail.chief_complaint && (
+                <div className="rounded-xl border border-slate-100 bg-slate-50 p-3">
+                  <p className="text-xs text-slate-500">Reason for visit</p>
+                  <p className="text-sm font-medium text-slate-900 mt-0.5">{detail.chief_complaint}</p>
+                </div>
+              )}
+
               <div>
                 <h4 className="text-sm font-semibold text-slate-700 uppercase tracking-wide mb-2">
-                  History of Present Illness (SOCRATES)
+                  Symptom Details
                 </h4>
                 {hpiFields.length === 0 && (
                   <p className="text-sm text-slate-400">

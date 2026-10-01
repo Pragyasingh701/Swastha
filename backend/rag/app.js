@@ -13,15 +13,18 @@ import summarizeRouter from './routes/summarize.js';
 import labInsightsRouter from './routes/labInsights.js';
 import patientSummaryRouter from './routes/patientSummary.js';
 import intakeRouter from './routes/intake.js';
+import noticesRouter from './routes/notices.js';
+import feedbackRouter from './routes/feedback.js';
 
 const app = express();
 
 app.get('/health', (req, res) => res.json({ ok: true, service: 'swastha-rag' }));
 
 app.use('/api/reports', reportsRouter);
-// Mounted before /api/search so the more specific conversational path
-// wins; the one-shot endpoint below is unchanged and still in use.
+// Mounted before /api/search so the more specific paths win; the one-shot
+// endpoint below is unchanged and still in use.
 app.use('/api/search/chat', searchChatRouter);
+app.use('/api/search/feedback', feedbackRouter);
 app.use('/api/search', searchRouter);
 app.use('/api/extract', extractRouter);
 app.use('/api/summarize', summarizeRouter);
@@ -31,6 +34,7 @@ app.use('/api/patient-summary', patientSummaryRouter);
 // start/turn/finalize. Priority queue (GET /api/intake/queue) is a
 // separate later task — not mounted here yet.
 app.use('/api/intake', intakeRouter);
+app.use('/api/notices', noticesRouter);
 
 // Central error handler as a last resort net — routes already catch and
 // respond themselves, but this guards against anything unhandled.

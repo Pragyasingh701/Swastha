@@ -217,25 +217,27 @@ export const isDoctorLinkedToPatient = async (doctorId, patientUserId) => {
     return false;
   }
 
-  try {
-    const { data, error } = await supabase
-      .from('doctor_patient')
-      .select('id, access_expires_at')
-      .eq('doctor_id', doctorId)
-      .eq('patient_id', patientUserId)
-      .eq('status', 'accepted')
-      .maybeSingle();
+  const { data, error } = await supabase
+    .from('doctor_patient')
+    .select('id, access_expires_at')
+    .eq('doctor_id', doctorId)
+    .eq('patient_id', patientUserId)
+    .eq('status', 'accepted')
+    .maybeSingle();
 
-    if (error && error.code !== 'PGRST116') {
-      throw error;
-    }
-
-    if (!data) return false;
-    return !isAccessExpired(data);
-  } catch (error) {
-    console.warn('Doctor-patient link check warning:', error?.message || error);
-    return false;
+  // PGRST116 ("no row found") is not an error condition here — it's the
+  // ordinary "not linked" case. Anything else (a real DB/network failure)
+  // is deliberately let through to the caller rather than swallowed into a
+  // silent `false`: callers that need to tell "not linked" (403) apart from
+  // "couldn't check" (500) rely on this throwing. Every current caller
+  // already awaits this inside its own try/catch (see call sites in
+  // backend/routes/reports.js and backend/routes/doctorPatients.js).
+  if (error && error.code !== 'PGRST116') {
+    throw error;
   }
+
+  if (!data) return false;
+  return !isAccessExpired(data);
 };
 
 /**

@@ -68,3 +68,8 @@ docs/
 # Database backups — contain password hashes and patient health data.
 # Never commit these.
 backups/
+
+# Ask Swastha eval questions reference real patient_id/report_id values —
+# never commit them. Only questions.example.json (a template with
+# placeholder ids) is tracked. See backend/rag/evals/run-evals.js.
+backend/rag/evals/questions.local.json

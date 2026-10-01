@@ -21,6 +21,7 @@
 import { Buffer } from 'node:buffer';
 import { EdgeTTS } from 'edge-tts-universal';
 import { currentKey, retireKey, __resetKeyPool } from '../config/sarvamKeys.js';
+import { ALLOW_EDGE_TTS_FALLBACK } from '../config/env.js';
 
 const SARVAM_TTS_URL = 'https://api.sarvam.ai/text-to-speech';
 
@@ -256,6 +257,17 @@ async function synthesizeWithSarvam(text, language) {
 }
 
 async function synthesizeWithEdge(text, language) {
+  // Provider-safety gate, defaults to false: edge-tts-universal sends the
+  // assistant's generated question text (built from patient intake
+  // context) to Microsoft's speech.platform.bing.com over a WebSocket,
+  // outside Sarvam's terms. When the flag is false, this function must
+  // never construct an EdgeTTS instance or otherwise reach that host — the
+  // check happens before any of that, not as a try/catch around a call
+  // that was allowed to start.
+  if (!ALLOW_EDGE_TTS_FALLBACK) {
+    return { ok: false, error_code: 'EDGE_TTS_DISABLED' };
+  }
+
   try {
     const voice = EDGE_VOICES[language] || EDGE_VOICES[DEFAULT_LANGUAGE];
     const tts = new EdgeTTS(text, voice);

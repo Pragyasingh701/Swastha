@@ -7,13 +7,17 @@
 // tuning stays in one place.
 import { supabase } from '../config/supabase.js';
 import { chatModel } from '../langchain/openRouterChatModel.js';
+import { runAI } from '../config/aiClient.js';
 import { ReportEmbeddingsRetriever } from '../langchain/reportRetriever.js';
 import { getHistory, appendTurn } from '../langchain/sessionStore.js';
+import { FULL_CONTEXT_MAX_CHARS } from '../config/env.js';
 import {
-  NO_RESULTS_MESSAGE,
   parseStructuredAnswer,
   verifyFileUrl,
   buildGroundedPrompt,
+  generateNoMatchAnswer,
+  escapeAngleBrackets,
+  loadPatientReportsForPrompt,
   isAggregateQuestion,
   answerAggregateQuestion,
 } from './searchService.js';
@@ -69,6 +73,187 @@ Standalone question:`;
 }
 
 /**
+ * Shared tail for both the full-context and retrieval paths: build the
+ * prompt from whatever excerpts were assembled, generate, and shape the
+ * response — identical generation/degraded-detection/citation/memory
+ * behavior regardless of how the excerpts were sourced.
+ *
+ * `mode` is passed straight through onto the returned object (never used
+ * internally) — it exists only so the caller (searchChat.js) can write it
+ * into the access audit log without re-deriving which path actually ran.
+ *
+ * @param {{ standaloneQuestion: string, trimmedQuery: string, excerpts: object[], sourceReports: object[], sessionId: string, userId: string, mode: 'full_context'|'retrieval' }} params
+ */
+async function generateAndRespond({ standaloneQuestion, trimmedQuery, excerpts, sourceReports, sessionId, userId, mode }) {
+  // Grounding uses the SAME prompt builder as the one-shot endpoint, so the
+  // strict "only use the excerpts / say you couldn't find it" behaviour is
+  // identical by construction rather than by a second copy that can drift.
+  const prompt = buildGroundedPrompt(standaloneQuestion, excerpts);
+
+  // Same detection as the one-shot /api/search path: call runAI directly
+  // (not chatModel.invoke, which only returns text and discards `.ok`) so a
+  // total provider failure surfaces as degraded:true instead of being
+  // rendered as an ordinary answer.
+  const gen = await runAI({ task: 'generation', input: prompt, label: 'chat' });
+
+  if (!gen.ok) {
+    // Do NOT write this turn to memory — the fallback sentence isn't a
+    // real answer, and storing it as context would poison a later rewrite.
+    return {
+      answer: gen.text,
+      structured: { headline: gen.text, keyFacts: [], caveat: '' },
+      sources: [],
+      noResultsFound: false,
+      degraded: true,
+      standaloneQuestion,
+      sessionId,
+      mode,
+    };
+  }
+
+  const structured = parseStructuredAnswer(gen.text, excerpts);
+
+  const verifiedUrls = await Promise.all(sourceReports.map((r) => verifyFileUrl(r.file_url)));
+  const sources = sourceReports.map((r, i) => ({
+    report_id: r.id,
+    title: r.title,
+    category: r.category,
+    report_date: r.report_date,
+    file_url: verifiedUrls[i],
+  }));
+
+  // Remember the ORIGINAL question (what the doctor actually typed) paired
+  // with the answer — the rewrite is a retrieval detail, and storing it
+  // would compound rewrites of rewrites over a long conversation.
+  await appendTurn(sessionId, userId, trimmedQuery, structured.headline);
+
+  return {
+    answer: structured.headline,
+    structured,
+    sources,
+    noResultsFound: false,
+    standaloneQuestion,
+    mode,
+    sessionId,
+  };
+}
+
+// Fields folded into a full-context excerpt, in display order, each as its
+// own labeled line — skipped entirely when empty rather than printed with a
+// blank value, so a report missing (say) a hospital doesn't leave a
+// dangling "Hospital: " line in the prompt.
+const FULL_CONTEXT_FIELD_LABELS = [
+  ['title', 'Title'],
+  ['report_date', 'Date'],
+  ['category', 'Category'],
+  ['hospital', 'Hospital'],
+  ['doctor', 'Doctor'],
+  ['diagnosis', 'Diagnosis'],
+  ['medicines', 'Medicines'],
+  ['notes', 'Notes'],
+];
+
+/**
+ * Builds one report's excerpt text as labeled lines, escaping EVERY field
+ * individually (not just notes) before it goes anywhere near the prompt —
+ * same reasoning as buildGroundedPrompt's own excerpt-text escaping: any of
+ * these fields can be user-controlled (typed manually, or OCR-extracted
+ * from an uploaded document) and none of them should be able to inject a
+ * fake label line or break out of the excerpt's own delimiters.
+ */
+function buildFullContextExcerptText(report) {
+  return FULL_CONTEXT_FIELD_LABELS.filter(([field]) => report[field] && String(report[field]).trim())
+    .map(([field, label]) => `${label}: ${escapeAngleBrackets(String(report[field]).trim())}`)
+    .join('\n');
+}
+
+/**
+ * Adaptive full-context mode: if a patient's entire report history (every
+ * field a doctor might need to answer from — title, date, category,
+ * hospital, doctor, diagnosis, medicines, notes) fits under
+ * FULL_CONTEXT_MAX_CHARS once built into excerpt text, skip embedding and
+ * vector search entirely and hand the model every report directly. This
+ * avoids two failure modes similarity search has for a patient with only a
+ * handful of reports: a chunk that's genuinely relevant but happens to fall
+ * below SIMILARITY_THRESHOLD for an oddly-phrased question, and MATCH_COUNT
+ * silently truncating to 5 chunks when a patient has more than 5 but the
+ * question doesn't itself look like an aggregate question (isAggregateQuestion
+ * only catches count/list-style phrasing, not "compare my last two visits"
+ * style questions that also need more than 5 chunks to answer correctly).
+ *
+ * Reads directly from `reports` via the same loadPatientReportsForPrompt
+ * used by answerAggregateQuestion — NOT from report_embeddings — so a
+ * report that was never indexed (or whose indexing failed; see
+ * embeddingService.js's fire-and-forget trigger) still appears here, unlike
+ * the old chunk-based version of this function.
+ *
+ * Returns null (never throws) if the patient is over the char budget, or if
+ * loadPatientReportsForPrompt's row limit was hit (a patient with more
+ * reports than that limit is exactly the kind of large history this mode
+ * isn't meant for) — in either case retrieval below runs exactly as before.
+ *
+ * @param {{ standaloneQuestion: string, trimmedQuery: string, userId: string, sessionId: string }} params
+ * @returns {Promise<object|null>}
+ */
+async function tryFullContextAnswer({ standaloneQuestion, trimmedQuery, userId, sessionId }) {
+  const { reports, truncated } = await loadPatientReportsForPrompt(userId);
+
+  if (reports.length === 0) {
+    // No reports at all for this patient — not this function's job to
+    // decide what that means (the caller's retrieval path already has a
+    // well-defined "nothing found" contract). Let it fall through.
+    return null;
+  }
+
+  // A patient with more reports than loadPatientReportsForPrompt's row
+  // limit is, by definition, too large a history for "hand the model
+  // everything" — treat exactly like being over the char budget, without
+  // spending time building excerpts for reports we'd only discard.
+  if (truncated) {
+    console.warn(
+      `[conversationalSearch] session ${sessionId}: full-context row limit exceeded — falling back to retrieval`
+    );
+    return null;
+  }
+
+  const excerpts = reports.map((r, i) => ({
+    index: i + 1,
+    reportId: r.id,
+    title: r.title || 'Untitled report',
+    reportDate: r.report_date || null,
+    text: buildFullContextExcerptText(r),
+    similarity: 1, // not a similarity-ranked result — every report is included
+  }));
+
+  // Sized on the excerpt text actually built (labeled fields), not raw
+  // chunk length — this is what the char budget is meant to bound, since
+  // it's what actually goes into the prompt.
+  const totalChars = excerpts.reduce((sum, e) => sum + e.text.length, 0);
+
+  if (totalChars >= FULL_CONTEXT_MAX_CHARS) {
+    return null;
+  }
+
+  // One source per report included — every report has one, since this
+  // reads `reports` directly rather than joining from report_embeddings.
+  const sourceReports = reports.map((r) => ({
+    id: r.id,
+    title: r.title || 'Untitled report',
+    category: r.category || null,
+    report_date: r.report_date || null,
+    file_url: r.file_url || null,
+  }));
+
+  // Counts only — never report content — matching the existing
+  // condense-question log line's privacy convention.
+  console.log(
+    `[conversationalSearch] session ${sessionId}: mode=full-context (${reports.length} reports, ${totalChars} chars)`
+  );
+
+  return generateAndRespond({ standaloneQuestion, trimmedQuery, excerpts, sourceReports, sessionId, userId, mode: 'full_context' });
+}
+
+/**
  * Full conversational RAG turn: condense -> retrieve -> ground -> remember.
  *
  * @param {{ query: string, userId: string, sessionId: string }} params
@@ -79,11 +264,16 @@ export async function conversationalSearch({ query, userId, sessionId }) {
   if (!sessionId) throw new Error('conversationalSearch: sessionId is required');
 
   const history = await getHistory(sessionId, userId);
-  const standaloneQuestion = await condenseQuestion(query.trim(), history);
+  const trimmedQuery = query.trim();
+  const standaloneQuestion = await condenseQuestion(trimmedQuery, history);
+  const wasCondensed = standaloneQuestion !== trimmedQuery;
 
-  if (standaloneQuestion !== query.trim()) {
+  if (wasCondensed) {
+    // Never log the raw query/rewrite text — only shape, so this stays
+    // useful for debugging the condense step without putting patient
+    // question content in server logs.
     console.log(
-      `[conversationalSearch] session ${sessionId}: condensed "${query.trim()}" -> "${standaloneQuestion}"`
+      `[conversationalSearch] session ${sessionId}: condensed query (${trimmedQuery.length} chars -> ${standaloneQuestion.length} chars)`
     );
   }
 
@@ -91,13 +281,24 @@ export async function conversationalSearch({ query, userId, sessionId }) {
   // diagnoses", "why only 5?") can't be answered by top-K similarity search
   // — see searchService.js's isAggregateQuestion for why. Handle those
   // directly from full `reports` metadata instead of the embeddings
-  // retriever, same as the one-shot /api/search endpoint.
+  // retriever, same as the one-shot /api/search endpoint. Unaffected by
+  // full-context mode below — this path never touches embeddings either way.
   if (isAggregateQuestion(standaloneQuestion)) {
     const result = await answerAggregateQuestion(standaloneQuestion, userId);
     if (!result.noResultsFound) {
-      await appendTurn(sessionId, userId, query.trim(), result.structured.headline);
+      await appendTurn(sessionId, userId, trimmedQuery, result.structured.headline);
     }
     return { ...result, standaloneQuestion, sessionId };
+  }
+
+  // Adaptive full-context: a patient with a small enough total history gets
+  // every report handed to the model directly, skipping embedding + vector
+  // search — see tryFullContextAnswer's own doc comment for why. Returns
+  // null (never throws) when the patient is over budget, in which case
+  // retrieval below runs exactly as before.
+  const fullContextResult = await tryFullContextAnswer({ standaloneQuestion, trimmedQuery, userId, sessionId });
+  if (fullContextResult) {
+    return fullContextResult;
   }
 
   // userId comes from the JWT (see routes/searchChat.js) and is applied
@@ -106,16 +307,20 @@ export async function conversationalSearch({ query, userId, sessionId }) {
   const docs = await retriever.invoke(standaloneQuestion);
 
   if (docs.length === 0) {
-    // Nothing above threshold: return the same no-results contract as the
-    // one-shot endpoint, and do NOT write this turn to memory — recording
+    // Nothing above threshold: tailor the reply to the actual question
+    // (same reasoning/helper as the one-shot endpoint — see
+    // generateNoMatchAnswer) rather than one fixed sentence for every
+    // zero-match case, and do NOT write this turn to memory — recording
     // "I couldn't find that" as context would poison later rewrites.
+    const noMatch = await generateNoMatchAnswer(standaloneQuestion, 'chat-no-match');
     return {
-      answer: NO_RESULTS_MESSAGE,
-      structured: { headline: NO_RESULTS_MESSAGE, keyFacts: [], caveat: '' },
+      answer: noMatch.headline,
+      structured: noMatch,
       sources: [],
       noResultsFound: true,
       standaloneQuestion,
       sessionId,
+      mode: 'retrieval',
     };
   }
 
@@ -147,44 +352,13 @@ export async function conversationalSearch({ query, userId, sessionId }) {
     };
   });
 
-  // Grounding uses the SAME prompt builder as the one-shot endpoint, so the
-  // strict "only use the excerpts / say you couldn't find it" behaviour is
-  // identical by construction rather than by a second copy that can drift.
-  // The standalone question is what gets asked, so the answer inherits the
-  // conversational context without the history being available to invent from.
-  const prompt = buildGroundedPrompt(standaloneQuestion, excerpts);
-
-  let raw;
-  try {
-    const response = await chatModel.invoke(prompt);
-    raw = String(response.content ?? response);
-  } catch (err) {
-    throw new Error(`conversationalSearch: answer generation failed: ${err.message}`);
-  }
-
-  const structured = parseStructuredAnswer(raw, excerpts);
-
   const sourceReports = reportIds.map((id) => reportById.get(id)).filter(Boolean);
-  const verifiedUrls = await Promise.all(sourceReports.map((r) => verifyFileUrl(r.file_url)));
-  const sources = sourceReports.map((r, i) => ({
-    report_id: r.id,
-    title: r.title,
-    category: r.category,
-    report_date: r.report_date,
-    file_url: verifiedUrls[i],
-  }));
 
-  // Remember the ORIGINAL question (what the doctor actually typed) paired
-  // with the answer — the rewrite is a retrieval detail, and storing it
-  // would compound rewrites of rewrites over a long conversation.
-  await appendTurn(sessionId, userId, query.trim(), structured.headline);
+  // Counts only — never chunk/report content — same convention as the
+  // full-context mode log line above.
+  console.log(
+    `[conversationalSearch] session ${sessionId}: mode=retrieval (${excerpts.length} chunks, ${sourceReports.length} reports)`
+  );
 
-  return {
-    answer: structured.headline,
-    structured,
-    sources,
-    noResultsFound: false,
-    standaloneQuestion,
-    sessionId,
-  };
+  return generateAndRespond({ standaloneQuestion, trimmedQuery, excerpts, sourceReports, sessionId, userId, mode: 'retrieval' });
 }

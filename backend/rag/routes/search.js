@@ -1,6 +1,8 @@
 import express from 'express';
 import { searchReports } from '../services/searchService.js';
 import { requireAuth } from '../middleware/auth.js';
+import { requireNoticeAck } from '../middleware/requireNoticeAck.js';
+import { logAccess } from '../../db/askSwasthaAccessLog.js';
 
 const router = express.Router();
 
@@ -9,8 +11,14 @@ const router = express.Router();
  * Body: { query: string }
  * user_id comes from the JWT (req.user.userId), never from the request
  * body — a client can't ask to search someone else's records.
+ *
+ * requireNoticeAck gates on the same 'ask_swastha' feature as
+ * /api/search/chat: this is the one-shot variant of the same feature
+ * (embeds the query and generates an answer via the same Gemini calls), so
+ * it needs the same disclosure/acknowledgement, not a separate one — an
+ * acknowledgement given via either endpoint satisfies both.
  */
-router.post('/', requireAuth, async (req, res) => {
+router.post('/', requireAuth, requireNoticeAck('ask_swastha'), async (req, res) => {
   const { query } = req.body || {};
   const userId = req.user.userId;
 
@@ -20,6 +28,18 @@ router.post('/', requireAuth, async (req, res) => {
 
   try {
     const result = await searchReports(query, userId);
+    // /api/search has no patient-targeting capability (unlike
+    // /api/search/chat's patient_user_id) — the caller is always the
+    // target, so is_cross_patient is always false here.
+    logAccess({
+      callerUserId: userId,
+      targetPatientId: userId,
+      isCrossPatient: false,
+      route: 'search',
+      mode: result.mode || null,
+      resultCount: Array.isArray(result.sources) ? result.sources.length : null,
+      degraded: Boolean(result.degraded),
+    });
     return res.status(200).json({
       answer: result.answer,
       structured: result.structured,

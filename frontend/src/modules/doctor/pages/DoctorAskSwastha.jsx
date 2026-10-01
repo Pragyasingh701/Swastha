@@ -2,7 +2,9 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import DoctorSidebar from "../components/DoctorSidebar";
 import ProfileDropdown from "../../settings/components/ProfileDropdown";
 import { getDoctorPatients } from "../../../services/doctorPatients";
-import { searchReportsConversational, clearConversation } from "../../../api/search";
+import { searchReportsConversational, clearConversation, submitAnswerFeedback } from "../../../api/search";
+import { getNoticeAckStatus, acknowledgeNotice } from "../../../api/notices";
+import { AiNoticeInfoLink, AiNoticeAckModal } from "../../../components/Common/AiNotice";
 import {
   Sparkles,
   Send,
@@ -15,6 +17,8 @@ import {
   Search,
   ShieldCheck,
   Clock,
+  ThumbsUp,
+  ThumbsDown,
 } from "lucide-react";
 import NotificationBell from "../../../components/Common/NotificationBell";
 
@@ -75,6 +79,14 @@ export default function DoctorAskSwastha() {
   const [error, setError] = useState(null);
   const pickerRef = useRef(null);
 
+  // Server-side enforcement (searchChat.js's requireNoticeAck) is the real
+  // gate; this is only so a doctor sees the notice up front instead of
+  // hitting a confusing 403 on their first question. null = not checked
+  // yet (nothing renders until this resolves, to avoid a flash of the chat
+  // UI followed by the modal popping over it).
+  const [noticeAcknowledged, setNoticeAcknowledged] = useState(null);
+  const [acknowledging, setAcknowledging] = useState(false);
+
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -92,6 +104,38 @@ export default function DoctorAskSwastha() {
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const { acknowledged } = await getNoticeAckStatus("ask_swastha");
+        if (!cancelled) setNoticeAcknowledged(acknowledged);
+      } catch {
+        // Status check failing shouldn't lock a doctor out of a page they
+        // may have already acknowledged — the real gate is server-side on
+        // every search request regardless, so fail open here and let that
+        // 403 (if it happens) be the worst case.
+        if (!cancelled) setNoticeAcknowledged(true);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  async function handleAcknowledgeNotice() {
+    setAcknowledging(true);
+    try {
+      await acknowledgeNotice("ask_swastha");
+      setNoticeAcknowledged(true);
+    } catch {
+      // Leave the modal up — the search endpoint's own 403 is the backstop
+      // if this keeps failing, but retrying here is the better first path.
+    } finally {
+      setAcknowledging(false);
+    }
+  }
 
   useEffect(() => {
     function handleClickOutside(e) {
@@ -176,12 +220,29 @@ export default function DoctorAskSwastha() {
               structured: result.structured || null,
               sources: result.sources || [],
               noResultsFound: result.noResultsFound,
+              // The AI provider failed and this is a fallback sentence, not
+              // a real answer — render it as an error with a retry, not as
+              // an ordinary grounded response.
+              isDegraded: Boolean(result.degraded),
+              retryQuery: result.degraded ? trimmed : undefined,
+              // Carried along only to echo back on a feedback submission
+              // (POST /api/search/feedback) — never displayed.
+              mode: result.mode || null,
             },
           ],
         },
       }));
     } catch (err) {
-      setError(err.message || "Search failed. Please try again.");
+      // A 429 gets its own page-specific copy rather than the rate
+      // limiter's generic server message. Both the top error banner and
+      // the chat bubble show the same text, rather than the banner
+      // falling back to the server's generic message while the bubble
+      // shows the friendlier one.
+      const errorText =
+        err.status === 429
+          ? "You're asking questions a bit too quickly. Please wait a moment and try again."
+          : err.message || "Something went wrong answering that. Please try again.";
+      setError(errorText);
       setThreads((prev) => ({
         ...prev,
         [patientUserId]: {
@@ -190,9 +251,10 @@ export default function DoctorAskSwastha() {
             ...prev[patientUserId].messages,
             {
               role: "assistant",
-              text: "Something went wrong answering that. Please try again.",
+              text: errorText,
               sources: [],
               isError: true,
+              retryQuery: trimmed,
             },
           ],
         },
@@ -213,9 +275,14 @@ export default function DoctorAskSwastha() {
 
       <div className="flex-1 flex flex-col min-w-0 h-screen overflow-hidden">
         <header className="shrink-0 flex items-center justify-end gap-4 px-6 lg:px-8 py-5 border-b border-slate-200 bg-white">
+          <AiNoticeInfoLink feature="ask_swastha" />
           <NotificationBell />
           <ProfileDropdown />
         </header>
+
+        {noticeAcknowledged === false && (
+          <AiNoticeAckModal feature="ask_swastha" onAccept={handleAcknowledgeNotice} accepting={acknowledging} />
+        )}
 
         <main className="flex-1 overflow-y-auto px-10 py-8 flex flex-col max-w-4xl mx-auto w-full">
           {/* Gradient banner — title/subtitle, no illustration per request */}
@@ -376,7 +443,7 @@ export default function DoctorAskSwastha() {
                 ) : (
                   <div className="space-y-4">
                     {messages.map((m, i) => (
-                      <ChatBubble key={i} message={m} />
+                      <ChatBubble key={i} message={m} onRetry={runSearch} disabled={loading} />
                     ))}
                     {loading && (
                       <div className="flex items-center gap-2 text-slate-400 text-sm">
@@ -420,8 +487,13 @@ export default function DoctorAskSwastha() {
   );
 }
 
-function ChatBubble({ message }) {
+function ChatBubble({ message, onRetry, disabled }) {
   const isUser = message.role === "user";
+  // Local to this bubble — feedback doesn't need to survive a session clear
+  // or reload, and each bubble is a distinct answer, so there's no need to
+  // lift this into the parent's threads state.
+  const [feedbackRating, setFeedbackRating] = useState(null);
+  const [feedbackSubmitting, setFeedbackSubmitting] = useState(false);
 
   if (isUser) {
     return (
@@ -433,14 +505,40 @@ function ChatBubble({ message }) {
     );
   }
 
-  const structured = message.structured;
+  // isDegraded: the AI provider failed (all keys/models/fallbacks
+  // exhausted) and the backend returned a friendly placeholder sentence
+  // instead of a real grounded answer — render it as an error with a
+  // retry, not as an ordinary answer, so a doctor doesn't mistake a
+  // fallback sentence for a real record-backed response.
+  const isErrorLike = message.isError || message.isDegraded;
+  const structured = message.isDegraded ? null : message.structured;
   const hasKeyFacts = structured?.keyFacts && structured.keyFacts.length > 0;
+
+  async function handleFeedback(rating) {
+    if (feedbackSubmitting || feedbackRating) return;
+    setFeedbackSubmitting(true);
+    try {
+      await submitAnswerFeedback({
+        rating,
+        mode: message.mode,
+        sourceReportIds: (message.sources || []).map((s) => s.report_id).filter(Boolean),
+        degraded: false, // this branch never renders for a degraded/error bubble
+      });
+      setFeedbackRating(rating);
+    } catch {
+      // Feedback is a nice-to-have, not a critical action — fail silently
+      // rather than showing an error banner over an answer the doctor
+      // already has and can keep using.
+    } finally {
+      setFeedbackSubmitting(false);
+    }
+  }
 
   return (
     <div className="flex justify-start">
       <div
         className={`text-sm rounded-2xl rounded-bl-sm px-4 py-3 max-w-[85%] ${
-          message.isError
+          isErrorLike
             ? "bg-red-50 text-red-700 border border-red-100"
             : "bg-slate-50 text-slate-700 border border-slate-100"
         }`}
@@ -448,6 +546,17 @@ function ChatBubble({ message }) {
         <p className="whitespace-pre-wrap font-medium text-slate-800">
           {structured?.headline || message.text}
         </p>
+
+        {(message.isDegraded || message.isError) && message.retryQuery && (
+          <button
+            type="button"
+            onClick={() => onRetry?.(message.retryQuery)}
+            disabled={disabled}
+            className="mt-2 text-xs font-semibold text-red-700 hover:text-red-800 underline disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            Retry
+          </button>
+        )}
 
         {hasKeyFacts && (
           <ul className="mt-3 space-y-2">
@@ -475,6 +584,46 @@ function ChatBubble({ message }) {
             {message.sources.map((s) => (
               <SourceRow key={s.report_id} source={s} />
             ))}
+          </div>
+        )}
+
+        {/* Omitted for degraded/error bubbles — there's no real answer to
+            rate, just a fallback sentence or a retry prompt. */}
+        {!isErrorLike && (
+          <div className="mt-3 pt-3 border-t border-slate-200 flex items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => handleFeedback("up")}
+              disabled={feedbackSubmitting || !!feedbackRating}
+              title="Helpful"
+              aria-label="Mark this answer as helpful"
+              aria-pressed={feedbackRating === "up"}
+              className={`p-1.5 rounded-lg transition-colors disabled:cursor-not-allowed ${
+                feedbackRating === "up"
+                  ? "text-emerald-600 bg-emerald-50"
+                  : "text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 disabled:hover:text-slate-400 disabled:hover:bg-transparent"
+              }`}
+            >
+              <ThumbsUp size={14} />
+            </button>
+            <button
+              type="button"
+              onClick={() => handleFeedback("down")}
+              disabled={feedbackSubmitting || !!feedbackRating}
+              title="Not helpful"
+              aria-label="Mark this answer as not helpful"
+              aria-pressed={feedbackRating === "down"}
+              className={`p-1.5 rounded-lg transition-colors disabled:cursor-not-allowed ${
+                feedbackRating === "down"
+                  ? "text-red-600 bg-red-50"
+                  : "text-slate-400 hover:text-red-600 hover:bg-red-50 disabled:hover:text-slate-400 disabled:hover:bg-transparent"
+              }`}
+            >
+              <ThumbsDown size={14} />
+            </button>
+            {feedbackRating && (
+              <span className="text-xs text-slate-400">Thanks for the feedback</span>
+            )}
           </div>
         )}
       </div>

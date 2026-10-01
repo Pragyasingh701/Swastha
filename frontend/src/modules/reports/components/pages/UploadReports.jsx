@@ -14,6 +14,7 @@ import {
   RefreshCw,
 } from "lucide-react";
 import { extractReportFromFile } from "../../../../api/search";
+import { AiNoticeBanner } from "../../../../components/Common/AiNotice";
 
 // PDFs and common image formats can be sent to the RAG extraction endpoint.
 const EXTRACTABLE_TYPES = ["image/jpeg", "image/png", "image/webp", "application/pdf"];
@@ -204,7 +205,14 @@ export default function UploadReports({ onClose, onSubmit, token, initialEvent }
       // misread handwriting, dosages, or dates.
       setActiveTab("manual");
     } catch (err) {
-      setExtractError(err.message || "Could not read this file automatically. Please fill the form manually.");
+      // A 429 gets its own page-specific copy rather than the rate
+      // limiter's generic server message, since "wait before extracting
+      // another file" is more useful here than "too many requests."
+      const message =
+        err.status === 429
+          ? "You've extracted a few files quickly — please wait a moment before trying another, or fill the form manually."
+          : err.message || "Could not read this file automatically. Please fill the form manually.";
+      setExtractError(message);
     } finally {
       setExtracting(false);
     }
@@ -320,6 +328,7 @@ export default function UploadReports({ onClose, onSubmit, token, initialEvent }
 
           {!isEditing && activeTab === "upload" && (
             <>
+              <AiNoticeBanner feature="report_upload" className="mb-4" />
               <div className="border-2 border-dashed rounded-xl p-8 text-center">
                 <UploadCloud className="mx-auto w-12 h-12 text-blue-600 mb-3" />
 

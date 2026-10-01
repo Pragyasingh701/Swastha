@@ -14,8 +14,8 @@ the **Frontend SPA** (Vite/React, `:5173`).
 | :--- | :--- | :--- |
 | **Frontend** (`frontend/`) | **React 18**, **Vite**, **Tailwind CSS**, **React Router v6**, **Recharts**, **Lucide Icons** | Modern responsive SPA featuring medical timeline UI, lab trends chart visualizer, dark mode styling, and redirect-based Google Sign-In. |
 | **Backend API** (`backend/`) | **Node.js**, **Express.js** (`:5001`), **Supabase Client SDK**, **Brevo REST API**, **Multer**, **`google-auth-library`**, **JWT** | Core API for user auth, Brevo-powered 6-digit email OTPs, password resets, family vault management, doctor license validation, and local document uploads. |
-| **RAG Sub-App** (`backend/rag/`, mounted at `/rag`) | **Google Gemini API**, **OpenRouter API**, **Supabase Client SDK** | Vector search & prescription OCR, running **inside the same Express process and port as the Backend API** (not a separate service — see below). Generates 768-dim embeddings (`gemini-embedding-001`) and synthesizes grounded answers via OpenRouter LLMs. |
-| **Database & Vector Storage** | **Supabase PostgreSQL**, **`pgvector`** extension | Cloud Postgres database with dedicated `patients`/`doctors`/`pending_registrations` identity tables (patients and doctors are separate tables, not a shared `users` table with a role column), plus `reports`, `report_embeddings`, `vault_table`, `family_members`, `doctor_patient`, and `notifications`, with an HNSW cosine vector index on embeddings. |
+| **RAG Sub-App** (`backend/rag/`, mounted at `/rag`) | **Google Gemini API** (primary; requires a **paid-tier** key for real patient data), **OpenRouter API** (last-resort fallback, on by default — see `ALLOW_OPENROUTER_FALLBACK`), **Supabase Client SDK** | Vector search & prescription OCR, running **inside the same Express process and port as the Backend API** (not a separate service — see below). Generates 768-dim embeddings (`gemini-embedding-001`) and synthesizes grounded answers, both via Gemini. |
+| **Database & Vector Storage** | **Supabase PostgreSQL**, **`pgvector`** extension | Cloud Postgres database with dedicated `patients`/`doctors`/`pending_registrations` identity tables (patients and doctors are separate tables, not a shared `users` table with a role column), plus `reports`, `report_embeddings`, `vault_table`, `family_members`, `doctor_patient`, and `notifications`. Retrieval scans one patient's own embeddings via a plain `patient_id` btree index, not an HNSW/ANN index — see the note below the `report_embeddings` DDL for why. |
 
 ---
 
@@ -24,7 +24,7 @@ the **Frontend SPA** (Vite/React, `:5173`).
 - **🛡️ Secure Multi-Role Authentication**: Patient and Doctor onboarding with redirect-based Google OAuth 2.0 (full-page redirect to Google + `/auth/google/callback`, with account deduplication — avoids ad-blockers breaking popup-based auth), 6-digit email OTP verification via **Brevo HTTPS REST API**, password resets, and JWT session tokens.
 - **🔬 Doctor Certificate AI Verification**: Automated parsing and credential validation of medical registration certificates using **Google Gemini 2.0 Flash AI** vision capabilities upon doctor signup.
 - **📜 Smart Medical Timeline & OCR Ingestion**: Chronological visual record of consultations, prescriptions, lab reports, and diagnoses. Automatically flags **unclear fields** (e.g. illegible doctor handwriting) to alert clinicians.
-- **🔍 Grounded RAG Semantic Search**: The RAG sub-app (mounted inside the backend at `/rag`) performs `pgvector` similarity search over patient records and synthesizes natural-language answers via **OpenRouter AI**.
+- **🔍 Grounded RAG Semantic Search**: The RAG sub-app (mounted inside the backend at `/rag`) performs `pgvector` similarity search over patient records and synthesizes natural-language answers via **Google Gemini**, with OpenRouter as a last-resort fallback (on by default, see `ALLOW_OPENROUTER_FALLBACK`).
 - **👨‍👩‍👧‍👦 Family Vault & Authorization Network**: Centralized health management for families. Manage dependants (children/elders) and send email-authorized consent requests for adult family members.
 - **📊 AI Lab Trends Visualizer**: Interactive trend analysis powered by **Recharts**, tracking blood work, lab parameters, and vital metrics over time.
 - **👨‍⚕️ Doctor Clinical Dashboard**: Dedicated portal allowing verified healthcare professionals to link patients by their unique 6-digit **patient code** (or user ID), then search records, view past diagnoses, active medications, and medical history. Access is patient-approved and **time-limited to 24 hours** per approval — after that, the link goes inactive and the doctor must send a fresh request rather than retaining standing access.
@@ -216,7 +216,14 @@ CREATE TABLE IF NOT EXISTS public.report_embeddings (
 );
 
 CREATE INDEX IF NOT EXISTS report_embeddings_user_id_idx ON public.report_embeddings (patient_id);
-CREATE INDEX IF NOT EXISTS report_embeddings_embedding_hnsw_idx ON public.report_embeddings USING hnsw (embedding vector_cosine_ops);
+-- No HNSW/ANN index on `embedding`: every retrieval query
+-- (match_report_embeddings) filters `WHERE patient_id = p_user_id` before
+-- ordering by vector distance — the candidate set is always one patient's
+-- own chunks, narrowed by the btree index above, never a cross-patient ANN
+-- search over the whole table. An exact scan over that already-small,
+-- already-scoped set is not meaningfully slower than an ANN lookup would
+-- be, and it's exact rather than approximate. See
+-- supabase/migrations/20260930051136_drop_report_embeddings_hnsw_idx.sql.
 
 -- 6. Family Vault Table (⚠️ hand-created, see note above)
 CREATE TABLE public.vault_table (
@@ -449,15 +456,58 @@ SUPABASE_REPORTS_BUCKET=reports
 BREVO_API_KEY=your_brevo_api_key_here
 
 # Google Gemini API key(s) — vision/OCR (doctor certificate parsing, report
-# extraction) AND, for the RAG sub-app, embeddings (gemini-embedding-001).
-# Comma-separate multiple keys as GEMINI_API_KEYS to rotate on rate-limit (429);
-# singular GEMINI_API_KEY also still works. Free at https://aistudio.google.com/app/apikey
+# extraction) AND, for the RAG sub-app, embeddings (gemini-embedding-001) and
+# grounded-answer generation. Comma-separate multiple keys as GEMINI_API_KEYS
+# to rotate on rate-limit (429); singular GEMINI_API_KEY also still works.
+# Get a key at https://aistudio.google.com/app/apikey — a FREE-TIER key is
+# fine for local development, but a PAID-TIER key is required before this
+# service processes any real patient data: the free tier's usage caps are
+# per-project-wide (shared across every user of the app, not per-request),
+# so real traffic will exhaust it — by default this falls back to
+# OpenRouter (see ALLOW_OPENROUTER_FALLBACK below) rather than interrupting
+# service for patients.
 GEMINI_API_KEY=your_gemini_api_key_here
 # GEMINI_API_KEYS=key_one,key_two
 
-# OpenRouter — required by the RAG sub-app for grounded answer generation.
-# Free key at https://openrouter.ai/keys
+# OpenRouter — a THIRD-PARTY provider, used only as a last-resort fallback
+# when every configured Gemini key/model is exhausted. REQUIRED by default,
+# since ALLOW_OPENROUTER_FALLBACK below defaults to true. Get a key at
+# https://openrouter.ai/keys.
 OPENROUTER_API_KEY=your_openrouter_api_key_here
+
+# Fallback flag, defaults to true. When every configured Gemini key/model is
+# exhausted, the RAG sub-app's AI failover client
+# (backend/rag/config/aiClient.js) falls back to OpenRouter rather than
+# failing the request — the AI-processing notice every user acknowledges
+# before first use (backend/rag/config/aiNotices.js) discloses "an AI
+# service" generically rather than naming Gemini specifically, so this
+# fallback is already covered by that consent. Set to false to disable it
+# (Gemini-only; a request fails gracefully with a friendly "try again"
+# message on total Gemini exhaustion instead of trying OpenRouter). Any
+# value other than exactly "false" is treated as true.
+ALLOW_OPENROUTER_FALLBACK=true
+
+# Sarvam AI — TTS (Bulbul v3) + ASR (Saaras) for the Module A voice intake
+# layer. Comma-separate multiple keys as SARVAM_API_KEYS to rotate past an
+# exhausted/rejected one; singular SARVAM_API_KEY also works. Optional —
+# without a key, or if Sarvam TTS fails, a turn simply has no audio unless
+# ALLOW_EDGE_TTS_FALLBACK below kicks in; ASR has no fallback and is simply
+# unavailable without a working key.
+SARVAM_API_KEYS=your_sarvam_api_key_here
+
+# Fallback flag, same reasoning as ALLOW_OPENROUTER_FALLBACK above. Defaults
+# to true: on a Sarvam TTS failure, the Sarvam-TTS fallback sends a request
+# to Microsoft's speech.platform.bing.com (via the edge-tts-universal
+# library) rather than the turn having no audio — covered by the same
+# generic "an AI service" notice. Set to false to disable it (Sarvam-only;
+# text/tap still works either way). Any value other than exactly "false" is
+# treated as true.
+ALLOW_EDGE_TTS_FALLBACK=true
+
+# How long a row in ask_swastha_access_log (see "Ask Swastha access audit
+# log" below) is kept before scripts/purge-audit-log.js deletes it. Purging
+# is NOT automatic — run that script on a schedule (e.g. a daily cron).
+# AUDIT_LOG_RETENTION_DAYS=365
 
 # Only needed if you deliberately run RAG as a separate external service again —
 # defaults to an in-process loopback call otherwise.
@@ -476,6 +526,75 @@ VITE_RAG_BASE_URL=http://localhost:5001/rag/api
 ```
 
 ---
+
+## 🌐 External hosts that can receive patient text
+
+Every external host the RAG sub-app (`backend/rag/`) can send patient/report text or document images to, given the current (default) `ALLOW_OPENROUTER_FALLBACK`/`ALLOW_EDGE_TTS_FALLBACK` settings — not what it always does send, but what it *can* reach given how it's configured. The AI-processing notice every user acknowledges before first use (see `backend/rag/config/aiNotices.js`) discloses "an AI service" generically, which is what makes it acceptable for either fallback provider below to be reachable by default:
+
+| Host | Features that reach it | What text/data is sent |
+| :--- | :--- | :--- |
+| `generativelanguage.googleapis.com` (Google Gemini) | Embeddings, grounded search/chat answers, report/lab/timeline summarization, patient intake dialogue, prescription/report OCR, doctor certificate OCR | Report chunk text (`report_embeddings.chunk_text`), diagnosis/medicines/notes fields, doctor questions, patient intake chat messages and accumulated structured medical history, and — for OCR — the uploaded document image itself (prescription, lab report, medical certificate) |
+| `openrouter.ai` | Same generation/vision-ocr/intake-dialogue features as Gemini above, as a last resort after every Gemini key/model is exhausted — **reachable by default** (`ALLOW_OPENROUTER_FALLBACK=true`); set the flag to `false` to disable it. | Same content as the Gemini row above, for whichever specific request triggered the fallback |
+| `api.sarvam.ai` (Sarvam AI) | Voice intake: speech-to-text (patient's spoken answer) and text-to-speech (the assistant's next question, generated from patient context) | The patient's voice recording (transcribed to their spoken symptom/history answer) and the assistant's generated question text |
+| `speech.platform.bing.com` (Microsoft Edge TTS, via the `edge-tts-universal` library) | Voice intake text-to-speech, as a last resort if Sarvam TTS fails — **reachable by default** (`ALLOW_EDGE_TTS_FALLBACK=true`); set the flag to `false` to disable it (the turn simply has no audio instead). | The assistant's generated question text (same content as the Sarvam TTS row), for whichever turn triggered the fallback |
+
+Not included above: Supabase (`*.supabase.co`) stores patient data as your own database/file storage, not as an AI/ML inference provider processing it — it's infrastructure you control, not a third party your patient text is sent *to* for processing. Brevo (transactional email) sends OTPs and account notifications, never clinical/medical content, and isn't part of the RAG sub-app.
+
+## 📋 Ask Swastha access audit log
+
+Every request to `POST /rag/api/search/chat` and `POST /rag/api/search` writes one row to `ask_swastha_access_log` — who accessed which patient's records, when, by which route/mode, and whether it was a doctor accessing a patient other than themselves. A 403 for an unlinked or access-expired doctor is logged too (with `mode`/`result_count` left `null`, since no search ever ran).
+
+**Columns**: `id`, `created_at`, `caller_user_id`, `target_patient_id`, `is_cross_patient`, `route` (`search_chat` | `search`), `mode` (`full_context` | `retrieval` | `aggregate`, nullable), `result_count` (nullable), `degraded`.
+
+**Deliberately excluded**: the question text, any excerpt/chunk text, and the generated answer. This table is an access log, not a transcript — it answers "did doctor X look at patient Y's records, and when," not "what did they ask."
+
+Writes are best-effort (`backend/db/askSwasthaAccessLog.js`): an insert failure is logged (ids only) and never fails the underlying search request.
+
+**Retention**: rows older than `AUDIT_LOG_RETENTION_DAYS` (default 365 — see Environment Configuration above) are deleted by `scripts/purge-audit-log.js`, which is not run automatically — schedule it yourself (e.g. a daily cron):
+
+```bash
+node scripts/purge-audit-log.js --dry-run   # report how many rows would be deleted
+node scripts/purge-audit-log.js             # actually delete them
+```
+
+## 🧪 Ask Swastha eval harness
+
+`backend/rag/evals/` runs a set of questions through the REAL search pipeline against whatever DB `backend/.env` points at, and reports whether each one found what it should have. Two modes, via `--mode` (default `conversational`):
+
+- `conversational` — `conversationalSearchService.js`'s `conversationalSearch`, the same code `POST /rag/api/search/chat` uses. Each top-level question gets a fresh session id; an optional `followups` array runs in that SAME session, so a followup can rely on the conversation's own context (e.g. "they" referring back to the parent question).
+- `oneshot` — `searchService.js`'s `searchReports`, the same code `POST /rag/api/search` uses. No session, so `followups` (if present on a question) are ignored with a warning.
+
+**Format** (see `backend/rag/evals/questions.example.json`): a JSON array of
+
+```json
+{
+  "question": "What medicines is this patient currently prescribed?",
+  "patient_id": "the patient's real user id",
+  "expected_report_ids": ["report ids that must appear in the answer's sources"],
+  "must_contain": ["optional", "keywords the answer text must contain"],
+  "followups": [
+    { "question": "Are any of those a controlled substance?", "must_contain": ["no"] }
+  ]
+}
+```
+
+`expected_report_ids`, `must_contain`, and `followups` are all optional — omit any to skip that check (or skip follow-up turns entirely) for a given question. Each entry in `followups` takes its own `expected_report_ids`/`must_contain`, scored independently against that turn's own answer.
+
+**Real patient data warning**: a useful eval set references real `patient_id`/`report_id` values, so it must never be committed. Questions are read from `backend/rag/evals/questions.local.json`, which is gitignored — only the placeholder `questions.example.json` is tracked. Copy the example, fill in real ids from your own dev/staging DB, and run:
+
+```bash
+cp backend/rag/evals/questions.example.json backend/rag/evals/questions.local.json
+# edit questions.local.json with real ids, then:
+node backend/rag/evals/run-evals.js
+# one-shot mode instead (no sessions, followups ignored):
+node backend/rag/evals/run-evals.js --mode=oneshot
+# or point at a different file:
+node backend/rag/evals/run-evals.js --file=path/to/other-questions.json
+```
+
+Each question is one row in the summary table: overall pass/fail (a question with followups only passes if every turn in its chain does), the parent turn's mode (`retrieval` | `aggregate` | `full_context`), total latency across all turns, a followup count, and — on failure — which turn(s) failed and why (missing report ids/keywords, or an error). Exits non-zero if anything failed (suitable for a CI gate once you have a question set worth gating on).
+
+**Never run this against production data** as part of routine development — point `backend/.env` at a dev/staging Supabase project, not the live database, unless you specifically intend to eval against real patient records with proper authorization.
 
 ## 🏃 Running the Application
 

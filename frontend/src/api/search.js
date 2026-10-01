@@ -49,6 +49,22 @@ export async function clearConversation(sessionId, patientUserId) {
   });
 }
 
+// rating: 'up' | 'down'. mode/sourceReportIds/degraded describe the answer
+// bubble being rated (echoed back from what searchReportsConversational
+// already returned) — user_id itself is never sent from here, the backend
+// reads it from the JWT.
+export async function submitAnswerFeedback({ rating, mode, sourceReportIds, degraded }) {
+  return request('/search/feedback', {
+    method: 'POST',
+    body: {
+      rating,
+      ...(mode ? { mode } : {}),
+      ...(sourceReportIds ? { source_report_ids: sourceReportIds } : {}),
+      ...(degraded ? { degraded: true } : {}),
+    },
+  });
+}
+
 // Not routed through request() above: this is a multipart upload (no PII
 // field of its own — just the file), so it only needs the response side
 // of the wire-crypto boundary, applied manually here.
@@ -66,10 +82,19 @@ export async function extractReportFromFile(file) {
   data = await decryptPiiFields(data, RAG_BASE_URL);
   if (!response.ok) {
     const error = new Error(data.error || data.message || 'Extraction request failed');
+    error.status = response.status;
     error.details = data;
     throw error;
   }
   return data;
 }
 
-export default { searchReports, indexReport, removeReportFromIndex, searchReportsConversational, clearConversation, extractReportFromFile };
+export default {
+  searchReports,
+  indexReport,
+  removeReportFromIndex,
+  searchReportsConversational,
+  clearConversation,
+  extractReportFromFile,
+  submitAnswerFeedback,
+};

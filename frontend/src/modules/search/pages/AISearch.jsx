@@ -2,10 +2,12 @@ import React, { useEffect, useRef, useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "../../../context/AuthContext";
 import { searchReports } from "../../../api/search";
+import { getNoticeAckStatus, acknowledgeNotice } from "../../../api/notices";
 import ResponsiveSidebar from "../../../components/Common/ResponsiveSidebar";
 import ProfileDropdown from "../../settings/components/ProfileDropdown";
 import PatientIdBadge from "../../../components/Common/PatientIdBadge";
 import SettingsModal from "../../settings/components/SettingsModal";
+import { AiNoticeInfoLink, AiNoticeAckModal } from "../../../components/Common/AiNotice";
 import {
   LayoutGrid,
   TrendingUp,
@@ -84,6 +86,46 @@ export default function AISearch() {
   const [error, setError] = useState(null);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
+  // Server-side enforcement (requireNoticeAck on POST /rag/api/search) is
+  // the real gate; this is only so a patient sees the notice up front
+  // instead of hitting a confusing 403 on their first question. null = not
+  // checked yet.
+  const [noticeAcknowledged, setNoticeAcknowledged] = useState(null);
+  const [acknowledging, setAcknowledging] = useState(false);
+
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const { acknowledged } = await getNoticeAckStatus("ask_swastha");
+        if (!cancelled) setNoticeAcknowledged(acknowledged);
+      } catch {
+        // Status check failing shouldn't lock a patient out of a page they
+        // may have already acknowledged — the real gate is server-side on
+        // every search request regardless, so fail open here and let that
+        // 403 (if it happens) be the worst case.
+        if (!cancelled) setNoticeAcknowledged(true);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [isAuthenticated]);
+
+  async function handleAcknowledgeNotice() {
+    setAcknowledging(true);
+    try {
+      await acknowledgeNotice("ask_swastha");
+      setNoticeAcknowledged(true);
+    } catch {
+      // Leave the modal up — the search endpoint's own 403 is the backstop
+      // if this keeps failing, but retrying here is the better first path.
+    } finally {
+      setAcknowledging(false);
+    }
+  }
+
   async function runSearch(trimmed) {
     if (!trimmed || loading) return;
 
@@ -142,12 +184,18 @@ export default function AISearch() {
 
       <div className="flex-1 flex flex-col min-w-0 h-screen overflow-hidden">
         <header className="shrink-0 flex items-center justify-end gap-4 px-6 lg:px-8 py-5 border-b border-slate-200 bg-white ">
+          <AiNoticeInfoLink feature="ask_swastha" />
+
           <NotificationBell />
 
           <PatientIdBadge />
 
           <ProfileDropdown />
         </header>
+
+        {noticeAcknowledged === false && (
+          <AiNoticeAckModal feature="ask_swastha" onAccept={handleAcknowledgeNotice} accepting={acknowledging} />
+        )}
 
       <main className="flex-1 overflow-y-auto px-10 py-8 flex flex-col max-w-4xl mx-auto w-full">
         <div className="mb-6">

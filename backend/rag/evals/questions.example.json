@@ -1,0 +1,37 @@
+[
+  {
+    "question": "What medicines is this patient currently prescribed?",
+    "patient_id": "REPLACE_WITH_REAL_PATIENT_ID",
+    "expected_report_ids": ["REPLACE_WITH_REAL_REPORT_ID"],
+    "must_contain": ["Metformin"]
+  },
+  {
+    "question": "Summarize the most recent lab results.",
+    "patient_id": "REPLACE_WITH_REAL_PATIENT_ID",
+    "expected_report_ids": ["REPLACE_WITH_REAL_REPORT_ID"]
+  },
+  {
+    "question": "How many reports does this patient have on file?",
+    "patient_id": "REPLACE_WITH_REAL_PATIENT_ID",
+    "expected_report_ids": [],
+    "must_contain": ["report"]
+  },
+  {
+    "question": "What medicines is this patient currently prescribed?",
+    "patient_id": "REPLACE_WITH_REAL_PATIENT_ID",
+    "expected_report_ids": ["REPLACE_WITH_REAL_REPORT_ID"],
+    "must_contain": ["Metformin"],
+    "_comment": "followups only run in --mode=conversational — each one runs in the SAME session as the question above, so it can rely on that context (e.g. 'they' below refers back to this patient's medicines).",
+    "followups": [
+      {
+        "question": "Are any of those a controlled substance?",
+        "must_contain": ["no"]
+      },
+      {
+        "question": "What dosage were they prescribed?",
+        "expected_report_ids": ["REPLACE_WITH_REAL_REPORT_ID"],
+        "must_contain": ["500mg"]
+      }
+    ]
+  }
+]

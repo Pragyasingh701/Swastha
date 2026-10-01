@@ -1,8 +1,10 @@
 import express from 'express';
 import { conversationalSearch } from '../services/conversationalSearchService.js';
-import { isDoctorLinkedToPatient } from '../services/doctorAuthService.js';
+import { isDoctorLinkedToPatient } from '../../db/doctorPatients.js';
 import { clearSession } from '../langchain/sessionStore.js';
 import { requireAuth } from '../middleware/auth.js';
+import { requireNoticeAck } from '../middleware/requireNoticeAck.js';
+import { logAccess } from '../../db/askSwasthaAccessLog.js';
 
 const router = express.Router();
 
@@ -29,8 +31,13 @@ const SESSION_ID_PATTERN = /^[A-Za-z0-9_-]{8,128}$/;
  * own. It is verified against the doctor_patient table on every request
  * (never cached, never trusted on its own) — a doctor with no link to that
  * patient gets 403, same as the main backend's linking flow requires.
+ *
+ * requireNoticeAck gates on the CALLER's own acknowledgement (req.user.userId)
+ * regardless of which patient's records are being searched — it's the
+ * caller who needs to have been told their question is sent to Gemini, not
+ * the patient being asked about.
  */
-router.post('/', requireAuth, async (req, res) => {
+router.post('/', requireAuth, requireNoticeAck('ask_swastha'), async (req, res) => {
   const { query, session_id: sessionId, patient_user_id: patientUserId } = req.body || {};
   const callerId = req.user.userId;
 
@@ -67,6 +74,18 @@ router.post('/', requireAuth, async (req, res) => {
       console.warn(
         `[POST /api/search/chat] user ${callerId} requested patient ${patientUserId} with no doctor_patient link`
       );
+      // Best-effort: an audit-log write failure must never affect this
+      // response, which is why logAccess is fire-and-forget (never awaited
+      // into the response path's error handling) and never throws itself.
+      logAccess({
+        callerUserId: callerId,
+        targetPatientId: patientUserId.trim(),
+        isCrossPatient: true,
+        route: 'search_chat',
+        mode: null,
+        resultCount: null,
+        degraded: false,
+      });
       return res.status(403).json({ error: 'You are not linked to this patient.' });
     }
 
@@ -75,12 +94,25 @@ router.post('/', requireAuth, async (req, res) => {
 
   try {
     const result = await conversationalSearch({ query, userId: targetUserId, sessionId });
+    logAccess({
+      callerUserId: callerId,
+      targetPatientId: targetUserId,
+      isCrossPatient: targetUserId !== callerId,
+      route: 'search_chat',
+      mode: result.mode || null,
+      resultCount: Array.isArray(result.sources) ? result.sources.length : null,
+      degraded: Boolean(result.degraded),
+    });
     return res.status(200).json({
       answer: result.answer,
       structured: result.structured,
       sources: result.sources,
       noResultsFound: result.noResultsFound,
+      degraded: Boolean(result.degraded),
       session_id: result.sessionId,
+      // Echoed back so the frontend can attach it to a feedback submission
+      // (POST /api/search/feedback) without re-deriving which path answered.
+      mode: result.mode || null,
     });
   } catch (err) {
     // A session_id belonging to another user/patient scope is a client
