@@ -16,10 +16,13 @@ import {
   verifyFileUrl,
   buildGroundedPrompt,
   generateNoMatchAnswer,
-  escapeAngleBrackets,
   loadPatientReportsForPrompt,
+  buildFullContextExcerptText,
+  filterSourcesToCited,
   isAggregateQuestion,
   answerAggregateQuestion,
+  isLastReportQuestion,
+  answerLastReportQuestion,
 } from './searchService.js';
 
 /**
@@ -45,7 +48,7 @@ Rules:
 - Resolve pronouns and implicit references ("it", "that", "those", "the last year") using the conversation.
 - Preserve every constraint from the follow-up (time ranges, specific drugs, specific values).
 - Do NOT answer the question. Do NOT add information that is not in the conversation or the follow-up.
-- If the follow-up is already standalone, return it unchanged.
+- CHECK FIRST, before doing anything else: does the follow-up contain a pronoun or implicit reference that only makes sense by looking at the conversation (e.g. "it", "that", "those", "what about X instead", "the first one")? If NOT — if the follow-up already names its own subject in full, with nothing needing to be looked up from an earlier turn — it is ALREADY standalone. Return it completely unchanged, character for character. This is the single most common mistake: merging the PREVIOUS topic into a new, unrelated follow-up that never asked about it. A question like "how many reports does this patient have in total" is a NEW, self-contained question — even though the previous turn was about something else entirely (e.g. allergies) — and must be returned exactly as asked, NOT rewritten into "how many allergy reports does this patient have."
 - Return ONLY the rewritten question, with no preamble, quotes, or explanation.
 
 Conversation:
@@ -113,8 +116,13 @@ async function generateAndRespond({ standaloneQuestion, trimmedQuery, excerpts, 
 
   const structured = parseStructuredAnswer(gen.text, excerpts);
 
-  const verifiedUrls = await Promise.all(sourceReports.map((r) => verifyFileUrl(r.file_url)));
-  const sources = sourceReports.map((r, i) => ({
+  // Narrowed to the reports the answer actually cited (full-context mode in
+  // particular hands the model EVERY report as a candidate source — most of
+  // which a given answer never ends up drawing from) — see
+  // filterSourcesToCited's doc comment in searchService.js.
+  const citedSourceReports = filterSourcesToCited(sourceReports, structured.keyFacts);
+  const verifiedUrls = await Promise.all(citedSourceReports.map((r) => verifyFileUrl(r.file_url)));
+  const sources = citedSourceReports.map((r, i) => ({
     report_id: r.id,
     title: r.title,
     category: r.category,
@@ -136,35 +144,6 @@ async function generateAndRespond({ standaloneQuestion, trimmedQuery, excerpts, 
     mode,
     sessionId,
   };
-}
-
-// Fields folded into a full-context excerpt, in display order, each as its
-// own labeled line — skipped entirely when empty rather than printed with a
-// blank value, so a report missing (say) a hospital doesn't leave a
-// dangling "Hospital: " line in the prompt.
-const FULL_CONTEXT_FIELD_LABELS = [
-  ['title', 'Title'],
-  ['report_date', 'Date'],
-  ['category', 'Category'],
-  ['hospital', 'Hospital'],
-  ['doctor', 'Doctor'],
-  ['diagnosis', 'Diagnosis'],
-  ['medicines', 'Medicines'],
-  ['notes', 'Notes'],
-];
-
-/**
- * Builds one report's excerpt text as labeled lines, escaping EVERY field
- * individually (not just notes) before it goes anywhere near the prompt —
- * same reasoning as buildGroundedPrompt's own excerpt-text escaping: any of
- * these fields can be user-controlled (typed manually, or OCR-extracted
- * from an uploaded document) and none of them should be able to inject a
- * fake label line or break out of the excerpt's own delimiters.
- */
-function buildFullContextExcerptText(report) {
-  return FULL_CONTEXT_FIELD_LABELS.filter(([field]) => report[field] && String(report[field]).trim())
-    .map(([field, label]) => `${label}: ${escapeAngleBrackets(String(report[field]).trim())}`)
-    .join('\n');
 }
 
 /**
@@ -286,6 +265,20 @@ export async function conversationalSearch({ query, userId, sessionId }) {
   if (isAggregateQuestion(standaloneQuestion)) {
     const result = await answerAggregateQuestion(standaloneQuestion, userId);
     if (!result.noResultsFound) {
+      await appendTurn(sessionId, userId, trimmedQuery, result.structured.headline);
+    }
+    return { ...result, standaloneQuestion, sessionId };
+  }
+
+  // "My last/latest/most recent report" — checked BEFORE full-context mode
+  // below, which would otherwise hand the model every report with no
+  // recency signal and leave it to infer "last" itself from Date: lines
+  // under a strict literal-grounding prompt (the turn-1 "raw field dump"
+  // behavior this fixes). Resolves directly to the single most recent
+  // report instead.
+  if (isLastReportQuestion(standaloneQuestion)) {
+    const result = await answerLastReportQuestion(standaloneQuestion, userId);
+    if (!result.noResultsFound && !result.degraded) {
       await appendTurn(sessionId, userId, trimmedQuery, result.structured.headline);
     }
     return { ...result, standaloneQuestion, sessionId };
