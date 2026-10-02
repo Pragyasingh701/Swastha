@@ -58,7 +58,51 @@ function isAccessExpired(link) {
   return new Date(link.access_expires_at).getTime() <= Date.now();
 }
 
-function normalizeDoctorPatientCard(patient = {}) {
+// "Linked Xm/Xh ago", relative to whenever access actually started (see
+// linkedSince below) — access only ever lives for ACCESS_DURATION_MS (24h),
+// so minutes/hours is all this ever needs to express.
+function formatLinkedAgo(linkedSince) {
+  if (!linkedSince) return 'Recently linked';
+  const diffMs = Date.now() - new Date(linkedSince).getTime();
+  if (!Number.isFinite(diffMs) || diffMs < 0) return 'Recently linked';
+
+  const diffMinutes = Math.floor(diffMs / (60 * 1000));
+  if (diffMinutes < 1) return 'Linked just now';
+  if (diffMinutes < 60) return `Linked ${diffMinutes}m ago`;
+
+  const diffHours = Math.floor(diffMinutes / 60);
+  return `Linked ${diffHours}hr ago`;
+}
+
+// Best-effort: the chief complaint from this patient's most recent intake
+// session (any status — even an abandoned session captured a real stated
+// complaint), used as the card's "Condition". Deliberately lenient (returns
+// null on any error or when the patient has never gone through intake) — a
+// missing condition must not break the patient list, it just falls back to
+// a neutral label at the call site.
+async function fetchLatestCondition(patientId) {
+  if (!patientId || !supabase) return null;
+
+  try {
+    const { data, error } = await supabase
+      .from('intake_sessions')
+      .select('chief_complaint, created_at')
+      .eq('patient_id', patientId)
+      .not('chief_complaint', 'is', null)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (error && error.code !== 'PGRST116') throw error;
+    const complaint = data?.chief_complaint ? String(data.chief_complaint).trim() : '';
+    return complaint || null;
+  } catch (error) {
+    console.warn('Latest condition fetch warning:', error?.message || error);
+    return null;
+  }
+}
+
+function normalizeDoctorPatientCard(patient = {}, { condition, linkedSince } = {}) {
   const patientIdValue = patient.patient_code || patient.id;
   const patient_email = patient.patient_email || patient.email || null;
   const patient_name = patient.patient_name || patient.name || patient.fullName || patient_email || 'Patient';
@@ -67,7 +111,6 @@ function normalizeDoctorPatientCard(patient = {}) {
   const patient_dob = patient.patient_dob || patient.dob || patient.date_of_birth || patient.dateOfBirth || null;
   const patient_blood_group = patient.patient_blood_group || patient.blood_group || patient.bloodGroup || patient.blood_type || null;
   const calculatedAge = patient_dob ? Math.max(0, new Date().getFullYear() - new Date(patient_dob).getFullYear()) : 0;
-  const specialty = patient.specialty || patient.specialization || 'General Care';
 
   return {
     id: `#${String(patientIdValue || '').replace(/^#/, '')}` || '#Unknown',
@@ -86,9 +129,9 @@ function normalizeDoctorPatientCard(patient = {}) {
     dob: patient_dob,
     blood_group: patient_blood_group,
     age: calculatedAge,
-    condition: specialty,
+    condition: condition || 'General Care',
     conditionTone: 'bg-[#dbeafe] text-[#1d4ed8]',
-    lastVisit: 'Recently linked',
+    lastVisit: formatLinkedAgo(linkedSince),
     status: 'Active', // display-only condition/activity label — unrelated
     statusTone: 'bg-emerald-100 text-emerald-800', // to the link's request status below
     avatar: patient.picture || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=400&q=80',
@@ -178,15 +221,20 @@ export const getDoctorPatients = async (doctorId) => {
           return null;
         }
 
-        const normalizedPatient = normalizeDoctorPatientCard({
-          ...patient,
-          patient_email: link.patient_email || patient.email || null,
-          patient_name: link.patient_name || patient.name || patient.fullName || patient.email || 'Patient',
-          patient_phone: link.patient_phone || patient.phone || patient.mobile || patient.phone_number || null,
-          patient_gender: link.patient_gender || patient.gender || 'U',
-          patient_dob: link.patient_dob || patient.dob || patient.date_of_birth || patient.dateOfBirth || null,
-          patient_blood_group: link.patient_blood_group || patient.blood_group || patient.bloodGroup || patient.blood_type || null,
-        });
+        const condition = await fetchLatestCondition(patientId);
+
+        const normalizedPatient = normalizeDoctorPatientCard(
+          {
+            ...patient,
+            patient_email: link.patient_email || patient.email || null,
+            patient_name: link.patient_name || patient.name || patient.fullName || patient.email || 'Patient',
+            patient_phone: link.patient_phone || patient.phone || patient.mobile || patient.phone_number || null,
+            patient_gender: link.patient_gender || patient.gender || 'U',
+            patient_dob: link.patient_dob || patient.dob || patient.date_of_birth || patient.dateOfBirth || null,
+            patient_blood_group: link.patient_blood_group || patient.blood_group || patient.bloodGroup || patient.blood_type || null,
+          },
+          { condition, linkedSince: link.responded_at || link.created_at }
+        );
 
         return {
           ...normalizedPatient,
