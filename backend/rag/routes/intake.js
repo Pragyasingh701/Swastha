@@ -5,7 +5,6 @@ import { supabase } from '../config/supabase.js';
 import { synthesizeSpeech, buildOptionsSpeech, normalizeLanguage, DEFAULT_LANGUAGE } from '../services/ttsService.js';
 import { transcribeSpeech, isSupportedAudioMime } from '../services/asrService.js';
 import { requireAuth } from '../middleware/auth.js';
-import { requireNoticeAck } from '../middleware/requireNoticeAck.js';
 
 const router = express.Router();
 
@@ -170,13 +169,8 @@ router.get('/:sessionId', requireAuth, async (req, res) => {
  * the first dialogue-engine turn. patient_id comes from the JWT
  * (req.user.userId), never from the request body — a client can't start a
  * session on someone else's behalf.
- *
- * requireNoticeAck gates here (session creation), not on every later
- * turn/transcribe/replay call — those all require an existing session,
- * which only this route (or clinic.js's verify-otp, gated the same way) can
- * create, so this is the one point that actually needs to block.
  */
-router.post('/start', requireAuth, requireNoticeAck('voice_intake'), async (req, res) => {
+router.post('/start', requireAuth, async (req, res) => {
   const patientId = req.user.userId;
   // Language is chosen once, here, and stored on the session row (Voice
   // Layer PRD §6). Unrecognised or absent values fall back to the default

@@ -18,7 +18,7 @@ const TABLE = 'ask_swastha_access_log';
  *   targetPatientId: string,
  *   isCrossPatient: boolean,
  *   route: 'search_chat'|'search',
- *   mode?: 'full_context'|'retrieval'|'aggregate'|null,
+ *   mode?: 'full_context'|'retrieval'|'aggregate'|'last_report'|null,
  *   resultCount?: number|null,
  *   degraded?: boolean,
  * }} entry

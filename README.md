@@ -25,7 +25,7 @@ the **Frontend SPA** (Vite/React, `:5173`).
 - **🔬 Doctor Certificate AI Verification**: Automated parsing and credential validation of medical registration certificates using **Google Gemini 2.0 Flash AI** vision capabilities upon doctor signup.
 - **📜 Smart Medical Timeline & OCR Ingestion**: Chronological visual record of consultations, prescriptions, lab reports, and diagnoses. Automatically flags **unclear fields** (e.g. illegible doctor handwriting) to alert clinicians.
 - **🔍 Grounded RAG Semantic Search**: The RAG sub-app (mounted inside the backend at `/rag`) performs `pgvector` similarity search over patient records and synthesizes natural-language answers via **Google Gemini**, with OpenRouter as a last-resort fallback (on by default, see `ALLOW_OPENROUTER_FALLBACK`).
-- **👨‍👩‍👧‍👦 Family Vault & Authorization Network**: Centralized health management for families. Manage dependants (children/elders) and send email-authorized consent requests for adult family members.
+- **👨‍👩‍👧‍👦 Family Vault & Authorization Network**: Centralized health management for families. Manage dependants (children/elders) and send email-authorized consent requests for adult family members. Once a family member is linked (their own separate Swastha account, approved via that consent flow), a family admin can also ask **Ask Swastha** about that member's own records via `patient_user_id` — same mechanism as the doctor↔patient case below, gated by `isPatientLinkedToFamilyMember` (`backend/db/family.js`) rather than `doctor_patient`. Backend API only today — no family-member picker in the Ask Swastha UI yet (see `frontend/src/modules/search/`).
 - **📊 AI Lab Trends Visualizer**: Interactive trend analysis powered by **Recharts**, tracking blood work, lab parameters, and vital metrics over time.
 - **👨‍⚕️ Doctor Clinical Dashboard**: Dedicated portal allowing verified healthcare professionals to link patients by their unique 6-digit **patient code** (or user ID), then search records, view past diagnoses, active medications, and medical history. Access is patient-approved and **time-limited to 24 hours** per approval — after that, the link goes inactive and the doctor must send a fresh request rather than retaining standing access.
 
@@ -542,9 +542,9 @@ Not included above: Supabase (`*.supabase.co`) stores patient data as your own d
 
 ## 📋 Ask Swastha access audit log
 
-Every request to `POST /rag/api/search/chat` and `POST /rag/api/search` writes one row to `ask_swastha_access_log` — who accessed which patient's records, when, by which route/mode, and whether it was a doctor accessing a patient other than themselves. A 403 for an unlinked or access-expired doctor is logged too (with `mode`/`result_count` left `null`, since no search ever ran).
+Every request to `POST /rag/api/search/chat` and `POST /rag/api/search` writes one row to `ask_swastha_access_log` — who accessed which patient's records, when, by which route/mode, and whether it was someone other than the patient themselves (a doctor via `doctor_patient`, or a family admin via `family_members` — both go through `patient_user_id` on `search/chat` and are logged identically as `is_cross_patient: true`). A 403 for an unlinked/access-expired doctor or an unlinked family member is logged too (with `mode`/`result_count` left `null`, since no search ever ran).
 
-**Columns**: `id`, `created_at`, `caller_user_id`, `target_patient_id`, `is_cross_patient`, `route` (`search_chat` | `search`), `mode` (`full_context` | `retrieval` | `aggregate`, nullable), `result_count` (nullable), `degraded`.
+**Columns**: `id`, `created_at`, `caller_user_id`, `target_patient_id`, `is_cross_patient`, `route` (`search_chat` | `search`), `mode` (`full_context` | `retrieval` | `aggregate` | `last_report`, nullable), `result_count` (nullable), `degraded`.
 
 **Deliberately excluded**: the question text, any excerpt/chunk text, and the generated answer. This table is an access log, not a transcript — it answers "did doctor X look at patient Y's records, and when," not "what did they ask."
 

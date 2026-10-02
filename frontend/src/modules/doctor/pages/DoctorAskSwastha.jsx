@@ -525,10 +525,12 @@ function ChatBubble({ message, onRetry, disabled }) {
         degraded: false, // this branch never renders for a degraded/error bubble
       });
       setFeedbackRating(rating);
-    } catch {
-      // Feedback is a nice-to-have, not a critical action — fail silently
-      // rather than showing an error banner over an answer the doctor
-      // already has and can keep using.
+    } catch (err) {
+      // TEMPORARY: surfaced to the console while diagnosing why feedback
+      // submissions aren't reaching the table — revert to a silent catch
+      // once resolved (feedback is a nice-to-have, shouldn't show an error
+      // banner over an answer the doctor already has and can keep using).
+      console.error('[DoctorAskSwastha] feedback submission failed:', err);
     } finally {
       setFeedbackSubmitting(false);
     }

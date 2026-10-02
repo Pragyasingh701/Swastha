@@ -2,7 +2,12 @@ import supabase from '../config/supabase.js';
 
 const TABLE = 'ask_swastha_feedback';
 const VALID_RATINGS = ['up', 'down'];
-const VALID_MODES = ['full_context', 'retrieval', 'aggregate'];
+// Kept in sync with rag/routes/feedback.js's own VALID_MODES and the
+// ask_swastha_feedback table's mode check constraint (see migration
+// 20261001000000_add_last_report_mode.sql) — see that route's comment for
+// why this list existing in three places independently is exactly how a new
+// mode value breaks feedback storage silently until all three are updated.
+const VALID_MODES = ['full_context', 'retrieval', 'aggregate', 'last_report'];
 
 /**
  * Stores one thumbs up/down rating on an Ask Swastha answer. `userId` is
@@ -18,7 +23,7 @@ const VALID_MODES = ['full_context', 'retrieval', 'aggregate'];
  * @param {{
  *   userId: string,
  *   rating: 'up'|'down',
- *   mode?: 'full_context'|'retrieval'|'aggregate'|null,
+ *   mode?: 'full_context'|'retrieval'|'aggregate'|'last_report'|null,
  *   sourceReportIds?: string[],
  *   degraded?: boolean,
  * }} entry

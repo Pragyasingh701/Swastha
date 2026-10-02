@@ -58,6 +58,19 @@ export const FRIENDLY_FALLBACK =
 // Keys that returned an auth-shaped error are skipped for the rest of the
 // process lifetime — no point paying a round-trip on a revoked key every call.
 const deadKeys = new Set();
+// Keys that returned 429/RESOURCE_EXHAUSTED are skipped for a short cooldown
+// instead of permanently (unlike deadKeys above): a rate limit resets on its
+// own (typically a per-minute quota on the free tier), so a key that was
+// exhausted a moment ago is usually usable again shortly. Without this, a
+// key sitting at its quota ceiling gets retried on every single subsequent
+// request from scratch — paying a full timeout (TIMEOUT_MS) on that one
+// dead-on-arrival key before the ladder can move to one that actually has
+// quota left. With several keys perpetually rate-limited under real
+// traffic, that tax compounds across every key in rotation and was the
+// direct cause of a 30-60s delay on what should be a sub-second call.
+// Map<keyIndex, cooldownExpiresAtMs>.
+const rateLimitedUntil = new Map();
+const RATE_LIMIT_COOLDOWN_MS = 60_000;
 // Round-robin start offset so key#1 isn't always the one burned first.
 let keyCursor = 0;
 
@@ -99,12 +112,23 @@ async function postJson(url, headers, body, timeoutMs) {
   }
 }
 
-/** Ordered list of usable keys, starting at the round-robin cursor. */
+/**
+ * Ordered list of usable keys, starting at the round-robin cursor —
+ * excludes permanently dead keys and keys still inside their rate-limit
+ * cooldown (see RATE_LIMIT_COOLDOWN_MS). If every non-dead key happens to be
+ * on cooldown right now, falls back to trying them anyway rather than
+ * returning nothing: with a double-digit key pool, "every single one is
+ * simultaneously rate-limited" is rare, and a key's limit occasionally
+ * resets slightly before the cooldown window is up — worth one attempt
+ * rather than guaranteeing a degraded result.
+ */
 function liveKeys() {
-  const all = GEMINI_API_KEYS.filter((_, i) => !deadKeys.has(i));
-  if (all.length === 0) return [];
-  const offset = keyCursor % GEMINI_API_KEYS.length;
-  const idx = GEMINI_API_KEYS.map((k, i) => i).filter((i) => !deadKeys.has(i));
+  const notDead = GEMINI_API_KEYS.map((k, i) => i).filter((i) => !deadKeys.has(i));
+  if (notDead.length === 0) return [];
+  const now = Date.now();
+  const offCooldown = notDead.filter((i) => (rateLimitedUntil.get(i) || 0) <= now);
+  const idx = offCooldown.length > 0 ? offCooldown : notDead;
+  const offset = keyCursor % idx.length;
   const rotated = [...idx.slice(offset), ...idx.slice(0, offset)];
   return rotated.map((i) => ({ key: GEMINI_API_KEYS[i], index: i }));
 }
@@ -279,6 +303,16 @@ export async function runAI({ task, input, file, json = false, taskType, label =
           await sleep(800);
           continue; // one same-key retry
         }
+        if (cls === 'RATE_LIMIT') {
+          // Benched for RATE_LIMIT_COOLDOWN_MS, not forever (unlike
+          // deadKeys) — a quota limit resets on its own. Without this, a
+          // key sitting at its ceiling gets retried (and pays its full
+          // timeout) on every subsequent call until it happens to have
+          // quota again, which with several keys simultaneously exhausted
+          // under real traffic is what turned a sub-second call into a
+          // 30-60s one.
+          rateLimitedUntil.set(index, Date.now() + RATE_LIMIT_COOLDOWN_MS);
+        }
         break; // RATE_LIMIT or exhausted retries -> next key
       }
       if (modelGone) break;
@@ -383,4 +417,4 @@ export async function embedTexts(texts, opts) {
   return out;
 }
 
-export const __testing = { classify, deadKeys, freeOpenRouterModels };
+export const __testing = { classify, deadKeys, rateLimitedUntil, RATE_LIMIT_COOLDOWN_MS, liveKeys, freeOpenRouterModels };

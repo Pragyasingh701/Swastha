@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "../../../context/AuthContext";
-import { searchReports } from "../../../api/search";
+import { searchReports, submitAnswerFeedback } from "../../../api/search";
 import { getNoticeAckStatus, acknowledgeNotice } from "../../../api/notices";
 import ResponsiveSidebar from "../../../components/Common/ResponsiveSidebar";
 import ProfileDropdown from "../../settings/components/ProfileDropdown";
@@ -24,6 +24,8 @@ import {
   Heart,
   FlaskConical,
   ShieldCheck,
+  ThumbsUp,
+  ThumbsDown,
 } from "lucide-react";
 import NotificationBell from "../../../components/Common/NotificationBell";
 
@@ -144,6 +146,9 @@ export default function AISearch() {
           structured: result.structured || null,
           sources: result.sources || [],
           noResultsFound: result.noResultsFound,
+          // Carried along only to echo back on a feedback submission
+          // (POST /api/search/feedback) — never displayed.
+          mode: result.mode || null,
         },
       ]);
     } catch (err) {
@@ -345,6 +350,11 @@ export default function AISearch() {
 
 function ChatBubble({ message }) {
   const isUser = message.role === "user";
+  // Local to this bubble — feedback doesn't need to survive a reload, and
+  // each bubble is a distinct answer, so there's no need to lift this into
+  // the parent's messages state.
+  const [feedbackRating, setFeedbackRating] = useState(null);
+  const [feedbackSubmitting, setFeedbackSubmitting] = useState(false);
 
   if (isUser) {
     return (
@@ -358,6 +368,28 @@ function ChatBubble({ message }) {
 
   const structured = message.structured;
   const hasKeyFacts = structured?.keyFacts && structured.keyFacts.length > 0;
+
+  async function handleFeedback(rating) {
+    if (feedbackSubmitting || feedbackRating) return;
+    setFeedbackSubmitting(true);
+    try {
+      await submitAnswerFeedback({
+        rating,
+        mode: message.mode,
+        sourceReportIds: (message.sources || []).map((s) => s.report_id).filter(Boolean),
+        degraded: false, // this branch never renders for an error bubble
+      });
+      setFeedbackRating(rating);
+    } catch (err) {
+      // TEMPORARY: surfaced to the console while diagnosing why feedback
+      // submissions aren't reaching the table — revert to a silent catch
+      // once resolved (feedback is a nice-to-have, shouldn't show an error
+      // banner over an answer the patient already has and can keep using).
+      console.error('[AISearch] feedback submission failed:', err);
+    } finally {
+      setFeedbackSubmitting(false);
+    }
+  }
 
   return (
     <div className="flex justify-start">
@@ -400,6 +432,45 @@ function ChatBubble({ message }) {
             {message.sources.map((s) => (
               <SourceRow key={s.report_id} source={s} />
             ))}
+          </div>
+        )}
+
+        {/* Omitted for an error bubble — there's no real answer to rate. */}
+        {!message.isError && (
+          <div className="mt-3 pt-3 border-t border-slate-200 flex items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => handleFeedback("up")}
+              disabled={feedbackSubmitting || !!feedbackRating}
+              title="Helpful"
+              aria-label="Mark this answer as helpful"
+              aria-pressed={feedbackRating === "up"}
+              className={`p-1.5 rounded-lg transition-colors disabled:cursor-not-allowed ${
+                feedbackRating === "up"
+                  ? "text-emerald-600 bg-emerald-50"
+                  : "text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 disabled:hover:text-slate-400 disabled:hover:bg-transparent"
+              }`}
+            >
+              <ThumbsUp size={14} />
+            </button>
+            <button
+              type="button"
+              onClick={() => handleFeedback("down")}
+              disabled={feedbackSubmitting || !!feedbackRating}
+              title="Not helpful"
+              aria-label="Mark this answer as not helpful"
+              aria-pressed={feedbackRating === "down"}
+              className={`p-1.5 rounded-lg transition-colors disabled:cursor-not-allowed ${
+                feedbackRating === "down"
+                  ? "text-red-600 bg-red-50"
+                  : "text-slate-400 hover:text-red-600 hover:bg-red-50 disabled:hover:text-slate-400 disabled:hover:bg-transparent"
+              }`}
+            >
+              <ThumbsDown size={14} />
+            </button>
+            {feedbackRating && (
+              <span className="text-xs text-slate-400">Thanks for the feedback</span>
+            )}
           </div>
         )}
       </div>

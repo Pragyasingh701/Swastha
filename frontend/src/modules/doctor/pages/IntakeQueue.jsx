@@ -50,6 +50,7 @@ const HPI_FIELD_LABELS = [
 const DRUG_ALLERGY_FIELD_LABELS = [
   ["current_medications", "Current Medications"],
   ["allergies", "Known Allergies"],
+  ["dietary_preference", "Diet"],
   ["notes", "Notes"],
 ];
 
