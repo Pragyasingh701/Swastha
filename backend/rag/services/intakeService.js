@@ -85,6 +85,61 @@ const HPI_FIELD_KEYWORDS = [
   ['site', ['where', 'location', 'site', 'which part', 'which area']],
 ];
 
+// Devanagari-aware word split, mirroring contentWords' purpose but for
+// Hindi text — contentWords' `[^\w\s]` strip is ASCII-only (JS regex \w is
+// [A-Za-z0-9_]), so it silently reduces any Devanagari string to "" and
+// every guard built on it (questionsLookRepeated, hpiFieldForQuestion's
+// keyword match) is structurally blind to Hindi. This is what let a Hindi
+// onset question ("Ye dard ya takleef kab shuru hui thi?" — romanized in
+// one live transcript, or "यह तकलीफ़ कब से शुरू हुई?" in Devanagari) go
+// completely unrecognized by every repeat-detection guard, so the SAME
+// field got re-asked in English later in the same hpi section with nothing
+// to catch it. ऀ-ॿ is the Devanagari Unicode block.
+function devanagariContentWords(text) {
+  return (text || '')
+    .replace(/[^ऀ-ॿ\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .split(' ')
+    .filter((w) => w.length > 1);
+}
+
+// Resolves a Hindi (or romanized-Hindi) question to its field by comparing
+// word-overlap against each field's own question_hi template in
+// `fallbackBank` — reuses the canonical Hindi phrasing already maintained
+// there (for the dedup guard's substitution path) as the reference text to
+// match against, rather than maintaining a second, parallel Hindi keyword
+// list alongside HPI_FIELD_KEYWORDS (which has already proven to be an
+// incident-by-incident maintenance burden even for English alone — see its
+// own comment history above). Devanagari-only: a ROMANIZED Hindi question
+// (Latin script, e.g. "kab shuru hui") has no Devanagari characters to
+// compare and will return null here, same as it would from the English
+// keyword match — accepted gap, see the fallback bank language note where
+// this is called.
+function devanagariFieldForQuestion(questionText, fallbackBank) {
+  const words = new Set(devanagariContentWords(questionText));
+  if (words.size === 0) return null;
+
+  let bestField = null;
+  let bestOverlap = 0;
+  for (const [field, spec] of Object.entries(fallbackBank)) {
+    if (!spec.question_hi) continue;
+    const templateWords = new Set(devanagariContentWords(spec.question_hi));
+    if (templateWords.size === 0) continue;
+    let shared = 0;
+    for (const w of words) if (templateWords.has(w)) shared += 1;
+    const overlap = shared / Math.min(words.size, templateWords.size);
+    // Same thresholds as questionsLookRepeated (0.65 ratio, >=2 shared
+    // words) — proven calibration for "different wording, same question"
+    // without false-positiving on a single shared common word.
+    if (overlap >= 0.65 && shared >= 2 && overlap > bestOverlap) {
+      bestField = field;
+      bestOverlap = overlap;
+    }
+  }
+  return bestField;
+}
+
 // Maps a repeated hpi question to the field it's actually about, by keyword
 // match against the question text — falls back to null (guard does nothing)
 // rather than guessing wrong, since a silent wrong-field write is worse
@@ -94,7 +149,10 @@ function hpiFieldForQuestion(questionText) {
   for (const [field, keywords] of HPI_FIELD_KEYWORDS) {
     if (keywords.some((k) => lower.includes(k))) return field;
   }
-  return null;
+  // English keyword match found nothing — try Devanagari template overlap
+  // before giving up, so a Hindi-phrased question is no longer invisible to
+  // this resolver (see devanagariFieldForQuestion's comment for why).
+  return devanagariFieldForQuestion(questionText, HPI_FALLBACK_QUESTIONS);
 }
 
 // Live-repro fix (fever/cold session eb8698eb-81f1-4ef3-bdb2-2eb223e7a364,
@@ -358,7 +416,9 @@ function drugAllergyFieldForQuestion(questionText) {
   if (/allerg/.test(t)) return 'allergies';
   if (/medicat|medicine|prescription|taking any|drugs you/.test(t)) return 'current_medications';
   if (/vegetarian|non-veg|nonveg|veg or|diet\b/.test(t)) return 'dietary_preference';
-  return null;
+  // English keyword match found nothing — try Devanagari template overlap,
+  // same reasoning as hpiFieldForQuestion's own fallback above.
+  return devanagariFieldForQuestion(questionText, DRUG_ALLERGY_FALLBACK_QUESTIONS);
 }
 
 // Section-aware "what field is this question actually about?", inferred from
