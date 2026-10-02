@@ -1,5 +1,6 @@
 import crypto from 'crypto';
 import supabase from '../config/supabase.js';
+import { findUserById } from './users.js';
 
 const FAMILY_VAULT_TABLE = process.env.FAMILY_VAULT_TABLE_NAME || 'vault_table';
 const FAMILY_MEMBERS_TABLE = process.env.FAMILY_MEMBERS_TABLE_NAME || 'family_members';
@@ -30,6 +31,21 @@ function calculateAgeFromDob(dobValue) {
 
 function isPendingAuthorizationMember(member) {
   return member?.authorizationStatus === 'pending' || Boolean(member?.notes && /\[PendingAuthorization:[^\]]+\]/.test(member.notes));
+}
+
+// Moved here from backend/routes/reports.js (was a private duplicate) so
+// isPatientLinkedToFamilyMember below and any future caller share the exact
+// same email-extraction logic rather than risking two copies drifting apart
+// — a family member's email is stored either as a direct `email` field or
+// tucked into a `[Email: ...]` tag inside `notes`, depending on how the
+// member was created.
+export function getMemberEmail(member = {}) {
+  const directEmail = String(member.email || '').trim().toLowerCase();
+  if (directEmail) return directEmail;
+
+  const notes = String(member.notes || '');
+  const emailMatch = notes.match(/\[Email:\s*([^\]]+)\]/i);
+  return String(emailMatch?.[1] || '').trim().toLowerCase();
 }
 
 function sanitizeConditions(list) {
@@ -538,4 +554,41 @@ export const getFamilyVaultSummary = async ({ userId } = {}) => {
     relationshipTags,
     healthOverview: members.filter((member) => member.healthOverview || member.notes),
   };
+};
+
+/**
+ * True if `patientId` (a family admin) may access `targetUserId`'s health
+ * data via the family vault — i.e. `targetUserId` has its OWN separate
+ * account whose email matches an APPROVED family_members row under
+ * `patientId`'s vault. Mirrors isDoctorLinkedToPatient's role as "the single
+ * shared source of truth every route/service calls" (see
+ * backend/db/doctorPatients.js) so this logic lives in exactly one place
+ * rather than being re-derived per route.
+ *
+ * SECURITY: relies on listFamilyMembers' default (includeDeleted: false)
+ * call, which already filters out `authorizationStatus === 'pending'`
+ * members (see isPendingAuthorizationMember) before this function ever sees
+ * them — a member who hasn't yet accepted the family-admin's invite must
+ * never grant access just because an email happens to match. Do not pass
+ * includeDeleted: true into a lookup feeding this function.
+ *
+ * Same-user is NOT handled here (unlike isDoctorLinkedToPatient, which
+ * short-circuits true for doctorId === patientUserId in some callers) — a
+ * caller checking "is this my own id" should do that check itself before
+ * calling this function, since "am I my own family member" isn't a
+ * meaningful question for this table.
+ *
+ * @param {string} patientId - the authenticated family admin's own id
+ * @param {string} targetUserId - the account whose data access is being requested
+ * @returns {Promise<boolean>}
+ */
+export const isPatientLinkedToFamilyMember = async (patientId, targetUserId) => {
+  if (!patientId || !targetUserId || !supabase) return false;
+
+  const targetUser = await findUserById(targetUserId);
+  if (!targetUser?.email) return false;
+
+  const targetEmail = String(targetUser.email).trim().toLowerCase();
+  const members = await listFamilyMembers({ userId: patientId });
+  return members.some((member) => getMemberEmail(member) === targetEmail);
 };

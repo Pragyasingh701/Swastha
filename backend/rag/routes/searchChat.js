@@ -1,6 +1,7 @@
 import express from 'express';
 import { conversationalSearch } from '../services/conversationalSearchService.js';
 import { isDoctorLinkedToPatient } from '../../db/doctorPatients.js';
+import { isPatientLinkedToFamilyMember } from '../../db/family.js';
 import { clearSession } from '../langchain/sessionStore.js';
 import { requireAuth } from '../middleware/auth.js';
 import { requireNoticeAck } from '../middleware/requireNoticeAck.js';
@@ -26,11 +27,14 @@ const SESSION_ID_PATTERN = /^[A-Za-z0-9_-]{8,128}$/;
  * cross-user leak this feature is required to prevent. Any user_id sent in
  * the body is ignored.
  *
- * patient_user_id is the ONE exception, and only for doctors: it lets a
- * doctor ask about a specific linked patient's records instead of their
- * own. It is verified against the doctor_patient table on every request
- * (never cached, never trusted on its own) — a doctor with no link to that
- * patient gets 403, same as the main backend's linking flow requires.
+ * patient_user_id is the ONE exception, for two roles: a DOCTOR asking
+ * about a specific linked patient's records, or a PATIENT (family admin)
+ * asking about a family member's records instead of their own (the family
+ * member must have their own separate Swastha account, linked by email in
+ * the family vault — see backend/db/family.js's isPatientLinkedToFamilyMember
+ * doc comment). Verified against the doctor_patient / family_members tables
+ * on EVERY request (never cached, never trusted on its own) — the caller
+ * gets 403 if the corresponding link doesn't check out for their role.
  *
  * requireNoticeAck gates on the CALLER's own acknowledgement (req.user.userId)
  * regardless of which patient's records are being searched — it's the
@@ -62,24 +66,35 @@ router.post('/', requireAuth, requireNoticeAck('ask_swastha'), async (req, res) 
   let targetUserId = callerId;
 
   if (patientUserId) {
-    let linked;
+    const trimmedTarget = patientUserId.trim();
+    // Doctor -> doctor_patient link; patient (family admin) -> family vault
+    // link (isPatientLinkedToFamilyMember, backend/db/family.js) — same
+    // "patient_user_id" param, resolved against whichever table matches the
+    // caller's own role. Any other role (or a patient targeting someone with
+    // no family link) falls through to the shared `linked = false` 403 below
+    // rather than silently defaulting to "allowed".
+    let linked = false;
     try {
-      linked = await isDoctorLinkedToPatient(callerId, patientUserId.trim());
+      if (req.user.role === 'doctor') {
+        linked = await isDoctorLinkedToPatient(callerId, trimmedTarget);
+      } else if (req.user.role === 'patient') {
+        linked = await isPatientLinkedToFamilyMember(callerId, trimmedTarget);
+      }
     } catch (err) {
-      console.error(`[POST /api/search/chat] link check failed for doctor ${callerId}:`, err);
+      console.error(`[POST /api/search/chat] link check failed for ${req.user.role} ${callerId}:`, err);
       return res.status(500).json({ error: 'Could not verify patient access. Please try again.' });
     }
 
     if (!linked) {
       console.warn(
-        `[POST /api/search/chat] user ${callerId} requested patient ${patientUserId} with no doctor_patient link`
+        `[POST /api/search/chat] ${req.user.role} ${callerId} requested patient ${trimmedTarget} with no verified link`
       );
       // Best-effort: an audit-log write failure must never affect this
       // response, which is why logAccess is fire-and-forget (never awaited
       // into the response path's error handling) and never throws itself.
       logAccess({
         callerUserId: callerId,
-        targetPatientId: patientUserId.trim(),
+        targetPatientId: trimmedTarget,
         isCrossPatient: true,
         route: 'search_chat',
         mode: null,
@@ -89,7 +104,7 @@ router.post('/', requireAuth, requireNoticeAck('ask_swastha'), async (req, res) 
       return res.status(403).json({ error: 'You are not linked to this patient.' });
     }
 
-    targetUserId = patientUserId.trim();
+    targetUserId = trimmedTarget;
   }
 
   try {

@@ -3,7 +3,7 @@ import jwt from 'jsonwebtoken';
 import { listTimelineReports, getTimelineReport, createTimelineReport, updateTimelineReport, deleteTimelineReport } from '../db/reports.js';
 import { findUserByEmail, findUserById } from '../db/users.js';
 import { isDoctorLinkedToPatient } from '../db/doctorPatients.js';
-import { listFamilyMembers } from '../db/family.js';
+import { isPatientLinkedToFamilyMember } from '../db/family.js';
 import { validateTimelineReportPayload } from '../utils/timelineValidation.js';
 import { uploadMemory, uploadFileToSupabase } from '../config/supabaseStorage.js';
 import supabase from '../config/supabase.js';
@@ -73,15 +73,6 @@ function getAuthUser(req) {
   }
 }
 
-function getMemberEmail(member = {}) {
-  const directEmail = String(member.email || '').trim().toLowerCase();
-  if (directEmail) return directEmail;
-
-  const notes = String(member.notes || '');
-  const emailMatch = notes.match(/\[Email:\s*([^\]]+)\]/i);
-  return String(emailMatch?.[1] || '').trim().toLowerCase();
-}
-
 async function resolveTargetUser(req, authUser) {
   const requestedUserId = String(req.body?.userId || req.query?.userId || '').trim();
   const requestedEmail = String(req.body?.targetEmail || req.query?.email || '').trim().toLowerCase();
@@ -120,10 +111,8 @@ async function resolveTargetUser(req, authUser) {
     return targetUserId;
   }
 
-  if (authUser.role === 'patient' && targetUser?.email) {
-    const members = await listFamilyMembers({ userId: authUser.userId });
-    const targetEmail = String(targetUser.email).trim().toLowerCase();
-    const isFamilyMember = members.some((member) => getMemberEmail(member) === targetEmail);
+  if (authUser.role === 'patient') {
+    const isFamilyMember = await isPatientLinkedToFamilyMember(authUser.userId, targetUserId);
     if (isFamilyMember) {
       return targetUserId;
     }
