@@ -12,6 +12,12 @@
 // autonomous diagnosis) and §6.1.
 import { supabase } from '../config/supabase.js';
 import { runAI } from '../config/aiClient.js';
+import {
+  DETAIL_QUESTIONS,
+  detailKeyFor,
+  pendingDetailFor,
+  resolveDetailValue,
+} from './intakeDetailFollowUp.js';
 
 // First-pass red-flag trigger list (PRD §6.1, confirmed with the user before
 // being hardcoded here). Not exhaustive — a deliberately short starter set
@@ -66,7 +72,26 @@ const HPI_FIELD_KEYWORDS = [
   // "first notice"/"since when" sit here (before timing) so an onset question
   // isn't swallowed by timing's day-pattern terms below.
   ['onset', ['onset', 'when did', 'first notice', 'first start', 'first began', 'since when', 'how long', 'how many days', 'start', 'began', 'duration']],
-  ['radiation', ['radiat', 'spread', 'move to', 'travel']],
+  // 'travel' alone used to be here, meant to catch "does it travel to..."
+  // (a radiation synonym) — but as a bare word it also matches an ordinary,
+  // unrelated "have you traveled anywhere recently?" (travel history, not
+  // symptom spread), which the dedup guard then misread as a repeat of an
+  // already-answered field (live repro, systemic complaint where radiation
+  // is pre-marked N/A: a genuine travel-history question got silently
+  // replaced with a DIFFERENT fallback question mid-conversation).
+  // 'travels to'/'travel to' requires the destination phrasing that only the
+  // clinical sense actually uses. A looser version also matching "travel
+  // ... else/elsewhere" ANYWHERE later in the sentence was tried and
+  // reverted — it reads "Do you travel often, and is there anything else
+  // about your job?" (ordinary travel + unrelated "else") as radiation too,
+  // which is worse than the narrower miss this leaves: "does it travel
+  // anywhere else?" (no literal "to") no longer matches here, but it's still
+  // caught by 'spread'-style phrasing the model tends to use instead, and a
+  // genuine miss just means one extra turn before the patient's answer is
+  // captured (via the extraction-miss rescue elsewhere in this file) —
+  // never a silently wrong field substitution, which is what a false
+  // positive here causes.
+  ['radiation', ['radiat', 'spread', 'move to', 'travels to', 'travel to']],
   ['exacerbating_relieving', ['better', 'worse', 'trigger', 'relieve', 'aggravat', 'ease', 'bring it on', 'set it off']],
   // 'throughout the day'/'behave'/'all day'/'overall' added after observing a
   // live miss: "Which of the following describes how your symptoms behave
@@ -82,7 +107,19 @@ const HPI_FIELD_KEYWORDS = [
   ['timing', ['timing', 'constant', 'comes and goes', 'come and go', 'pattern', 'time of day', 'throughout the day', 'during the day', 'all day', 'behave', 'overall', 'how often', 'frequency', 'intermittent', 'the most', 'worst time', 'when is it worst', 'usually happen']],
   ['associated_symptoms', ['associated', 'along with', 'other symptoms', 'also experienc', 'accompan', 'anything else']],
   ['character', ['character', 'describe the', 'what does it feel', 'feel like', 'type of', 'quality', 'burning', 'sharp', 'dull']],
-  ['site', ['where', 'location', 'site', 'which part', 'which area']],
+  // 'where' as a bare string also matches INSIDE other, unrelated words —
+  // "anywhere", "elsewhere", "somewhere", "nowhere" — none of which ask about
+  // the complaint's location (live repro: "Have you traveled anywhere
+  // recently?", a travel-history question, matched "where" and was
+  // misclassified as site). A word-boundary regex requires "where" to be its
+  // own word, same as the plain-text keywords everywhere else in this table
+  // already effectively are for any word that doesn't appear truncated
+  // mid-word elsewhere in ordinary English. Every other keyword here is left
+  // as plain substring matching — several ('radiat', 'aggravat', 'accompan',
+  // 'experienc') are DELIBERATELY truncated stems meant to match multiple
+  // inflections ("radiating", "aggravated", "accompanied", ...), and a
+  // boundary would break exactly that.
+  ['site', [/\bwhere\b/, 'location', 'site', 'which part', 'which area']],
 ];
 
 // Devanagari-aware word split, mirroring contentWords' purpose but for
@@ -147,7 +184,11 @@ function devanagariFieldForQuestion(questionText, fallbackBank) {
 function hpiFieldForQuestion(questionText) {
   const lower = (questionText || '').toLowerCase();
   for (const [field, keywords] of HPI_FIELD_KEYWORDS) {
-    if (keywords.some((k) => lower.includes(k))) return field;
+    // Plain substring match for every keyword, EXCEPT one ('where', in site's
+    // list — see its own comment) that needs a word boundary instead, to
+    // avoid matching inside an unrelated word. keywords is almost always
+    // strings; a RegExp entry is the deliberate, narrow exception.
+    if (keywords.some((k) => (k instanceof RegExp ? k.test(lower) : lower.includes(k)))) return field;
   }
   // English keyword match found nothing — try Devanagari template overlap
   // before giving up, so a Hindi-phrased question is no longer invisible to
@@ -586,6 +627,23 @@ function localizeSpec(spec, language) {
   };
 }
 
+// The "what is the name?" question for a pending follow-up (see
+// intakeDetailFollowUp.js), localized like every other bank question. null
+// when nothing is pending, so callers can use it as the "is a name owed?" test.
+function detailSpecFor(pending, language = 'hi-IN') {
+  if (!pending) return null;
+  return localizeSpec(DETAIL_QUESTIONS[detailKeyFor(pending)], language);
+}
+
+// structured_history without the pending-name marker. The key is dropped
+// rather than set to null so it never shows up in the prompt or the stored
+// blob once nothing is owed.
+function withoutPendingDetail(history) {
+  if (!history || !history.pending_detail) return history;
+  const { pending_detail: _settled, ...rest } = history;
+  return rest;
+}
+
 // Two option sets that overlap heavily are the same question re-skinned,
 // even when the question TEXT was rewritten enough to defeat
 // questionsLookRepeated() and the model self-labelled a different
@@ -683,6 +741,19 @@ function nextUnansweredQuestionFor(section, history, language = 'hi-IN') {
   }
 
   if (section === 'drug_allergy') {
+    // A name that is still owed comes before the next unanswered field: that
+    // field already holds the patient's bare "yes", so the lookup below would
+    // skip straight past it.
+    const owed = detailSpecFor(history?.pending_detail, language);
+    if (owed) {
+      return {
+        field: history.pending_detail.field,
+        question: owed.question,
+        options: owed.options,
+        allow_multiple: owed.allow_multiple,
+      };
+    }
+
     const field = ['current_medications', 'allergies'].find(
       (f) => !(Array.isArray(history?.drug_allergy?.[f]) && history.drug_allergy[f].length > 0)
     );
@@ -727,7 +798,13 @@ function capturedFieldKeys(history) {
         : typeof v === 'string' && v.trim() !== '';
     if (filled) keys.push(`hpi.${f}`);
   }
+  // A field whose NAME is still owed (see intakeDetailFollowUp.js) holds only
+  // the patient's bare "yes" so far, so it is not answered yet. Listing it
+  // would tell the model never to ask for the name, and would let the dedup
+  // guard swap the name question out as a "repeat" of an answered field.
+  const nameOwedFor = history?.pending_detail?.field;
   for (const f of ['current_medications', 'allergies']) {
+    if (f === nameOwedFor) continue;
     if (Array.isArray(history?.drug_allergy?.[f]) && history.drug_allergy[f].length > 0) {
       keys.push(`drug_allergy.${f}`);
     }
@@ -806,6 +883,14 @@ function emptyStructuredHistory() {
     },
     red_flag: false,
     red_flag_reason: null,
+    // Not part of the empty shape on purpose: structured_history may also carry
+    // `pending_detail: { field, kind }` while the patient has said "yes" to
+    // medications or allergies without naming one and the engine still owes
+    // them the "what is the name?" question (see intakeDetailFollowUp.js). It
+    // is added the turn that question is asked and dropped the turn it is
+    // answered, so a finished session never contains it. It lives at the top
+    // level, not under drug_allergy, because the doctor's summary renders every
+    // key of drug_allergy as if it were something the patient said.
   };
 }
 
@@ -915,6 +1000,15 @@ function buildSystemPrompt(section, structuredHistory, lastQuestion, language) {
   };
   const sectionRules = [sectionRuleFor[section] || `- "${section}": (no rule defined — advance or ask a safe generic follow-up)`];
 
+  // Only present on the turn where the patient is answering a "what is the
+  // name?" question the engine asked for them (see intakeDetailFollowUp.js).
+  // Without it the model sees a field that already holds a "yes" and has no
+  // reason to overwrite it with the name.
+  const owedField = structuredHistory?.pending_detail?.field;
+  const pendingNameBlock = owedField
+    ? `\nPENDING NAME FOLLOW-UP: earlier the patient said "yes" to drug_allergy.${owedField} without naming ${owedField === 'allergies' ? 'what they are allergic to' : 'the medicine(s)'}, so the question you JUST asked (above) asked for the name(s). Their latest message IS that answer — write the name(s) they gave into updated_fields.drug_allergy.${owedField} as an array of English names, replacing the earlier "yes"-style entry instead of keeping it. If they said they don't remember, write ["I don't remember"]. Do not ask for the name again and do not ask about ${owedField} again; go on to the next field that is not ALREADY ANSWERED.\n`
+    : '';
+
   return `You are a clinical intake assistant for an Indian OPD (outpatient) clinic. You are talking directly to a PATIENT before their doctor consult, gathering a structured history. You NEVER diagnose, suggest a condition, or give medical advice — you only ask focused follow-up questions and structure what the patient tells you.
 
 LANGUAGE — read this before anything else:
@@ -939,7 +1033,7 @@ ${JSON.stringify(structuredHistory, null, 2)}
 ALREADY ANSWERED — never ask about any of these again, in any wording, for the rest of this session:
 ${capturedKeys.length > 0 ? capturedKeys.map((k) => `- ${k}`).join('\n') : '- (nothing captured yet)'}
 A field on this list is DONE. It does not matter that you have not personally asked about it this turn, or that the patient answered it as part of a different question, or that you could word it differently — if the key is listed above, asking about it again is a duplicate and is forbidden. Pick a field that is NOT on this list.
-
+${pendingNameBlock}
 Section rules:
 ${sectionRules.join('\n')}
 
@@ -1005,10 +1099,17 @@ Rules for the JSON:
 // plausible question behind them at all — the observed invention case was
 // severity appearing with no severity question anywhere in the transcript.
 const HPI_FIELD_CUES = {
-  site: ['where', 'which part', 'location', 'कहाँ', 'कहां', 'किस हिस्से', 'जगह'],
+  // 'where' as a word boundary, not a bare substring — same fix and reason as
+  // HPI_FIELD_KEYWORDS' own site entry (it matches inside "anywhere" etc.).
+  site: [/\bwhere\b/, 'which part', 'location', 'कहाँ', 'कहां', 'किस हिस्से', 'जगह'],
   onset: ['when did', 'since when', 'how long', 'start', 'began', 'कब से', 'कब शुरू', 'कितने दिन', 'कब'],
   character: ['what kind', 'describe', 'feel like', 'type of pain', 'कैसा', 'किस तरह', 'कैसी'],
-  radiation: ['spread', 'travel', 'move to', 'radiat', 'फैल', 'जाता', 'कहीं और'],
+  // 'travel' alone matched an unrelated travel-history question too (see
+  // HPI_FIELD_KEYWORDS' own radiation entry for the live repro, the exact
+  // same reasoning, and why a looser "travel ... else" pattern was tried and
+  // reverted) — same fix applied here for consistency between the two
+  // tables.
+  radiation: ['spread', 'travels to', 'travel to', 'move to', 'radiat', 'फैल', 'जाता', 'कहीं और'],
   associated_symptoms: ['along with', 'other symptom', 'also have', 'nausea', 'vomit', 'fever', 'साथ', 'अन्य लक्षण', 'उल्टी', 'मितली', 'बुखार', 'दस्त'],
   timing: ['come and go', 'constant', 'all the time', 'time of day', 'intermittent', 'लगातार', 'रुक', 'कभी', 'समय'],
   exacerbating_relieving: ['better', 'worse', 'relief', 'trigger', 'after eating', 'make it', 'बढ़', 'कम', 'आराम', 'खाने के बाद', 'ज़्यादा', 'ज्यादा', 'चीज़', 'चीज', 'असर', 'फर्क', 'राहत'],
@@ -1023,7 +1124,10 @@ function wasFieldAsked(field, askedQuestions) {
   const cues = HPI_FIELD_CUES[field];
   if (!cues) return true; // unknown field — not ours to police
   const haystack = askedQuestions.join(' \n ').toLowerCase();
-  return cues.some((cue) => haystack.includes(cue.toLowerCase()));
+  // Same plain-substring-vs-regex split as HPI_FIELD_KEYWORDS above — only
+  // site's 'where' needs the word boundary (see its own comment); every
+  // other cue keeps its existing substring match.
+  return cues.some((cue) => (cue instanceof RegExp ? cue.test(haystack) : haystack.includes(cue.toLowerCase())));
 }
 
 /**
@@ -1068,6 +1172,56 @@ function stripUnaskedHpiFields(updatedFields, currentHpi, askedQuestions) {
   }
 
   return { cleaned: { ...updatedFields, hpi: keptHpi }, dropped };
+}
+
+// Same cue-and-strip shape as HPI_FIELD_CUES/stripUnaskedHpiFields above, but
+// for drug_allergy.dietary_preference specifically — the one drug_allergy
+// field this needs to cover. current_medications/allergies don't need it:
+// they're required fields, already protected from going EMPTY by the
+// extraction-miss/repeat-recovery guards elsewhere, which is a different
+// failure mode from "a value appeared that nobody asked for".
+//
+// Live repro: "Which food are you allergic to?" -> "Non-veg food" correctly
+// landed in allergies, but the model ALSO wrote dietary_preference:
+// "Non-vegetarian" into the SAME turn's updated_fields, despite the diet
+// question (drugAllergyFieldForQuestion's own vegetarian|non-veg|diet cues)
+// never once appearing in this session's turns — the model inferred "allergic
+// to non-veg food" implies "is vegetarian" and recorded that inference as if
+// it were an asked-and-answered fact. drugAllergyFieldForQuestion's existing
+// cues (checked for 'allerg' FIRST, so an allergy question naming "food" is
+// never mistaken for the diet question) are reused here as the "was this
+// asked?" cue list, so there is exactly one place that defines what counts as
+// "the diet question" for both detecting a repeat of it and vetting a write.
+const DIETARY_PREFERENCE_CUES = ['vegetarian', 'non-veg', 'nonveg', 'veg or', 'diet'];
+
+function wasDietaryPreferenceAsked(askedQuestions) {
+  const haystack = askedQuestions.join(' \n ').toLowerCase();
+  return DIETARY_PREFERENCE_CUES.some((cue) => haystack.includes(cue));
+}
+
+/**
+ * Drops an invented drug_allergy.dietary_preference the same way
+ * stripUnaskedHpiFields drops an invented HPI field — only ever strips a NEW
+ * write; a value already in structured_history was vetted when it was
+ * written, so a later correction/refinement of it is never blocked.
+ */
+function stripUnaskedDrugAllergyFields(updatedFields, currentDrugAllergy, askedQuestions) {
+  if (!updatedFields?.drug_allergy || typeof updatedFields.drug_allergy !== 'object') {
+    return { cleaned: updatedFields, dropped: [] };
+  }
+  const field = 'dietary_preference';
+  const value = updatedFields.drug_allergy[field];
+  if (value === undefined) return { cleaned: updatedFields, dropped: [] };
+
+  const existing = currentDrugAllergy?.[field];
+  const alreadyHasValue = typeof existing === 'string' && existing.trim() !== '';
+  if (alreadyHasValue || wasDietaryPreferenceAsked(askedQuestions)) {
+    return { cleaned: updatedFields, dropped: [] };
+  }
+
+  console.warn('[intake] dropped an invented drug_allergy.dietary_preference — the diet question was never asked this session');
+  const { [field]: _omitted, ...restDrugAllergy } = updatedFields.drug_allergy;
+  return { cleaned: { ...updatedFields, drug_allergy: restDrugAllergy }, dropped: [field] };
 }
 
 function mergeStructuredHistory(current, updatedFields) {
@@ -1342,9 +1496,18 @@ export async function runIntakeTurn({ section, structuredHistory, patientMessage
   // being answered right now — the patient's current message can only be
   // answering a question that has already been put to them.
   const askedQuestions = [...priorQuestionsInSection, lastQuestion].filter(Boolean);
-  const { cleaned: vettedFields } = stripUnaskedHpiFields(
+  const { cleaned: hpiVettedFields } = stripUnaskedHpiFields(
     parsed.updated_fields,
     history.hpi,
+    askedQuestions
+  );
+  // Same invention guard, for drug_allergy.dietary_preference (see
+  // stripUnaskedDrugAllergyFields' own comment for the live repro this
+  // closes). Chained onto hpiVettedFields, not parsed.updated_fields
+  // directly, so a single merge below sees both guards' results.
+  const { cleaned: vettedFields } = stripUnaskedDrugAllergyFields(
+    hpiVettedFields,
+    history.drug_allergy,
     askedQuestions
   );
 
@@ -1353,6 +1516,29 @@ export async function runIntakeTurn({ section, structuredHistory, patientMessage
     red_flag: redFlag,
     red_flag_reason: redFlagReason,
   };
+
+  // ── Name follow-up, settling (drug_allergy) ──────────────────────────
+  // If the question just answered was a "what is the name?" follow-up this
+  // engine asked for (see intakeDetailFollowUp.js), this message IS the name:
+  // fill the field and clear the pending marker. Runs BEFORE the extraction-
+  // miss rescue below on purpose: capturedFieldKeys() treats an owed field as
+  // unanswered, so the rescue would otherwise see it as "missed" every time
+  // and overwrite a good model extraction with the patient's raw message.
+  // Keyed off the pending marker in the PRE-turn history, not off the text of
+  // lastQuestion, so a turn lost to a degraded model call can't misplace it.
+  if (history.pending_detail && (patientMessage || '').trim()) {
+    const field = history.pending_detail.field;
+    const names = resolveDetailValue({
+      pending: history.pending_detail,
+      patientMessage,
+      previousValue: history.drug_allergy?.[field],
+      modelValue: mergedHistory.drug_allergy?.[field],
+    });
+    mergedHistory = withoutPendingDetail({
+      ...mergedHistory,
+      drug_allergy: { ...mergedHistory.drug_allergy, [field]: names },
+    });
+  }
 
   // ── Direct extraction-miss guard ────────────────────────────────────
   // Everything below this point (the repeat-detection back-fill, and the
@@ -1390,11 +1576,64 @@ export async function runIntakeTurn({ section, structuredHistory, patientMessage
     // waits one extra turn to be captured (never worse than what was
     // happening before), while the case it correctly catches prevents a
     // genuine cross-field data corruption.
-    const modelStillOnSameField = !!answeredField && (
+    //
+    // Bounded to ONE deferral per field (live repro: session
+    // 39262ad8-ea8f-4632-8bcb-3f0975d460ef). Unbounded, this backoff had no
+    // way to tell "the model asked a genuine, different follow-up" apart
+    // from "the model (or the dedup guard's own fallback-bank substitution,
+    // which always re-emits the identical question while a field is empty)
+    // is stuck re-asking the SAME field every turn" — both look identical
+    // from here: parsed.next_question resolves to answeredField either way.
+    // Once this field has already been deferred for once before in this
+    // section (asked about in >=2 PRIOR turns, i.e. this isn't the first
+    // time), the model has already had its one free follow-up turn and
+    // failed to land it, so it must not be deferred a second time — the
+    // patient has now answered the same question at least twice, correctly
+    // both times, and that answer must not be thrown away again waiting for
+    // a THIRD repeat before markStuckHpiFields' generic "not specified"
+    // marker eventually overwrites it (the wrong outcome for a patient who
+    // DID answer clearly, just never got extracted).
+    const priorAttempts = answeredField
+      ? priorQuestionsInSection.filter((q) => fieldForQuestion(section, q) === answeredField).length
+      : 0;
+    const modelStillOnSameField = !!answeredField && priorAttempts < 2 && (
       (typeof parsed.next_question === 'string' && fieldForQuestion(section, parsed.next_question) === answeredField)
       || leafFieldName(parsed.target_field) === answeredField
     );
     if (answeredField && !modelStillOnSameField) {
+      // associated_symptoms needs its own check here, separate from
+      // stillMissing below: capturedFieldKeys() deliberately treats an EMPTY
+      // array as "already answered" for this one field (the same ambiguity
+      // that forces the Array.isArray-only test in hpiComplete() too — see
+      // that comment), and emptyStructuredHistory() starts this field at []
+      // from turn one, so stillMissing is ALWAYS false for it regardless of
+      // whether it was ever actually asked. That is exactly why it used to be
+      // excluded from this rescue entirely rather than silently misfiring.
+      //
+      // Live repro (session 4aea91ad-1ec5-4970-bd67-1d7e07cab820): the
+      // patient answered "Fever" (a real, offered option) to "Have you
+      // noticed anything else along with the Fever or cold?", extraction
+      // missed it, and the question repeated — nothing ever rescued it, and
+      // the only eventual resolution (markStuckHpiFields, after 3 repeats)
+      // force-sets this field to [], i.e. "nothing else reported" — the
+      // WRONG outcome for a patient who explicitly did report something.
+      //
+      // The correct "was this missed" signal instead: did THIS TURN's own
+      // model output actually touch associated_symptoms at all? vettedFields
+      // is parsed.updated_fields after stripUnaskedHpiFields, which never
+      // strips this key — so its absence here means the model wrote nothing
+      // for it this turn, independent of what mergedHistory already holds.
+      if (answeredField === 'associated_symptoms' && vettedFields?.hpi?.associated_symptoms === undefined) {
+        // One-element array, not the model prompt's own comma-split
+        // convention (documented ~line 1012) reimplemented here — an
+        // imperfect single combined item the doctor can still read beats
+        // both the repeat loop and the silent "nothing else" miscapture.
+        mergedHistory = {
+          ...mergedHistory,
+          hpi: { ...mergedHistory.hpi, associated_symptoms: [patientMessage.trim()] },
+        };
+      }
+
       const stillMissing = !capturedFieldKeys(mergedHistory)
         .some((k) => leafFieldName(k) === answeredField);
       if (stillMissing) {
@@ -1494,6 +1733,38 @@ export async function runIntakeTurn({ section, structuredHistory, patientMessage
     }
   }
 
+  // ── Name follow-up, requesting (drug_allergy) ────────────────────────
+  // The patient just answered the medications or allergies question with a
+  // "yes" that names nothing ("Yes — prescription", "Yes — to a food", or a
+  // typed "yes"). Record that we owe the doctor a name, and ask for it below.
+  // Done here, after the extraction-miss rescues above, so the field already
+  // holds whatever the model or the rescue made of the answer: that stays in
+  // the record as the partial answer if the patient walks away before
+  // naming anything. Only when nothing was already pending, and only once per
+  // field (pendingDetailFor checks the questions already asked), so this can
+  // never loop.
+  let detailRequested = null;
+  if (section === 'drug_allergy' && !history.pending_detail && lastQuestion && (patientMessage || '').trim()) {
+    detailRequested = pendingDetailFor({
+      answeredField: fieldForQuestion(section, lastQuestion),
+      patientMessage,
+      lastQuestion,
+      priorQuestions: priorQuestionsInSection,
+    });
+    if (detailRequested) {
+      const field = detailRequested.field;
+      const recorded = mergedHistory.drug_allergy?.[field];
+      mergedHistory = {
+        ...mergedHistory,
+        drug_allergy: {
+          ...mergedHistory.drug_allergy,
+          [field]: Array.isArray(recorded) && recorded.length > 0 ? recorded : [patientMessage.trim()],
+        },
+        pending_detail: detailRequested,
+      };
+    }
+  }
+
   // Section completion is trusted from the model turn-by-turn, but verified
   // deterministically where we can, rather than trusted blindly — belt-and-
   // braces against the model drifting on section_complete over a longer
@@ -1542,7 +1813,12 @@ export async function runIntakeTurn({ section, structuredHistory, patientMessage
     }
   }
   if (section === 'drug_allergy') {
-    if (sectionComplete && !drugAllergyComplete(mergedHistory.drug_allergy)) {
+    // A name still owed (see intakeDetailFollowUp.js) means the field holds
+    // only a bare "yes", which is non-empty and so would otherwise count as
+    // answered: it let a lone "Yes — to a food" finish the whole section,
+    // closing the intake before anyone asked which food.
+    const nameOwed = !!mergedHistory.pending_detail;
+    if (sectionComplete && (nameOwed || !drugAllergyComplete(mergedHistory.drug_allergy))) {
       // Same belt-and-braces as hpi above — this section had no
       // deterministic check at all before, and the model was observed
       // reporting section_complete: false turn after turn even once both
@@ -1564,7 +1840,7 @@ export async function runIntakeTurn({ section, structuredHistory, patientMessage
     // here means the state machine reaches finalize deterministically as
     // soon as both fields are genuinely filled, instead of depending on the
     // model ever reporting it — the same fix already applied to hpi above.
-    if (!sectionComplete && drugAllergyComplete(mergedHistory.drug_allergy)) {
+    if (!sectionComplete && !nameOwed && drugAllergyComplete(mergedHistory.drug_allergy)) {
       sectionComplete = true;
     }
   }
@@ -1816,6 +2092,36 @@ export async function runIntakeTurn({ section, structuredHistory, patientMessage
     }
   }
 
+  // The name we just decided to ask for outranks whatever the guards above
+  // settled on, and so does the model's own wording: the model's question here
+  // was written for a field it believed done (it was usually already moving on
+  // to the next one), and its chips are the wrong ones for a name question.
+  // These are bank strings in the session's language, so the language guard
+  // below has nothing to repair.
+  if (detailRequested) {
+    const nameQuestion = detailSpecFor(detailRequested, language);
+    dedupedNextQuestion = nameQuestion.question;
+    quickReplyOptions = { options: nameQuestion.options, allow_multiple: nameQuestion.allow_multiple };
+  } else if (resolvedSection === 'drug_allergy') {
+    // The medications and allergies questions always ship with the bank's
+    // wording and chips ("Yes — prescription", "Yes — to a food", ...),
+    // whatever the model wrote. The name follow-up hangs off the patient
+    // saying yes, and the model's own chips for these two questions vary run to
+    // run ("Food allergies", "Seasonal allergies", "Yes, occasionally"), often
+    // with no yes in them. A patient tapped "Food allergies" and the intake
+    // closed without asking which food. Fixed chips mean the follow-up never
+    // depends on how the model happened to phrase them. Only for a field not
+    // answered yet: a repeat of an answered one is the dedup guard's job above.
+    const askedField = fieldForQuestion('drug_allergy', dedupedNextQuestion);
+    const isMainQuestion = (askedField === 'current_medications' || askedField === 'allergies')
+      && !capturedFieldKeys(mergedHistory).some((k) => leafFieldName(k) === askedField);
+    if (isMainQuestion) {
+      const mainQuestion = questionSpecForField(askedField, mergedHistory, language);
+      dedupedNextQuestion = mainQuestion.question;
+      quickReplyOptions = { options: mainQuestion.options, allow_multiple: mainQuestion.allow_multiple };
+    }
+  }
+
   // Options are contractually required on every question turn (see the
   // prompt's quick_reply_options rules) — but the model still drops them
   // sometimes, which strands the patient on a bare text box for a question
@@ -2015,7 +2321,13 @@ export async function advanceIntakeSession({ sessionId, patientMessage }) {
     .single();
 
   if (fetchError || !session) {
-    throw new Error(`advanceIntakeSession: session not found: ${fetchError?.message || sessionId}`);
+    // .single() reports a missing row as PGRST116. Anything else ("TypeError:
+    // fetch failed") means the database couldn't be reached, which is not the
+    // same as the session not existing, so the log shouldn't say it is.
+    const reason = !fetchError || fetchError.code === 'PGRST116'
+      ? `session not found: ${sessionId}`
+      : `could not load session: ${fetchError.message}`;
+    throw new Error(`advanceIntakeSession: ${reason}`);
   }
   if (session.status === 'completed') {
     throw new Error('advanceIntakeSession: session already completed');

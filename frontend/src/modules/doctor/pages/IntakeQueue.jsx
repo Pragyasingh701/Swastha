@@ -47,10 +47,11 @@ const HPI_FIELD_LABELS = [
 ];
 
 // Curated order + wording for drug_allergy, same role as HPI_FIELD_LABELS.
+// dietary_preference is deliberately NOT listed here — see NON_ANSWER_KEYS
+// below, which suppresses it outright rather than giving it a curated label.
 const DRUG_ALLERGY_FIELD_LABELS = [
   ["current_medications", "Current Medications"],
   ["allergies", "Known Allergies"],
-  ["dietary_preference", "Diet"],
   ["notes", "Notes"],
 ];
 
@@ -72,9 +73,15 @@ const DRUG_ALLERGY_FIELD_LABELS = [
 // appear (at the end, with a humanized label) rather than disappearing.
 // ─────────────────────────────────────────────────────────────────────────
 
-// Keys that are state-machine bookkeeping rather than patient answers, and
-// so must never be rendered as if they were something the patient said.
-const NON_ANSWER_KEYS = new Set(["section", "red_flag", "red_flag_reason"]);
+// Keys to never render as their own box here, either because they're
+// state-machine bookkeeping rather than a patient answer (section, red_flag,
+// red_flag_reason), or because this summary intentionally doesn't need a
+// dedicated box for them: dietary_preference, by request — an allergy to a
+// food already names veg/non-veg in the Known Allergies box (e.g. "Non-veg
+// food"), so a second "Diet: Non-vegetarian" box next to it is redundant, and
+// this is suppressed unconditionally rather than only when it duplicates an
+// allergy, per that request.
+const NON_ANSWER_KEYS = new Set(["section", "red_flag", "red_flag_reason", "dietary_preference"]);
 
 // "work_stress_pattern" -> "Work Stress Pattern". Fallback only — a curated
 // label from the tables above always wins when one exists.
