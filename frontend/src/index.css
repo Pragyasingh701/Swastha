@@ -77,3 +77,19 @@ html, body, #root {
 .animate-gradient-flow {
   animation: gradient-flow 9s ease infinite;
 }
+/* Google Translate widget: keep it working but invisible (the app has its
+   own EN/हिं toggle — see components/Common/LanguageToggle.jsx). */
+#google_translate_element,
+body > .skiptranslate,
+.goog-te-banner-frame,
+.goog-te-balloon-frame,
+#goog-gt-tt {
+  display: none !important;
+}
+body {
+  top: 0 !important;
+}
+.goog-text-highlight {
+  background: none !important;
+  box-shadow: none !important;
+}
