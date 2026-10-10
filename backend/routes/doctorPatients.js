@@ -2,6 +2,7 @@ import express from 'express';
 import jwt from 'jsonwebtoken';
 import {
   getDoctorPatients,
+  getDoctorLifetimeStats,
   linkDoctorToPatient,
   deleteDoctorPatient,
   getPendingRequestsForPatient,
@@ -60,6 +61,30 @@ router.get('/', async (req, res) => {
   } catch (error) {
     console.error('Doctor patient list error:', error);
     return res.status(500).json({ message: 'Unable to load doctor patients.' });
+  }
+});
+
+/**
+ * GET /api/doctor-patients/stats
+ * DOCTOR-facing dashboard stats across all-time links, including patients
+ * whose access has expired. Reports logged = the doctor's intake History.
+ * Counts only.
+ * Declared before any '/:param' route so Express doesn't match "stats" as a
+ * :patientId.
+ */
+router.get('/stats', async (req, res) => {
+  const authUser = getAuthUser(req);
+
+  if (!authUser?.userId || authUser.role !== 'doctor') {
+    return res.status(401).json({ message: 'Authentication required.' });
+  }
+
+  try {
+    const stats = await getDoctorLifetimeStats(authUser.userId);
+    return res.json(stats);
+  } catch (error) {
+    console.error('Doctor lifetime stats error:', error);
+    return res.status(500).json({ message: 'Unable to load doctor stats.' });
   }
 });
 

@@ -53,6 +53,8 @@ async function requirePatientAuth(req, res, next) {
     return res.status(403).json({ message: 'Only patient accounts can use clinic check-in.' });
   }
   req.user = { userId: user.id, email: user.email, role: user.role };
+  // Already fetched here — handed on so the route doesn't re-query it.
+  req.patientRow = user;
   next();
 }
 
@@ -140,30 +142,59 @@ router.post('/verify-otp', requirePatientAuth, async (req, res) => {
   try {
     // A bad/unknown doctorId at this stage (after the code-verify screen
     // already confirmed identity) fails safe rather than proceeding silently.
-    const doctor = await findUserById(doctorId);
-    if (!doctor || doctor.role !== 'doctor') {
+    // Direct doctors-table lookup — findUserById would first miss on
+    // `patients` (an extra round-trip) before reaching `doctors`.
+    const { data: doctor } = await supabase
+      .from('doctors')
+      .select('id')
+      .eq('id', doctorId)
+      .maybeSingle();
+    if (!doctor) {
       return res.status(400).json({ message: 'Unable to complete check-in for this doctor.' });
     }
-
-    await upsertAcceptedLink({ doctorId, patientId });
 
     // Patient-chosen on the language screen shown before this call (Voice
     // Layer PRD §6 — asked once, stored on the session row). An
     // unrecognised value falls back to the default rather than failing.
     const language = req.body?.language === 'en-IN' ? 'en-IN' : 'hi-IN';
 
-    const { session, turn } = await startIntakeSession(patientId, {
-      doctorId,
-      origin: 'clinic_checkin',
-      language,
-    });
+    // Linking the doctor and creating the session don't depend on each
+    // other (the opener is static, so session creation is a single insert) —
+    // run together instead of back to back. If the link fails, the session
+    // created alongside it is removed so a failed check-in leaves no
+    // orphaned in_progress row behind.
+    const [linkResult, sessionResult] = await Promise.allSettled([
+      upsertAcceptedLink({ doctorId, patientId, patient: req.patientRow }),
+      startIntakeSession(patientId, {
+        doctorId,
+        origin: 'clinic_checkin',
+        language,
+      }),
+    ]);
+    if (linkResult.status === 'rejected') {
+      if (sessionResult.status === 'fulfilled') {
+        await supabase
+          .from('intake_sessions')
+          .delete()
+          .eq('id', sessionResult.value.session.id)
+          .then(({ error }) => {
+            if (error) console.warn('Clinic verify-otp: could not remove orphaned session:', error.message);
+          });
+      }
+      throw linkResult.reason;
+    }
+    if (sessionResult.status === 'rejected') throw sessionResult.reason;
+    const { session, turn } = sessionResult.value;
 
     // Same audio fields POST /rag/api/intake/start returns — this endpoint
     // is the other way a session gets created, so it has to speak the first
     // question too or a clinic check-in patient gets a silent opener while
     // every later turn talks. A TTS failure just omits the audio fields;
     // it never blocks the check-in.
-    const speech = await synthesizeSpeech(turn.next_question, language);
+    // skip_audio: the client fetches it separately (see /rag/api/intake/turn).
+    const speech = req.body?.skip_audio === true
+      ? { ok: false }
+      : await synthesizeSpeech(turn.next_question, language);
 
     return res.status(200).json({
       session_id: session.id,
@@ -250,7 +281,7 @@ router.get('/today-code', requireDoctorAuth, async (req, res) => {
  * data, while an otherwise-identical link created through the remote
  * request/accept flow correctly lapsed after 24h. The two flows now agree.
  */
-async function upsertAcceptedLink({ doctorId, patientId }) {
+async function upsertAcceptedLink({ doctorId, patientId, patient: knownPatient = null }) {
   if (!supabase) throw new Error('Database connection is unavailable.');
 
   // Deliberately NOT short-circuiting on an already-linked pair the way
@@ -287,7 +318,7 @@ async function upsertAcceptedLink({ doctorId, patientId }) {
     return;
   }
 
-  const patient = await findUserById(patientId);
+  const patient = knownPatient || await findUserById(patientId);
   const { error } = await supabase.from('doctor_patient').insert({
     doctor_id: doctorId,
     patient_id: patientId,

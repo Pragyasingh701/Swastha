@@ -11,7 +11,7 @@ import {
 } from "lucide-react";
 import NotificationBell from "../../../components/Common/NotificationBell";
 import { useAuth } from "../../../context/AuthContext";
-import { getDoctorPatients } from "../../../services/doctorPatients";
+import { getDoctorPatients, getDoctorLifetimeStats } from "../../../services/doctorPatients";
 import { getTimelineReports } from "../../../api/reports";
 import CheckInCodeCard from "../components/CheckInCodeCard";
 
@@ -40,6 +40,7 @@ function useDoctorDashboardData() {
   const { token, user } = useAuth();
   const [patients, setPatients] = useState([]);
   const [reports, setReports] = useState([]);
+  const [lifetime, setLifetime] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -50,7 +51,12 @@ function useDoctorDashboardData() {
       setIsLoading(true);
       setError(null);
       try {
-        const linkedPatients = await getDoctorPatients();
+        const [linkedPatients, lifetimeStats] = await Promise.all([
+          getDoctorPatients(),
+          // Lifetime totals are best-effort: fall back to the live-access
+          // counts below if this fails.
+          getDoctorLifetimeStats().catch(() => null),
+        ]);
         const acceptedPatients = linkedPatients.filter(
           (p) => (p.linkStatus || "accepted") === "accepted"
         );
@@ -68,11 +74,13 @@ function useDoctorDashboardData() {
         if (cancelled) return;
         setPatients(acceptedPatients);
         setReports(reportLists.flat());
+        setLifetime(lifetimeStats);
       } catch (err) {
         if (!cancelled) {
           setError(err.message || "Failed to load dashboard data.");
           setPatients([]);
           setReports([]);
+          setLifetime(null);
         }
       } finally {
         if (!cancelled) setIsLoading(false);
@@ -85,14 +93,17 @@ function useDoctorDashboardData() {
     };
   }, [token]);
 
-  return { patients, reports, isLoading, error, doctorName: user?.name };
+  return { patients, reports, lifetime, isLoading, error, doctorName: user?.name };
 }
 
 export default function DoctorDashboard() {
-  const { patients, reports, isLoading, error, doctorName } =
+  const { patients, reports, lifetime, isLoading, error, doctorName } =
     useDoctorDashboardData();
 
-  const stats = useMemo(() => computeStats(patients, reports), [patients, reports]);
+  const stats = useMemo(
+    () => computeStats(patients, reports, lifetime),
+    [patients, reports, lifetime]
+  );
 
   return (
     <div className="h-screen overflow-hidden bg-slate-50 flex">
@@ -139,7 +150,7 @@ export default function DoctorDashboard() {
 
 /* --------------------------- Stat computation --------------------------- */
 
-function computeStats(patients, reports) {
+function computeStats(patients, reports, lifetime) {
   const now = new Date();
   const today = startOfDay(now);
   const sevenDaysAgo = new Date(today.getTime() - 7 * MS_PER_DAY);
@@ -163,13 +174,16 @@ function computeStats(patients, reports) {
     return isPrescription && reportDate(r) >= sevenDaysAgo;
   }).length;
 
+  // Server stats are authoritative: they include completed intakes and
+  // patients whose 24h access has lapsed. The client-side figures above are
+  // only the fallback when that request fails.
   return {
-    totalPatients: patients.length,
-    totalReports: reports.length,
-    reportsThisWeek,
-    reportsPrevWeek,
-    newPatientsThisWeek,
-    prescriptionsThisWeek,
+    totalPatients: lifetime?.totalPatients ?? patients.length,
+    totalReports: lifetime?.totalReports ?? reports.length,
+    reportsThisWeek: lifetime?.reportsThisWeek ?? reportsThisWeek,
+    reportsPrevWeek: lifetime?.reportsPrevWeek ?? reportsPrevWeek,
+    newPatientsThisWeek: lifetime?.newPatientsThisWeek ?? newPatientsThisWeek,
+    prescriptionsThisWeek: lifetime?.prescriptionsThisWeek ?? prescriptionsThisWeek,
   };
 }
 

@@ -216,14 +216,15 @@ function getSpeechRecognition() {
   return window.SpeechRecognition || window.webkitSpeechRecognition || null;
 }
 
-// Mute is remembered across turns and across a page refresh, so a patient
-// who silenced the voice once doesn't have to re-mute on every question.
+// Voice is muted by default — reading is faster and skips the audio
+// generation wait. A patient's explicit choice (unmute "0" / mute "1") is
+// remembered across turns and page refreshes.
 
 function readStoredMute() {
   try {
-    return localStorage.getItem(MUTE_STORAGE_KEY) === "1";
+    return localStorage.getItem(MUTE_STORAGE_KEY) !== "0";
   } catch {
-    return false;
+    return true;
   }
 }
 
@@ -426,7 +427,7 @@ export default function IntakeChat() {
         setSection(res.section);
         setMessages([{ role: "assistant", text: res.next_question }]);
         setQuickReplies(normalizeQuickReplies(res.quick_reply_options));
-        playQuestionAudio(res);
+        if (!muted) handleReplayQuestion(res.next_question, res.session_id);
       } catch (err) {
         setError(err.message || "Could not start your intake session. Please try again.");
       } finally {
@@ -519,23 +520,6 @@ export default function IntakeChat() {
     }
   }
 
-  // Called when a turn arrives. Caches the audio against its question text
-  // so it can be replayed later, and autoplays it unless muted.
-  function playQuestionAudio(res) {
-    if (!res?.audio_base64 || !res.next_question) return;
-    const payload = {
-      base64: res.audio_base64,
-      mime: res.audio_mime_type || "audio/wav",
-      // Present only when this turn actually had quick_reply_options; a
-      // free-text question carries none and gets no readout.
-      options: res.options_audio_base64
-        ? { base64: res.options_audio_base64, mime: res.options_audio_mime_type || "audio/wav" }
-        : null,
-    };
-    setAudioByText((prev) => ({ ...prev, [res.next_question]: payload }));
-    if (!muted) playAudioPayload(payload.base64, payload.mime, res.next_question, payload.options);
-  }
-
   /**
    * Per-question replay (PRD §6 — "tap to replay anytime"). Works on ANY
    * question in the transcript, not just the latest, and is independent of
@@ -544,8 +528,11 @@ export default function IntakeChat() {
    *
    * Read-only — it never advances or alters the conversation.
    */
-  async function handleReplayQuestion(text) {
+  // `sessionIdOverride`: the first question is fetched before sessionId
+  // state has landed, so the caller passes the id it just received.
+  async function handleReplayQuestion(text, sessionIdOverride = null) {
     if (!text) return;
+    const activeSessionId = sessionIdOverride || sessionId;
 
     // Tapping the bubble that's already playing stops it.
     if (speakingText === text) {
@@ -562,18 +549,24 @@ export default function IntakeChat() {
     // Not cached (e.g. the page was refreshed mid-session) — ask the
     // backend to re-speak it. ttsService caches by text+language, so this
     // is usually a cache hit there too.
-    if (!sessionId) return;
+    if (!activeSessionId) return;
     setLoadingAudioText(text);
     // Snapshot the token so a slow fetch that lands after the patient has
     // already answered (or tapped a different question) is cached but not
     // played — newest request wins.
     const requestedAt = playTokenRef.current;
     try {
-      const res = await replayIntakeAudio(sessionId, text);
-      const payload = { base64: res.audio_base64, mime: res.audio_mime_type || "audio/wav" };
+      const res = await replayIntakeAudio(activeSessionId, text);
+      const payload = {
+        base64: res.audio_base64,
+        mime: res.audio_mime_type || "audio/wav",
+        options: res.options_audio_base64
+          ? { base64: res.options_audio_base64, mime: res.options_audio_mime_type || "audio/wav" }
+          : null,
+      };
       setAudioByText((prev) => ({ ...prev, [text]: payload }));
       if (playTokenRef.current !== requestedAt) return;
-      playAudioPayload(payload.base64, payload.mime, text);
+      playAudioPayload(payload.base64, payload.mime, text, payload.options);
     } catch {
       // Audio unavailable — the question text is still on screen to read.
       setVoiceNote("Could not play that question. Please read it above.");
@@ -788,7 +781,7 @@ export default function IntakeChat() {
       setQuickReplies(normalizeQuickReplies(session.quick_reply_options));
       setStarting(false);
       setGateStep(GATE_STEPS.CHAT);
-      playQuestionAudio(session);
+      if (!muted) handleReplayQuestion(session.next_question, session.session_id);
     } catch (err) {
       // Send them back to the confirm screen — the code may have expired
       // while they were choosing, and re-confirming is the recovery.
@@ -845,11 +838,15 @@ export default function IntakeChat() {
     const longWaitTimer = setTimeout(() => setSendingLongWait(true), 8000);
 
     try {
-      const res = await sendIntakeTurn(sessionId, trimmed);
+      // Audio is never part of the turn reply: synthesizing it is the slowest
+      // step, and the question text should appear as soon as it's ready.
+      // Unless muted, the audio is fetched right after and plays when it
+      // lands (dropped if the patient has already answered again).
+      const res = await sendIntakeTurn(sessionId, trimmed, { skipAudio: true });
       setSection(res.section);
       setMessages((prev) => [...prev, { role: "assistant", text: res.next_question }]);
       setQuickReplies(normalizeQuickReplies(res.quick_reply_options));
-      playQuestionAudio(res);
+      if (!muted) handleReplayQuestion(res.next_question);
 
       // The backend's own state machine reaching "finalize" with no more
       // questions is the signal to close out — not a guess on our side.

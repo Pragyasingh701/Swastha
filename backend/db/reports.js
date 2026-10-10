@@ -247,6 +247,29 @@ export const deleteTimelineReport = async (userId, reportId) => {
   }
 };
 
+// Dates + category only — no report content is read. Used for the doctor
+// dashboard's totals, which (unlike the per-patient report routes) must not
+// drop to zero when a patient's 24h access window lapses.
+export const listReportActivityForPatients = async (patientIds) => {
+  const ids = [...new Set((patientIds || []).map((id) => String(id || '').trim()).filter(Boolean))];
+  if (ids.length === 0 || !supabase) return [];
+
+  const { data, error } = await supabase
+    .from(REPORTS_TABLE)
+    .select('category, report_date, created_at')
+    .in(REPORTS_USER_ID_COLUMN, ids);
+
+  if (error) {
+    console.error('Supabase report activity query error:', error.message || error);
+    throw error;
+  }
+
+  return (data || []).map((row) => ({
+    category: row.category || null,
+    at: row.created_at || row.report_date || null,
+  }));
+};
+
 export const deleteAllReportsForUser = async (userId) => {
   const normalizedUserId = String(userId || '').trim();
   if (!normalizedUserId || !supabase) return 0;
