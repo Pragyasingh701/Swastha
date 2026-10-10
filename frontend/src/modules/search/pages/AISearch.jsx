@@ -27,7 +27,9 @@ import {
   ThumbsUp,
   ThumbsDown,
 } from "lucide-react";
+import { useLanguage } from "../../../context/LanguageContext";
 import NotificationBell from "../../../components/Common/NotificationBell";
+import LanguageToggle from "../../../components/Common/LanguageToggle";
 
 // Same nav list as Dashboard.jsx / Timeline.jsx / etc.
 const navItems = [
@@ -80,6 +82,7 @@ function formatDate(value) {
 }
 
 export default function AISearch() {
+  const { language } = useLanguage();
   const navigate = useNavigate();
   const { isAuthenticated } = useAuth();
   const [query, setQuery] = useState("");
@@ -137,7 +140,7 @@ export default function AISearch() {
     setLoading(true);
 
     try {
-      const result = await searchReports(trimmed);
+      const result = await searchReports(trimmed, language);
       setMessages((prev) => [
         ...prev,
         {
@@ -194,6 +197,8 @@ export default function AISearch() {
           <NotificationBell />
 
           <PatientIdBadge />
+
+          <LanguageToggle />
 
           <ProfileDropdown />
         </header>
@@ -359,7 +364,7 @@ function ChatBubble({ message }) {
   if (isUser) {
     return (
       <div className="flex justify-end">
-        <div className="bg-blue-700 text-white text-sm rounded-2xl rounded-br-sm px-4 py-2.5 max-w-[80%]">
+        <div translate="no" className="notranslate bg-blue-700 text-white text-sm rounded-2xl rounded-br-sm px-4 py-2.5 max-w-[80%]">
           {message.text}
         </div>
       </div>
@@ -394,7 +399,8 @@ function ChatBubble({ message }) {
   return (
     <div className="flex justify-start">
       <div
-        className={`text-sm rounded-2xl rounded-bl-sm px-4 py-3 max-w-[85%] ${
+        translate="no"
+        className={`notranslate text-sm rounded-2xl rounded-bl-sm px-4 py-3 max-w-[85%] ${
           message.isError
             ? "bg-red-50 text-red-700 border border-red-100 "
             : "bg-slate-50 text-slate-700 border border-slate-100 "

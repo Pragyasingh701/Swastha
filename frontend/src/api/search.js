@@ -11,10 +11,12 @@ function request(path, options = {}) {
   return apiRequest(options.method || 'GET', path, { ...options, baseUrl: RAG_BASE_URL });
 }
 
-export async function searchReports(query) {
+// language: 'en' | 'hi' — the language the AI should write its answer in
+// (the backend treats anything but Hindi as English).
+export async function searchReports(query, language) {
   return request('/search', {
     method: 'POST',
-    body: { query },
+    body: { query, ...(language ? { language } : {}) },
   });
 }
 
@@ -31,13 +33,14 @@ export async function removeReportFromIndex(reportId) {
   });
 }
 
-export async function searchReportsConversational(query, sessionId, patientUserId) {
+export async function searchReportsConversational(query, sessionId, patientUserId, language) {
   return request('/search/chat', {
     method: 'POST',
     body: {
       query,
       session_id: sessionId,
       ...(patientUserId ? { patient_user_id: patientUserId } : {}),
+      ...(language ? { language } : {}),
     },
   });
 }

@@ -31,7 +31,7 @@ export default function PatientIdBadge({ customProfile }) {
       title="Your Patient ID — share this with a doctor to let them link your records"
     >
       <span className="text-slate-400">Patient ID</span>
-      <span className="font-mono text-base font-semibold text-slate-800 tracking-wide">
+      <span translate="no" className="notranslate font-mono text-base font-semibold text-slate-800 tracking-wide">
         {profile.patient_code}
       </span>
     </span>

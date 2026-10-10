@@ -173,7 +173,7 @@ export default function CheckInCodeCard() {
               tracked characters (tracking-[0.2em] adds ~20% width per
               character) must fit even in the card's narrowest realistic
               rendered width before any @container step kicks in. */}
-          <span className="inline-block font-black tracking-[0.2em] text-blue-700 whitespace-nowrap text-3xl @xs:text-4xl @sm:text-5xl @md:text-6xl">
+          <span translate="no" className="notranslate inline-block font-black tracking-[0.2em] text-blue-700 whitespace-nowrap text-3xl @xs:text-4xl @sm:text-5xl @md:text-6xl">
             {code}
           </span>
         </div>

@@ -7,6 +7,7 @@ import ResponsiveSidebar from "../../../components/Common/ResponsiveSidebar";
 import ProfileDropdown from "../../settings/components/ProfileDropdown";
 import PatientIdBadge from "../../../components/Common/PatientIdBadge";
 import NotificationBell from "../../../components/Common/NotificationBell";
+import LanguageToggle from "../../../components/Common/LanguageToggle";
 import SettingsModal from "../../settings/components/SettingsModal";
 import {
   LayoutGrid,
@@ -69,7 +70,7 @@ function ChatBubble({ message, onReplay, isSpeaking, isLoading }) {
   if (isPatient) {
     return (
       <div className="flex justify-end">
-        <div className="bg-blue-700 text-white text-sm rounded-2xl rounded-br-sm px-4 py-2.5 max-w-[80%]">
+        <div translate="no" className="notranslate bg-blue-700 text-white text-sm rounded-2xl rounded-br-sm px-4 py-2.5 max-w-[80%]">
           {message.text}
         </div>
       </div>
@@ -86,7 +87,8 @@ function ChatBubble({ message, onReplay, isSpeaking, isLoading }) {
     <div className="flex justify-start">
       <div className="max-w-[85%]">
         <div
-          className={`text-sm rounded-2xl rounded-bl-sm px-4 py-3 ${
+          translate="no"
+          className={`notranslate text-sm rounded-2xl rounded-bl-sm px-4 py-3 ${
             message.isError
               ? "bg-red-50 text-red-700 border border-red-100 "
               : "bg-slate-50 text-slate-700 border border-slate-100 "
@@ -965,6 +967,8 @@ export default function IntakeChat() {
         <header className="shrink-0 flex items-center justify-end gap-4 px-6 lg:px-8 py-5 border-b border-slate-200 bg-white ">
           <NotificationBell />
           <PatientIdBadge />
+
+          <LanguageToggle />
           <ProfileDropdown />
         </header>
 

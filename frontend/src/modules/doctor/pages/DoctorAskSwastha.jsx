@@ -20,7 +20,9 @@ import {
   ThumbsUp,
   ThumbsDown,
 } from "lucide-react";
+import { useLanguage } from "../../../context/LanguageContext";
 import NotificationBell from "../../../components/Common/NotificationBell";
+import LanguageToggle from "../../../components/Common/LanguageToggle";
 
 const EXAMPLE_QUESTIONS = [
   "Has this patient had any drug allergies or reactions?",
@@ -66,6 +68,7 @@ function newSessionId() {
 }
 
 export default function DoctorAskSwastha() {
+  const { language } = useLanguage();
   const [patients, setPatients] = useState([]);
   const [isFetchingPatients, setIsFetchingPatients] = useState(true);
   const [isPickerOpen, setIsPickerOpen] = useState(false);
@@ -207,7 +210,7 @@ export default function DoctorAskSwastha() {
     setLoading(true);
 
     try {
-      const result = await searchReportsConversational(trimmed, sessionId, patientUserId);
+      const result = await searchReportsConversational(trimmed, sessionId, patientUserId, language);
       setThreads((prev) => ({
         ...prev,
         [patientUserId]: {
@@ -277,6 +280,8 @@ export default function DoctorAskSwastha() {
         <header className="shrink-0 flex items-center justify-end gap-4 px-6 lg:px-8 py-5 border-b border-slate-200 bg-white">
           <AiNoticeInfoLink feature="ask_swastha" />
           <NotificationBell />
+
+          <LanguageToggle />
           <ProfileDropdown />
         </header>
 
@@ -498,7 +503,7 @@ function ChatBubble({ message, onRetry, disabled }) {
   if (isUser) {
     return (
       <div className="flex justify-end">
-        <div className="bg-blue-700 text-white text-sm rounded-2xl rounded-br-sm px-4 py-2.5 max-w-[80%]">
+        <div translate="no" className="notranslate bg-blue-700 text-white text-sm rounded-2xl rounded-br-sm px-4 py-2.5 max-w-[80%]">
           {message.text}
         </div>
       </div>
@@ -539,7 +544,8 @@ function ChatBubble({ message, onRetry, disabled }) {
   return (
     <div className="flex justify-start">
       <div
-        className={`text-sm rounded-2xl rounded-bl-sm px-4 py-3 max-w-[85%] ${
+        translate="no"
+        className={`notranslate text-sm rounded-2xl rounded-bl-sm px-4 py-3 max-w-[85%] ${
           isErrorLike
             ? "bg-red-50 text-red-700 border border-red-100"
             : "bg-slate-50 text-slate-700 border border-slate-100"
