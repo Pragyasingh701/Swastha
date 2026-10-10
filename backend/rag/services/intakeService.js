@@ -1012,7 +1012,7 @@ function buildSystemPrompt(section, structuredHistory, lastQuestion, language) {
   return `You are a clinical intake assistant for an Indian OPD (outpatient) clinic. You are talking directly to a PATIENT before their doctor consult, gathering a structured history. You NEVER diagnose, suggest a condition, or give medical advice — you only ask focused follow-up questions and structure what the patient tells you.
 
 LANGUAGE — read this before anything else:
-Write EVERY patient-facing string in ${languageName}. That means "next_question" (including the "finalize" closing message) and every string inside "quick_reply_options.options" — those are shown to the patient and read aloud to them, so a patient who only reads ${languageName} must be able to understand them completely.
+Write EVERY patient-facing string in ${languageName}.${language === 'en-IN' ? ' This means plain English words in Latin script ONLY — never Hindi, never romanized Hindi / Hinglish (e.g. never "Kahan par dard hai?" or "Jodon mein"), even if the patient\'s own message is in Hindi or Hinglish or the greeting above says "Namaste".' : ''} That means "next_question" (including the "finalize" closing message) and every string inside "quick_reply_options.options" — those are shown to the patient and read aloud to them, so a patient who only reads ${languageName} must be able to understand them completely.
 Keep widely-recognised clinical terms and medicine names as-is where a patient would actually recognise them better that way (e.g. "fever", "BP", "sugar", brand names) rather than forcing an unnatural literal translation — natural clinic speech, not textbook translation.
 EXCEPTION — "updated_fields" is NOT patient-facing: every value you write inside "updated_fields" must stay in ENGLISH, exactly as before, because it becomes the doctor's clinical record. So you may ask the patient a question in ${languageName} and record their answer in English in the same turn. JSON keys/field names are ALWAYS English and never translated.
 
@@ -1357,6 +1357,30 @@ const LATIN_LETTER_RE = /[A-Za-z]/;
  * Devanagari", since there is no legitimate reason for Devanagari to
  * appear in an English-session question.
  */
+// Distinctive romanized-Hindi (Hinglish) words — chosen to be ones that are
+// not English words, so a hit is a real signal. Without this, an en-IN
+// session accepted romanized Hindi ("Kahan par dard ya body ache sabse
+// zyada mehsoos ho raha hai?") because that contains no Devanagari, and a
+// patient who chose English got Hinglish questions and chips.
+const HINGLISH_WORDS = new Set([
+  'kahan', 'kya', 'kab', 'kaise', 'kyun', 'kitna', 'kitne', 'kaun',
+  'aap', 'aapko', 'aapka', 'aapki', 'aapke', 'mujhe', 'mera', 'meri',
+  'hai', 'hain', 'tha', 'thi', 'raha', 'rahi', 'rahe', 'hota', 'hoti', 'hua', 'hui',
+  'mein', 'nahi', 'nahin', 'haan', 'bhi', 'sabse', 'zyada', 'jyada', 'thoda', 'bahut',
+  'dard', 'takleef', 'mehsoos', 'jism', 'peth', 'kamar', 'sir', 'bukhar', 'khansi',
+  'jodon', 'jodo', 'taangon', 'baahon', 'saare', 'poore', 'shuru', 'pehle', 'baad',
+]);
+
+function looksLikeHinglish(text) {
+  const words = String(text || '').toLowerCase().match(/[a-z]+/g) || [];
+  if (words.length === 0) return false;
+  const hits = words.filter((w) => HINGLISH_WORDS.has(w)).length;
+  // Two distinctive words in a sentence; for a short option label, one is
+  // enough ("Jodon mein (Joints)" already has two, but "Peth dard" etc. is
+  // short and unambiguous).
+  return hits >= 2 || (hits >= 1 && words.length <= 4);
+}
+
 function matchesSessionLanguage(text, language) {
   const t = String(text || '').trim();
   if (!t) return true; // empty is handled by the empty-question fallback, not here
@@ -1366,7 +1390,7 @@ function matchesSessionLanguage(text, language) {
     if (!LATIN_LETTER_RE.test(t)) return true;
     return DEVANAGARI_RE.test(t);
   }
-  if (language === 'en-IN') return !DEVANAGARI_RE.test(t);
+  if (language === 'en-IN') return !DEVANAGARI_RE.test(t) && !looksLikeHinglish(t);
   return true; // unknown language — nothing to enforce against
 }
 
@@ -2229,7 +2253,7 @@ export async function runIntakeTurn({ section, structuredHistory, patientMessage
   };
 }
 
-export { emptyStructuredHistory, hpiComplete, SECTIONS };
+export { emptyStructuredHistory, hpiComplete, SECTIONS, matchesSessionLanguage };
 
 // Internal helpers exposed for unit testing only — same convention as
 // aiClient.js's __testing export. Not part of the module's real surface.
