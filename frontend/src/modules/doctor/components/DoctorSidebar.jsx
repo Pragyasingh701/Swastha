@@ -11,6 +11,7 @@ const navItems = [
   { label: "Patients", icon: "groups", route: "/doctor/patients" },
   { label: "AI Insights", icon: "smart_toy", route: "/doctor/clinical-intelligence" },
   { label: "Ask Swastha", icon: "auto_awesome", route: "/doctor/ask-swastha" },
+  { label: "Research", icon: "travel_explore", route: "/doctor/research" },
 ];
 
 export default function DoctorSidebar() {

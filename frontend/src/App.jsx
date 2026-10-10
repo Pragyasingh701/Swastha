@@ -20,6 +20,7 @@ import IntakeQueue from "./modules/doctor/pages/IntakeQueue";
 import DoctorPatients from "./modules/doctor/pages/DoctorPatients";
 import ClinicalIntelligence from "./modules/doctor/pages/ClinicalIntelligence";
 import DoctorAskSwastha from "./modules/doctor/pages/DoctorAskSwastha";
+import DoctorResearch from "./modules/doctor/pages/DoctorResearch";
 import DoctorReports from "./modules/doctor/pages/DoctorReports";
 import DoctorMessages from "./modules/doctor/pages/DoctorMessages";
 
@@ -312,6 +313,15 @@ export default function App() {
           element={
             <DoctorRoute>
               <DoctorAskSwastha />
+            </DoctorRoute>
+          }
+        />
+
+        <Route
+          path="/doctor/research"
+          element={
+            <DoctorRoute>
+              <DoctorResearch />
             </DoctorRoute>
           }
         />
