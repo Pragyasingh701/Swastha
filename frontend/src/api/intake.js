@@ -11,10 +11,12 @@ function request(path, options = {}) {
   return apiRequest(options.method || 'GET', path, { ...options, baseUrl: RAG_BASE_URL });
 }
 
+// Audio is always fetched separately (replayIntakeAudio) so the first
+// question appears without waiting on speech synthesis.
 export async function startIntake(language) {
   return request('/intake/start', {
     method: 'POST',
-    body: language ? { language } : {},
+    body: { ...(language ? { language } : {}), skip_audio: true },
   });
 }
 
@@ -73,10 +75,14 @@ export async function transcribeIntakeAudio(sessionId, audioBlob) {
   return data;
 }
 
-export async function sendIntakeTurn(sessionId, message) {
+// skipAudio: the patient has the voice muted, so the server can skip
+// synthesizing the question audio (the slowest part of a turn).
+export async function sendIntakeTurn(sessionId, message, { skipAudio = false } = {}) {
   return request('/intake/turn', {
     method: 'POST',
-    body: { session_id: sessionId, message },
+    body: skipAudio
+      ? { session_id: sessionId, message, skip_audio: true }
+      : { session_id: sessionId, message },
   });
 }
 

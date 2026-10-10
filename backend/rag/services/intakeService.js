@@ -2254,8 +2254,35 @@ export const __testing = {
   buildSystemPrompt,
 };
 
+const OPENING_TURN = {
+  'en-IN': {
+    question: 'Namaste! Please tell me what brings you to the clinic today.',
+    options: ['Fever or cold', 'Stomach pain or vomiting', 'Body ache or joint pain', 'Cough or breathing issue', 'Other problem'],
+  },
+  'hi-IN': {
+    question: 'नमस्ते! आज आपको क्या परेशानी हो रही है, कृपया विस्तार से बताएं।',
+    options: ['बुखार और ठंड लगना', 'पेट दर्द', 'सिर दर्द', 'खांसी और जुकाम', 'कमजोरी या चक्कर आना'],
+  },
+};
+
+// Same shape runIntakeTurn returns, for a brand-new session.
+function openingTurnFor(language) {
+  const { question, options } = OPENING_TURN[language] || OPENING_TURN['hi-IN'];
+  return {
+    ok: true,
+    next_question: question,
+    quick_reply_options: { options: [...options], allow_multiple: false },
+    structured_history: emptyStructuredHistory(),
+    section: 'chief_complaint',
+    section_complete: false,
+    red_flag: false,
+    red_flag_reason: null,
+    red_flag_is_new: false,
+  };
+}
+
 /**
- * Creates a new intake_sessions row and runs the first turn (empty
+ * Creates a new intake_sessions row and returns the opening turn (empty
  * structured_history, section "chief_complaint", no patient message yet —
  * the first turn just asks the patient to state their complaint).
  *
@@ -2265,13 +2292,10 @@ export const __testing = {
 export async function startIntakeSession(patientId, { doctorId = null, origin = 'remote', language = 'hi-IN' } = {}) {
   if (!patientId) throw new Error('startIntakeSession: patientId is required');
 
-  const structuredHistory = emptyStructuredHistory();
-  const turn = await runIntakeTurn({
-    section: 'chief_complaint',
-    structuredHistory,
-    patientMessage: '(session just started — greet the patient and ask them to describe their main complaint today)',
-    language,
-  });
+  // The opener is the same greeting + common-complaint chips every time, so
+  // it's served from a fixed per-language template instead of a model call —
+  // that call alone added 2-3s to every session start for no variation.
+  const turn = openingTurnFor(language);
 
   const { data, error } = await supabase
     .from('intake_sessions')

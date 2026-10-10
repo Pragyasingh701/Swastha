@@ -33,8 +33,6 @@ const uploadAudio = multer({
  * flow keeps working untouched (PRD §3 — a TTS hiccup never blocks intake).
  */
 async function withAudio(payload, questionText, language) {
-  const speech = await synthesizeSpeech(questionText, language);
-
   // Options are spoken as a SEPARATE clip rather than appended to the
   // question's own text. The question text repeats across sessions (the
   // opening question is identical every time — a permanent cache hit),
@@ -43,8 +41,14 @@ async function withAudio(payload, questionText, language) {
   // of ttsService's cache hits, costing real Sarvam credit per session.
   // Keeping them separate also lets the patient answer as soon as they've
   // heard the question, without sitting through the option list.
+  //
+  // Question and options clips are independent — synthesized together so the
+  // turn waits for the slower of the two, not the sum of both.
   const optionsText = buildOptionsSpeech(payload.quick_reply_options?.options, language);
-  const optionsSpeech = optionsText ? await synthesizeSpeech(optionsText, language) : null;
+  const [speech, optionsSpeech] = await Promise.all([
+    synthesizeSpeech(questionText, language),
+    optionsText ? synthesizeSpeech(optionsText, language) : null,
+  ]);
 
   if (!speech.ok) return payload;
 
@@ -179,13 +183,17 @@ router.post('/start', requireAuth, async (req, res) => {
 
   try {
     const { session, turn } = await startIntakeSession(patientId, { language });
-    return res.status(200).json(await withAudio({
+    const payload = {
       session_id: session.id,
       next_question: turn.next_question,
       quick_reply_options: turn.quick_reply_options,
       section: turn.section,
       red_flag: turn.red_flag,
-    }, turn.next_question, language));
+    };
+    // See /turn — the client fetches audio separately via /replay-audio.
+    return res.status(200).json(
+      req.body?.skip_audio === true ? payload : await withAudio(payload, turn.next_question, language)
+    );
   } catch (err) {
     console.error(`[POST /api/intake/start] failed for patient ${patientId}:`, err);
     return res.status(500).json({ error: 'Could not start intake session.' });
@@ -201,7 +209,7 @@ router.post('/start', requireAuth, async (req, res) => {
  */
 router.post('/turn', requireAuth, async (req, res) => {
   const patientId = req.user.userId;
-  const { session_id: sessionId, message } = req.body || {};
+  const { session_id: sessionId, message, skip_audio: skipAudio } = req.body || {};
 
   if (!sessionId || typeof sessionId !== 'string') {
     return res.status(400).json({ error: 'session_id is required' });
@@ -224,7 +232,7 @@ router.post('/turn', requireAuth, async (req, res) => {
     // fixed at /start and a client cannot switch voices mid-session.
     const language = normalizeLanguage(session.language || DEFAULT_LANGUAGE);
 
-    return res.status(200).json(await withAudio({
+    const payload = {
       session_id: session.id,
       next_question: turn.next_question,
       quick_reply_options: turn.quick_reply_options,
@@ -234,7 +242,14 @@ router.post('/turn', requireAuth, async (req, res) => {
       red_flag: turn.red_flag,
       red_flag_reason: turn.red_flag_reason,
       red_flag_is_new: turn.red_flag_is_new,
-    }, turn.next_question, language));
+    };
+
+    // A muted client never plays the audio, so synthesizing it only adds
+    // seconds of dead "Thinking..." time. If they unmute later, the Listen
+    // button fetches it on demand via /replay-audio.
+    return res.status(200).json(
+      skipAudio === true ? payload : await withAudio(payload, turn.next_question, language)
+    );
   } catch (err) {
     console.error(`[POST /api/intake/turn] failed for patient ${patientId}, session ${sessionId}:`, err);
     return res.status(500).json({ error: 'Could not process intake turn.' });
@@ -390,15 +405,21 @@ router.post('/replay-audio', requireAuth, async (req, res) => {
     }
 
     const wanted = text.trim();
-    const isOwnQuestion = (Array.isArray(session.turns) ? session.turns : []).some(
-      (t) => t && t.role === 'assistant' && typeof t.text === 'string' && t.text.trim() === wanted
-    );
-    if (!isOwnQuestion) {
+    // Latest matching turn — its options (if any) are read out after the
+    // question, same as when the audio used to ride along with /turn.
+    const ownTurn = [...(Array.isArray(session.turns) ? session.turns : [])]
+      .reverse()
+      .find((t) => t && t.role === 'assistant' && typeof t.text === 'string' && t.text.trim() === wanted);
+    if (!ownTurn) {
       return res.status(400).json({ error: 'That text is not a question from this session.' });
     }
 
     const language = normalizeLanguage(session.language || DEFAULT_LANGUAGE);
-    const speech = await synthesizeSpeech(wanted, language);
+    const optionsText = buildOptionsSpeech(ownTurn.options, language);
+    const [speech, optionsSpeech] = await Promise.all([
+      synthesizeSpeech(wanted, language),
+      optionsText ? synthesizeSpeech(optionsText, language) : null,
+    ]);
 
     if (!speech.ok) {
       return res.status(502).json({ error: speech.error_code });
@@ -409,6 +430,12 @@ router.post('/replay-audio', requireAuth, async (req, res) => {
       audio_mime_type: speech.mime_type,
       audio_provider: speech.provider,
       language,
+      ...(optionsSpeech?.ok
+        ? {
+            options_audio_base64: optionsSpeech.audio_base64,
+            options_audio_mime_type: optionsSpeech.mime_type,
+          }
+        : {}),
     });
   } catch (err) {
     console.error(`[POST /api/intake/replay-audio] failed for patient ${patientId}, session ${sessionId}:`, err);

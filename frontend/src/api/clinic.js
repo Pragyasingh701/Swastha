@@ -29,7 +29,7 @@ export async function verifyClinicCode(code) {
 export async function verifyClinicOtp({ doctorId, language }) {
   return request('/verify-otp', {
     method: 'POST',
-    body: { doctorId, ...(language ? { language } : {}) },
+    body: { doctorId, ...(language ? { language } : {}), skip_audio: true },
   });
 }
 

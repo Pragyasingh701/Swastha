@@ -1,6 +1,7 @@
 import crypto from 'crypto';
 import supabase from '../config/supabase.js';
 import { createNotification } from './notifications.js';
+import { listReportActivityForPatients } from './reports.js';
 
 // Pushing a notification is best-effort from a linking action's point of
 // view — a doctor's request/patient's response must NOT fail just because
@@ -250,6 +251,95 @@ export const getDoctorPatients = async (doctorId) => {
     console.warn('Doctor patient fetch warning:', error?.message || error);
     return [];
   }
+};
+
+const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
+
+/**
+ * Dashboard stats for a doctor, computed server-side so they cover every
+ * patient who ever accepted this doctor's link, including ones whose 24h
+ * access window has since lapsed. Counts only — no patient or report
+ * content is returned, so this doesn't need the access-window gate
+ * getDoctorPatients / isDoctorLinkedToPatient apply.
+ *
+ * "Reports logged" is the doctor's intake History (the sessions they've
+ * marked Completed or Removed — intake_session_actions, one per session,
+ * dated by the latest action), not the reports patients upload: those
+ * aren't tied to any doctor, so counting them credited this doctor with
+ * other clinicians' records. Prescriptions are the exception — there's no
+ * intake equivalent, so they still come from uploaded reports.
+ */
+export const getDoctorLifetimeStats = async (doctorId) => {
+  const empty = {
+    totalPatients: 0,
+    totalReports: 0,
+    reportsThisWeek: 0,
+    reportsPrevWeek: 0,
+    newPatientsThisWeek: 0,
+    prescriptionsThisWeek: 0,
+  };
+  if (!doctorId || !supabase) return empty;
+
+  const { data: links, error } = await supabase
+    .from('doctor_patient')
+    .select('patient_id, created_at, responded_at')
+    .eq('doctor_id', doctorId)
+    .eq('status', 'accepted');
+
+  if (error) {
+    throw error;
+  }
+
+  const patientIds = [...new Set((links || []).map((l) => l.patient_id).filter(Boolean))];
+  if (patientIds.length === 0) return empty;
+
+  const [reportRows, actionsResult] = await Promise.all([
+    listReportActivityForPatients(patientIds),
+    supabase
+      .from('intake_session_actions')
+      .select('session_id, acted_at')
+      .eq('doctor_id', doctorId)
+      .in('patient_id', patientIds),
+  ]);
+
+  if (actionsResult.error) {
+    throw actionsResult.error;
+  }
+
+  // One entry per session (a session can be actioned more than once), dated
+  // by its latest action — same rule the History list uses.
+  const latestActionBySession = new Map();
+  for (const a of actionsResult.data || []) {
+    const prev = latestActionBySession.get(a.session_id);
+    if (!prev || new Date(a.acted_at) > new Date(prev)) {
+      latestActionBySession.set(a.session_id, a.acted_at);
+    }
+  }
+  const historyDates = [...latestActionBySession.values()];
+
+  const now = Date.now();
+  const weekStart = now - WEEK_MS;
+  const prevWeekStart = now - 2 * WEEK_MS;
+  const inThisWeek = (at) => at != null && new Date(at).getTime() >= weekStart;
+  const inPrevWeek = (at) => {
+    if (at == null) return false;
+    const t = new Date(at).getTime();
+    return t >= prevWeekStart && t < weekStart;
+  };
+
+  return {
+    totalPatients: patientIds.length,
+    totalReports: historyDates.length,
+    reportsThisWeek: historyDates.filter(inThisWeek).length,
+    reportsPrevWeek: historyDates.filter(inPrevWeek).length,
+    // responded_at is when the patient accepted — and a clinic check-in
+    // re-stamps it on an already-linked pair — so it tracks "linked" better
+    // than created_at (the original request time).
+    newPatientsThisWeek: (links || []).filter((l) => inThisWeek(l.responded_at || l.created_at)).length,
+    prescriptionsThisWeek: reportRows.filter(
+      (r) => (r.category === 'Prescription' || r.category === 'Prescriptions') && inThisWeek(r.at)
+    ).length,
+  };
 };
 
 /**

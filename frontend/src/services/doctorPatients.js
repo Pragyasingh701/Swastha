@@ -9,6 +9,16 @@ export async function getDoctorPatients() {
   return result.patients || [];
 }
 
+/**
+ * DOCTOR-facing dashboard stats (totals + this-week figures). Reports logged
+ * is the doctor's intake History, and patients whose 24h access has expired
+ * are covered, which getDoctorPatients can't report on (they come back as
+ * name-only 'expired' cards).
+ */
+export async function getDoctorLifetimeStats() {
+  return request('/stats');
+}
+
 export async function linkPatientToDoctor(patientCode) {
   const result = await request('/link', {
     method: 'POST',
