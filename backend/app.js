@@ -9,6 +9,7 @@ import notificationsRoutes from './routes/notifications.js';
 import clinicRoutes from './routes/clinic.js';
 import intakeAdminRoutes from './routes/intakeAdmin.js';
 import cryptoRoutes from './routes/crypto.js';
+import researchRoutes from './routes/research.js';
 import { piiWireBoundary } from './middleware/wireCrypto.js';
 
 import fs from 'fs';
@@ -64,6 +65,7 @@ app.use('/api/reports', reportsRoutes);
 app.use('/api/doctor-patients', doctorPatientsRoutes);
 app.use('/api/notifications', notificationsRoutes);
 app.use('/api/clinic', clinicRoutes);
+app.use('/api/research', researchRoutes);
 // Machine-to-machine only (shared-secret protected, not JWT) — see
 // routes/intakeAdmin.js's own comment for why this lives outside the
 // normal patient/doctor route boundary.
