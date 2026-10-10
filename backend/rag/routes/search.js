@@ -8,7 +8,8 @@ const router = express.Router();
 
 /**
  * POST /api/search
- * Body: { query: string }
+ * Body: { query: string, language?: string }
+ * language ('hi' / 'hi-IN') asks for a Hindi answer; anything else is English.
  * user_id comes from the JWT (req.user.userId), never from the request
  * body — a client can't ask to search someone else's records.
  *
@@ -19,7 +20,7 @@ const router = express.Router();
  * acknowledgement given via either endpoint satisfies both.
  */
 router.post('/', requireAuth, requireNoticeAck('ask_swastha'), async (req, res) => {
-  const { query } = req.body || {};
+  const { query, language } = req.body || {};
   const userId = req.user.userId;
 
   if (!query || typeof query !== 'string' || !query.trim()) {
@@ -27,7 +28,7 @@ router.post('/', requireAuth, requireNoticeAck('ask_swastha'), async (req, res) 
   }
 
   try {
-    const result = await searchReports(query, userId);
+    const result = await searchReports(query, userId, language);
     // /api/search has no patient-targeting capability (unlike
     // /api/search/chat's patient_user_id) — the caller is always the
     // target, so is_cross_patient is always false here.

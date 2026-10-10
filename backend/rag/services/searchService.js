@@ -4,6 +4,7 @@ import { supabase } from '../config/supabase.js';
 // runAI('generation') never throws — check `.ok` before parsing.
 import { embedText, runAI } from '../config/aiClient.js';
 import { FULL_CONTEXT_MAX_CHARS } from '../config/env.js';
+import { languageInstruction, normalizeResponseLanguage } from '../config/responseLanguage.js';
 
 const MATCH_COUNT = 5;
 // Cosine similarity threshold below which a chunk is considered irrelevant.
@@ -22,6 +23,11 @@ const SIMILARITY_THRESHOLD = 0.65;
 // same generic wall of text — see the fix this replaced).
 const NO_RESULTS_MESSAGE =
   'No relevant records found in your health history for this question.';
+const NO_RESULTS_MESSAGE_HI = 'इस प्रश्न के लिए आपके स्वास्थ्य इतिहास में कोई संबंधित रिकॉर्ड नहीं मिला।';
+
+function noResultsMessage(language) {
+  return normalizeResponseLanguage(language) === 'hi' ? NO_RESULTS_MESSAGE_HI : NO_RESULTS_MESSAGE;
+}
 
 // Questions ABOUT the whole record set (counts, "list everything", "how
 // many files/reports/diagnoses", or complaints like "why only 5?") cannot
@@ -179,7 +185,7 @@ function isBareLastReportReference(query) {
  * parseStructuredAnswer / sources construction) so the response contract is
  * identical regardless of which special-case path answered it.
  */
-async function answerLastReportQuestion(query, userId) {
+async function answerLastReportQuestion(query, userId, language) {
   const category = detectLastReportCategory(query);
 
   // Queried directly (newest-first, limit 1) rather than taking the last
@@ -227,8 +233,8 @@ async function answerLastReportQuestion(query, userId) {
 
   if (!report) {
     return {
-      answer: NO_RESULTS_MESSAGE,
-      structured: { headline: NO_RESULTS_MESSAGE, keyFacts: [], caveat: '' },
+      answer: noResultsMessage(language),
+      structured: { headline: noResultsMessage(language), keyFacts: [], caveat: '' },
       sources: [],
       noResultsFound: true,
       mode: 'last_report',
@@ -262,7 +268,7 @@ async function answerLastReportQuestion(query, userId) {
   // gets the same summary treatment as "summarize my last report" instead.
   const effectiveQuery = isBareLastReportReference(query) ? 'Summarize this report.' : query;
 
-  const prompt = buildGroundedPrompt(`${effectiveQuery}${fallbackNote}`, excerpts);
+  const prompt = buildGroundedPrompt(`${effectiveQuery}${fallbackNote}`, excerpts, language);
   const gen = await runAI({ task: 'generation', input: prompt, label: 'search-last-report' });
 
   if (!gen.ok) {
@@ -441,7 +447,7 @@ function capReportsToCharBudget(reports) {
  * mentioned it, since a count/summary answer is actively misleading without
  * that disclosure.
  */
-async function answerAggregateQuestion(query, userId) {
+async function answerAggregateQuestion(query, userId, language) {
   const { reports: allReports, truncated: rowLimitTruncated } = await loadPatientReportsForPrompt(userId);
 
   // "Summarize all my prescriptions"/"list my lab reports" names one or more
@@ -470,8 +476,8 @@ async function answerAggregateQuestion(query, userId) {
 
   if (allReports.length === 0) {
     return {
-      answer: NO_RESULTS_MESSAGE,
-      structured: { headline: NO_RESULTS_MESSAGE, keyFacts: [], caveat: '' },
+      answer: noResultsMessage(language),
+      structured: { headline: noResultsMessage(language), keyFacts: [], caveat: '' },
       sources: [],
       noResultsFound: true,
       mode: 'aggregate',
@@ -527,7 +533,7 @@ async function answerAggregateQuestion(query, userId) {
     ? ` (Note: this patient has ${totalDescription} report(s) on file; only the ${reports.length} most recent are included below — any count or total you give must say it may be incomplete.)`
     : '';
 
-  const prompt = buildGroundedPrompt(`${query}${cappedNote}`, excerpts);
+  const prompt = buildGroundedPrompt(`${query}${cappedNote}`, excerpts, language);
   const gen = await runAI({ task: 'generation', input: prompt, label: 'search-aggregate' });
 
   if (!gen.ok) {
@@ -571,8 +577,9 @@ async function answerAggregateQuestion(query, userId) {
  *
  * @param {string} query
  * @param {string} userId
+ * @param {string} [language] - 'hi' / 'hi-IN' to answer in Hindi; anything else is English
  */
-export async function searchReports(query, userId) {
+export async function searchReports(query, userId, language) {
   if (!query || !query.trim()) {
     throw new Error('searchReports: query is required');
   }
@@ -582,7 +589,7 @@ export async function searchReports(query, userId) {
   }
 
   if (isAggregateQuestion(query)) {
-    return answerAggregateQuestion(query, userId);
+    return answerAggregateQuestion(query, userId, language);
   }
 
   // Checked before isAggregateQuestion's WHOLE_HISTORY_PATTERN could ever
@@ -591,7 +598,7 @@ export async function searchReports(query, userId) {
   // report directly rather than letting a singular "last/latest" question
   // fall through to full-context or top-K retrieval with no recency signal.
   if (isLastReportQuestion(query)) {
-    return answerLastReportQuestion(query, userId);
+    return answerLastReportQuestion(query, userId, language);
   }
 
   let queryEmbedding;
@@ -622,7 +629,7 @@ export async function searchReports(query, userId) {
     // Tailored to the actual question (a real health question with no
     // matching records vs. an off-topic/greeting message) rather than one
     // fixed sentence for every zero-match case — see generateNoMatchAnswer.
-    const noMatch = await generateNoMatchAnswer(query, 'search-no-match');
+    const noMatch = await generateNoMatchAnswer(query, 'search-no-match', language);
     return {
       answer: noMatch.headline,
       structured: noMatch,
@@ -662,7 +669,7 @@ export async function searchReports(query, userId) {
     };
   });
 
-  const prompt = buildGroundedPrompt(query, excerpts);
+  const prompt = buildGroundedPrompt(query, excerpts, language);
 
   const gen = await runAI({ task: 'generation', input: prompt, label: 'search' });
 
@@ -760,7 +767,7 @@ function isSummaryRequest(query) {
   return SUMMARY_REQUEST_PATTERN.test(query);
 }
 
-function buildGroundedPrompt(query, excerpts) {
+function buildGroundedPrompt(query, excerpts, language) {
   const excerptBlock = excerpts
     .map(
       (e) =>
@@ -793,7 +800,7 @@ Strict rules:
   - If the excerpts contain NOTHING relevant to the question at all, say so specifically: name what the question asked for and state plainly that none of the provided records mention it (e.g. "Your records don't mention any diagnosis or treatment for hypertension.").
   - If the excerpts contain SOMETHING related but not a complete or exact answer (e.g. they list medications but don't state what condition each one treats, or they're for a different but similar condition), say specifically what they DO show, in "keyFacts", and use "caveat" to explain exactly what's missing or uncertain and why you can't confirm the full answer from what's given. Never invent the missing link (e.g. never assert a drug treats a condition unless an excerpt says so) — describe the gap instead of guessing across it.
   - Never use a generic, one-size-fits-all non-answer — every "couldn't fully answer" response must be specific to what was actually asked and what the excerpts actually contain.
-- Do not give medical advice or recommendations beyond what is written in the excerpts — you are reporting what the records say, not interpreting or advising.${summaryGuidance}
+- Do not give medical advice or recommendations beyond what is written in the excerpts — you are reporting what the records say, not interpreting or advising.${summaryGuidance}${languageInstruction(language)}
 
 <excerpts>
 ${excerptBlock}
@@ -835,7 +842,7 @@ Rules for the JSON:
  * treating a non-JSON response as the whole headline, so this reuses that
  * same parsing path with no new contract to maintain.
  */
-function buildNoMatchPrompt(query) {
+function buildNoMatchPrompt(query, language) {
   // Escaped the same way excerpt text is (see escapeAngleBrackets) — the
   // query is patient-authored free text embedded directly into the prompt,
   // so it must not be able to look like a delimiter or a new instruction.
@@ -852,7 +859,7 @@ Decide which of these two situations this is, and reply with ONE short, plain se
 - If this looks like a genuine question about the user's health, symptoms, medications, diagnoses, or medical history: write one specific sentence saying their records don't contain information about that particular thing — name the actual topic they asked about (e.g. "Your records don't contain any information about hypertension medication."). Do not guess or invent an answer; simply state plainly that this specific thing isn't in their records.
 - If this is NOT a question about health records at all (a greeting, small talk, asking about you, or anything unrelated to their medical history): write one short, friendly sentence redirecting them to ask about their health records instead (e.g. "I'm here to help you look through your health records — try asking about a diagnosis, medication, or report."). Do not answer the off-topic question itself.
 
-Reply with exactly one sentence, nothing more.`;
+Reply with exactly one sentence, nothing more.${languageInstruction(language)}`;
 }
 
 // Strips ```json fences etc. that free-tier chat models routinely wrap
@@ -966,14 +973,15 @@ function filterSourcesToCited(sourceReports, keyFacts) {
  *
  * @param {string} query
  * @param {string} label - runAI's label for provider-failover logging (e.g. 'search-no-match', 'chat-no-match')
+ * @param {string} [language] - 'hi' / 'hi-IN' to reply in Hindi; anything else is English
  * @returns {Promise<{ headline: string, keyFacts: [], caveat: string }>}
  */
-async function generateNoMatchAnswer(query, label) {
-  const prompt = buildNoMatchPrompt(query);
+async function generateNoMatchAnswer(query, label, language) {
+  const prompt = buildNoMatchPrompt(query, language);
   const gen = await runAI({ task: 'generation', input: prompt, label });
 
   if (!gen.ok) {
-    return { headline: NO_RESULTS_MESSAGE, keyFacts: [], caveat: '' };
+    return { headline: noResultsMessage(language), keyFacts: [], caveat: '' };
   }
 
   return parseStructuredAnswer(gen.text, []);

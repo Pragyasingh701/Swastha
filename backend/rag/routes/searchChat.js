@@ -17,7 +17,9 @@ const SESSION_ID_PATTERN = /^[A-Za-z0-9_-]{8,128}$/;
 
 /**
  * POST /api/search/chat
- * Body: { query: string, session_id: string, patient_user_id?: string }
+ * Body: { query: string, session_id: string, patient_user_id?: string, language?: string }
+ * language ('hi' / 'hi-IN') asks for the answer to be written in Hindi; anything
+ * else (or omitted) is English — see config/responseLanguage.js.
  *
  * NOTE ON user_id: the brief specified user_id in the request body, but
  * that is deliberately NOT accepted here — it is read from the verified JWT
@@ -42,7 +44,7 @@ const SESSION_ID_PATTERN = /^[A-Za-z0-9_-]{8,128}$/;
  * the patient being asked about.
  */
 router.post('/', requireAuth, requireNoticeAck('ask_swastha'), async (req, res) => {
-  const { query, session_id: sessionId, patient_user_id: patientUserId } = req.body || {};
+  const { query, session_id: sessionId, patient_user_id: patientUserId, language } = req.body || {};
   const callerId = req.user.userId;
 
   if (!query || typeof query !== 'string' || !query.trim()) {
@@ -108,7 +110,7 @@ router.post('/', requireAuth, requireNoticeAck('ask_swastha'), async (req, res) 
   }
 
   try {
-    const result = await conversationalSearch({ query, userId: targetUserId, sessionId });
+    const result = await conversationalSearch({ query, userId: targetUserId, sessionId, language });
     logAccess({
       callerUserId: callerId,
       targetPatientId: targetUserId,

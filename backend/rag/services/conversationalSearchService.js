@@ -85,13 +85,13 @@ Standalone question:`;
  * internally) — it exists only so the caller (searchChat.js) can write it
  * into the access audit log without re-deriving which path actually ran.
  *
- * @param {{ standaloneQuestion: string, trimmedQuery: string, excerpts: object[], sourceReports: object[], sessionId: string, userId: string, mode: 'full_context'|'retrieval' }} params
+ * @param {{ standaloneQuestion: string, trimmedQuery: string, excerpts: object[], sourceReports: object[], sessionId: string, userId: string, mode: 'full_context'|'retrieval', language?: string }} params
  */
-async function generateAndRespond({ standaloneQuestion, trimmedQuery, excerpts, sourceReports, sessionId, userId, mode }) {
+async function generateAndRespond({ standaloneQuestion, trimmedQuery, excerpts, sourceReports, sessionId, userId, mode, language }) {
   // Grounding uses the SAME prompt builder as the one-shot endpoint, so the
   // strict "only use the excerpts / say you couldn't find it" behaviour is
   // identical by construction rather than by a second copy that can drift.
-  const prompt = buildGroundedPrompt(standaloneQuestion, excerpts);
+  const prompt = buildGroundedPrompt(standaloneQuestion, excerpts, language);
 
   // Same detection as the one-shot /api/search path: call runAI directly
   // (not chatModel.invoke, which only returns text and discards `.ok`) so a
@@ -171,10 +171,10 @@ async function generateAndRespond({ standaloneQuestion, trimmedQuery, excerpts, 
  * reports than that limit is exactly the kind of large history this mode
  * isn't meant for) — in either case retrieval below runs exactly as before.
  *
- * @param {{ standaloneQuestion: string, trimmedQuery: string, userId: string, sessionId: string }} params
+ * @param {{ standaloneQuestion: string, trimmedQuery: string, userId: string, sessionId: string, language?: string }} params
  * @returns {Promise<object|null>}
  */
-async function tryFullContextAnswer({ standaloneQuestion, trimmedQuery, userId, sessionId }) {
+async function tryFullContextAnswer({ standaloneQuestion, trimmedQuery, userId, sessionId, language }) {
   const { reports, truncated } = await loadPatientReportsForPrompt(userId);
 
   if (reports.length === 0) {
@@ -229,15 +229,16 @@ async function tryFullContextAnswer({ standaloneQuestion, trimmedQuery, userId, 
     `[conversationalSearch] session ${sessionId}: mode=full-context (${reports.length} reports, ${totalChars} chars)`
   );
 
-  return generateAndRespond({ standaloneQuestion, trimmedQuery, excerpts, sourceReports, sessionId, userId, mode: 'full_context' });
+  return generateAndRespond({ standaloneQuestion, trimmedQuery, excerpts, sourceReports, sessionId, userId, mode: 'full_context', language });
 }
 
 /**
  * Full conversational RAG turn: condense -> retrieve -> ground -> remember.
  *
- * @param {{ query: string, userId: string, sessionId: string }} params
+ * @param {{ query: string, userId: string, sessionId: string, language?: string }} params
+ *   language: 'hi' / 'hi-IN' to answer in Hindi; anything else is English.
  */
-export async function conversationalSearch({ query, userId, sessionId }) {
+export async function conversationalSearch({ query, userId, sessionId, language }) {
   if (!query || !query.trim()) throw new Error('conversationalSearch: query is required');
   if (!userId) throw new Error('conversationalSearch: userId is required');
   if (!sessionId) throw new Error('conversationalSearch: sessionId is required');
@@ -263,7 +264,7 @@ export async function conversationalSearch({ query, userId, sessionId }) {
   // retriever, same as the one-shot /api/search endpoint. Unaffected by
   // full-context mode below — this path never touches embeddings either way.
   if (isAggregateQuestion(standaloneQuestion)) {
-    const result = await answerAggregateQuestion(standaloneQuestion, userId);
+    const result = await answerAggregateQuestion(standaloneQuestion, userId, language);
     if (!result.noResultsFound) {
       await appendTurn(sessionId, userId, trimmedQuery, result.structured.headline);
     }
@@ -277,7 +278,7 @@ export async function conversationalSearch({ query, userId, sessionId }) {
   // behavior this fixes). Resolves directly to the single most recent
   // report instead.
   if (isLastReportQuestion(standaloneQuestion)) {
-    const result = await answerLastReportQuestion(standaloneQuestion, userId);
+    const result = await answerLastReportQuestion(standaloneQuestion, userId, language);
     if (!result.noResultsFound && !result.degraded) {
       await appendTurn(sessionId, userId, trimmedQuery, result.structured.headline);
     }
@@ -289,7 +290,7 @@ export async function conversationalSearch({ query, userId, sessionId }) {
   // search — see tryFullContextAnswer's own doc comment for why. Returns
   // null (never throws) when the patient is over budget, in which case
   // retrieval below runs exactly as before.
-  const fullContextResult = await tryFullContextAnswer({ standaloneQuestion, trimmedQuery, userId, sessionId });
+  const fullContextResult = await tryFullContextAnswer({ standaloneQuestion, trimmedQuery, userId, sessionId, language });
   if (fullContextResult) {
     return fullContextResult;
   }
@@ -305,7 +306,7 @@ export async function conversationalSearch({ query, userId, sessionId }) {
     // generateNoMatchAnswer) rather than one fixed sentence for every
     // zero-match case, and do NOT write this turn to memory — recording
     // "I couldn't find that" as context would poison later rewrites.
-    const noMatch = await generateNoMatchAnswer(standaloneQuestion, 'chat-no-match');
+    const noMatch = await generateNoMatchAnswer(standaloneQuestion, 'chat-no-match', language);
     return {
       answer: noMatch.headline,
       structured: noMatch,
@@ -353,5 +354,5 @@ export async function conversationalSearch({ query, userId, sessionId }) {
     `[conversationalSearch] session ${sessionId}: mode=retrieval (${excerpts.length} chunks, ${sourceReports.length} reports)`
   );
 
-  return generateAndRespond({ standaloneQuestion, trimmedQuery, excerpts, sourceReports, sessionId, userId, mode: 'retrieval' });
+  return generateAndRespond({ standaloneQuestion, trimmedQuery, excerpts, sourceReports, sessionId, userId, mode: 'retrieval', language });
 }
