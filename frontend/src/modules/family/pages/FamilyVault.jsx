@@ -16,6 +16,7 @@ import {
   LogOut,
 } from 'lucide-react';
 import NotificationBell from "../../../components/Common/NotificationBell";
+import LanguageToggle from "../../../components/Common/LanguageToggle";
 import { useAuth } from '../../../context/AuthContext';
 import ProfileDropdown from '../../settings/components/ProfileDropdown';
 import PatientIdBadge from '../../../components/Common/PatientIdBadge';
@@ -213,6 +214,8 @@ function Header({ userName, userEmail }) {
       <NotificationBell />
 
       <PatientIdBadge />
+
+      <LanguageToggle />
 
       <ProfileDropdown />
     </header>

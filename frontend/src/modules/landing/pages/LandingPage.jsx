@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
+import LanguageToggle from "../../../components/Common/LanguageToggle";
 import swasthaLogo from "../../../assets/swastha-logo.png";
 
 const FAQS = [
@@ -108,6 +109,7 @@ export default function LandingPage() {
             </button>
           </nav>
           <div className="flex items-center gap-4">
+            <LanguageToggle />
             <button
               onClick={() => navigate("/login")}
               className="hidden sm:block text-on-surface-variant font-label-md hover:text-primary transition-colors"

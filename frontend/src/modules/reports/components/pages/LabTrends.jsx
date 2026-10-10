@@ -29,6 +29,7 @@ import {
   Beaker,
 } from "lucide-react";
 import NotificationBell from "../../../../components/Common/NotificationBell";
+import LanguageToggle from "../../../../components/Common/LanguageToggle";
 import { useAuth } from "../../../../context/AuthContext";
 import { getLabInsights } from "../../../../api/reports";
 import SettingsModal from "../../../settings/components/SettingsModal";
@@ -156,6 +157,8 @@ export default function LabInsights() {
           <NotificationBell />
 
           <PatientIdBadge />
+
+          <LanguageToggle />
 
           <ProfileDropdown />
         </header>

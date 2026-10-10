@@ -10,6 +10,7 @@ import {
   Trophy,
 } from "lucide-react";
 import NotificationBell from "../../../components/Common/NotificationBell";
+import LanguageToggle from "../../../components/Common/LanguageToggle";
 import { useAuth } from "../../../context/AuthContext";
 import { getDoctorPatients, getDoctorLifetimeStats } from "../../../services/doctorPatients";
 import { getTimelineReports } from "../../../api/reports";
@@ -199,6 +200,8 @@ function TopBar() {
   return (
     <header className="shrink-0 flex items-center justify-end gap-4 px-6 lg:px-8 py-5 border-b border-slate-200 bg-white shadow-sm">
       <NotificationBell />
+
+      <LanguageToggle />
       <ProfileDropdown />
     </header>
   );

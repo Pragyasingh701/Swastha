@@ -30,6 +30,7 @@ import {
   AlertTriangle,
 } from "lucide-react";
 import NotificationBell from "../../../../components/Common/NotificationBell";
+import LanguageToggle from "../../../../components/Common/LanguageToggle";
 
 /* -----------------------------------------------------------
    Nav + category config.
@@ -359,6 +360,8 @@ export default function Timeline() {
           <NotificationBell />
 
           <PatientIdBadge />
+
+          <LanguageToggle />
 
           <ProfileDropdown />
         </header>

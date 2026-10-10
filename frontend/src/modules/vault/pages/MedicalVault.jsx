@@ -30,6 +30,7 @@ import {
   CalendarDays,
 } from "lucide-react";
 import NotificationBell from "../../../components/Common/NotificationBell";
+import LanguageToggle from "../../../components/Common/LanguageToggle";
 
 /* -----------------------------------------------------------
    Nav + category config — same shape as Timeline.jsx so a report's
@@ -389,6 +390,8 @@ function Header({ profile }) {
       <NotificationBell />
 
       <PatientIdBadge customProfile={profile} />
+
+      <LanguageToggle />
 
       <ProfileDropdown customProfile={profile} />
     </header>

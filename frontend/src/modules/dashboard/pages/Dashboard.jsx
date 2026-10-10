@@ -10,6 +10,7 @@ import Logo from "../../../components/Common/Logo";
 import ResponsiveSidebar from "../../../components/Common/ResponsiveSidebar";
 import PatientIdBadge from "../../../components/Common/PatientIdBadge";
 import NotificationBell from "../../../components/Common/NotificationBell";
+import LanguageToggle from "../../../components/Common/LanguageToggle";
 
 import {
   LayoutGrid,
@@ -101,6 +102,8 @@ function Header({ profile }) {
       <NotificationBell />
 
       <PatientIdBadge customProfile={profile} />
+
+      <LanguageToggle />
 
       <ProfileDropdown customProfile={profile} />
     </header>

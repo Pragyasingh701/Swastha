@@ -2,6 +2,7 @@ import React, { useEffect, useState, useMemo, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { Sparkles, Bell, X, CalendarDays, Stethoscope, XCircle, ChevronDown, ChevronRight, AlertTriangle, FlaskConical, ClipboardList, ScanLine, Syringe, FileText } from "lucide-react";
 import NotificationBell from "../../../components/Common/NotificationBell";
+import LanguageToggle from "../../../components/Common/LanguageToggle";
 import DoctorSidebar from "../components/DoctorSidebar";
 import ProfileDropdown from "../../settings/components/ProfileDropdown";
 import { getDoctorPatients, linkPatientToDoctor, deletePatientFromDoctor, requestAccessAgain } from "../../../services/doctorPatients";
@@ -363,6 +364,8 @@ export default function DoctorPatients() {
       <div className="flex-1 flex flex-col h-screen overflow-hidden min-w-0">
         <header className="shrink-0 flex items-center justify-end gap-4 px-6 lg:px-8 py-5 border-b border-slate-200 bg-white ">
           <NotificationBell />
+
+          <LanguageToggle />
           <ProfileDropdown />
         </header>
 
