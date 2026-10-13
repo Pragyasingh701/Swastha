@@ -50,8 +50,6 @@ Swastha/
 │   │   ├── services/                # Vector embedding generator & pgvector match engine
 │   │   ├── langchain/               # Conversational search session store & retriever
 │   │   └── app.js                   # Express sub-app, dynamically imported + mounted by server.js
-│   ├── migrations/                 # Old pgvector migrations (001/002) — current ones live in
-│   │                                # supabase/migrations/ at the repo root, see DB Architecture below
 │   ├── routes/
 │   │   ├── auth.js                 # Auth, Google OAuth, Brevo OTPs, Doctor License Verification
 │   │   ├── family.js               # Family Vault CRUD & Authorization routes
@@ -62,11 +60,15 @@ Swastha/
 │   ├── utils/
 │   │   ├── mailer.js               # Brevo REST API transactional email sender (OTPs & Invites)
 │   │   └── timelineValidation.js   # Input sanitization & validation rules
+│   ├── test/                       # node:test suites, run from the repo root with `npm test`
+│   │                                # (many hit the real configured Supabase project — see wire-encryption.test.js)
 │   ├── uploads/                    # Local storage for uploaded certificates & reports
 │   ├── .env.example                # Backend environment template — also covers the RAG sub-app now
 │   └── server.js                   # Express entry point; mounts backend/rag/app.js at /rag
 ├── frontend/                       # React 18 + Vite + Tailwind CSS Frontend SPA (:5173)
-│   ├── src/
+│   ├── src/                        # Frontend test: `npm run test:frontend` from the repo root (vitest)
+│   │   ├── api/                    # Backend call wrappers (auth, reports, family, intake, search, ...) + PII wire encryption
+│   │   ├── components/common/      # Shared UI (Logo, NotificationBell, ResponsiveSidebar, AiNotice, ...)
 │   │   ├── context/
 │   │   │   └── AuthContext.jsx     # Global Auth Provider & Route Guard state
 │   │   ├── modules/
