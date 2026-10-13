@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../../context/AuthContext';
-import { authService } from '../../../services/auth';
+import { authService } from '../../../api/auth';
 import { X, Trash2, AlertTriangle, Loader2 } from 'lucide-react';
 
 export default function DeleteAccountModal({ isOpen, onClose }) {

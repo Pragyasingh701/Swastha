@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../../../context/AuthContext";
-import { authService } from "../../../services/auth";
+import { authService } from "../../../api/auth";
 import { getFamilyDashboard } from "../../../api/family";
 import { getTimelineReports } from "../../../api/reports";
 import ProfileDropdown from "../../settings/components/ProfileDropdown";

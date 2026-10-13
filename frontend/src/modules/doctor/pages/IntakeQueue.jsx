@@ -19,7 +19,7 @@ import {
   completeIntakeSession,
   removeIntakeSession,
   getIntakeQueueHistory,
-} from "../../../services/doctorPatients";
+} from "../../../api/doctorPatients";
 
 // Module A (Conversational History Engine) — DOCTOR-facing priority queue,
 // its own page/sidebar entry (moved out of DoctorDashboard.jsx per request).

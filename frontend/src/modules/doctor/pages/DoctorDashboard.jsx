@@ -11,7 +11,7 @@ import {
 } from "lucide-react";
 import NotificationBell from "../../../components/common/NotificationBell";
 import { useAuth } from "../../../context/AuthContext";
-import { getDoctorPatients, getDoctorLifetimeStats } from "../../../services/doctorPatients";
+import { getDoctorPatients, getDoctorLifetimeStats } from "../../../api/doctorPatients";
 import { getTimelineReports } from "../../../api/reports";
 import CheckInCodeCard from "../components/CheckInCodeCard";
 

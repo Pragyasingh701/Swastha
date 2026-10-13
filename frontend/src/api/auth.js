@@ -1,4 +1,4 @@
-import { apiGet, apiPost, apiRequest } from '../api/client';
+import { apiGet, apiPost, apiRequest } from './client';
 
 export const authService = {
   async login(email, password) {

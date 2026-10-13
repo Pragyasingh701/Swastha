@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../../../context/AuthContext';
-import { authService } from '../../../services/auth';
+import { authService } from '../../../api/auth';
 import {
   sanitizePhoneInput,
   isValidIndianPhone,

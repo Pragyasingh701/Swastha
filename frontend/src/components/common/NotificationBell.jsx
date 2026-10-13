@@ -4,7 +4,7 @@ import {
   getDoctorPatientNotifications,
   acceptDoctorRequest,
   declineDoctorRequest,
-} from "../../services/doctorPatients";
+} from "../../api/doctorPatients";
 import { usePolling } from "../../hooks/usePolling";
 
 /**

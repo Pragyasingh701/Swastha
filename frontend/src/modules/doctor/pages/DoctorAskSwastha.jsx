@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import DoctorSidebar from "../components/DoctorSidebar";
 import ProfileDropdown from "../../settings/components/ProfileDropdown";
-import { getDoctorPatients } from "../../../services/doctorPatients";
+import { getDoctorPatients } from "../../../api/doctorPatients";
 import { searchReportsConversational, clearConversation, submitAnswerFeedback } from "../../../api/search";
 import { getNoticeAckStatus, acknowledgeNotice } from "../../../api/notices";
 import { AiNoticeInfoLink, AiNoticeAckModal } from "../../../components/common/AiNotice";

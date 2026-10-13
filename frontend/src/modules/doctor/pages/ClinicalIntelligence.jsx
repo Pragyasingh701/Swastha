@@ -4,7 +4,7 @@ import { Sparkles, Search, ChevronDown, User, ClipboardList, FlaskConical, ScanL
 import NotificationBell from "../../../components/common/NotificationBell";
 import DoctorSidebar from "../components/DoctorSidebar";
 import ProfileDropdown from "../../settings/components/ProfileDropdown";
-import { getDoctorPatients, getDoctorPatientSummary } from "../../../services/doctorPatients";
+import { getDoctorPatients, getDoctorPatientSummary } from "../../../api/doctorPatients";
 import { getTimelineReports } from "../../../api/reports";
 import { useAuth } from "../../../context/AuthContext";
 

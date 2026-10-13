@@ -98,7 +98,7 @@ export async function apiGet(path, options = {}) {
 
 export async function apiPost(path, body, options = {}) {
   // Preserves an existing quirk some callers rely on (e.g.
-  // services/auth.js's deleteAccount): passing options.method overrides
+  // api/auth.js's deleteAccount): passing options.method overrides
   // the 'POST' default, so this doubles as the generic "POST unless told
   // otherwise" verb.
   return apiRequest(options.method || 'POST', path, { ...options, body })

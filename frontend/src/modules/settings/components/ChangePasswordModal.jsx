@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useAuth } from '../../../context/AuthContext';
-import { authService } from '../../../services/auth';
+import { authService } from '../../../api/auth';
 import { X, KeyRound, MailCheck, CheckCircle2, AlertCircle, Eye, EyeOff, Loader2, LogIn } from 'lucide-react';
 
 export default function ChangePasswordModal({ isOpen, onClose }) {

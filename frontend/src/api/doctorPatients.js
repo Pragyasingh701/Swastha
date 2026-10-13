@@ -1,4 +1,4 @@
-import { apiRequest } from '../api/client';
+import { apiRequest } from './client';
 
 function request(path, options = {}) {
   return apiRequest(options.method || 'GET', `/doctor-patients${path}`, options);
