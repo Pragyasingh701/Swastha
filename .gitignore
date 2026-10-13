@@ -25,6 +25,7 @@ uploads/
 backend/uploads/
 
 # Build outputs
+.vite/
 dist/
 build/
 frontend/dist/

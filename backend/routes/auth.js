@@ -198,33 +198,14 @@ router.post('/upload', authenticateToken, (req, res) => {
 /**
  * Helper to decode / verify Google Credentials (handles both OAuth Access Tokens and JWT ID Tokens)
  */
-async function decodeGoogleCredential(rawCredential) {
-  let credential = rawCredential;
-  let clientProfile = null;
-
-  if (typeof rawCredential === 'object' && rawCredential !== null) {
-    if (rawCredential.email) {
-      clientProfile = {
-        email: rawCredential.email,
-        name: rawCredential.name,
-        picture: rawCredential.picture,
-        sub: rawCredential.sub || rawCredential.id,
-      };
-    }
-    credential = rawCredential.credential || rawCredential.access_token || rawCredential.id_token || rawCredential.token;
-  }
-
-  let email = clientProfile?.email;
-  let name = clientProfile?.name;
-  let picture = clientProfile?.picture;
-  let sub = clientProfile?.sub;
-
-  if (email) {
-    return { email, name, picture, sub };
-  }
+async function decodeGoogleCredential(credential) {
+  let email;
+  let name;
+  let picture;
+  let sub;
 
   if (!credential || typeof credential !== 'string') {
-    throw new Error('Google credential is required and must be a valid token or profile object');
+    throw new Error('Google credential is required and must be a valid token');
   }
 
   async function fetchGoogleUserInfo(accessToken) {
@@ -310,11 +291,6 @@ async function decodeGoogleCredential(rawCredential) {
         name = decoded.name;
         picture = decoded.picture;
         sub = decoded.sub;
-      } else if (clientProfile?.email) {
-        email = clientProfile.email;
-        name = clientProfile.name;
-        picture = clientProfile.picture;
-        sub = clientProfile.sub;
       } else {
         throw new Error(`Google token verification failed: ${fetchErr.message}`);
       }
@@ -493,8 +469,8 @@ router.post('/register', async (req, res) => {
 
 /**
  * Shared completion logic for any Google sign-in path: find-or-create the user, then
- * send the 6-digit OTP the same way password-based login does. Used by google-login,
- * google-register, and the redirect-based google/exchange route so all three stay in sync.
+ * send the 6-digit OTP the same way password-based login does. Used by the
+ * redirect-based google/exchange route.
  */
 async function completeGoogleAuth(res, { email, name, picture, sub }, { role } = {}) {
   const normalizedEmail = email.toLowerCase().trim();
@@ -531,54 +507,6 @@ async function completeGoogleAuth(res, { email, name, picture, sub }, { role } =
     });
   }
 }
-
-/**
- * POST /api/auth/google-login
- * Google Sign-In on Login Page -> Verifies user with Google, creates/updates user, sends 6-digit OTP
- */
-router.post('/google-login', async (req, res) => {
-  const { credential, token: googleToken, access_token, id_token } = req.body;
-  const googleCredential = credential || googleToken || access_token || id_token;
-  if (!googleCredential) {
-    return res.status(400).json({ message: 'Google credential is required' });
-  }
-
-  try {
-    const profile = await decodeGoogleCredential(googleCredential, req.body);
-    if (!profile.email) {
-      return res.status(400).json({ message: 'Could not extract valid email from Google credentials' });
-    }
-
-    return await completeGoogleAuth(res, profile);
-  } catch (error) {
-    console.error('Google login error:', error);
-    return res.status(401).json({ message: 'Invalid Google authentication token', error: error.message });
-  }
-});
-
-/**
- * POST /api/auth/google-register
- * Google Sign-Up on Register Page -> Verifies user with Google, creates/updates user, sends 6-digit OTP
- */
-router.post('/google-register', async (req, res) => {
-  const { credential, token: googleToken, access_token, id_token, role = 'none' } = req.body;
-  const googleCredential = credential || googleToken || access_token || id_token;
-  if (!googleCredential) {
-    return res.status(400).json({ message: 'Google credential is required' });
-  }
-
-  try {
-    const profile = await decodeGoogleCredential(googleCredential, req.body);
-    if (!profile.email) {
-      return res.status(400).json({ message: 'Could not extract valid email from Google credentials' });
-    }
-
-    return await completeGoogleAuth(res, profile, { role });
-  } catch (error) {
-    console.error('Google registration error:', error);
-    return res.status(401).json({ message: 'Invalid Google authentication token', error: error.message });
-  }
-});
 
 /**
  * POST /api/auth/google/exchange
@@ -628,41 +556,6 @@ router.post('/google/exchange', async (req, res) => {
     console.error('Google code exchange error:', error);
     return res.status(401).json({ message: 'Google sign-in could not be completed.', error: error.message });
   }
-});
-
-/**
- * Legacy / Fallback POST /api/auth/google route
- */
-router.post('/google', async (req, res) => {
-  const { credential, token: googleToken, access_token, id_token } = req.body;
-  const googleCredential = credential || googleToken || access_token || id_token;
-  const { email, name, picture, sub } = await decodeGoogleCredential(googleCredential);
-  const normalizedEmail = (email || 'google_user@swastha.app').toLowerCase().trim();
-  const existingUser = await findUserByEmail(normalizedEmail);
-
-  // Allow Google login for existing accounts (whether created via email/password or Google)
-
-  const user = await createOrUpdateUser({
-    id: existingUser ? existingUser.id : ('usr_g_' + (sub || Date.now())),
-    email: normalizedEmail,
-    name,
-    picture,
-    role: existingUser ? existingUser.role : null,
-    authProvider: 'google',
-  });
-
-  const token = jwt.sign({ userId: user.id, email: user.email, role: user.role }, JWT_SECRET, {
-    expiresIn: '7d',
-  });
-
-  return res.json({
-    message: 'Google auth successful',
-    token,
-    user: {
-      ...user,
-      hasSelectedRole: !!(user.role && user.role !== 'none'),
-    },
-  });
 });
 
 /**

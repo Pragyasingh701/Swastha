@@ -85,9 +85,4 @@ export async function clearSession(sessionId, userId) {
   return true;
 }
 
-/** Diagnostics only — current live session count. */
-export function sessionCount() {
-  return sessions.size;
-}
-
 export { SESSION_TTL_MS, MAX_TURNS };

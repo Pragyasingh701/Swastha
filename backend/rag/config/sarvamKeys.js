@@ -81,17 +81,6 @@ export function retireKey(index, reason) {
   return next !== null;
 }
 
-/** True while at least one key remains usable. */
-export function hasUsableKey() {
-  return currentKey() !== null;
-}
-
-/** Diagnostics: how much of the pool is left. Never exposes key values. */
-export function keyPoolStatus() {
-  if (keys.length === 0) keys = loadKeys();
-  return { total: keys.length, retired: retired.size, remaining: keys.length - retired.size };
-}
-
 /** Test seam — restores the pool to its initial state. */
 export function __resetKeyPool() {
   retired.clear();
@@ -99,4 +88,4 @@ export function __resetKeyPool() {
   keys = loadKeys();
 }
 
-export default { currentKey, retireKey, hasUsableKey, keyPoolStatus };
+export default { currentKey, retireKey };

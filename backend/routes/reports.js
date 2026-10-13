@@ -164,32 +164,6 @@ function sanitizeUnclearFields(value) {
   return Array.isArray(fields) ? fields.filter((f) => KNOWN_UNCLEAR_FIELDS.includes(f)) : [];
 }
 
-router.get('/file', async (req, res) => {
-  const fileUrl = String(req.query.url || '').trim();
-
-  if (!fileUrl) {
-    return res.status(400).json({ message: 'A file URL is required.' });
-  }
-
-  try {
-    const upstreamResponse = await fetch(fileUrl);
-    if (!upstreamResponse.ok) {
-      return res.status(upstreamResponse.status).send('Unable to load the requested file.');
-    }
-
-    const contentType = upstreamResponse.headers.get('content-type') || 'application/octet-stream';
-    const buffer = Buffer.from(await upstreamResponse.arrayBuffer());
-
-    res.setHeader('Content-Type', contentType);
-    res.setHeader('Cache-Control', 'private, max-age=0, no-store');
-    res.setHeader('Content-Disposition', 'inline; filename="report-file"');
-    return res.send(buffer);
-  } catch (error) {
-    console.error('File preview proxy error:', error);
-    return res.status(502).json({ message: 'Unable to load the requested file.' });
-  }
-});
-
 // Return a short-lived signed URL for a storage object path (private buckets)
 router.get('/signed-url', async (req, res) => {
   const path = String(req.query.path || '').trim();

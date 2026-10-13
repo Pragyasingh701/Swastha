@@ -4,7 +4,6 @@ import {
   createFamilyMember,
   createOrGetFamilyVaultForUser,
   createPendingFamilyMemberAuthorizationRequest,
-  deleteFamilyVaultForUser,
   getFamilyVaultForUser,
   getFamilyVaultSummary,
   listFamilyMembers,
@@ -589,7 +588,6 @@ async function updateMemberHandler(req, res) {
   }
 }
 
-router.put('/members/:id', updateMemberHandler);
 router.patch('/members/:id', updateMemberHandler);
 
 async function deleteMemberHandler(req, res) {
@@ -627,25 +625,6 @@ async function deleteMemberHandler(req, res) {
   }
 }
 
-router.delete('/members/:id', deleteMemberHandler);
 router.delete('/members/:id/delete', deleteMemberHandler);
-
-router.delete('/user/:userId', async (req, res) => {
-  try {
-    const { userId } = req.params;
-    if (!userId) {
-      return res.status(400).json({ message: 'userId is required' });
-    }
-
-    const result = await deleteFamilyVaultForUser(userId);
-    return res.json({
-      message: 'Family vault cleanup completed',
-      result,
-    });
-  } catch (error) {
-    console.error('Family vault cleanup error:', error);
-    return res.status(500).json({ message: 'Failed to clean up family vault', error: error.message });
-  }
-});
 
 export default router;

@@ -104,30 +104,9 @@ export async function apiPost(path, body, options = {}) {
   return apiRequest(options.method || 'POST', path, { ...options, body })
 }
 
-export async function apiPatch(path, body, options = {}) {
-  return apiRequest('PATCH', path, { ...options, body })
-}
-
-export async function apiPut(path, body, options = {}) {
-  return apiRequest('PUT', path, { ...options, body })
-}
-
-export async function apiDelete(path, options = {}) {
-  return apiRequest('DELETE', path, options)
-}
-
 export function getStoredToken() {
   try {
     return localStorage.getItem('swastha_token') || sessionStorage.getItem('swastha_token') || null;
-  } catch {
-    return null;
-  }
-}
-
-export function getStoredUser() {
-  try {
-    const raw = localStorage.getItem('swastha_user') || sessionStorage.getItem('swastha_user');
-    return raw ? JSON.parse(raw) : null;
   } catch {
     return null;
   }
@@ -139,6 +118,6 @@ export function getAuthHeader(token) {
 }
 
 export default {
-  apiGet, apiPost, apiPatch, apiPut, apiDelete, apiRequest,
-  getStoredToken, getStoredUser, getAuthHeader, BASE_URL,
+  apiGet, apiPost, apiRequest,
+  getStoredToken, getAuthHeader, BASE_URL,
 }

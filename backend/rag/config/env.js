@@ -83,10 +83,6 @@ export const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
 export const ALLOW_EDGE_TTS_FALLBACK = String(process.env.ALLOW_EDGE_TTS_FALLBACK ?? 'true').toLowerCase() !== 'false';
 export const JWT_SECRET = process.env.JWT_SECRET;
 export const PORT = process.env.PORT || 3010;
-export const CORS_ORIGIN = (process.env.CORS_ORIGIN || 'http://localhost:5173')
-  .split(',')
-  .map((s) => s.trim())
-  .filter(Boolean);
 
 // Below this many total characters of embeddable chunk text, a patient's
 // whole history is small enough to hand to the generation model directly —

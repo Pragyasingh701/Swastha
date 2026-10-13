@@ -46,17 +46,6 @@ export async function requestAccessAgain(patientId) {
 }
 
 /**
- * Doctor-facing single-patient detail. The server enforces status ===
- * 'accepted' and returns 403 otherwise — this call must only ever be
- * triggered for a card the UI already knows is accepted (never for a
- * pending/declined card), so a 403 here would indicate a UI bug, not an
- * expected outcome.
- */
-export async function getDoctorPatientDetail(patientId) {
-  return request(`/${patientId}`);
-}
-
-/**
  * DOCTOR-facing: AI summary of a patient's full record timeline (Clinical
  * Intelligence page). Regenerated fresh on every call — see
  * backend/routes/doctorPatients.js's GET /:patientId/summary for why
@@ -64,14 +53,6 @@ export async function getDoctorPatientDetail(patientId) {
  */
 export async function getDoctorPatientSummary(patientId) {
   return request(`/${patientId}/summary`);
-}
-
-/**
- * PATIENT-facing: doctor link requests awaiting this patient's response.
- */
-export async function getPendingDoctorRequests() {
-  const result = await request('/pending-requests');
-  return result.requests || [];
 }
 
 /** PATIENT-facing: accept a pending doctor link request. */
@@ -146,9 +127,7 @@ export default {
   linkPatientToDoctor,
   deletePatientFromDoctor,
   requestAccessAgain,
-  getDoctorPatientDetail,
   getDoctorPatientSummary,
-  getPendingDoctorRequests,
   acceptDoctorRequest,
   declineDoctorRequest,
   getDoctorPatientNotifications,
