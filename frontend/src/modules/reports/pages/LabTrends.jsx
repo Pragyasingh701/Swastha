@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import ResponsiveSidebar from "../../../../components/common/ResponsiveSidebar";
+import ResponsiveSidebar from "../../../components/common/ResponsiveSidebar";
 import {
   AreaChart,
   Area,
@@ -28,12 +28,12 @@ import {
   RefreshCw,
   Beaker,
 } from "lucide-react";
-import NotificationBell from "../../../../components/common/NotificationBell";
-import { useAuth } from "../../../../context/AuthContext";
-import { getLabInsights } from "../../../../api/reports";
-import SettingsModal from "../../../settings/components/SettingsModal";
-import ProfileDropdown from "../../../settings/components/ProfileDropdown";
-import PatientIdBadge from "../../../../components/common/PatientIdBadge";
+import NotificationBell from "../../../components/common/NotificationBell";
+import { useAuth } from "../../../context/AuthContext";
+import { getLabInsights } from "../../../api/reports";
+import SettingsModal from "../../settings/components/SettingsModal";
+import ProfileDropdown from "../../settings/components/ProfileDropdown";
+import PatientIdBadge from "../../../components/common/PatientIdBadge";
 
 // Same nav list as Dashboard.jsx, with Lab Insights marked active
 const navItems = [

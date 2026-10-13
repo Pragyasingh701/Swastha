@@ -30,7 +30,7 @@ import Dashboard from "./modules/dashboard/pages/Dashboard";
 import FamilyVault from "./modules/family/pages/FamilyVault";
 
 // Reports
-import LabTrends from "./modules/reports/components/pages/LabTrends";
+import LabTrends from "./modules/reports/pages/LabTrends";
 
 // Search
 import AISearch from "./modules/search/pages/AISearch";
@@ -39,7 +39,7 @@ import AISearch from "./modules/search/pages/AISearch";
 import IntakeChat from "./modules/intake/pages/IntakeChat";
 
 // Timeline
-import Timeline from "./modules/timeline/components/pages/Timeline";
+import Timeline from "./modules/timeline/pages/Timeline";
 import MedicalVault from "./modules/vault/pages/MedicalVault";
 
 function LoadingSpinner() {
