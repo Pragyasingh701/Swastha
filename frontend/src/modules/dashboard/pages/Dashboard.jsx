@@ -6,10 +6,10 @@ import { getFamilyDashboard } from "../../../api/family";
 import { getTimelineReports } from "../../../api/reports";
 import ProfileDropdown from "../../settings/components/ProfileDropdown";
 import SettingsModal from "../../settings/components/SettingsModal";
-import Logo from "../../../components/Common/Logo";
-import ResponsiveSidebar from "../../../components/Common/ResponsiveSidebar";
-import PatientIdBadge from "../../../components/Common/PatientIdBadge";
-import NotificationBell from "../../../components/Common/NotificationBell";
+import Logo from "../../../components/common/Logo";
+import ResponsiveSidebar from "../../../components/common/ResponsiveSidebar";
+import PatientIdBadge from "../../../components/common/PatientIdBadge";
+import NotificationBell from "../../../components/common/NotificationBell";
 
 import {
   LayoutGrid,

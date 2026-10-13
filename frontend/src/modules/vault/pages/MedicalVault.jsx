@@ -2,10 +2,10 @@ import React, { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "../../../context/AuthContext";
 import { getTimelineReports, generateReportSummary } from "../../../api/reports";
-import ResponsiveSidebar from "../../../components/Common/ResponsiveSidebar";
+import ResponsiveSidebar from "../../../components/common/ResponsiveSidebar";
 import SettingsModal from "../../settings/components/SettingsModal";
 import ProfileDropdown from "../../settings/components/ProfileDropdown";
-import PatientIdBadge from "../../../components/Common/PatientIdBadge";
+import PatientIdBadge from "../../../components/common/PatientIdBadge";
 import {
   LayoutGrid,
   TrendingUp,
@@ -29,7 +29,7 @@ import {
   Building2,
   CalendarDays,
 } from "lucide-react";
-import NotificationBell from "../../../components/Common/NotificationBell";
+import NotificationBell from "../../../components/common/NotificationBell";
 
 /* -----------------------------------------------------------
    Nav + category config — same shape as Timeline.jsx so a report's

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
-import OtpInput from "../../components/Common/OtpInput";
+import OtpInput from "../../components/common/OtpInput";
 
 export default function VerifyOTP() {
   const navigate = useNavigate();

@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import DoctorSidebar from "../components/DoctorSidebar";
 import ProfileDropdown from "../../settings/components/ProfileDropdown";
-import NotificationBell from "../../../components/Common/NotificationBell";
+import NotificationBell from "../../../components/common/NotificationBell";
 import {
   AlertTriangle,
   ClipboardList,

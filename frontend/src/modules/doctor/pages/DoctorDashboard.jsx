@@ -9,7 +9,7 @@ import {
   FileCheck2,
   Trophy,
 } from "lucide-react";
-import NotificationBell from "../../../components/Common/NotificationBell";
+import NotificationBell from "../../../components/common/NotificationBell";
 import { useAuth } from "../../../context/AuthContext";
 import { getDoctorPatients, getDoctorLifetimeStats } from "../../../services/doctorPatients";
 import { getTimelineReports } from "../../../api/reports";

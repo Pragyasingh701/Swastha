@@ -1,7 +1,7 @@
 import React from "react";
 import { useNavigate } from "react-router-dom";
 import { Sparkles, Bell } from "lucide-react";
-import NotificationBell from "../../../components/Common/NotificationBell";
+import NotificationBell from "../../../components/common/NotificationBell";
 import DoctorSidebar from "../components/DoctorSidebar";
 import ProfileDropdown from "../../settings/components/ProfileDropdown";
 

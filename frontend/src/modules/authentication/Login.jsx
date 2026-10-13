@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 import { startGoogleAuth } from "../../utils/googleAuth";
-import Logo from "../../components/Common/Logo";
+import Logo from "../../components/common/Logo";
 
 export default function Login() {
   const navigate = useNavigate();

@@ -15,12 +15,12 @@ import {
   Users,
   LogOut,
 } from 'lucide-react';
-import NotificationBell from "../../../components/Common/NotificationBell";
+import NotificationBell from "../../../components/common/NotificationBell";
 import { useAuth } from '../../../context/AuthContext';
 import ProfileDropdown from '../../settings/components/ProfileDropdown';
-import PatientIdBadge from '../../../components/Common/PatientIdBadge';
+import PatientIdBadge from '../../../components/common/PatientIdBadge';
 import SettingsModal from '../../settings/components/SettingsModal';
-import ResponsiveSidebar from '../../../components/Common/ResponsiveSidebar';
+import ResponsiveSidebar from '../../../components/common/ResponsiveSidebar';
 import {
   createFamilyMember,
   createFamilyVault,

@@ -3,10 +3,10 @@ import { useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "../../../context/AuthContext";
 import { startIntake, resumeIntake, sendIntakeTurn, finalizeIntake, transcribeIntakeAudio, replayIntakeAudio } from "../../../api/intake";
 import { verifyClinicCode, verifyClinicOtp } from "../../../api/clinic";
-import ResponsiveSidebar from "../../../components/Common/ResponsiveSidebar";
+import ResponsiveSidebar from "../../../components/common/ResponsiveSidebar";
 import ProfileDropdown from "../../settings/components/ProfileDropdown";
-import PatientIdBadge from "../../../components/Common/PatientIdBadge";
-import NotificationBell from "../../../components/Common/NotificationBell";
+import PatientIdBadge from "../../../components/common/PatientIdBadge";
+import NotificationBell from "../../../components/common/NotificationBell";
 import SettingsModal from "../../settings/components/SettingsModal";
 import {
   LayoutGrid,

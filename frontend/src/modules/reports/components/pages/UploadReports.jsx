@@ -14,7 +14,7 @@ import {
   RefreshCw,
 } from "lucide-react";
 import { extractReportFromFile } from "../../../../api/search";
-import { AiNoticeBanner } from "../../../../components/Common/AiNotice";
+import { AiNoticeBanner } from "../../../../components/common/AiNotice";
 
 // PDFs and common image formats can be sent to the RAG extraction endpoint.
 const EXTRACTABLE_TYPES = ["image/jpeg", "image/png", "image/webp", "application/pdf"];

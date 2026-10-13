@@ -4,7 +4,7 @@ import ProfileDropdown from "../../settings/components/ProfileDropdown";
 import { getDoctorPatients } from "../../../services/doctorPatients";
 import { searchReportsConversational, clearConversation, submitAnswerFeedback } from "../../../api/search";
 import { getNoticeAckStatus, acknowledgeNotice } from "../../../api/notices";
-import { AiNoticeInfoLink, AiNoticeAckModal } from "../../../components/Common/AiNotice";
+import { AiNoticeInfoLink, AiNoticeAckModal } from "../../../components/common/AiNotice";
 import {
   Sparkles,
   Send,
@@ -20,7 +20,7 @@ import {
   ThumbsUp,
   ThumbsDown,
 } from "lucide-react";
-import NotificationBell from "../../../components/Common/NotificationBell";
+import NotificationBell from "../../../components/common/NotificationBell";
 
 const EXAMPLE_QUESTIONS = [
   "Has this patient had any drug allergies or reactions?",

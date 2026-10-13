@@ -3,11 +3,11 @@ import { useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "../../../context/AuthContext";
 import { searchReports, submitAnswerFeedback } from "../../../api/search";
 import { getNoticeAckStatus, acknowledgeNotice } from "../../../api/notices";
-import ResponsiveSidebar from "../../../components/Common/ResponsiveSidebar";
+import ResponsiveSidebar from "../../../components/common/ResponsiveSidebar";
 import ProfileDropdown from "../../settings/components/ProfileDropdown";
-import PatientIdBadge from "../../../components/Common/PatientIdBadge";
+import PatientIdBadge from "../../../components/common/PatientIdBadge";
 import SettingsModal from "../../settings/components/SettingsModal";
-import { AiNoticeInfoLink, AiNoticeAckModal } from "../../../components/Common/AiNotice";
+import { AiNoticeInfoLink, AiNoticeAckModal } from "../../../components/common/AiNotice";
 import {
   LayoutGrid,
   TrendingUp,
@@ -27,7 +27,7 @@ import {
   ThumbsUp,
   ThumbsDown,
 } from "lucide-react";
-import NotificationBell from "../../../components/Common/NotificationBell";
+import NotificationBell from "../../../components/common/NotificationBell";
 
 // Same nav list as Dashboard.jsx / Timeline.jsx / etc.
 const navItems = [
