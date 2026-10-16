@@ -1,11 +1,11 @@
 import express from 'express';
 import jwt from 'jsonwebtoken';
-import { listTimelineReports, getTimelineReport, createTimelineReport, updateTimelineReport, deleteTimelineReport } from '../db/reports.js';
+import { listTimelineReports, getTimelineReport, getTimelineReportById, createTimelineReport, updateTimelineReport, deleteTimelineReport } from '../db/reports.js';
 import { findUserByEmail, findUserById } from '../db/users.js';
 import { isDoctorLinkedToPatient } from '../db/doctorPatients.js';
 import { isPatientLinkedToFamilyMember } from '../db/family.js';
 import { validateTimelineReportPayload } from '../utils/timelineValidation.js';
-import { uploadMemory, uploadFileToSupabase } from '../config/supabaseStorage.js';
+import { uploadMemory, uploadFileToSupabase, createSignedFileUrl, removeStoredFiles } from '../config/supabaseStorage.js';
 import { createNotification } from '../db/notifications.js';
 import { decryptMultipartFields } from '../middleware/wireCrypto.js';
 
@@ -135,6 +135,12 @@ function handleReportFileUpload(req, res, next) {
     return next();
   }
 
+  // Checked before the body is parsed: multer buffers up to 10 MB in memory,
+  // which an anonymous caller must not be able to make the server do.
+  if (!getAuthUser(req)?.userId) {
+    return res.status(401).json({ message: 'Authentication required.' });
+  }
+
   uploadMemory.single('file')(req, res, async (err) => {
     if (err) {
       console.error('Report file upload error:', err);
@@ -225,6 +231,40 @@ router.get('/lab-insights', async (req, res) => {
   }
 });
 
+// Short-lived signed URL for a report's attached file. The file is served
+// only after the same access check the timeline uses (owner, linked doctor,
+// confirmed family admin) — so it keeps working if the bucket is made private,
+// and a file URL alone is never what grants access.
+router.get('/:id/file-url', async (req, res) => {
+  try {
+    const user = getAuthUser(req);
+    if (!user?.userId) {
+      return res.status(401).json({ message: 'Authentication required.' });
+    }
+
+    const report = await getTimelineReportById(req.params.id);
+    const denied = () => res.status(403).json({ message: 'You do not have permission to access this file.' });
+    if (!report?.user_id || !report.fileUrl) {
+      return denied();
+    }
+
+    try {
+      await assertCanAccessTarget(user, report.user_id);
+    } catch (accessError) {
+      return res.status(accessError.status === 500 ? 500 : 403).json({ message: accessError.status === 500 ? accessError.message : 'You do not have permission to access this file.' });
+    }
+
+    const url = await createSignedFileUrl(report.fileUrl, 300);
+    if (!url) {
+      return res.status(404).json({ message: 'This report has no viewable file.' });
+    }
+    return res.json({ url, expiresInSeconds: 300 });
+  } catch (error) {
+    console.error('Report file URL error:', error);
+    return res.status(500).json({ message: 'Could not open this file.' });
+  }
+});
+
 router.get('/', async (req, res) => {
   try {
     const user = getAuthUser(req);
@@ -286,9 +326,11 @@ router.post('/', handleReportFileUpload, async (req, res) => {
     }
 
     const { sanitized } = validation;
-    const uploadedFileUrl = req.file
-      ? await uploadFileToSupabase(req.file)
-      : String(req.body?.fileUrl || '').trim() || null;
+    // A report's file only ever comes from an actual upload. A client-supplied
+    // fileUrl used to be stored as-is and later rendered in an iframe/link
+    // (script injection via "javascript:" URLs, or pointing at someone else's
+    // file), so it is ignored here.
+    const uploadedFileUrl = req.file ? await uploadFileToSupabase(req.file, targetUserId) : null;
 
     let report = await createTimelineReport({
       userId: targetUserId,
@@ -340,6 +382,9 @@ router.post('/', handleReportFileUpload, async (req, res) => {
 
     return res.status(201).json({ report });
   } catch (error) {
+    if (error?.status === 400) {
+      return res.status(400).json({ message: error.message });
+    }
     console.error('Timeline report save error:', error);
     return res.status(500).json({ message: 'Failed to save timeline report', error: error.message });
   }
@@ -373,10 +418,22 @@ router.put('/:id', handleReportFileUpload, async (req, res) => {
       return res.status(400).json({ message: validation.message });
     }
 
+    const existingReport = await getTimelineReport(targetUserId, reportId);
+    if (!existingReport) {
+      return res.status(404).json({ message: 'Report not found, or you do not have permission to edit it.' });
+    }
+
     const { sanitized } = validation;
-    const uploadedFileUrl = req.file
-      ? await uploadFileToSupabase(req.file)
-      : String(req.body?.fileUrl || '').trim() || null;
+    // The file changes only by uploading a new one, or is cleared when the
+    // client explicitly sends an empty fileUrl. Any other fileUrl value (a
+    // different URL, a script string) is ignored and the stored file kept.
+    let nextFileUrl = existingReport.fileUrl || null;
+    if (req.file) {
+      nextFileUrl = await uploadFileToSupabase(req.file, targetUserId);
+    } else if (req.body && Object.prototype.hasOwnProperty.call(req.body, 'fileUrl') && !String(req.body.fileUrl || '').trim()) {
+      nextFileUrl = null;
+    }
+    const uploadedFileUrl = nextFileUrl;
 
     let report = await updateTimelineReport(targetUserId, reportId, {
       title: sanitized.title,
@@ -394,6 +451,10 @@ router.put('/:id', handleReportFileUpload, async (req, res) => {
 
     if (!report) {
       return res.status(404).json({ message: 'Report not found, or you do not have permission to edit it.' });
+    }
+
+    if (existingReport.fileUrl && existingReport.fileUrl !== uploadedFileUrl) {
+      removeStoredFiles([existingReport.fileUrl]);
     }
 
     // Content may have changed — regenerate the summary before responding,
@@ -429,6 +490,9 @@ router.put('/:id', handleReportFileUpload, async (req, res) => {
 
     return res.json({ report });
   } catch (error) {
+    if (error?.status === 400) {
+      return res.status(400).json({ message: error.message });
+    }
     console.error('Timeline report update error:', error);
     return res.status(500).json({ message: 'Failed to update timeline report', error: error.message });
   }
@@ -502,6 +566,9 @@ router.delete('/:id', async (req, res) => {
     }
 
     const deletedReport = await deleteTimelineReport(targetUserId, reportId);
+    if (deletedReport?.fileUrl) {
+      removeStoredFiles([deletedReport.fileUrl]);
+    }
 
     const targetPatientId = targetUserId;
     const isFamilyAdminChange = user.role === 'patient' && targetPatientId !== user.userId;
