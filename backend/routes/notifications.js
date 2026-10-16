@@ -1,7 +1,6 @@
 import express from 'express';
 import jwt from 'jsonwebtoken';
 import {
-  createNotification,
   getNotificationsForUser,
   getUnreadNotificationCount,
   markAllNotificationsAsRead,
@@ -69,42 +68,6 @@ router.get('/', async (req, res) => {
   } catch (error) {
     console.error('Fetch notifications error:', error);
     return res.status(500).json({ message: 'Unable to load notifications.', error: error.message });
-  }
-});
-
-router.post('/', async (req, res) => {
-  const user = getAuthUser(req);
-
-  if (!user?.userId) {
-    return res.status(401).json({ message: 'Authentication required.' });
-  }
-
-  try {
-    const {
-      recipientId,
-      actorId,
-      actorRole = 'system',
-      eventType,
-      title,
-      message,
-      metadata = {},
-    } = req.body || {};
-
-    const targetRecipientId = recipientId || user.userId;
-    const notification = await createNotification({
-      recipientId: targetRecipientId,
-      actorId: actorId || user.userId,
-      actorRole,
-      eventType,
-      title,
-      message,
-      metadata,
-    });
-
-    return res.status(201).json({ notification });
-  } catch (error) {
-    console.error('Create notification error:', error);
-    return res.status(400).json({ message: error?.message || 'Unable to create notification.' });
   }
 });
 
