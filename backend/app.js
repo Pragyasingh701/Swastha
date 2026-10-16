@@ -1,5 +1,6 @@
 import './utils/asyncErrors.js';
 import express from 'express';
+import helmet from 'helmet';
 import { corsMiddleware } from './middleware/corsConfig.js';
 import { limiters } from './middleware/rateLimits.js';
 import dotenv from 'dotenv';
@@ -37,11 +38,14 @@ const app = express();
 // the real client's.
 app.set('trust proxy', 1);
 
-// Set Security & Cross-Origin-Opener-Policy Headers for Google OAuth
-app.use((req, res, next) => {
-  res.setHeader('Cross-Origin-Opener-Policy', 'same-origin-allow-popups');
-  next();
-});
+// Security headers for the API. CSP is off here on purpose: this serves JSON
+// (and the static /uploads files), not pages — the SPA's own CSP is set by the
+// frontend host (vercel.json). CORP is "cross-origin" because the SPA lives on
+// a different origin and loads files this API serves.
+app.use(helmet({
+  contentSecurityPolicy: false,
+  crossOriginResourcePolicy: { policy: 'cross-origin' },
+}));
 
 app.use(corsMiddleware());
 // 2mb limit (not Express's 100kb default): shared with the /rag sub-app,
