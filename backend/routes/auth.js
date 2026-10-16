@@ -13,6 +13,7 @@ import { getFamilyVaultForUser, deleteFamilyVaultForUser } from '../db/family.js
 import { deleteAllReportsForUser } from '../db/reports.js';
 import { processMedicalCertificate } from '../services/certificateParserService.js';
 import { createNotification } from '../db/notifications.js';
+import { sniffFileType } from '../config/supabaseStorage.js';
 
 const router = express.Router();
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || '771272691038-s9h707grr3b4ojkgp48aa5vb9tej2sjh.apps.googleusercontent.com';
@@ -200,19 +201,25 @@ if (!global.__storeCleanupInterval) {
   }, 5 * 60 * 1000);
 }
 
-// Multer Storage Setup for uploaded documents (Certificates, ID Proofs)
+// Multer Storage Setup for uploaded documents (Certificates, ID Proofs).
+// Files are written to a local directory that is NOT served over HTTP (they
+// used to be exposed at /uploads/<name> with no authentication): the doctor
+// certificates and ID proofs in here are identity documents. The stored
+// name is random and its extension comes from the file's real type, never
+// from the client's filename.
+const UPLOAD_DIR = 'uploads/';
+const UPLOAD_EXTENSIONS = { 'application/pdf': '.pdf', 'image/jpeg': '.jpg', 'image/png': '.png', 'image/webp': '.webp' };
+
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
-    const uploadDir = 'uploads/';
-    if (!fs.existsSync(uploadDir)) {
-      fs.mkdirSync(uploadDir, { recursive: true });
+    if (!fs.existsSync(UPLOAD_DIR)) {
+      fs.mkdirSync(UPLOAD_DIR, { recursive: true });
     }
-    cb(null, uploadDir);
+    cb(null, UPLOAD_DIR);
   },
   filename: (req, file, cb) => {
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
-    const ext = path.extname(file.originalname);
-    cb(null, file.fieldname + '-' + uniqueSuffix + ext);
+    const ext = UPLOAD_EXTENSIONS[file.mimetype] || '';
+    cb(null, `file-${Date.now()}-${crypto.randomBytes(8).toString('hex')}${ext}`);
   },
 });
 
@@ -220,14 +227,27 @@ const upload = multer({
   storage,
   limits: { fileSize: 10 * 1024 * 1024 }, // 10MB file size limit
   fileFilter: (req, file, cb) => {
-    const allowed = ['application/pdf', 'image/jpeg', 'image/png', 'image/webp'];
-    if (allowed.includes(file.mimetype)) {
+    if (UPLOAD_EXTENSIONS[file.mimetype]) {
       cb(null, true);
     } else {
       cb(new Error('Invalid file type. Only PDF, JPEG, PNG, and WEBP files are allowed.'));
     }
   },
 });
+
+// The declared Content-Type is client-controlled, so the file's first bytes
+// must also match an allowed type, otherwise it is deleted again.
+function fileMatchesAllowedType(filePath) {
+  try {
+    const fd = fs.openSync(filePath, 'r');
+    const head = Buffer.alloc(12);
+    fs.readSync(fd, head, 0, 12, 0);
+    fs.closeSync(fd);
+    return Boolean(sniffFileType(head));
+  } catch {
+    return false;
+  }
+}
 
 // Middleware to authenticate JWT bearer tokens
 const authenticateToken = (req, res, next) => {
@@ -258,6 +278,10 @@ router.post('/upload', authenticateToken, (req, res) => {
     }
     if (!req.file) {
       return res.status(400).json({ message: 'No file uploaded.' });
+    }
+    if (!fileMatchesAllowedType(req.file.path)) {
+      fs.unlink(req.file.path, () => {});
+      return res.status(400).json({ message: 'The uploaded file is not a valid PDF, JPEG, PNG or WEBP document.' });
     }
     const protocol = req.protocol || 'http';
     const host = req.get('host') || 'localhost:5001';

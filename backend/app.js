@@ -15,7 +15,6 @@ import cryptoRoutes from './routes/crypto.js';
 import { piiWireBoundary } from './middleware/wireCrypto.js';
 
 import fs from 'fs';
-import path from 'path';
 
 if (fs.existsSync('./backend/.env')) {
   dotenv.config({ path: './backend/.env' });
@@ -76,8 +75,9 @@ app.post('/api/auth/google/exchange', limiters.googleByIp);
 app.post('/api/crypto/handshake', limiters.handshakeByIp);
 app.post('/api/doctor-patients/link', limiters.linkByDoctor);
 
-app.use('/uploads', express.static(path.resolve('uploads')));
-app.use('/uploads', express.static(path.resolve('backend/uploads')));
+// Note: uploaded doctor certificates / ID proofs (written to ./uploads by
+// POST /api/auth/upload) are deliberately NOT served — they used to be
+// reachable by anyone with the URL.
 
 // Routes
 app.use('/api/crypto', cryptoRoutes);
