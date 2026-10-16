@@ -1,3 +1,4 @@
+import './utils/asyncErrors.js';
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
@@ -78,5 +79,29 @@ app.use('/rag', ragApp);
 app.get('/', (req, res) => res.status(200).send('OK'));
 app.get('/health', (req, res) => res.status(200).send('OK'));
 app.get('/api/health', (req, res) => res.status(200).send('OK'));
+
+// Last in the chain: anything a route threw or rejected with (see
+// utils/asyncErrors.js) ends up here as a clean JSON error instead of Express's
+// default HTML page, which also leaks stack traces outside production.
+// eslint-disable-next-line no-unused-vars
+app.use((err, req, res, next) => {
+  if (res.headersSent) {
+    return next(err);
+  }
+  if (err?.type === 'entity.parse.failed') {
+    return res.status(400).json({ message: 'Malformed JSON request body.' });
+  }
+  if (err?.type === 'entity.too.large') {
+    return res.status(413).json({ message: 'Request body is too large.' });
+  }
+  console.error(`Unhandled error on ${req.method} ${req.originalUrl}:`, err);
+  return res.status(500).json({ message: 'Something went wrong. Please try again.' });
+});
+
+// Backstop: a stray rejection from outside a request (a timer, a floating
+// promise) shouldn't take the whole service down either.
+process.on('unhandledRejection', (reason) => {
+  console.error('Unhandled promise rejection:', reason);
+});
 
 export default app;
