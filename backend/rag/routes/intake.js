@@ -219,14 +219,10 @@ router.post('/turn', requireAuth, async (req, res) => {
   }
 
   try {
-    const { session, turn } = await advanceIntakeSession({ sessionId, patientMessage: message });
-
-    // Ownership check after the fetch (advanceIntakeSession already loaded
-    // the row) — a patient cannot advance someone else's session by
-    // guessing a session_id.
-    if (session.patient_id !== patientId) {
-      return res.status(403).json({ error: 'This session does not belong to you.' });
-    }
+    // advanceIntakeSession verifies the session belongs to patientId before
+    // it calls the model or writes anything — a patient cannot advance
+    // someone else's session by guessing a session_id.
+    const { session, turn } = await advanceIntakeSession({ sessionId, patientId, patientMessage: message });
 
     // Read back from the session row, not the request — the language is
     // fixed at /start and a client cannot switch voices mid-session.
@@ -251,6 +247,9 @@ router.post('/turn', requireAuth, async (req, res) => {
       skipAudio === true ? payload : await withAudio(payload, turn.next_question, language)
     );
   } catch (err) {
+    if (err.status === 403) {
+      return res.status(403).json({ error: err.message });
+    }
     console.error(`[POST /api/intake/turn] failed for patient ${patientId}, session ${sessionId}:`, err);
     return res.status(500).json({ error: 'Could not process intake turn.' });
   }
@@ -269,11 +268,7 @@ router.post('/finalize', requireAuth, async (req, res) => {
   }
 
   try {
-    const session = await finalizeIntakeSession(sessionId);
-
-    if (session.patient_id !== patientId) {
-      return res.status(403).json({ error: 'This session does not belong to you.' });
-    }
+    const session = await finalizeIntakeSession(sessionId, patientId);
 
     return res.status(200).json({
       session_id: session.id,
@@ -282,6 +277,9 @@ router.post('/finalize', requireAuth, async (req, res) => {
       completed_at: session.completed_at,
     });
   } catch (err) {
+    if (err.status === 403) {
+      return res.status(403).json({ error: err.message });
+    }
     console.error(`[POST /api/intake/finalize] failed for patient ${patientId}, session ${sessionId}:`, err);
     return res.status(500).json({ error: 'Could not finalize intake session.' });
   }

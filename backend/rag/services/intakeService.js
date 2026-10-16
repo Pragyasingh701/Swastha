@@ -2354,10 +2354,11 @@ export async function startIntakeSession(patientId, { doctorId = null, origin = 
  * (session.patient_id === callerId) must already be verified by the caller
  * (route), same pattern as doctorPatients.js link-ownership checks.
  *
- * @param {{ sessionId: string, patientMessage: string }} params
+ * @param {{ sessionId: string, patientId: string, patientMessage: string }} params
  */
-export async function advanceIntakeSession({ sessionId, patientMessage }) {
+export async function advanceIntakeSession({ sessionId, patientId, patientMessage }) {
   if (!sessionId) throw new Error('advanceIntakeSession: sessionId is required');
+  if (!patientId) throw new Error('advanceIntakeSession: patientId is required');
   if (!patientMessage || !patientMessage.trim()) {
     throw new Error('advanceIntakeSession: patientMessage is required');
   }
@@ -2376,6 +2377,12 @@ export async function advanceIntakeSession({ sessionId, patientMessage }) {
       ? `session not found: ${sessionId}`
       : `could not load session: ${fetchError.message}`;
     throw new Error(`advanceIntakeSession: ${reason}`);
+  }
+  // Ownership is decided here, before anything is sent to the LLM or written
+  // back — checking only after the update (as the route used to) still let a
+  // non-owner alter the session and push its history through the AI provider.
+  if (session.patient_id !== patientId) {
+    throw intakeOwnershipError();
   }
   if (session.status === 'completed') {
     throw new Error('advanceIntakeSession: session already completed');
@@ -2455,6 +2462,7 @@ export async function advanceIntakeSession({ sessionId, patientMessage }) {
       red_flag_reason: turn.red_flag ? turn.red_flag_reason : session.red_flag_reason,
     })
     .eq('id', sessionId)
+    .eq('patient_id', patientId)
     .select()
     .single();
 
@@ -2470,13 +2478,36 @@ export async function advanceIntakeSession({ sessionId, patientMessage }) {
  * status transition per PRD §6.1's state machine (chief_complaint -> hpi ->
  * drug_allergy -> finalize).
  */
-export async function finalizeIntakeSession(sessionId) {
+export async function finalizeIntakeSession(sessionId, patientId) {
   if (!sessionId) throw new Error('finalizeIntakeSession: sessionId is required');
+  if (!patientId) throw new Error('finalizeIntakeSession: patientId is required');
+
+  const { data: existing, error: fetchError } = await supabase
+    .from('intake_sessions')
+    .select('*')
+    .eq('id', sessionId)
+    .eq('patient_id', patientId)
+    .maybeSingle();
+
+  if (fetchError) {
+    throw new Error(`finalizeIntakeSession: failed to load session: ${fetchError.message}`);
+  }
+  // Missing and not-yours look identical on purpose, so a session id can't
+  // be probed for existence.
+  if (!existing) {
+    throw intakeOwnershipError();
+  }
+  // Already finalized (e.g. a retried request) — return it as-is rather than
+  // re-stamping completed_at.
+  if (existing.status === 'completed') {
+    return existing;
+  }
 
   const { data, error } = await supabase
     .from('intake_sessions')
     .update({ status: 'completed', completed_at: new Date().toISOString() })
     .eq('id', sessionId)
+    .eq('patient_id', patientId)
     .select()
     .single();
 
@@ -2484,4 +2515,10 @@ export async function finalizeIntakeSession(sessionId) {
     throw new Error(`finalizeIntakeSession: failed to finalize session: ${error.message}`);
   }
   return data;
+}
+
+function intakeOwnershipError() {
+  const err = new Error('This session does not belong to you.');
+  err.status = 403;
+  return err;
 }
