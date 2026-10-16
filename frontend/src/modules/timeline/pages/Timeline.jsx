@@ -5,7 +5,7 @@ import { parseMemberNotesAndEmail } from "../../family/pages/FamilyMember";
 import { useAuth } from "../../../context/AuthContext";
 import * as reportService from "../../../api/reports";
 import * as familyService from "../../../api/family";
-import { indexReport, removeReportFromIndex } from "../../../api/search";
+import { indexReport } from "../../../api/search";
 import ResponsiveSidebar from "../../../components/common/ResponsiveSidebar";
 import SettingsModal from "../../settings/components/SettingsModal";
 import ProfileDropdown from "../../settings/components/ProfileDropdown";
@@ -323,10 +323,7 @@ export default function Timeline() {
       setEvents((prev) => prev.filter((event) => String(event.id) !== String(reportId)));
       setSelectedEvent(null);
 
-      // Best-effort: drop it from the search index too.
-      removeReportFromIndex(reportId).catch((err) => {
-        console.error('Failed to remove report from AI search index:', err);
-      });
+      // No separate index cleanup: the search index rows cascade-delete with the report.
     } catch (error) {
       console.error('Failed to delete timeline report:', error);
     }

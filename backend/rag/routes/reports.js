@@ -1,6 +1,10 @@
 import express from 'express';
-import { processReportEmbeddings, deleteReportEmbeddings } from '../services/embeddingService.js';
+import { processReportEmbeddings } from '../services/embeddingService.js';
 import { requireAuth } from '../middleware/auth.js';
+import { supabase } from '../config/supabase.js';
+import { getTimelineReport } from '../../db/reports.js';
+import { isDoctorLinkedToPatient } from '../../db/doctorPatients.js';
+import { isPatientLinkedToFamilyMember } from '../../db/family.js';
 
 const router = express.Router();
 
@@ -23,22 +27,60 @@ const router = express.Router();
  * user_id comes from the JWT, not the body.
  */
 router.post('/index', requireAuth, async (req, res) => {
-  const userId = req.user.userId;
-  const { id, title, diagnosis, medicines, notes, reportDate, report_date } = req.body || {};
+  const callerId = req.user.userId;
+  const { id } = req.body || {};
 
   if (!id) {
     return res.status(400).json({ error: 'id (report id) is required' });
   }
 
   try {
+    // The report's owner and content come from the `reports` row itself, never
+    // from the request body: trusting the body let any logged-in user
+    // overwrite or wipe another user's index chunks by guessing a (sequential)
+    // report id, and plant text that later surfaced as "grounding" in someone
+    // else's answers.
+    const { data: row, error: lookupError } = await supabase
+      .from('reports')
+      .select('patient_id')
+      .eq('id', id)
+      .maybeSingle();
+    if (lookupError) throw lookupError;
+
+    // Missing and not-yours are answered identically so ids can't be probed.
+    const denied = () => res.status(403).json({ error: 'You do not have access to this report.' });
+    if (!row?.patient_id) return denied();
+
+    const ownerId = row.patient_id;
+    if (ownerId !== callerId) {
+      let linked = false;
+      try {
+        if (req.user.role === 'doctor') {
+          linked = await isDoctorLinkedToPatient(callerId, ownerId);
+        } else if (req.user.role === 'patient') {
+          linked = await isPatientLinkedToFamilyMember(callerId, ownerId);
+        }
+      } catch (err) {
+        console.error(`[POST /api/reports/index] link check failed for ${req.user.role} ${callerId}:`, err);
+        return res.status(500).json({ error: 'Could not verify access. Please try again.' });
+      }
+      if (!linked) return denied();
+    }
+
+    const report = await getTimelineReport(ownerId, id);
+    if (!report) return denied();
+
     const result = await processReportEmbeddings({
-      id,
-      user_id: userId,
-      title,
-      diagnosis,
-      medicines,
-      notes,
-      report_date: report_date || reportDate,
+      id: report.id,
+      // Indexed under the report's owner (the patient), not the caller — a
+      // doctor or family admin saving on a patient's behalf must not file the
+      // chunks under their own account.
+      user_id: ownerId,
+      title: report.title,
+      diagnosis: report.diagnosis,
+      medicines: report.medicines,
+      notes: report.notes,
+      report_date: report.reportDate,
     });
     return res.status(200).json({ embeddings: result });
   } catch (err) {
@@ -48,30 +90,14 @@ router.post('/index', requireAuth, async (req, res) => {
     console.error(`[POST /api/reports/index] failed for report ${id}:`, err);
     return res.status(207).json({
       embeddings: null,
-      warning: `Report saved, but indexing for search failed: ${err.message}`,
+      warning: 'Report saved, but indexing for search failed. It may not appear in search yet.',
     });
   }
 });
 
-/**
- * DELETE /api/reports/index/:id
- * Remove a report's embeddings — call this alongside backend's
- * DELETE /api/reports/:id so deleted reports stop showing up in search.
- */
-router.delete('/index/:id', requireAuth, async (req, res) => {
-  const { id } = req.params;
-
-  if (!id) {
-    return res.status(400).json({ error: 'id (report id) is required' });
-  }
-
-  try {
-    await deleteReportEmbeddings(id);
-    return res.status(200).json({ ok: true });
-  } catch (err) {
-    console.error(`[DELETE /api/reports/index/${id}] failed:`, err);
-    return res.status(500).json({ error: 'Failed to remove report from search index' });
-  }
-});
+// There is deliberately no DELETE /index/:id: report_embeddings.report_id is
+// `on delete cascade`, so deleting a report already removes its chunks, and
+// an unscoped delete-by-id endpoint only offered a way to wipe other
+// users' index entries.
 
 export default router;

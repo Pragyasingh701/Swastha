@@ -25,12 +25,6 @@ export async function indexReport(report) {
   });
 }
 
-export async function removeReportFromIndex(reportId) {
-  return request(`/reports/index/${encodeURIComponent(reportId)}`, {
-    method: 'DELETE',
-  });
-}
-
 export async function searchReportsConversational(query, sessionId, patientUserId) {
   return request('/search/chat', {
     method: 'POST',
@@ -92,7 +86,6 @@ export async function extractReportFromFile(file) {
 export default {
   searchReports,
   indexReport,
-  removeReportFromIndex,
   searchReportsConversational,
   clearConversation,
   extractReportFromFile,
