@@ -1,6 +1,7 @@
 import './utils/asyncErrors.js';
 import express from 'express';
 import cors from 'cors';
+import { limiters } from './middleware/rateLimits.js';
 import dotenv from 'dotenv';
 import authRoutes from './routes/auth.js';
 import familyRoutes from './routes/family.js';
@@ -53,6 +54,23 @@ app.use(express.json({ limit: '2mb' }));
 // inherits it automatically since Express hands a mounted sub-app the same
 // req/res the parent already has, with no re-wrapping.
 app.use(piiWireBoundary);
+
+// Rate limits (see middleware/rateLimits.js). After the wire boundary so the
+// per-email keys can read the decrypted body.
+app.use(['/api', '/rag'], limiters.general);
+app.post('/api/auth/login', limiters.loginByIpAndEmail, limiters.loginByEmail);
+app.post('/api/auth/register', limiters.register, limiters.emailByIp, limiters.emailByEmail);
+app.post('/api/auth/send-otp', limiters.emailByIp, limiters.emailByEmail);
+app.post('/api/auth/change-password/send-otp', limiters.emailByIp);
+app.post('/api/auth/forgot-password', limiters.emailByIp, limiters.forgotByEmail);
+app.post('/api/auth/verify-otp', limiters.verifyByIp);
+app.post('/api/auth/change-password/verify-otp', limiters.verifyByIp);
+app.post('/api/auth/change-password/confirm', limiters.verifyByIp);
+app.get('/api/auth/verify-reset-token', limiters.resetByIp);
+app.post('/api/auth/reset-password', limiters.resetByIp);
+app.post('/api/auth/google/exchange', limiters.googleByIp);
+app.post('/api/crypto/handshake', limiters.handshakeByIp);
+app.post('/api/doctor-patients/link', limiters.linkByDoctor);
 
 app.use('/uploads', express.static(path.resolve('uploads')));
 app.use('/uploads', express.static(path.resolve('backend/uploads')));

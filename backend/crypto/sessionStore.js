@@ -30,7 +30,17 @@ if (!global.__cryptoSessionSweepInterval) {
   global.__cryptoSessionSweepInterval.unref?.();
 }
 
+// Handshake is unauthenticated, so the store can't be allowed to grow without
+// bound: past this many live sessions the oldest are evicted (a legitimate
+// client whose session was evicted just re-handshakes — see
+// frontend/src/api/client.js's ENC_SESSION_EXPIRED retry).
+const MAX_SESSIONS = Number(process.env.CRYPTO_MAX_SESSIONS) || 20000;
+
 export function createSession(key) {
+  while (sessions.size >= MAX_SESSIONS) {
+    const oldest = sessions.keys().next().value;
+    sessions.delete(oldest);
+  }
   const sessionId = randomUUID();
   const now = Date.now();
   const expiresAt = now + SESSION_TTL_MS;
