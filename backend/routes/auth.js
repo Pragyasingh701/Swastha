@@ -102,6 +102,80 @@ const otpStore = {
     return true;
   },
 };
+
+// --- OTP challenge state (per key) ----------------------------------------
+// A "challenge" starts when a code is issued by something that has already
+// proven part of the login: a correct password (/login), a Google sign-in
+// (/google/exchange), a new registration (/register), or a logged-in user
+// (/change-password/send-otp). It tracks resend and wrong-attempt budgets.
+//
+// /send-otp can then only RESEND inside an existing challenge. Before this it
+// issued a code for any email with no prior step, so the password (or Google)
+// step could be skipped: ask for a code, then guess it.
+if (!global.__otpMeta) {
+  global.__otpMeta = new Map();
+}
+const otpMeta = global.__otpMeta; // key => { startedAt, lastIssuedAt, resends, failed, locked }
+
+const OTP_TTL_MS = 10 * 60 * 1000;
+const OTP_CHALLENGE_WINDOW_MS = 30 * 60 * 1000; // how long after start a resend is still allowed
+const OTP_RESEND_COOLDOWN_MS = 30 * 1000;
+const OTP_MAX_RESENDS = 5;
+const OTP_MAX_WRONG_ATTEMPTS = 5;
+
+// Issue a code. `fresh` starts a new challenge (resetting the budgets);
+// otherwise it counts as a resend within the current one.
+function issueOtp(key, { fresh }) {
+  const now = Date.now();
+  const code = crypto.randomInt(100000, 1000000).toString();
+  otpStore.set(key, { code, expiresAt: now + OTP_TTL_MS });
+  if (fresh) {
+    otpMeta.set(key, { startedAt: now, lastIssuedAt: now, resends: 0, failed: 0, locked: false });
+  } else {
+    const meta = otpMeta.get(key);
+    if (meta) {
+      meta.resends += 1;
+      meta.lastIssuedAt = now;
+    }
+  }
+  return code;
+}
+
+function canResendOtp(key) {
+  const meta = otpMeta.get(key);
+  if (!meta || meta.locked) return false;
+  const now = Date.now();
+  if (now - meta.startedAt > OTP_CHALLENGE_WINDOW_MS) return false;
+  if (meta.resends >= OTP_MAX_RESENDS) return false;
+  if (now - meta.lastIssuedAt < OTP_RESEND_COOLDOWN_MS) return false;
+  return true;
+}
+
+// Checks a submitted code and enforces the wrong-attempt budget. After
+// OTP_MAX_WRONG_ATTEMPTS misses every outstanding code for the key is thrown
+// away and the challenge is locked: the only way to get a new code is to go
+// through the password / Google step again, so there's nothing for a guesser
+// to keep trying, and a real user is never locked out by someone else.
+function verifyOtp(key, submittedCode) {
+  const meta = otpMeta.get(key);
+  if (!meta || meta.locked) return { ok: false, reason: 'invalid' };
+
+  if (otpStore.verify(key, submittedCode)) {
+    otpMeta.delete(key);
+    return { ok: true };
+  }
+
+  meta.failed += 1;
+  if (meta.failed >= OTP_MAX_WRONG_ATTEMPTS) {
+    meta.locked = true;
+    otpStore.delete(key);
+    return { ok: false, reason: 'locked' };
+  }
+  return { ok: false, reason: 'invalid' };
+}
+
+const OTP_LOCKED_MESSAGE = 'Too many incorrect codes. Please start again to get a new verification code.';
+
 const resetTokenStore = global.__resetTokenStore; // token => { email, expiresAt }
 const passwordChangeTokenStore = global.__passwordChangeTokenStore; // token => { email, expiresAt }
 
@@ -113,6 +187,9 @@ if (!global.__storeCleanupInterval) {
       const fresh = list.filter((e) => e.expiresAt >= now);
       if (fresh.length === 0) otpStoreRaw.delete(key);
       else if (fresh.length !== list.length) otpStoreRaw.set(key, fresh);
+    }
+    for (const [key, meta] of otpMeta.entries()) {
+      if (now - meta.startedAt > OTP_CHALLENGE_WINDOW_MS) otpMeta.delete(key);
     }
     for (const [key, data] of resetTokenStore.entries()) {
       if (data.expiresAt < now) resetTokenStore.delete(key);
@@ -336,8 +413,7 @@ router.post('/login', async (req, res) => {
   }
 
   // Generate 6-digit OTP code for Login Verification
-  const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
-  otpStore.set(normalizedEmail, { code: otpCode, expiresAt: Date.now() + 10 * 60 * 1000 });
+  const otpCode = issueOtp(normalizedEmail, { fresh: true });
 
   try {
     await sendOTPEmail(normalizedEmail, otpCode);
@@ -449,8 +525,7 @@ router.post('/register', async (req, res) => {
   });
 
   // Generate 6-digit OTP code for Registration Verification
-  const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
-  otpStore.set(normalizedEmail, { code: otpCode, expiresAt: Date.now() + 10 * 60 * 1000 });
+  const otpCode = issueOtp(normalizedEmail, { fresh: true });
 
   try {
     await sendOTPEmail(normalizedEmail, otpCode);
@@ -490,8 +565,7 @@ async function completeGoogleAuth(res, { email, name, picture, sub }, { role } =
   }
 
   // Generate 6-digit OTP code for Google Verification
-  const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
-  otpStore.set(normalizedEmail, { code: otpCode, expiresAt: Date.now() + 10 * 60 * 1000 });
+  const otpCode = issueOtp(normalizedEmail, { fresh: true });
 
   try {
     await sendOTPEmail(normalizedEmail, otpCode);
@@ -564,18 +638,30 @@ router.post('/google/exchange', async (req, res) => {
  * Verifies 6-digit OTP and logs user in
  */
 router.post('/verify-otp', async (req, res) => {
-  const { email, otpCode } = req.body;
-  if (!otpCode || otpCode.length !== 6) {
+  const { email, otpCode } = req.body || {};
+  if (typeof otpCode !== 'string' || !/^\d{6}$/.test(otpCode)) {
     return res.status(400).json({ message: 'Valid 6-digit OTP code is required' });
   }
+  if (typeof email !== 'string' || !email.trim()) {
+    return res.status(400).json({ message: 'Email address is required' });
+  }
 
-  const key = email ? email.toLowerCase().trim() : '';
-  // .verify() checks against ANY still-active code for this email, not
-  // just the most recently issued one — a second concurrent login to the
-  // same email no longer invalidates a still-pending first login's code.
-  const isValid = otpStore.verify(key, otpCode);
+  const key = email.toLowerCase().trim();
+  // ':' is reserved for internal keys such as "changepwd:<email>" — a real
+  // address never contains it, and the public endpoint must not be able to
+  // reach those.
+  if (key.includes(':')) {
+    return res.status(400).json({ message: 'Invalid or expired OTP verification code.' });
+  }
 
-  if (!isValid) {
+  // Checks ANY still-active code for this email (not just the newest), so a
+  // second concurrent login to the same email doesn't invalidate the first —
+  // and enforces the wrong-attempt budget.
+  const result = verifyOtp(key, otpCode);
+  if (!result.ok) {
+    if (result.reason === 'locked') {
+      return res.status(429).json({ message: OTP_LOCKED_MESSAGE });
+    }
     return res.status(400).json({ message: 'Invalid or expired OTP verification code.' });
   }
 
@@ -822,29 +908,34 @@ router.post('/profile', authenticateToken, async (req, res) => {
 
 /**
  * POST /api/auth/send-otp
+ * RESEND only. A code can only be re-sent inside a verification that has
+ * already been started by /login, /register or Google sign-in — never issued
+ * cold for an arbitrary address (see the OTP challenge helpers above). The
+ * reply is identical whether or not anything was sent, so this can't be used
+ * to find out which addresses have accounts or sign-ins in progress.
  */
 router.post('/send-otp', async (req, res) => {
-  const { email } = req.body;
-  if (!email) {
+  const { email } = req.body || {};
+  if (typeof email !== 'string' || !email.trim()) {
     return res.status(400).json({ message: 'Email address is required' });
   }
 
   const normalizedEmail = email.toLowerCase().trim();
-  const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
-  otpStore.set(normalizedEmail, { code: otpCode, expiresAt: Date.now() + 10 * 60 * 1000 });
+  const genericReply = { message: 'If a sign-in is in progress for this email, a new verification code has been sent.' };
 
+  if (normalizedEmail.includes(':') || !canResendOtp(normalizedEmail)) {
+    return res.json(genericReply);
+  }
+
+  const otpCode = issueOtp(normalizedEmail, { fresh: false });
   try {
     await sendOTPEmail(normalizedEmail, otpCode);
-    return res.json({
-      message: `Verification code sent to ${normalizedEmail}`,
-    });
   } catch (error) {
     otpStore.deleteCode(normalizedEmail, otpCode);
-    return res.status(500).json({
-      message: 'Failed to send verification code.',
-      error: error.message,
-    });
+    console.error('Resend OTP email failed:', error?.message || error);
+    return res.status(500).json({ message: 'Failed to send verification code.' });
   }
+  return res.json(genericReply);
 });
 
 /**
@@ -908,8 +999,7 @@ router.post('/change-password/send-otp', authenticateToken, async (req, res) => 
       });
     }
 
-    const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
-    otpStore.set(`changepwd:${email}`, { code: otpCode, expiresAt: Date.now() + 10 * 60 * 1000 });
+    const otpCode = issueOtp(`changepwd:${email}`, { fresh: true });
 
     try {
       await sendOTPEmail(email, otpCode);
@@ -933,16 +1023,19 @@ router.post('/change-password/send-otp', authenticateToken, async (req, res) => 
  * authorizes the following /change-password/confirm call.
  */
 router.post('/change-password/verify-otp', authenticateToken, async (req, res) => {
-  const { otpCode } = req.body;
-  if (!otpCode || otpCode.length !== 6) {
+  const { otpCode } = req.body || {};
+  if (typeof otpCode !== 'string' || !/^\d{6}$/.test(otpCode)) {
     return res.status(400).json({ message: 'Valid 6-digit OTP code is required' });
   }
 
   const email = (req.user.email || '').toLowerCase().trim();
   const key = `changepwd:${email}`;
-  const isValid = otpStore.verify(key, otpCode);
+  const result = verifyOtp(key, otpCode);
 
-  if (!isValid) {
+  if (!result.ok) {
+    if (result.reason === 'locked') {
+      return res.status(429).json({ message: OTP_LOCKED_MESSAGE });
+    }
     return res.status(400).json({ message: 'Invalid or expired verification code.' });
   }
 
