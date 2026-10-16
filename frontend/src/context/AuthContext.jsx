@@ -206,7 +206,6 @@ export const AuthProvider = ({ children }) => {
     if (currentUser) {
       const updated = { ...currentUser, role, hasSelectedRole: !!currentUser.hasSelectedRole };
       setUser(updated);
-      authService.updateRole(currentUser.id || currentUser.email, role);
     }
   };
 

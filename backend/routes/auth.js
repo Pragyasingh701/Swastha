@@ -1,5 +1,6 @@
 import express from 'express';
 import { OAuth2Client } from 'google-auth-library';
+import crypto from 'crypto';
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
 import multer from 'multer';
@@ -632,51 +633,42 @@ router.post('/verify-otp', async (req, res) => {
   return res.json(response);
 });
 
-/**
- * POST /api/auth/role
- *
- * First-time role selection out of pending_registrations (RoleSelection.jsx).
- * NOT a role switch — role is immutable once a user has a patients/doctors
- * row (see backend/db/users.js: createOrUpdateUser leaves `role` untouched
- * for an already-assigned user, no matter what's sent here). This endpoint
- * now goes through createOrUpdateUser's promotion path instead of the
- * removed updateUserRole(), since choosing a role is a table move (pending
- * -> patients/doctors), not a column update.
- */
-router.post('/role', async (req, res) => {
-  const { userId, role } = req.body;
-  if (!userId || !role) {
-    return res.status(400).json({ message: 'UserId and role are required' });
-  }
-
-  const existingUser = await findUserById(userId);
-  if (!existingUser) {
-    return res.status(404).json({ message: 'User not found.' });
-  }
-
-  const savedUser = await createOrUpdateUser({ ...existingUser, id: userId, role });
-  return res.json({ message: 'Role updated successfully', role: savedUser.role });
-});
+// Fields a client must never be able to set through the profile form: they
+// either identify/authenticate the account or record a server-side decision.
+const PROFILE_FORBIDDEN_FIELDS = [
+  'id', 'userId', 'email', 'password', 'password_hash', 'passwordHash',
+  'patient_code', 'patientCode', 'auth_provider', 'authProvider',
+  'verification_status', 'verificationStatus',
+  'cert_extracted_data', 'certExtractedData',
+  'license_expiry_date', 'licenseExpiryDate',
+  'created_at', 'updated_at',
+];
 
 /**
  * POST /api/auth/profile
  * Updates user profile details (Patient or Doctor registration forms)
  */
 router.post('/profile', authenticateToken, async (req, res) => {
-  const { email, userId, role, ...profileDetails } = req.body;
-  let targetEmail = email || (userId && userId.includes('@') ? userId : null);
-  const targetRole = role || profileDetails.role;
-
-  const authEmail = (req.user.email || '').toLowerCase().trim();
-  if (!targetEmail && authEmail) {
-    targetEmail = authEmail;
+  const { role, ...rawProfileDetails } = req.body || {};
+  const profileDetails = { ...rawProfileDetails };
+  for (const field of PROFILE_FORBIDDEN_FIELDS) {
+    delete profileDetails[field];
   }
 
-  let userToUpdate = null;
-  if (targetEmail) {
-    userToUpdate = await findUserByEmail(targetEmail);
-  } else if (userId) {
-    userToUpdate = await findUserById(userId);
+  // The account being edited is ALWAYS the one the token belongs to — never
+  // an id/email taken from the body, which would let any logged-in user
+  // overwrite (or take over) someone else's profile.
+  const userToUpdate = (req.user.userId && await findUserById(req.user.userId))
+    || (req.user.email && await findUserByEmail(req.user.email))
+    || null;
+  if (!userToUpdate) {
+    return res.status(401).json({ message: 'This account no longer exists. Please log in again.' });
+  }
+
+  const targetEmail = userToUpdate.email;
+  const targetRole = role || profileDetails.role;
+  if (targetRole !== undefined && targetRole !== 'patient' && targetRole !== 'doctor') {
+    return res.status(400).json({ message: 'Role must be either patient or doctor.' });
   }
 
   const isSettingsUpdate = Boolean(profileDetails.isSettingsUpdate || profileDetails.isUpdate);
@@ -954,7 +946,7 @@ router.post('/change-password/verify-otp', authenticateToken, async (req, res) =
     return res.status(400).json({ message: 'Invalid or expired verification code.' });
   }
 
-  const changeToken = 'chg_' + Math.random().toString(36).substring(2) + Date.now().toString(36);
+  const changeToken = 'chg_' + crypto.randomBytes(24).toString('hex');
   passwordChangeTokenStore.set(changeToken, { email, expiresAt: Date.now() + 10 * 60 * 1000 });
 
   return res.json({ message: 'Verification successful', changeToken });

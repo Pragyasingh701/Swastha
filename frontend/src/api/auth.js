@@ -21,10 +21,6 @@ export const authService = {
     return apiPost('/auth/send-otp', { email });
   },
 
-  async updateRole(userId, role) {
-    return apiPost('/auth/role', { userId, role });
-  },
-
   async updateProfile(profileData, token) {
     return apiPost('/auth/profile', profileData, { token });
   },
