@@ -1,4 +1,5 @@
 import { supabase } from '../config/supabase.js';
+import { storagePathFromUrl } from '../../config/supabaseStorage.js';
 // Both AI calls route through the shared failover client (4-key rotation,
 // Gemini -> OpenRouter fallback). embedText still throws on exhaustion;
 // runAI('generation') never throws — check `.ok` before parsing.
@@ -706,34 +707,14 @@ export async function searchReports(query, userId) {
 // never persisted). Rather than show a "View" link that 404s, verify it
 // resolves first and null it out otherwise — the frontend already renders
 // sources with no file_url as plain (non-clickable) text.
-const FILE_CHECK_TIMEOUT_MS = 2500;
-
+// The stored file_url is returned only when it points at an object in our own
+// storage bucket (the frontend then opens it through the authenticated
+// /api/reports/:id/file-url endpoint, by report_id). This used to fetch the
+// stored URL with a HEAD request to check it was alive, which let a user who
+// could store an arbitrary URL make the server probe internal hosts (SSRF); a
+// recognised bucket path needs no network call.
 async function verifyFileUrl(fileUrl) {
-  if (!fileUrl) return null;
-
-  // Not a well-formed absolute URL (e.g. a bare filename like
-  // "test_prescription.png") — the real file location is unknown/lost,
-  // no amount of retrying fixes that.
-  let parsed;
-  try {
-    parsed = new URL(fileUrl);
-  } catch {
-    return null;
-  }
-  if (!/^https?:$/.test(parsed.protocol)) return null;
-
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), FILE_CHECK_TIMEOUT_MS);
-  try {
-    const res = await fetch(fileUrl, { method: 'HEAD', signal: controller.signal });
-    return res.ok ? fileUrl : null;
-  } catch {
-    // Network error, timeout, or the host refused HEAD — treat as
-    // unresolvable rather than risk showing a dead link.
-    return null;
-  } finally {
-    clearTimeout(timeout);
-  }
+  return storagePathFromUrl(fileUrl) ? fileUrl : null;
 }
 
 // Excerpt text is patient/doctor-authored free text, not code we generate —
