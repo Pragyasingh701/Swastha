@@ -10,6 +10,9 @@ import {
   deleteFamilyMember,
   updateFamilyMember,
   confirmPendingFamilyMemberAuthorizationRequest,
+  stripEmailTags,
+  withEmailTag,
+  getMemberEmail,
 } from '../db/family.js';
 import { sendFamilyMemberAuthorizationEmail } from '../utils/mailer.js';
 import { findUserByEmail, findUserById } from '../db/users.js';
@@ -180,13 +183,14 @@ function validateFamilyMemberPayload(payload = {}, options = {}) {
   return errors;
 }
 
-async function validateDuplicateFamilyMember(userId, payload) {
+async function validateDuplicateFamilyMember(userId, payload, excludeMemberId = null) {
   const members = await listFamilyMembers({ userId });
   const normalizedName = normalizeText(payload.name).toLowerCase();
   const normalizedRelationship = normalizeText(payload.relationship).toLowerCase();
 
   if (normalizedName && normalizedRelationship) {
     const existing = members.find((member) =>
+      String(member.id) !== String(excludeMemberId) &&
       normalizeText(member.name).toLowerCase() === normalizedName &&
       normalizeText(member.relationship).toLowerCase() === normalizedRelationship
     );
@@ -332,12 +336,16 @@ async function createMemberHandler(req, res) {
       relationship: req.body?.relationship,
       relationshipTag: req.body?.relationshipTag,
       healthOverview: req.body?.healthOverview,
-      notes: req.body?.notes,
+      // A member added here has no linked account: the client can neither pick
+      // its approval state nor attach an email (the [Email: ...] tag in notes
+      // is what links a record to a real account, so it's only ever written
+      // by the invite-by-email flow below, after that account's owner
+      // confirms). Anything of the sort in the body is dropped.
+      notes: stripEmailTags(req.body?.notes) || undefined,
       conditions: req.body?.conditions,
-      email: req.body?.email,
       lastVisitDate: req.body?.lastVisitDate,
       nextCheckupDate: req.body?.nextCheckupDate,
-      authorizationMethod: req.body?.authorizationMethod || 'mail',
+      authorizationMethod: 'manual',
     };
 
     const fieldErrors = validateFamilyMemberPayload(payload, { requireName: true, requireEmail: false });
@@ -399,7 +407,6 @@ router.post('/members/authorize', async (req, res) => {
       email: req.body?.email,
       lastVisitDate: req.body?.lastVisitDate,
       nextCheckupDate: req.body?.nextCheckupDate,
-      inviterEmail: req.body?.inviterEmail,
     };
 
     const fieldErrors = validateFamilyMemberPayload(payload, { requireName: true, requireEmail: true });
@@ -418,7 +425,10 @@ router.post('/members/authorize', async (req, res) => {
     }
 
     const recipientEmail = normalizeText(payload.email);
-    const inviterEmail = normalizeText(payload.inviterEmail) || user?.email || null;
+    // The inviter is always the logged-in account — a client-supplied
+    // inviterEmail let anyone send the official "X invited you" email in
+    // someone else's name.
+    const inviterEmail = user?.email || null;
     const memberName = normalizeText(payload.name);
 
     const patientAccount = await findUserByEmail(recipientEmail);
@@ -432,6 +442,11 @@ router.post('/members/authorize', async (req, res) => {
 
     const { member, authorizationToken } = await createPendingFamilyMemberAuthorizationRequest({
       ...payload,
+      // The link to the account is the address the token is mailed to,
+      // whatever the client wrote in notes — otherwise a request could be
+      // mailed to the requester's own second account while the record
+      // claims to be someone else's.
+      notes: withEmailTag(payload.notes, patientAccount.email),
       userId: user.userId,
       requestedByEmail: inviterEmail,
     });
@@ -552,17 +567,35 @@ async function updateMemberHandler(req, res) {
       return res.status(403).json({ message: 'Create a family vault before updating family members.' });
     }
 
-    const payload = {
-      ...req.body,
-      userId: user.userId,
-    };
+    const existingMembers = await listFamilyMembers({ userId: user.userId });
+    const existingMember = existingMembers.find((entry) => String(entry.id) === String(req.params.id));
+    if (!existingMember) {
+      return res.status(404).json({ message: 'Family member not found.' });
+    }
+
+    // Only plain profile fields are editable. Approval state, tokens and the
+    // account link are never taken from the body (a member could otherwise
+    // approve itself, or be re-pointed at another account's email).
+    const EDITABLE_FIELDS = [
+      'name', 'dob', 'age', 'relationship', 'relationshipTag', 'parentMemberId',
+      'healthOverview', 'conditions', 'lastVisitDate', 'nextCheckupDate',
+    ];
+    const payload = { userId: user.userId };
+    for (const field of EDITABLE_FIELDS) {
+      if (req.body?.[field] !== undefined) payload[field] = req.body[field];
+    }
+    if (req.body?.notes !== undefined) {
+      // Keep whatever account link the record already has; ignore any
+      // [Email: ...] the client sent.
+      payload.notes = withEmailTag(req.body.notes, getMemberEmail(existingMember)) || '';
+    }
 
     const fieldErrors = validateFamilyMemberPayload(payload, { requireName: false, requireEmail: false });
     if (Object.keys(fieldErrors).length > 0) {
       return res.status(400).json({ message: 'Validation failed', fieldErrors });
     }
 
-    const duplicateError = await validateDuplicateFamilyMember(user.userId, payload);
+    const duplicateError = await validateDuplicateFamilyMember(user.userId, payload, existingMember.id);
     if (duplicateError) {
       return res.status(409).json({ message: duplicateError });
     }

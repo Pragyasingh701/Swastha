@@ -28,7 +28,8 @@ import app from '../app.js';
 import { createOrUpdateUser, deleteUserById } from '../db/users.js';
 import {
   createOrGetFamilyVaultForUser,
-  createFamilyMember,
+  createPendingFamilyMemberAuthorizationRequest,
+  confirmPendingFamilyMemberAuthorizationRequest,
   deleteFamilyMember,
   deleteFamilyVaultForUser,
 } from '../db/family.js';
@@ -86,25 +87,20 @@ test('a family admin can search a linked family member\'s records via POST /rag/
   let familyMemberRowId = null;
   try {
     await createOrGetFamilyVaultForUser(admin.id);
-    // There is no `email` column on family_members — buildMemberPayload
-    // (backend/db/family.js) has no field for a plain `email` param at all.
-    // The real, production email convention (confirmed in
-    // frontend/src/modules/family/pages/FamilyVault.jsx) is a `[Email: ...]`
-    // tag the FRONTEND prepends to `notes` before sending — getMemberEmail's
-    // fallback regex is what actually reads this back out. Matching that
-    // exactly here, rather than passing a nonexistent `email` field, is
-    // what makes this test exercise the real write/read path.
-    //
-    // No authorizationMethod: 'mail' -> buildMemberPayload defaults to
-    // 'approved' (see family.js's own comment on that default) — this is
-    // the already-linked-and-consented state isPatientLinkedToFamilyMember
-    // requires, not the pending-invite flow.
-    const createdMember = await createFamilyMember({
+    // There is no `email` column on family_members — the link to the member's
+    // own account is a `[Email: ...]` tag in `notes` (what getMemberEmail
+    // reads back). Access is only honored for a link that went through the
+    // real invite flow: a pending request whose token the member then
+    // confirms, which stamps both authorization_requested_at and
+    // authorization_approved_at. A record created directly with that tag is
+    // NOT enough (see family-vault-self-approval.test.js).
+    const { member: createdMember, authorizationToken } = await createPendingFamilyMemberAuthorizationRequest({
       userId: admin.id,
       name: member.name,
       notes: `[Email: ${member.email}]`,
       relationship: 'Child',
     });
+    await confirmPendingFamilyMemberAuthorizationRequest(authorizationToken);
     familyMemberRowId = createdMember.id;
 
     const adminToken = jwt.sign({ userId: admin.id, email: admin.email, role: 'patient' }, JWT_SECRET, {
