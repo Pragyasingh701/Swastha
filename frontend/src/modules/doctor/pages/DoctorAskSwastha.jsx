@@ -3,6 +3,7 @@ import DoctorSidebar from "../components/DoctorSidebar";
 import ProfileDropdown from "../../settings/components/ProfileDropdown";
 import { getDoctorPatients } from "../../../api/doctorPatients";
 import { searchReportsConversational, clearConversation, submitAnswerFeedback } from "../../../api/search";
+import { openReportFile } from "../../../api/reports";
 import { getNoticeAckStatus, acknowledgeNotice } from "../../../api/notices";
 import { AiNoticeInfoLink, AiNoticeAckModal } from "../../../components/common/AiNotice";
 import {
@@ -650,17 +651,16 @@ function SourceRow({ source }) {
   }
 
   return (
-    <a
-      href={source.file_url}
-      target="_blank"
-      rel="noopener noreferrer"
-      className="flex items-center gap-2 text-xs text-slate-500 px-2 py-1.5 rounded-lg border border-transparent hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700 transition-colors"
+    <button
+      type="button"
+      onClick={() => openReportFile(source.report_id).catch(() => {})}
+      className="w-full text-left flex items-center gap-2 text-xs text-slate-500 px-2 py-1.5 rounded-lg border border-transparent hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700 transition-colors"
     >
       {content}
       <span className="ml-auto flex items-center gap-1 text-blue-600 font-medium shrink-0">
         View
         <ExternalLink size={12} />
       </span>
-    </a>
+    </button>
   );
 }

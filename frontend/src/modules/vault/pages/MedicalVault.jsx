@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "../../../context/AuthContext";
 import { getTimelineReports, generateReportSummary } from "../../../api/reports";
+import ReportFilePreview from "../../../components/common/ReportFilePreview";
 import ResponsiveSidebar from "../../../components/common/ResponsiveSidebar";
 import SettingsModal from "../../settings/components/SettingsModal";
 import ProfileDropdown from "../../settings/components/ProfileDropdown";
@@ -177,26 +178,6 @@ function matchesReportSearch(report, query) {
     .toLowerCase();
 
   return searchableText.includes(normalizedQuery);
-}
-
-function getPreviewType(fileUrl) {
-  if (!fileUrl) return null;
-  const lower = String(fileUrl).toLowerCase();
-  if (/\.pdf(\?|$)/.test(lower)) return "pdf";
-  if (/\.(png|jpe?g|webp)(\?|$)/.test(lower)) return "image";
-  return null;
-}
-
-function getPreviewUrl(fileUrl) {
-  if (!fileUrl) return null;
-  const apiBase = import.meta.env.VITE_API_BASE_URL || `${window.location.origin}/api`;
-
-  try {
-    const parsed = new URL(fileUrl);
-    return fileUrl;
-  } catch (e) {
-    return `${apiBase}/reports/signed-url?path=${encodeURIComponent(fileUrl)}`;
-  }
 }
 
 export default function MedicalVault() {
@@ -807,40 +788,18 @@ function ReportPreview({ report, token, onSummaryGenerated, onClose }) {
           {/* Right: document preview */}
           <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 h-full flex flex-col">
             <p className="text-sm text-slate-500 mb-3">Document preview</p>
-            <div className="flex-1 overflow-hidden">
+            <div className="flex-1 overflow-hidden flex flex-col">
               {report.fileUrl ? (
-                getPreviewType(report.fileUrl) === "pdf" ? (
-                  <iframe
-                    src={getPreviewUrl(report.fileUrl)}
-                    title="Report PDF preview"
-                    className="w-full h-full rounded-xl border border-slate-200 "
-                    style={{ minHeight: 360 }}
-                  />
-                ) : getPreviewType(report.fileUrl) === "image" ? (
-                  <img
-                    src={getPreviewUrl(report.fileUrl)}
-                    alt={report.title || "Uploaded document"}
-                    className="w-full h-full rounded-xl object-contain"
-                  />
-                ) : (
-                  <p className="text-sm text-slate-500 ">Preview not available for this file type.</p>
-                )
+                <ReportFilePreview
+                  reportId={report.id}
+                  fileUrl={report.fileUrl}
+                  title={report.title}
+                  linkLabel="Open document"
+                />
               ) : (
                 <p className="text-xs text-slate-400 ">No file attached to this report.</p>
               )}
             </div>
-
-            {report.fileUrl && (
-              <a
-                href={getPreviewUrl(report.fileUrl)}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="mt-4 inline-flex items-center gap-2 rounded-2xl border border-blue-100 bg-blue-50 px-4 py-2 text-blue-700 text-sm font-semibold transition-colors hover:bg-blue-100 "
-              >
-                <FileText size={16} />
-                Open document
-              </a>
-            )}
           </div>
         </div>
       </div>

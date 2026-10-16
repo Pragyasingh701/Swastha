@@ -8,6 +8,7 @@ import { getDoctorPatients, linkPatientToDoctor, deletePatientFromDoctor, reques
 import { getTimelineReports } from "../../../api/reports";
 import { useAuth } from "../../../context/AuthContext";
 import { usePolling } from "../../../hooks/usePolling";
+import ReportFilePreview from "../../../components/common/ReportFilePreview";
 
 // Diagnosis/Medicines are stored under the same column names for every
 // category, but what they actually MEAN differs by category — mirrors
@@ -1315,26 +1316,6 @@ function EventCard({ event }) {
   );
 }
 
-function getPreviewType(fileUrl) {
-  if (!fileUrl) return null;
-  const lower = String(fileUrl).toLowerCase();
-  if (/\.pdf(\?|$)/.test(lower)) return 'pdf';
-  if (/\.(png|jpe?g|webp)(\?|$)/.test(lower)) return 'image';
-  return null;
-}
-
-function getPreviewUrl(fileUrl) {
-  if (!fileUrl) return null;
-  const apiBase = import.meta.env.VITE_API_BASE_URL || `${window.location.origin}/api`;
-
-  try {
-    const parsed = new URL(fileUrl);
-    return fileUrl;
-  } catch (e) {
-    return `${apiBase}/reports/signed-url?path=${encodeURIComponent(fileUrl)}`;
-  }
-}
-
 function EventDetails({ event, onClose }) {
   const formattedDate = event.reportDate
     ? new Date(event.reportDate).toLocaleDateString('en-US', {
@@ -1344,8 +1325,6 @@ function EventDetails({ event, onClose }) {
       })
     : 'Unknown date';
 
-  const previewType = getPreviewType(event.fileUrl);
-  const previewUrl = getPreviewUrl(event.fileUrl);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 px-4 py-6">
@@ -1415,32 +1394,17 @@ function EventDetails({ event, onClose }) {
             {event.fileUrl ? (
               <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3 h-full flex flex-col">
                 <p className="text-sm text-slate-500 ">Document preview</p>
-                {previewType === 'pdf' ? (
-                  <iframe
-                    src={previewUrl}
-                    title="PDF preview"
-                    className="mt-3 flex-1 w-full rounded-xl border border-slate-200 "
-                    style={{ minHeight: 420 }}
+                <div className="mt-3 flex-1 flex flex-col">
+                  <ReportFilePreview
+                    reportId={event.id}
+                    fileUrl={event.fileUrl}
+                    title={event.title}
+                    frameClassName="flex-1 w-full rounded-xl border border-slate-200"
+                    frameStyle={{ minHeight: 420 }}
+                    imageClassName="max-h-[520px] w-full rounded-xl object-contain"
+                    linkClassName="mt-3 inline-flex items-center gap-2 rounded-2xl border border-blue-100 bg-blue-50 px-4 py-2 text-blue-700 text-sm font-semibold transition-colors hover:bg-blue-100"
                   />
-                ) : previewType === 'image' ? (
-                  <img
-                    src={previewUrl}
-                    alt={event.title || 'Uploaded document'}
-                    className="mt-3 max-h-[520px] w-full rounded-xl object-contain"
-                  />
-                ) : (
-                  <p className="mt-3 text-sm text-slate-500 ">Preview not available for this file type.</p>
-                )}
-
-                <a
-                  href={previewUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="mt-3 inline-flex items-center gap-2 rounded-2xl border border-blue-100 bg-blue-50 px-4 py-2 text-blue-700 text-sm font-semibold transition-colors hover:bg-blue-100 "
-                >
-                  <FileText size={16} />
-                  View original document
-                </a>
+                </div>
               </div>
             ) : event.fileName ? (
               <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
