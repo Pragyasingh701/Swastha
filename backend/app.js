@@ -1,6 +1,6 @@
 import './utils/asyncErrors.js';
 import express from 'express';
-import cors from 'cors';
+import { corsMiddleware } from './middleware/corsConfig.js';
 import { limiters } from './middleware/rateLimits.js';
 import dotenv from 'dotenv';
 import authRoutes from './routes/auth.js';
@@ -43,7 +43,7 @@ app.use((req, res, next) => {
   next();
 });
 
-app.use(cors());
+app.use(corsMiddleware());
 // 2mb limit (not Express's 100kb default): shared with the /rag sub-app,
 // whose OCR'd report text can be long.
 app.use(express.json({ limit: '2mb' }));
