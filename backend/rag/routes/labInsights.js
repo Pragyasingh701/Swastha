@@ -1,6 +1,7 @@
 import express from 'express';
 import { generateLabInsights } from '../services/labInsightsService.js';
 import { requireAuth } from '../middleware/auth.js';
+import { requireNoticeAck } from '../middleware/requireNoticeAck.js';
 
 const router = express.Router();
 
@@ -14,7 +15,7 @@ const router = express.Router();
  * Body: { reports: [ { title, doctor, hospital, reportDate, diagnosis,
  *   medicines, notes, analysis }, ... ] }
  */
-router.post('/', requireAuth, async (req, res) => {
+router.post('/', requireAuth, requireNoticeAck('ask_swastha'), async (req, res) => {
   const reports = Array.isArray(req.body?.reports) ? req.body.reports : [];
 
   if (reports.length === 0) {

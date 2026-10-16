@@ -1,6 +1,7 @@
 import express from 'express';
 import { processReportEmbeddings } from '../services/embeddingService.js';
 import { requireAuth } from '../middleware/auth.js';
+import { requireNoticeAck } from '../middleware/requireNoticeAck.js';
 import { supabase } from '../config/supabase.js';
 import { getTimelineReport } from '../../db/reports.js';
 import { isDoctorLinkedToPatient } from '../../db/doctorPatients.js';
@@ -26,7 +27,7 @@ const router = express.Router();
  * would find the right report but the chunk had no drug names in it).
  * user_id comes from the JWT, not the body.
  */
-router.post('/index', requireAuth, async (req, res) => {
+router.post('/index', requireAuth, requireNoticeAck('ask_swastha'), async (req, res) => {
   const callerId = req.user.userId;
   const { id } = req.body || {};
 

@@ -2,6 +2,7 @@ import express from 'express';
 import { hasAcknowledged, recordAcknowledgement } from '../../db/aiNoticeAcknowledgements.js';
 import { requireAuth } from '../middleware/auth.js';
 import { AI_NOTICE_VERSION } from '../config/aiNotices.js';
+import { backfillReportIndex } from '../services/indexBackfillService.js';
 
 const router = express.Router();
 
@@ -47,6 +48,11 @@ router.post('/ack', requireAuth, async (req, res) => {
 
   try {
     await recordAcknowledgement(userId, feature, AI_NOTICE_VERSION);
+    // Reports saved before the user accepted were not indexed (indexing needs
+    // this acknowledgement); catch them up in the background.
+    if (feature === 'ask_swastha') {
+      backfillReportIndex(userId).catch(() => {});
+    }
     return res.status(200).json({ acknowledged: true, notice_version: AI_NOTICE_VERSION });
   } catch (err) {
     console.error(`[POST /api/notices/ack] failed to store acknowledgement for user ${userId}, feature ${feature}:`, err);

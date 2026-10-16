@@ -1,6 +1,7 @@
 import express from 'express';
 import { summarizePatientTimeline } from '../services/patientSummaryService.js';
 import { requireAuth } from '../middleware/auth.js';
+import { requireNoticeAck } from '../middleware/requireNoticeAck.js';
 
 const router = express.Router();
 
@@ -15,7 +16,7 @@ const router = express.Router();
  * Body: { patientName, reports: [ { title, category, doctor, hospital,
  *   reportDate, diagnosis, medicines, notes, analysis }, ... ] }
  */
-router.post('/', requireAuth, async (req, res) => {
+router.post('/', requireAuth, requireNoticeAck('ask_swastha'), async (req, res) => {
   const { patientName } = req.body || {};
   const reports = Array.isArray(req.body?.reports) ? req.body.reports : [];
 

@@ -193,7 +193,7 @@ test('bumping the notice version re-prompts even a previously-acknowledged user'
   const token = signToken(userId);
 
   await withServer(async (baseUrl) => {
-    // The real AI_NOTICE_VERSION (1) was never acknowledged by this user —
+    // The real AI_NOTICE_VERSION was never acknowledged by this user —
     // only the stale version 0 was — so this must still be blocked.
     const res = await fetch(`${baseUrl}/rag/api/search/chat`, {
       method: 'POST',
@@ -204,7 +204,7 @@ test('bumping the notice version re-prompts even a previously-acknowledged user'
 
     assert.equal(res.status, 403);
     assert.equal(data.code, 'AI_NOTICE_ACK_REQUIRED');
-    assert.equal(data.notice_version, 1, 'must report the CURRENT version, not the stale one the user already has');
+    assert.equal(data.notice_version, AI_NOTICE_VERSION, 'must report the CURRENT version, not the stale one the user already has');
   });
 });
 

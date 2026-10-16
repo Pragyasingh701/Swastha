@@ -1,6 +1,7 @@
 import express from 'express';
 import { summarizeReport } from '../services/summaryService.js';
 import { requireAuth } from '../middleware/auth.js';
+import { requireNoticeAck } from '../middleware/requireNoticeAck.js';
 
 const router = express.Router();
 
@@ -12,7 +13,7 @@ const router = express.Router();
  * the report's fields; returns the generated summary text. Caller is
  * responsible for storing it — this endpoint doesn't touch the database.
  */
-router.post('/', requireAuth, async (req, res) => {
+router.post('/', requireAuth, requireNoticeAck('ask_swastha'), async (req, res) => {
   try {
     const summary = await summarizeReport(req.body || {});
     return res.status(200).json({ summary });

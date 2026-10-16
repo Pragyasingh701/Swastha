@@ -712,6 +712,14 @@ router.get('/:patientId/summary', async (req, res) => {
     });
 
     const data = await ragRes.json();
+    if (ragRes.status === 403 && data?.code === 'AI_NOTICE_ACK_REQUIRED') {
+      return res.status(403).json({
+        message: 'Please review how Swastha uses AI before generating patient summaries.',
+        code: data.code,
+        feature: data.feature,
+        notice_version: data.notice_version,
+      });
+    }
     if (!ragRes.ok) {
       console.error('Patient summary generation failed:', data?.error || ragRes.status);
       return res.status(502).json({ message: data?.error || 'Could not generate patient summary.' });

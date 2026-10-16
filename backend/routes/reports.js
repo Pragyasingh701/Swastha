@@ -28,7 +28,7 @@ const RAG_BASE_URL = process.env.RAG_BASE_URL || `http://localhost:${process.env
 // "AI Summary" — never generated on click. Failure here does NOT fail the
 // report save — the report is still valid without a summary, same
 // graceful-degradation pattern as AI extraction elsewhere in this app.
-async function generateSummary(authHeader, report) {
+async function generateSummaryResult(authHeader, report) {
   try {
     const res = await fetch(`${RAG_BASE_URL}/summarize`, {
       method: 'POST',
@@ -48,14 +48,24 @@ async function generateSummary(authHeader, report) {
       }),
     });
     const data = await res.json();
+    // The user hasn't accepted how Swastha uses AI yet: not an error to hide —
+    // callers that can ask the user (the on-demand route) pass it on so the UI
+    // can show the notice; the save paths just skip the summary.
+    if (res.status === 403 && data?.code === 'AI_NOTICE_ACK_REQUIRED') {
+      return { summary: null, consentRequired: { code: data.code, feature: data.feature, notice_version: data.notice_version } };
+    }
     if (!res.ok) {
       throw new Error(data?.error || `rag summarize returned HTTP ${res.status}`);
     }
-    return data.summary || null;
+    return { summary: data.summary || null };
   } catch (err) {
     console.error(`AI summary generation failed for report ${report.id}:`, err.message || err);
-    return null;
+    return { summary: null };
   }
+}
+
+async function generateSummary(authHeader, report) {
+  return (await generateSummaryResult(authHeader, report)).summary;
 }
 
 function getAuthUser(req) {
@@ -219,6 +229,14 @@ router.get('/lab-insights', async (req, res) => {
     });
 
     const data = await ragRes.json();
+    if (ragRes.status === 403 && data?.code === 'AI_NOTICE_ACK_REQUIRED') {
+      return res.status(403).json({
+        message: 'Please review how Swastha uses AI before generating lab insights.',
+        code: data.code,
+        feature: data.feature,
+        notice_version: data.notice_version,
+      });
+    }
     if (!ragRes.ok) {
       console.error('Lab insights generation failed:', data?.error || ragRes.status);
       return res.status(502).json({ message: data?.error || 'Could not generate lab insights.' });
@@ -525,7 +543,13 @@ router.post('/:id/summarize', async (req, res) => {
       return res.json({ report: existing });
     }
 
-    const summary = await generateSummary(req.headers.authorization, existing);
+    const { summary, consentRequired } = await generateSummaryResult(req.headers.authorization, existing);
+    if (consentRequired) {
+      return res.status(403).json({
+        message: 'Please review how Swastha uses AI before generating summaries.',
+        ...consentRequired,
+      });
+    }
     if (!summary) {
       return res.status(502).json({ message: 'Could not generate an AI summary for this report. Please try again.' });
     }
