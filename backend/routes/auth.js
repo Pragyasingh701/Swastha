@@ -386,30 +386,28 @@ async function decodeGoogleCredential(credential) {
  * POST /api/auth/login
  * Email & Password Login -> Sends 6-digit OTP code to email
  */
+// A real bcrypt hash of a throwaway string, compared against when the account
+// doesn't exist (or has no password) so that case takes as long as a wrong
+// password and the response time doesn't reveal which addresses are registered.
+const DUMMY_PASSWORD_HASH = bcrypt.hashSync('swastha-dummy-password-for-timing', 12);
+
+// Every login failure says the same thing: which part was wrong (no such
+// account, Google-only account, bad password) is not disclosed.
+const LOGIN_FAILED_MESSAGE =
+  'Incorrect email or password. If you signed up with Google, use "Continue with Google".';
+
 router.post('/login', async (req, res) => {
-  const { email, password } = req.body;
-  if (!email || !password) {
+  const { email, password } = req.body || {};
+  if (typeof email !== 'string' || typeof password !== 'string' || !email.trim() || !password) {
     return res.status(400).json({ message: 'Email and password are required' });
   }
 
   const normalizedEmail = email.toLowerCase().trim();
   const user = await findUserByEmail(normalizedEmail);
 
-  if (!user) {
-    return res.status(404).json({ message: 'No account found with this email address. Please create an account first.' });
-  }
-
-  // Check if account was registered strictly via Google Sign-In (no password created)
-  if (!user.password_hash) {
-    return res.status(400).json({
-      message: 'This account was registered using Google Sign-In. Please click "Continue with Google" to log in.',
-      isGoogleUser: true,
-    });
-  }
-
-  // Password Verification
-  if (!(await bcrypt.compare(password, user.password_hash))) {
-    return res.status(401).json({ message: 'Incorrect password. Please try again.' });
+  const passwordOk = await bcrypt.compare(password, user?.password_hash || DUMMY_PASSWORD_HASH);
+  if (!user || !user.password_hash || !passwordOk) {
+    return res.status(401).json({ message: LOGIN_FAILED_MESSAGE });
   }
 
   // Generate 6-digit OTP code for Login Verification
@@ -1081,26 +1079,20 @@ router.post('/change-password/confirm', authenticateToken, async (req, res) => {
  * POST /api/auth/forgot-password
  */
 router.post('/forgot-password', async (req, res) => {
-  const { email } = req.body;
-  if (!email) {
+  const { email } = req.body || {};
+  if (typeof email !== 'string' || !email.trim()) {
     return res.status(400).json({ message: 'Email address is required.' });
   }
 
   const normalizedEmail = email.toLowerCase().trim();
+  // The reply never depends on whether the address has an account (or only a
+  // Google login), so this can't be used to find out who is registered.
+  const genericReply = { message: 'If an account exists for that email, we\'ve sent a password reset link to it.' };
+
   const existingUser = await findUserByEmail(normalizedEmail);
-
-  // 1. Check if the user exists in database records
-  if (!existingUser) {
-    return res.status(404).json({
-      message: 'No registered account found with this email address. Please check your email or create a new account.',
-    });
-  }
-
-  // 2. Check if account has a password created (Google-only accounts do not use passwords)
-  if (!existingUser.password_hash) {
-    return res.status(400).json({
-      message: 'This account was registered using Google Sign-In and does not have a password. Please log in using "Continue with Google".',
-    });
+  // Google-only accounts have no password to reset.
+  if (!existingUser || !existingUser.password_hash) {
+    return res.json(genericReply);
   }
 
   // Clear any existing reset tokens for this email
@@ -1110,21 +1102,17 @@ router.post('/forgot-password', async (req, res) => {
     }
   }
 
-  const resetToken = 'rst_' + Math.random().toString(36).substring(2) + Date.now().toString(36);
+  const resetToken = 'rst_' + crypto.randomBytes(24).toString('hex');
   resetTokenStore.set(resetToken, { email: normalizedEmail, expiresAt: Date.now() + 30 * 60 * 1000 });
 
+  // Replied to before the email goes out: otherwise the extra time a real
+  // send takes would itself reveal that the account exists.
+  res.json(genericReply);
   try {
     await sendPasswordResetEmail(normalizedEmail, resetToken);
-    return res.json({
-      message: `Password reset link sent to ${normalizedEmail}`,
-      resetToken,
-    });
   } catch (error) {
     resetTokenStore.delete(resetToken);
-    return res.status(500).json({
-      message: 'Failed to send password reset email.',
-      error: error.message,
-    });
+    console.error('Password reset email failed:', error?.message || error);
   }
 });
 
