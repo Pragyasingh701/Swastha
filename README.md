@@ -91,7 +91,7 @@ Swastha/
 
 ---
 
-## 🗄️ Supabase Database Architecture (9 Tables + 1 View)
+## 🗄️ Supabase Database Architecture (9 Tables)
 
 **Patients and doctors are separate tables**, not a shared `users` table with a role column — that
 split (`patients` / `doctors` / `pending_registrations`, replacing the old single `users` table)
@@ -169,16 +169,6 @@ CREATE TABLE public.pending_registrations (
   created_at           TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at           TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
-
--- Read-only convenience view for the login lookup path — a UNION across all
--- 3 identity tables, not a merge. Lets auth code check one place for "does
--- this email exist, and with which password_hash / role."
-CREATE VIEW public.auth_identities AS
-  SELECT id, email, password_hash, auth_provider, 'patient'::text AS role FROM public.patients
-  UNION ALL
-  SELECT id, email, password_hash, auth_provider, 'doctor'::text AS role FROM public.doctors
-  UNION ALL
-  SELECT id, email, password_hash, auth_provider, 'none'::text AS role FROM public.pending_registrations;
 
 -- 4. Medical Reports & Timeline Table
 -- NOTE: id is BIGINT (verified via pg_dump), not UUID, despite this table
