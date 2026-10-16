@@ -436,8 +436,12 @@ JWT_SECRET=your_jwt_secret_key_here
 
 # Used to build links in transactional emails (password reset, family authorization confirm).
 # Defaults to localhost if unset — set these explicitly in production.
+# FRONTEND_URL is also the CORS allow-list: only browsers on that origin (plus localhost:5173
+# outside production) may call the API. If it is unset the API accepts every origin and logs
+# a warning. CORS_ORIGINS (comma-separated) adds extra origins, e.g. Vercel preview URLs.
 FRONTEND_URL=http://localhost:5173
 BACKEND_URL=http://localhost:5001
+# CORS_ORIGINS=https://my-preview-branch.vercel.app
 
 # Supabase Credentials
 SUPABASE_URL=https://your-project-ref.supabase.co
