@@ -6,7 +6,6 @@ import { isDoctorLinkedToPatient } from '../db/doctorPatients.js';
 import { isPatientLinkedToFamilyMember } from '../db/family.js';
 import { validateTimelineReportPayload } from '../utils/timelineValidation.js';
 import { uploadMemory, uploadFileToSupabase } from '../config/supabaseStorage.js';
-import supabase from '../config/supabase.js';
 import { createNotification } from '../db/notifications.js';
 import { decryptMultipartFields } from '../middleware/wireCrypto.js';
 
@@ -73,20 +72,12 @@ function getAuthUser(req) {
   }
 }
 
-async function resolveTargetUser(req, authUser) {
-  const requestedUserId = String(req.body?.userId || req.query?.userId || '').trim();
-  const requestedEmail = String(req.body?.targetEmail || req.query?.email || '').trim().toLowerCase();
-  let targetUser = null;
-
-  if (requestedUserId) {
-    targetUser = await findUserById(requestedUserId);
-  } else if (requestedEmail) {
-    targetUser = await findUserByEmail(requestedEmail);
-  }
-
-  const targetUserId = targetUser?.id || authUser.userId;
+// The single access gate for touching someone else's timeline — shared by
+// the read route and every write route so the two can't drift apart again
+// (GET used to check doctors only, leaving every other role unchecked).
+async function assertCanAccessTarget(authUser, targetUserId) {
   if (targetUserId === authUser.userId) {
-    return targetUserId;
+    return;
   }
 
   if (authUser.role === 'doctor') {
@@ -108,17 +99,33 @@ async function resolveTargetUser(req, authUser) {
     if (!linked) {
       throw new Error('You are not linked to this patient.');
     }
-    return targetUserId;
+    return;
   }
 
   if (authUser.role === 'patient') {
     const isFamilyMember = await isPatientLinkedToFamilyMember(authUser.userId, targetUserId);
     if (isFamilyMember) {
-      return targetUserId;
+      return;
     }
   }
 
-  throw new Error('You do not have permission to edit this timeline.');
+  throw new Error('You do not have permission to access this timeline.');
+}
+
+async function resolveTargetUser(req, authUser) {
+  const requestedUserId = String(req.body?.userId || req.query?.userId || '').trim();
+  const requestedEmail = String(req.body?.targetEmail || req.query?.email || '').trim().toLowerCase();
+  let targetUser = null;
+
+  if (requestedUserId) {
+    targetUser = await findUserById(requestedUserId);
+  } else if (requestedEmail) {
+    targetUser = await findUserByEmail(requestedEmail);
+  }
+
+  const targetUserId = targetUser?.id || authUser.userId;
+  await assertCanAccessTarget(authUser, targetUserId);
+  return targetUserId;
 }
 
 // Multer middleware wrapper with error handling
@@ -163,29 +170,6 @@ function sanitizeUnclearFields(value) {
   }
   return Array.isArray(fields) ? fields.filter((f) => KNOWN_UNCLEAR_FIELDS.includes(f)) : [];
 }
-
-// Return a short-lived signed URL for a storage object path (private buckets)
-router.get('/signed-url', async (req, res) => {
-  const path = String(req.query.path || '').trim();
-  if (!path) {
-    return res.status(400).json({ message: 'A storage path is required (e.g. reports/123.pdf).' });
-  }
-
-  try {
-    const bucket = process.env.SUPABASE_REPORTS_BUCKET || 'reports';
-    const expiresIn = Number(req.query.expiresIn) || 60; // seconds
-    const { data, error } = await supabase.storage.from(bucket).createSignedUrl(path, expiresIn);
-    if (error) {
-      console.error('Signed URL generation error:', error.message || error);
-      return res.status(502).json({ message: error.message || 'Failed to generate signed URL.' });
-    }
-
-    return res.json({ url: data.signedUrl });
-  } catch (err) {
-    console.error('Signed URL endpoint error:', err);
-    return res.status(500).json({ message: 'Unable to generate signed URL.' });
-  }
-});
 
 // Matches both "Lab Report" and "Lab Reports" (both appear in the wild —
 // see MedicalVault.jsx/Timeline.jsx's category configs), case-insensitively.
@@ -252,33 +236,22 @@ router.get('/', async (req, res) => {
     const requestedUserId = String(req.query.userId || '').trim();
     let targetUserId = user.userId;
 
-    if (requestedUserId) {
-      targetUserId = requestedUserId;
-    } else if (requestedEmail) {
-      const targetUser = await findUserByEmail(requestedEmail);
+    if (requestedUserId || requestedEmail) {
+      const targetUser = requestedUserId
+        ? await findUserById(requestedUserId)
+        : await findUserByEmail(requestedEmail);
+      // An unknown target gets the same answer as an unauthorized one, so
+      // this can't be used to probe which emails/ids have accounts.
       if (!targetUser?.id) {
-        return res.status(404).json({ message: 'No account found for that email.' });
+        return res.status(403).json({ message: 'You do not have permission to access this timeline.' });
       }
       targetUserId = targetUser.id;
     }
 
-    // SECURITY: a DOCTOR requesting someone ELSE's reports (targetUserId
-    // !== the caller's own id) requires an accepted doctor_patient link.
-    // This was previously unchecked for doctors — any doctor could read
-    // any patient's reports by passing their id/email as a query param,
-    // link or no link. Scoped to role === 'doctor' only: this same query
-    // param shape is also used by the family-vault "view a family
-    // member's timeline" feature (Timeline.jsx), which has its own,
-    // separate authorization workflow (see backend/routes/family.js) that
-    // this route does not check — narrowing to doctors avoids breaking
-    // that path while still closing the doctor-side hole.
-    if (targetUserId !== user.userId && user.role === 'doctor') {
-      const allowed = await isDoctorLinkedToPatient(user.userId, targetUserId);
-      if (!allowed) {
-        return res.status(403).json({
-          message: 'You do not have access to this patient. The patient must accept your request first.',
-        });
-      }
+    try {
+      await assertCanAccessTarget(user, targetUserId);
+    } catch (accessError) {
+      return res.status(accessError.status || 403).json({ message: accessError.message });
     }
 
     const reports = await listTimelineReports(targetUserId);
