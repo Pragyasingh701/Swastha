@@ -3,6 +3,7 @@ import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "../../../context/AuthContext";
 import { getTimelineReports, generateReportSummary } from "../../../api/reports";
 import ReportFilePreview from "../../../components/common/ReportFilePreview";
+import { AI_NOTICE_ACCEPTED_EVENT } from "../../../components/common/AiNoticeGate";
 import ResponsiveSidebar from "../../../components/common/ResponsiveSidebar";
 import SettingsModal from "../../settings/components/SettingsModal";
 import ProfileDropdown from "../../settings/components/ProfileDropdown";
@@ -678,6 +679,16 @@ function ReportPreview({ report, token, onSummaryGenerated, onClose }) {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [report.id]);
+
+  // Generation was refused because the AI notice hadn't been accepted; once the
+  // global notice (AiNoticeGate) is accepted, try again without a manual retry.
+  useEffect(() => {
+    if (!genError || report.analysis) return undefined;
+    const retry = () => runGenerate();
+    window.addEventListener(AI_NOTICE_ACCEPTED_EVENT, retry);
+    return () => window.removeEventListener(AI_NOTICE_ACCEPTED_EVENT, retry);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [genError, report.analysis]);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 px-4 py-6">

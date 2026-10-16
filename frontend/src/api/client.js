@@ -11,6 +11,20 @@ export const BASE_URL = import.meta.env.VITE_API_BASE_URL || ''
 // would log the user out and navigate away even when the server never
 // deleted the account, leaving all patient/queue records intact for the
 // next registration with the same email to pick back up.
+// The backend answers 403 { code: 'AI_NOTICE_ACK_REQUIRED' } when an AI
+// feature is used before the user has accepted how Swastha uses AI. Rather than
+// every caller handling that, it is announced once and a single global modal
+// (components/common/AiNoticeGate.jsx) asks for the acknowledgement.
+export const AI_NOTICE_REQUIRED_EVENT = 'swastha:ai-notice-required'
+
+export function notifyAiNoticeRequired(feature) {
+  try {
+    window.dispatchEvent(new CustomEvent(AI_NOTICE_REQUIRED_EVENT, { detail: { feature: feature || 'ask_swastha' } }))
+  } catch {
+    // no window (tests/SSR) — nothing to notify
+  }
+}
+
 async function parseResponse(res, baseUrl) {
   let data = null
   try {
@@ -22,6 +36,9 @@ async function parseResponse(res, baseUrl) {
     data = await decryptPiiFields(data, baseUrl)
   }
   if (!res.ok) {
+    if (res.status === 403 && data?.code === 'AI_NOTICE_ACK_REQUIRED') {
+      notifyAiNoticeRequired(data.feature)
+    }
     const message = (data && (data.message || data.error)) || `Request failed with status ${res.status}`
     const err = new Error(message)
     err.status = res.status
@@ -119,5 +136,5 @@ export function getAuthHeader(token) {
 
 export default {
   apiGet, apiPost, apiRequest,
-  getStoredToken, getAuthHeader, BASE_URL,
+  getStoredToken, getAuthHeader, BASE_URL, notifyAiNoticeRequired,
 }

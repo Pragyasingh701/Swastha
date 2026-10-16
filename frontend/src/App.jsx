@@ -1,4 +1,5 @@
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
+import AiNoticeGate from "./components/common/AiNoticeGate";
 import { useAuth } from "./context/AuthContext";
 
 // Landing Page
@@ -217,6 +218,7 @@ function WildcardRedirect() {
 export default function App() {
   return (
     <BrowserRouter>
+      <AiNoticeGate />
       <Routes>
         {/* Landing & Guest-only Auth Routes */}
         <Route path="/" element={<GuestRoute><LandingPage /></GuestRoute>} />
