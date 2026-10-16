@@ -12,6 +12,7 @@
 //   - embeddings are the ONE exception: they throw, because a silently unindexed
 //     report is permanently unfindable (§9, confirmed with the user)
 //   - never log a key value; reference keys as key#N/M only
+import { recordAiRequest } from '../utils/aiRequestLog.js';
 import { GEMINI_API_KEYS, OPENROUTER_API_KEY, ALLOW_OPENROUTER_FALLBACK } from './env.js';
 
 const GEMINI_BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
@@ -243,7 +244,7 @@ async function freeOpenRouterModels({ vision = false } = {}) {
  *   Resolves even on total failure (degraded:true) — EXCEPT task 'embedding',
  *   which throws, by design.
  */
-export async function runAI({ task, input, file, json = false, taskType, label = task }) {
+async function runAIInner({ task, input, file, json = false, taskType, label = task }) {
   if (!task || !MODEL_LADDER[task]) throw new Error(`runAI: unknown task "${task}"`);
   if (task === 'embedding' && (!input || !input.trim())) {
     throw new Error('runAI: refusing to embed empty text');
@@ -382,6 +383,29 @@ export async function runAI({ task, input, file, json = false, taskType, label =
     throw new Error(`runAI(embedding) exhausted all keys after ${attempts} attempts: ${trail.join(' | ')}`);
   }
   return degraded(attempts, 'ALL_PROVIDERS_EXHAUSTED', task);
+}
+
+// Public entry point: runs the work, then records which provider/model
+// actually handled it (see utils/aiRequestLog.js — no content is stored).
+export async function runAI(args) {
+  const startedAt = Date.now();
+  try {
+    const result = await runAIInner(args);
+    recordAiRequest({
+      kind: args.task,
+      provider: result.provider,
+      model: result.model_used,
+      ok: result.ok,
+      degraded: result.degraded,
+      latencyMs: Date.now() - startedAt,
+      errorCode: result.error_code || null,
+    });
+    return result;
+  } catch (err) {
+    // task 'embedding' throws on exhaustion by design — still worth a row.
+    recordAiRequest({ kind: args?.task, provider: null, ok: false, degraded: true, latencyMs: Date.now() - startedAt, errorCode: 'THROWN' });
+    throw err;
+  }
 }
 
 function degraded(attempts, code, task) {
