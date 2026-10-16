@@ -4,6 +4,9 @@ import { requireAuth } from '../middleware/auth.js';
 import { requireNoticeAck } from '../middleware/requireNoticeAck.js';
 import { logAccess } from '../../db/askSwasthaAccessLog.js';
 
+// Same limit as the chat route (searchChat.js) and the search box in the UI.
+const MAX_QUERY_CHARS = 2000;
+
 const router = express.Router();
 
 /**
@@ -24,6 +27,12 @@ router.post('/', requireAuth, requireNoticeAck('ask_swastha'), async (req, res) 
 
   if (!query || typeof query !== 'string' || !query.trim()) {
     return res.status(400).json({ error: 'query (non-empty string) is required' });
+  }
+  // Same cap as /api/search/chat and the UI. Unbounded text here went through
+  // regex matching and an embedding call, so a multi-megabyte "question" could
+  // stall the server's event loop for seconds per request.
+  if (query.length > MAX_QUERY_CHARS) {
+    return res.status(400).json({ error: `query must be ${MAX_QUERY_CHARS} characters or fewer` });
   }
 
   try {
