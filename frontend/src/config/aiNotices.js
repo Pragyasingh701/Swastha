@@ -22,7 +22,7 @@ export const AI_NOTICES = {
   voice_intake: {
     title: 'How voice intake uses AI',
     body:
-      'Your voice recording and its transcript are sent to an AI service to convert your speech to text, and to read questions aloud to you.',
+      'Your answers, typed or spoken, are sent to AI services to understand and organise them. If you speak, your voice recording and its transcript are sent to a speech service to convert it to text, and questions are read aloud to you by one.',
   },
   report_upload: {
     title: 'How report scanning uses AI',

@@ -29,7 +29,7 @@ export const AI_NOTICES = {
   },
   voice_intake: {
     short:
-      'Your voice and its transcript are sent to an AI service to convert speech to text and to read questions aloud.',
+      'Your answers, typed or spoken, are sent to AI services to understand and organise them. If you speak, your voice and its transcript are sent to a speech service to convert it to text, and questions are read aloud by one.',
   },
   report_upload: {
     short: 'Uploaded documents are read by AI to auto-fill this form.',

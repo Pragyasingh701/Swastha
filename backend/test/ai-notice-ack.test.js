@@ -1,10 +1,7 @@
 // Part 1 of the AI-processing disclosure feature: a one-time, server-side-
 // enforced acknowledgement gate in front of Ask Swastha (POST
-// /rag/api/search/chat). Voice intake (POST /rag/api/intake/start) USED to
-// be gated the same way but had its consent requirement removed by product
-// decision — see the "voice intake consent gate removed" test below, which
-// now asserts the opposite of what it once did (no acknowledgement required
-// at all for intake).
+// /rag/api/search/chat) and voice intake (POST /rag/api/intake/start). The
+// intake gate was removed for a while and has been put back.
 //
 // mock.module can't re-mock an already-mocked specifier within one process,
 // so every test in this file shares ONE mocked db/aiNoticeAcknowledgements.js
@@ -208,7 +205,7 @@ test('bumping the notice version re-prompts even a previously-acknowledged user'
   });
 });
 
-test('POST /intake/start requires no AI-notice acknowledgement (voice intake consent gate removed)', async () => {
+test('a missing acknowledgement blocks first use of voice intake server-side (403)', async () => {
   const userId = `usr_noack_intake_${Date.now()}`;
   const token = signToken(userId);
 
@@ -220,7 +217,26 @@ test('POST /intake/start requires no AI-notice acknowledgement (voice intake con
     });
     const data = await res.json();
 
-    assert.equal(res.status, 200, 'voice intake must work with no acknowledgement on record at all');
+    assert.equal(res.status, 403);
+    assert.equal(data.code, 'AI_NOTICE_ACK_REQUIRED');
+    assert.equal(data.feature, 'voice_intake');
+  });
+});
+
+test('acknowledging voice intake unblocks POST /intake/start', async () => {
+  const userId = `usr_ack_intake_${Date.now()}`;
+  ackStore.add(ackKey(userId, 'voice_intake', AI_NOTICE_VERSION));
+  const token = signToken(userId);
+
+  await withServer(async (baseUrl) => {
+    const res = await fetch(`${baseUrl}/rag/api/intake/start`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ language: 'en-IN' }),
+    });
+    const data = await res.json();
+
+    assert.equal(res.status, 200);
     assert.ok(data.session_id);
   });
 });

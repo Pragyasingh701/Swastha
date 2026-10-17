@@ -6,6 +6,7 @@ import { accessExpiryFromNow } from '../db/doctorPatients.js';
 import { startIntakeSession } from '../rag/services/intakeService.js';
 import { synthesizeSpeech } from '../rag/services/ttsService.js';
 import { verifyAuthToken, signPurposeToken, verifyPurposeToken } from '../config/jwt.js';
+import { checkNoticeAck } from '../db/aiNoticeAcknowledgements.js';
 
 const router = express.Router();
 
@@ -140,6 +141,26 @@ router.post('/verify-otp', requirePatientAuth, async (req, res) => {
 
   if (!doctorId) {
     return res.status(400).json({ message: 'doctorId is required.' });
+  }
+
+  // This is the OTHER way into intake besides POST /rag/api/intake/start: it
+  // creates its own session row, so the same server-side acknowledgement has
+  // to be checked here, or a clinic check-in patient could start an intake
+  // (and have their answers and audio sent to AI providers) without ever
+  // accepting how it uses AI. Same check, and the same fail-closed behaviour,
+  // as the middleware on /start; only the response shape follows this file's
+  // convention (`message`, where the rag sub-app uses `error`).
+  const ackResult = await checkNoticeAck(patientId, 'voice_intake');
+  if (!ackResult.ok) {
+    if (ackResult.status === 403) {
+      return res.status(403).json({
+        message: 'You must acknowledge how this feature uses AI before continuing.',
+        code: ackResult.code,
+        feature: ackResult.feature,
+        notice_version: ackResult.noticeVersion,
+      });
+    }
+    return res.status(500).json({ message: 'Could not verify notice acknowledgement. Please try again.' });
   }
 
   // The code must actually have been entered: the token from /verify-code is
