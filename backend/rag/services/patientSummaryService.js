@@ -1,5 +1,6 @@
 // Routed through the shared failover client: Gemini (4 keys) -> OpenRouter.
 import { runAI } from '../config/aiClient.js';
+import { UNTRUSTED_DATA_RULES, wrapUntrusted, sanitizeModelText, sanitizeModelList } from '../utils/untrustedData.js';
 
 // Doctor-facing patient summary: unlike summaryService.js (one report) or
 // labInsightsService.js (lab reports only, chart-shaped output), this
@@ -65,7 +66,9 @@ export async function summarizePatientTimeline(patientName, reports) {
 
   const prompt = `You are a clinical assistant helping a doctor quickly review a patient's history. Below is ${name}'s full medical record timeline, in free-text form, oldest to newest.
 
-${reportBlocks}
+${UNTRUSTED_DATA_RULES}
+
+${wrapUntrusted('records', reportBlocks)}
 
 Return ONLY a single JSON object (no prose, no markdown fences) with this exact shape:
 {
@@ -99,16 +102,13 @@ Rules:
     throw new Error(`Patient summary model returned unparsable output: ${err.message}`);
   }
 
-  const toStringArray = (value) =>
-    Array.isArray(value)
-      ? value.filter((v) => v && String(v).trim()).map((v) => String(v).trim())
-      : [];
-
+  // Cleaned before it reaches a doctor: links the records never contained are
+  // removed and lengths are capped (see utils/untrustedData.js).
   return {
-    overview: typeof parsed.overview === 'string' ? parsed.overview.trim() : '',
-    diagnoses: toStringArray(parsed.diagnoses),
-    medications: toStringArray(parsed.medications),
-    trends: toStringArray(parsed.trends),
-    followUps: toStringArray(parsed.followUps),
+    overview: sanitizeModelText(parsed.overview, 600),
+    diagnoses: sanitizeModelList(parsed.diagnoses),
+    medications: sanitizeModelList(parsed.medications),
+    trends: sanitizeModelList(parsed.trends),
+    followUps: sanitizeModelList(parsed.followUps),
   };
 }

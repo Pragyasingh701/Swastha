@@ -5,6 +5,7 @@
 // it. Shared pieces (threshold, match count, no-results copy, JSON parsing,
 // file_url verification) are imported from there rather than duplicated, so
 // tuning stays in one place.
+import { UNTRUSTED_DATA_RULES, wrapUntrusted } from '../utils/untrustedData.js';
 import { supabase } from '../config/supabase.js';
 import { chatModel } from '../langchain/openRouterChatModel.js';
 import { runAI } from '../config/aiClient.js';
@@ -51,10 +52,11 @@ Rules:
 - CHECK FIRST, before doing anything else: does the follow-up contain a pronoun or implicit reference that only makes sense by looking at the conversation (e.g. "it", "that", "those", "what about X instead", "the first one")? If NOT — if the follow-up already names its own subject in full, with nothing needing to be looked up from an earlier turn — it is ALREADY standalone. Return it completely unchanged, character for character. This is the single most common mistake: merging the PREVIOUS topic into a new, unrelated follow-up that never asked about it. A question like "how many reports does this patient have in total" is a NEW, self-contained question — even though the previous turn was about something else entirely (e.g. allergies) — and must be returned exactly as asked, NOT rewritten into "how many allergy reports does this patient have."
 - Return ONLY the rewritten question, with no preamble, quotes, or explanation.
 
-Conversation:
-${transcript}
+${UNTRUSTED_DATA_RULES}
 
-Follow-up question: ${question}
+${wrapUntrusted('conversation', transcript)}
+
+${wrapUntrusted('follow_up_question', question)}
 
 Standalone question:`;
 

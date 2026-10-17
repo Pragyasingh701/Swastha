@@ -3,6 +3,7 @@
 // "summary" that gets stored, which is honest (it says try again) rather
 // than leaving the summary column stuck empty with no visible cause.
 import { runAI } from '../config/aiClient.js';
+import { UNTRUSTED_DATA_RULES, wrapUntrusted, sanitizeModelText } from '../utils/untrustedData.js';
 
 /**
  * Generate a plain-language AI summary of a full medical report, covering
@@ -39,13 +40,16 @@ export async function summarizeReport(report) {
     throw new Error('summarizeReport: report has no content to summarize');
   }
 
-  const prompt = `You are a medical records assistant. Write a short, clear, plain-language summary of the following health record for the patient to read. Cover everything present in the record below — diagnosis/findings, medicines or results, and any relevant notes — in 3-5 sentences. Do not invent or add anything not stated in the record. Do not give medical advice beyond what's written. Write it as flowing prose, not a bulleted restatement of the fields.
+  const recordText = lines.join('\n');
+  const prompt = `You are a medical records assistant. Write a short, clear, plain-language summary of the health record below for the patient to read. Cover everything present in the record — diagnosis/findings, medicines or results, and any relevant notes — in 3-5 sentences. Do not invent or add anything not stated in the record. Do not give medical advice beyond what's written. Write it as flowing prose, not a bulleted restatement of the fields.
 
-Record:
-${lines.join('\n')}
+${UNTRUSTED_DATA_RULES}
+
+${wrapUntrusted('record', recordText)}
 
 Summary:`;
 
   const res = await runAI({ task: 'generation', input: prompt, label: 'summary' });
-  return res.text;
+  // On total failure `text` is the friendly fallback sentence; cleaning is harmless for it.
+  return sanitizeModelText(res.text, 1500);
 }
