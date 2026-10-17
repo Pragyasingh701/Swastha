@@ -12,6 +12,8 @@ import {
   requestAccessAgain,
   getDoctorNotifications,
   getPatientNotifications,
+  getActiveDoctorAccessForPatient,
+  revokeDoctorAccess,
 } from '../db/doctorPatients.js';
 import { createNotification } from '../db/notifications.js';
 import { findUserById } from '../db/users.js';
@@ -63,6 +65,19 @@ async function requireDoctor(req, res, next) {
   const user = await findUserById(authUser.userId);
   if (!user || user.role !== 'doctor') {
     return res.status(403).json({ message: 'This action is only available to doctor accounts.' });
+  }
+  next();
+}
+
+// Patient-only routes: the role comes from the database, like requireDoctor.
+async function requirePatient(req, res, next) {
+  const authUser = getAuthUser(req);
+  if (!authUser?.userId) {
+    return res.status(401).json({ message: 'Authentication required.' });
+  }
+  const user = await findUserById(authUser.userId);
+  if (!user || user.role !== 'patient') {
+    return res.status(403).json({ message: 'This action is only available to patient accounts.' });
   }
   next();
 }
@@ -146,6 +161,43 @@ router.get('/notifications', async (req, res) => {
  * Declared before any '/:param' route so Express doesn't match
  * "pending-requests" as a :patientId.
  */
+/**
+ * GET /api/doctor-patients/my-doctors
+ * PATIENT-facing: the doctors who can see this patient's records right now.
+ * Declared before any '/:param' route so Express doesn't read "my-doctors" as
+ * a :patientId.
+ */
+router.get('/my-doctors', requirePatient, async (req, res) => {
+  const authUser = getAuthUser(req);
+  try {
+    const doctors = await getActiveDoctorAccessForPatient(authUser.userId);
+    return res.json({ doctors });
+  } catch (error) {
+    console.error('My doctors error:', error);
+    return res.status(500).json({ message: 'Unable to load the doctors who have access.' });
+  }
+});
+
+/**
+ * POST /api/doctor-patients/access/:linkId/revoke
+ * PATIENT-facing: ends a doctor's access to this patient's records now,
+ * rather than at the end of the 24 hours. Only the patient the link belongs to
+ * can do this. The doctor can ask again, and the patient can decline.
+ */
+router.post('/access/:linkId/revoke', requirePatient, async (req, res) => {
+  const authUser = getAuthUser(req);
+  try {
+    const revoked = await revokeDoctorAccess({ linkId: req.params.linkId, patientId: authUser.userId });
+    if (!revoked) {
+      return res.status(404).json({ message: 'No active access found to revoke.' });
+    }
+    return res.json({ message: 'Access revoked. This doctor can no longer see your records.' });
+  } catch (error) {
+    console.error('Revoke access error:', error);
+    return res.status(500).json({ message: 'Unable to revoke access. Please try again.' });
+  }
+});
+
 router.get('/pending-requests', async (req, res) => {
   const authUser = getAuthUser(req);
 

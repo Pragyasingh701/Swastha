@@ -55,6 +55,17 @@ export async function getDoctorPatientSummary(patientId) {
   return request(`/${patientId}/summary`);
 }
 
+/** PATIENT-facing: the doctors who can see this patient's records right now. */
+export async function getMyDoctors() {
+  const result = await request('/my-doctors');
+  return result.doctors || [];
+}
+
+/** PATIENT-facing: end a doctor's access now instead of waiting for it to expire. */
+export async function revokeDoctorAccess(linkId) {
+  return request(`/access/${encodeURIComponent(linkId)}/revoke`, { method: 'POST' });
+}
+
 /** PATIENT-facing: accept a pending doctor link request. */
 export async function acceptDoctorRequest(linkId) {
   return request(`/requests/${linkId}/accept`, { method: 'POST' });

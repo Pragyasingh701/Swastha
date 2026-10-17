@@ -973,3 +973,70 @@ export const deleteDoctorPatient = async ({ doctorId, patientUserId, linkId }) =
     throw error;
   }
 };
+
+/**
+ * PATIENT-facing: the doctors who can see this patient's records right now
+ * (accepted links whose access window hasn't ended), with enough about each
+ * doctor for the patient to recognise them.
+ */
+export const getActiveDoctorAccessForPatient = async (patientId) => {
+  if (!patientId || !supabase) return [];
+
+  const { data: links, error } = await supabase
+    .from('doctor_patient')
+    .select('id, doctor_id, access_expires_at, created_at')
+    .eq('patient_id', patientId)
+    .eq('status', 'accepted');
+  if (error) throw error;
+
+  const active = (links || []).filter((link) => !isAccessExpired(link));
+  if (active.length === 0) return [];
+
+  const { data: doctors, error: doctorsError } = await supabase
+    .from('doctors')
+    .select('id, name, specialty, hospital_name')
+    .in('id', active.map((link) => link.doctor_id));
+  if (doctorsError) throw doctorsError;
+  const doctorById = new Map((doctors || []).map((doctor) => [doctor.id, doctor]));
+
+  return active
+    .map((link) => {
+      const doctor = doctorById.get(link.doctor_id) || {};
+      return {
+        linkId: link.id,
+        doctorName: doctor.name || 'Doctor',
+        specialty: doctor.specialty || null,
+        hospitalName: doctor.hospital_name || null,
+        accessExpiresAt: link.access_expires_at,
+      };
+    })
+    .sort((a, b) => new Date(a.accessExpiresAt) - new Date(b.accessExpiresAt));
+};
+
+/**
+ * PATIENT-facing: ends a doctor's access immediately, instead of waiting out
+ * the 24 hours. Access already lasts only while access_expires_at is in the
+ * future, so revoking just moves that moment into the past: every place that
+ * checks access (records, summaries, intake, Ask Swastha) stops allowing the
+ * doctor at once, with no new status value or schema change. The doctor then
+ * sees the link as expired and can only get access back by sending a new
+ * request, which the patient is free to decline.
+ *
+ * Scoped to the patient: a link that isn't theirs (or isn't accepted) matches
+ * nothing and returns null.
+ */
+export const revokeDoctorAccess = async ({ linkId, patientId }) => {
+  if (!linkId || !patientId || !supabase) return null;
+
+  const { data, error } = await supabase
+    .from('doctor_patient')
+    .update({ access_expires_at: new Date(Date.now() - 1000).toISOString() })
+    .eq('id', linkId)
+    .eq('patient_id', patientId)
+    .eq('status', 'accepted')
+    .select('id, doctor_id')
+    .maybeSingle();
+
+  if (error && error.code !== 'PGRST116') throw error;
+  return data || null;
+};
