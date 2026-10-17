@@ -630,7 +630,11 @@ router.post('/link', requireDoctor, async (req, res) => {
     // NEW pending request. linkDoctorToPatient returns the existing link
     // as-is (no fresh email_action_token) when one already exists, so this
     // naturally skips re-emailing on a repeat/idempotent call.
-    if (result.link.status === 'pending' && result.link.email_action_token && result.link.patient_email) {
+    // Only a request that was really just created or re-opened (isNewRequest)
+    // sends the patient an email or a notification. Repeating the same code for
+    // a request that is already waiting is answered with the existing one and
+    // sends nothing.
+    if (result.isNewRequest && result.link.status === 'pending' && result.link.email_action_token && result.link.patient_email) {
       try {
         const backendUrl = process.env.BACKEND_URL || 'http://localhost:5001';
         const acceptUrl = `${backendUrl}/api/doctor-patients/email-action/accept?token=${result.link.email_action_token}`;
@@ -643,7 +647,7 @@ router.post('/link', requireDoctor, async (req, res) => {
       }
     }
 
-    const recipientId = result?.patient?.patientUserId || result?.patient?.patientId || null;
+    const recipientId = result.isNewRequest ? (result?.patient?.patientUserId || result?.patient?.patientId || null) : null;
     if (recipientId) {
       try {
         await createNotification({

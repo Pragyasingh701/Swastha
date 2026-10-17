@@ -220,7 +220,16 @@ export default function DoctorPatients() {
     try {
       await requestAccessAgain(patientUserId);
       setPatients((prev) =>
-        prev.map((p) => (p.linkId === patient.linkId ? { ...p, linkStatus: 'pending' } : p))
+        prev.map((p) => (p.linkId === patient.linkId
+          ? {
+              ...p,
+              linkStatus: 'pending',
+              requestExpired: false,
+              requestExpiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+              canRequestAgain: undefined,
+              retryAt: null,
+            }
+          : p))
       );
     } catch (err) {
       alert(err.message || 'Failed to send request. Please try again.');
@@ -1049,20 +1058,29 @@ function LockedPatientCard({ patient, linkStatus, openMenuId, setOpenMenuId, del
   const isPending = linkStatus === 'pending';
   const isExpired = linkStatus === 'expired';
   const isDeclined = !isPending && !isExpired;
+  // A pending request cannot be cancelled while the patient still has time to
+  // answer; it lapses after 24 hours, and then the doctor can ask again.
+  const requestLapsed = isPending && (patient.requestExpired === true
+    || (patient.requestExpiresAt && new Date(patient.requestExpiresAt).getTime() <= Date.now()));
 
   // A declined card may be in a 24 hour cooldown (the patient declined twice):
   // tick once a minute so the countdown stays right and the button comes back
   // by itself when the wait is over.
   const [now, setNow] = useState(() => Date.now());
+  const tickUntil = isDeclined ? patient.retryAt : isPending ? patient.requestExpiresAt : null;
   useEffect(() => {
-    if (!isDeclined || !patient.retryAt) return undefined;
+    if (!tickUntil) return undefined;
     const timer = setInterval(() => setNow(Date.now()), 30 * 1000);
     return () => clearInterval(timer);
-  }, [isDeclined, patient.retryAt]);
+  }, [tickUntil]);
   const waitLeft = isDeclined && patient.retryAt ? formatWaitUntil(patient.retryAt, now) : '';
   const inCooldown = isDeclined && Boolean(waitLeft);
+  const pendingWaitLeft = isPending && patient.requestExpiresAt ? formatWaitUntil(patient.requestExpiresAt, now) : '';
+  // The request is still waiting for the patient (no cancel, just a countdown).
+  const requestWaiting = isPending && !requestLapsed && Boolean(pendingWaitLeft || !patient.requestExpiresAt);
+  const requestHasLapsed = isPending && !requestWaiting;
   const declinedOnce = isDeclined && !inCooldown && Number(patient.declineCount) % 2 === 1;
-  const badgeText = isPending ? 'Pending Verification' : isExpired ? 'Inactive' : 'Declined';
+  const badgeText = isPending ? (requestHasLapsed ? 'No Response' : 'Pending Verification') : isExpired ? 'Inactive' : 'Declined';
   const badgeTone = isPending
     ? 'bg-amber-50 text-amber-700 border-amber-200'
     : isExpired
@@ -1107,6 +1125,8 @@ function LockedPatientCard({ patient, linkStatus, openMenuId, setOpenMenuId, del
           </div>
         </div>
 
+        {/* No menu while a request is waiting: it can't be cancelled. */}
+        {!requestWaiting && (
         <div className="relative">
           <button
             type="button"
@@ -1130,11 +1150,12 @@ function LockedPatientCard({ patient, linkStatus, openMenuId, setOpenMenuId, del
                 className="w-full text-left px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 flex items-center gap-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <XCircle size={16} />
-                {deletingPatientId === patient.patientUserId ? 'Removing...' : isExpired || isDeclined ? 'Remove' : 'Cancel Request'}
+                {deletingPatientId === patient.patientUserId ? 'Removing...' : 'Remove'}
               </button>
             </div>
           )}
         </div>
+        )}
       </div>
 
       {isExpired ? (
@@ -1182,14 +1203,35 @@ function LockedPatientCard({ patient, linkStatus, openMenuId, setOpenMenuId, del
             {!isRequestingAgain && !inCooldown && <span className="material-symbols-outlined text-[16px]">refresh</span>}
           </button>
         </div>
+      ) : requestHasLapsed ? (
+        <div className="mt-auto pt-4 border-t border-dashed border-[#c3c6d7]/40 space-y-3">
+          <p className="text-sm text-[#737686] text-center">
+            The patient didn't respond within 24 hours. You can send a new request.
+          </p>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onRequestAgain();
+            }}
+            disabled={isRequestingAgain}
+            className="w-full py-2.5 rounded-lg border border-amber-300 text-amber-800 hover:bg-amber-50 transition-all flex justify-center items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {isRequestingAgain ? 'Sending request...' : 'Request Again'}
+            {!isRequestingAgain && <span className="material-symbols-outlined text-[16px]">refresh</span>}
+          </button>
+        </div>
       ) : (
-        // No "View Profile" button — a pending card is not clickable-through
-        // to any detail view. This message replaces it rather than a disabled
-        // button, so there's no interactive-looking element that a doctor
-        // might expect to do something.
-        <p className="mt-auto text-sm text-[#737686] text-center py-2 border-t border-dashed border-[#c3c6d7]/40">
-          Waiting for patient to accept your request.
-        </p>
+        // A request that is waiting for the patient: no buttons at all, since it
+        // can't be cancelled. If there's no answer within 24 hours the card
+        // offers Request Again instead.
+        <div className="mt-auto py-2 border-t border-dashed border-[#c3c6d7]/40 text-center space-y-1">
+          <p className="text-sm font-medium text-[#737686]">Request pending</p>
+          <p className="text-xs text-[#737686]">
+            Waiting for the patient to respond.
+            {pendingWaitLeft ? ` If they don't, you can send a new request in ${pendingWaitLeft}.` : ''}
+          </p>
+        </div>
       )}
     </div>
   );

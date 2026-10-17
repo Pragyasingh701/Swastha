@@ -59,6 +59,27 @@ export function accessExpiryFromNow() {
 // one written without a window — as the clinic check-in flow once did —
 // granted permanent access. It now counts as expired: access lasts only while
 // a valid, future access_expires_at says so.
+// ── Pending requests ──────────────────────────────────────────────────────
+// A request waiting for the patient cannot be cancelled by the doctor (cancel
+// and re-send was a way to spam a patient with emails). It simply lasts 24
+// hours from when it was sent. If the patient hasn't answered by then it has
+// expired: the patient can no longer accept or decline it, and the doctor may
+// send a new one.
+export const PENDING_REQUEST_TTL_MS = 24 * 60 * 60 * 1000;
+
+function pendingRequestExpiresAt(link) {
+  const sentAt = new Date(link?.requested_at || link?.created_at || 0).getTime();
+  return Number.isFinite(sentAt) ? sentAt + PENDING_REQUEST_TTL_MS : 0;
+}
+
+function isPendingRequestLive(link) {
+  return link?.status === 'pending' && !isPendingRequestExpired(link);
+}
+
+function isPendingRequestExpired(link) {
+  return link?.status === 'pending' && pendingRequestExpiresAt(link) <= Date.now();
+}
+
 // ── Declines ───────────────────────────────────────────────────────────────
 // A patient's "no" is counted on the link row (decline_count) and the row is
 // kept, so deleting a card can't undo it. Declines come in pairs: after the
@@ -202,6 +223,14 @@ function minimalDoctorPatientCard(link, statusOverride) {
     // Only meaningful on a declined card: whether the doctor may ask again, and if
     // not, when. (An expired card can always be re-requested.)
     ...(link.status === 'declined' && !statusOverride ? declineRetryState(link) : {}),
+    // Only meaningful on a pending card: when the request lapses if the patient
+    // doesn't answer, and whether it already has (then the doctor may ask again).
+    ...(link.status === 'pending' && !statusOverride
+      ? {
+          requestExpiresAt: new Date(pendingRequestExpiresAt(link)).toISOString(),
+          requestExpired: isPendingRequestExpired(link),
+        }
+      : {}),
   };
 }
 
@@ -488,14 +517,20 @@ export const linkDoctorToPatient = async ({ doctorId, patientCode }) => {
       return reopenExpiredLink({ doctorId, patient, existingLink });
     }
 
-    const expired = existingLink.status === 'accepted' && isAccessExpired(existingLink);
+    const expired =
+      (existingLink.status === 'accepted' && isAccessExpired(existingLink))
+      || isPendingRequestExpired(existingLink); // the patient never answered
 
     if (!expired) {
       // pending, or still within its 24h access window — idempotent,
       // return the existing link as-is.
       return {
-        link: existingLink,
+        // No email token: nothing new is being sent. (The stored token used to
+        // ride along here, which made the route re-send the patient's email on
+        // every repeat of the same code.)
+        link: { ...existingLink, email_action_token: null },
         patient: existingLink.status === 'accepted' ? normalizeDoctorPatientCard(patient) : minimalDoctorPatientCard(existingLink),
+        isNewRequest: false,
       };
     }
 
@@ -523,6 +558,7 @@ export const linkDoctorToPatient = async ({ doctorId, patientCode }) => {
     patient_blood_group: patient.blood_group || patient.bloodGroup || patient.blood_type || null,
     status: 'pending', // explicit — not relying on the column default alone
     created_at: new Date().toISOString(),
+    requested_at: new Date().toISOString(),
     email_action_token: emailActionToken,
   };
 
@@ -539,6 +575,7 @@ export const linkDoctorToPatient = async ({ doctorId, patientCode }) => {
   await notifyPatientOfNewRequest({ doctorId, patient, link: data });
 
   return {
+    isNewRequest: true,
     link: data,
     // Pending: return the minimal shape, not the full patient object —
     // the requesting doctor doesn't get health data just by sending a
@@ -571,6 +608,7 @@ async function reopenExpiredLink({ doctorId, patient, existingLink }) {
       email_action_token: emailActionToken,
       hidden_by_doctor: false,
       cooldown_until: null,
+      requested_at: new Date().toISOString(),
       // A link being reopened after a decline has already had one: make sure a
       // row declined before decline_count existed carries that into the count.
       ...(existingLink.status === 'declined'
@@ -586,6 +624,7 @@ async function reopenExpiredLink({ doctorId, patient, existingLink }) {
   await notifyPatientOfNewRequest({ doctorId, patient, link: reopened });
 
   return {
+    isNewRequest: true,
     link: reopened,
     patient: minimalDoctorPatientCard(reopened),
   };
@@ -618,6 +657,10 @@ export const requestAccessAgain = async ({ doctorId, patientUserId }) => {
   if (existingLink.status === 'declined') {
     const blocked = declinedCooldownError(existingLink);
     if (blocked) throw blocked;
+  } else if (existingLink.status === 'pending') {
+    if (!isPendingRequestExpired(existingLink)) {
+      throw new Error(`Your request is still waiting for the patient. You can send a new one if they haven't responded in ${formatWait(new Date(pendingRequestExpiresAt(existingLink)).toISOString())}.`);
+    }
   } else if (existingLink.status !== 'accepted' || !isAccessExpired(existingLink)) {
     throw new Error('This request is not eligible to be re-sent.');
   }
@@ -670,7 +713,7 @@ export const getPendingRequestsForPatient = async (patientUserId) => {
   if (!patientUserId || !supabase) return [];
 
   try {
-    const { data: links, error } = await supabase
+    const { data: pendingLinks, error } = await supabase
       .from('doctor_patient')
       .select('*')
       .eq('patient_id', patientUserId)
@@ -678,7 +721,9 @@ export const getPendingRequestsForPatient = async (patientUserId) => {
       .order('created_at', { ascending: false });
 
     if (error) throw error;
-    if (!Array.isArray(links) || links.length === 0) return [];
+    // A request nobody answered in 24 hours has lapsed and is no longer listed.
+    const links = Array.isArray(pendingLinks) ? pendingLinks.filter((l) => !isPendingRequestExpired(l)) : [];
+    if (links.length === 0) return [];
 
     const doctorIds = [...new Set(links.map((l) => l.doctor_id).filter(Boolean))];
     const { data: doctors, error: doctorsError } = await supabase
@@ -738,6 +783,9 @@ export const getPatientNotifications = async (patientUserId) => {
 
     const notifications = [];
     for (const link of links) {
+      // A request the patient never answered has lapsed: it must not keep
+      // showing Accept / Decline buttons.
+      if (isPendingRequestExpired(link)) continue;
       const doctorName = doctorNameById.get(link.doctor_id) || 'Unknown Doctor';
 
       notifications.push({
@@ -830,6 +878,9 @@ export const getDoctorNotifications = async (doctorId) => {
 // double-applying. email_action_token is cleared on resolution so a
 // reused/stale email link can no longer act on this row either.
 async function resolveDoctorLinkRequest({ link, newStatus, resolvedByRole, resolvedByUserId }) {
+  if (isPendingRequestExpired(link)) {
+    throw new Error('This request has expired. The doctor can send a new one.');
+  }
   const updatePayload = { status: newStatus, responded_at: new Date().toISOString(), email_action_token: null };
   if (newStatus === 'accepted') {
     // Access is time-boxed from the moment of acceptance, not permanent —
@@ -1012,7 +1063,7 @@ export const deleteDoctorPatient = async ({ doctorId, patientUserId, linkId }) =
   try {
     let lookup = supabase
       .from('doctor_patient')
-      .select('id, status, decline_count')
+      .select('id, status, decline_count, requested_at, created_at')
       .eq('doctor_id', doctorId);
     lookup = linkId ? lookup.eq('id', linkId) : lookup.eq('patient_id', patientUserId);
     const { data: link, error: lookupError } = await lookup.maybeSingle();
@@ -1020,6 +1071,13 @@ export const deleteDoctorPatient = async ({ doctorId, patientUserId, linkId }) =
 
     if (!link) {
       return { message: 'Patient removed successfully.' };
+    }
+
+    // A request the patient still has time to answer can't be cancelled: cancel
+    // and re-send was a way to flood a patient with requests. It lapses by
+    // itself after 24 hours, and then it can be removed or sent again.
+    if (isPendingRequestLive(link)) {
+      throw new Error("A request can't be cancelled while the patient can still respond. If they don't respond within 24 hours you can send a new one.");
     }
 
     // A link with decline history is never deleted: the history is what stops
