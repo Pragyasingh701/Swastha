@@ -821,8 +821,10 @@ router.get('/:patientId/summary', requireDoctor, async (req, res) => {
  * DOCTOR-facing: re-sends an access request for a patient whose previous
  * 24h access window has expired — used by the "Request Access Again"
  * button on an expired card, so the doctor doesn't have to re-type the
- * patient code. Rejects (via requestAccessAgain) anything that isn't an
- * actually-expired accepted link, e.g. a still-pending or declined pair.
+ * patient code. Also used on a declined card, when the decline rules allow
+ * it (one more try after a first decline, a 24 hour wait after a second; see
+ * declineRetryState in db/doctorPatients.js). Rejects (via requestAccessAgain)
+ * anything else, e.g. a still-pending request.
  */
 router.post('/:patientId/re-request', requireDoctor, async (req, res) => {
   const authUser = getAuthUser(req);

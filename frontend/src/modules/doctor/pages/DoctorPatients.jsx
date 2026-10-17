@@ -1036,9 +1036,32 @@ export default function DoctorPatients() {
 // passed (see backend/db/doctorPatients.js's isAccessExpired) — shown as
 // an inactive/red card with a "Request Access Again" button in place of
 // the pending/declined status message.
+// "23h 10m" / "45m" until `isoTime`; '' once it has passed.
+function formatWaitUntil(isoTime, now) {
+  const ms = new Date(isoTime).getTime() - now;
+  if (!Number.isFinite(ms) || ms <= 0) return '';
+  const minutes = Math.max(1, Math.ceil(ms / 60000));
+  const hours = Math.floor(minutes / 60);
+  return hours > 0 ? `${hours}h ${minutes % 60}m` : `${minutes}m`;
+}
+
 function LockedPatientCard({ patient, linkStatus, openMenuId, setOpenMenuId, deletingPatientId, onDelete, onRequestAgain, isRequestingAgain }) {
   const isPending = linkStatus === 'pending';
   const isExpired = linkStatus === 'expired';
+  const isDeclined = !isPending && !isExpired;
+
+  // A declined card may be in a 24 hour cooldown (the patient declined twice):
+  // tick once a minute so the countdown stays right and the button comes back
+  // by itself when the wait is over.
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (!isDeclined || !patient.retryAt) return undefined;
+    const timer = setInterval(() => setNow(Date.now()), 30 * 1000);
+    return () => clearInterval(timer);
+  }, [isDeclined, patient.retryAt]);
+  const waitLeft = isDeclined && patient.retryAt ? formatWaitUntil(patient.retryAt, now) : '';
+  const inCooldown = isDeclined && Boolean(waitLeft);
+  const declinedOnce = isDeclined && !inCooldown && Number(patient.declineCount) % 2 === 1;
   const badgeText = isPending ? 'Pending Verification' : isExpired ? 'Inactive' : 'Declined';
   const badgeTone = isPending
     ? 'bg-amber-50 text-amber-700 border-amber-200'
@@ -1107,7 +1130,7 @@ function LockedPatientCard({ patient, linkStatus, openMenuId, setOpenMenuId, del
                 className="w-full text-left px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 flex items-center gap-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <XCircle size={16} />
-                {deletingPatientId === patient.patientUserId ? 'Removing...' : isExpired ? 'Remove Patient' : 'Cancel Request'}
+                {deletingPatientId === patient.patientUserId ? 'Removing...' : isExpired || isDeclined ? 'Remove' : 'Cancel Request'}
               </button>
             </div>
           )}
@@ -1130,15 +1153,42 @@ function LockedPatientCard({ patient, linkStatus, openMenuId, setOpenMenuId, del
             {!isRequestingAgain && <span className="material-symbols-outlined text-[16px]">refresh</span>}
           </button>
         </div>
+      ) : isDeclined ? (
+        // Declined: the doctor may ask once more after a first decline, and
+        // must wait 24 hours after a second (decided by the server; this just
+        // shows it and counts down).
+        <div className="mt-auto pt-4 border-t border-dashed border-[#c3c6d7]/40 space-y-3">
+          <p className="text-sm text-[#737686] text-center">
+            {inCooldown
+              ? 'This patient declined again. You can request access again after the wait below.'
+              : declinedOnce
+              ? "This patient declined your request. You can ask once more; if they decline again you'll have to wait 24 hours."
+              : 'The wait is over. You can request access again.'}
+          </p>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onRequestAgain();
+            }}
+            disabled={inCooldown || isRequestingAgain}
+            className="w-full py-2.5 rounded-lg border border-slate-300 text-slate-700 hover:bg-slate-100 transition-all flex justify-center items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {isRequestingAgain
+              ? 'Sending request...'
+              : inCooldown
+              ? `Available in ${waitLeft}`
+              : 'Request Again'}
+            {!isRequestingAgain && !inCooldown && <span className="material-symbols-outlined text-[16px]">refresh</span>}
+          </button>
+        </div>
       ) : (
-        // No "View Profile" button — a pending/declined card is not
-        // clickable-through to any detail view. This message replaces it
-        // rather than a disabled button, so there's no interactive-looking
-        // element that a doctor might expect to do something.
+        // No "View Profile" button — a pending card is not clickable-through
+        // to any detail view. This message replaces it rather than a disabled
+        // button, so there's no interactive-looking element that a doctor
+        // might expect to do something.
         <p className="mt-auto text-sm text-[#737686] text-center py-2 border-t border-dashed border-[#c3c6d7]/40">
-          {isPending
-            ? 'Waiting for patient to accept your request.'
-            : 'This patient has declined your request.'}
+          Waiting for patient to accept your request.
         </p>
       )}
     </div>

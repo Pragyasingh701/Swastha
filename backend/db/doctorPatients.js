@@ -59,6 +59,41 @@ export function accessExpiryFromNow() {
 // one written without a window — as the clinic check-in flow once did —
 // granted permanent access. It now counts as expired: access lasts only while
 // a valid, future access_expires_at says so.
+// ── Declines ───────────────────────────────────────────────────────────────
+// A patient's "no" is counted on the link row (decline_count) and the row is
+// kept, so deleting a card can't undo it. Declines come in pairs: after the
+// first the doctor may ask once more; the second starts a cooldown during
+// which they cannot ask; once it has passed they can ask again, and every two
+// further declines start another cooldown. Accepting resets the count.
+export const DECLINE_COOLDOWN_MS = 24 * 60 * 60 * 1000;
+
+// What a doctor may do about a declined link right now.
+function declineRetryState(link) {
+  // A decline from before counting existed has decline_count 0 but counts as one.
+  const count = Math.max(Number(link?.decline_count) || 0, 1);
+  if (count % 2 === 1) {
+    return { canRequestAgain: true, retryAt: null, declineCount: count }; // the one extra try
+  }
+  const until = link?.cooldown_until ? new Date(link.cooldown_until).getTime() : 0;
+  if (Number.isFinite(until) && until > Date.now()) {
+    return { canRequestAgain: false, retryAt: new Date(until).toISOString(), declineCount: count };
+  }
+  return { canRequestAgain: true, retryAt: null, declineCount: count }; // cooldown over
+}
+
+function formatWait(isoTime) {
+  const minutes = Math.max(1, Math.ceil((new Date(isoTime).getTime() - Date.now()) / 60000));
+  const hours = Math.floor(minutes / 60);
+  return hours > 0 ? `${hours}h ${minutes % 60}m` : `${minutes}m`;
+}
+
+function declinedCooldownError(link) {
+  const retry = declineRetryState(link);
+  return retry.canRequestAgain
+    ? null
+    : new Error(`This patient has declined your request again. You can ask for access again in ${formatWait(retry.retryAt)}.`);
+}
+
 function isAccessExpired(link) {
   if (!link?.access_expires_at) return true;
   const expiresAt = new Date(link.access_expires_at).getTime();
@@ -164,6 +199,9 @@ function minimalDoctorPatientCard(link, statusOverride) {
     linkStatus: statusOverride || link.status, // 'pending' | 'declined' | 'expired' — kept distinct from
     linkedAt: link.created_at, // the unrelated display `status` field above
     accessExpiresAt: link.access_expires_at || null,
+    // Only meaningful on a declined card: whether the doctor may ask again, and if
+    // not, when. (An expired card can always be re-requested.)
+    ...(link.status === 'declined' && !statusOverride ? declineRetryState(link) : {}),
   };
 }
 
@@ -177,6 +215,7 @@ export const getDoctorPatients = async (doctorId) => {
       .from('doctor_patient')
       .select('*')
       .eq('doctor_id', doctorId)
+      .eq('hidden_by_doctor', false)
       .order('created_at', { ascending: false });
 
     if (error) {
@@ -442,9 +481,11 @@ export const linkDoctorToPatient = async ({ doctorId, patientCode }) => {
 
   if (existingLink) {
     if (existingLink.status === 'declined') {
-      // Patient explicitly declined — doctor cannot re-request. Surface a
-      // clear error rather than silently re-sending or silently no-op'ing.
-      throw new Error('This patient has declined your request. You cannot re-request access.');
+      // The patient said no. After a first decline the doctor may ask once
+      // more; after a second there is a cooldown (see declineRetryState).
+      const blocked = declinedCooldownError(existingLink);
+      if (blocked) throw blocked;
+      return reopenExpiredLink({ doctorId, patient, existingLink });
     }
 
     const expired = existingLink.status === 'accepted' && isAccessExpired(existingLink);
@@ -528,6 +569,13 @@ async function reopenExpiredLink({ doctorId, patient, existingLink }) {
       responded_at: null,
       access_expires_at: null,
       email_action_token: emailActionToken,
+      hidden_by_doctor: false,
+      cooldown_until: null,
+      // A link being reopened after a decline has already had one: make sure a
+      // row declined before decline_count existed carries that into the count.
+      ...(existingLink.status === 'declined'
+        ? { decline_count: Math.max(Number(existingLink.decline_count) || 0, 1) }
+        : {}),
     })
     .eq('id', existingLink.id)
     .select()
@@ -567,7 +615,10 @@ export const requestAccessAgain = async ({ doctorId, patientUserId }) => {
   if (!existingLink) {
     throw new Error('No previous request found for this patient.');
   }
-  if (existingLink.status !== 'accepted' || !isAccessExpired(existingLink)) {
+  if (existingLink.status === 'declined') {
+    const blocked = declinedCooldownError(existingLink);
+    if (blocked) throw blocked;
+  } else if (existingLink.status !== 'accepted' || !isAccessExpired(existingLink)) {
     throw new Error('This request is not eligible to be re-sent.');
   }
 
@@ -784,6 +835,15 @@ async function resolveDoctorLinkRequest({ link, newStatus, resolvedByRole, resol
     // Access is time-boxed from the moment of acceptance, not permanent —
     // see the ACCESS EXPIRY note above this file's status-column comment.
     updatePayload.access_expires_at = accessExpiryFromNow();
+    // Accepting wipes the slate: no decline history, no cooldown.
+    updatePayload.decline_count = 0;
+    updatePayload.cooldown_until = null;
+    updatePayload.hidden_by_doctor = false;
+  } else if (newStatus === 'declined') {
+    // Count it. Every second decline starts a cooldown (declineRetryState).
+    const declines = Math.max(Number(link.decline_count) || 0, 0) + 1;
+    updatePayload.decline_count = declines;
+    updatePayload.cooldown_until = declines % 2 === 0 ? new Date(Date.now() + DECLINE_COOLDOWN_MS).toISOString() : null;
   }
 
   const { data, error } = await supabase
@@ -950,22 +1010,41 @@ export const deleteDoctorPatient = async ({ doctorId, patientUserId, linkId }) =
   }
 
   try {
-    let query = supabase
+    let lookup = supabase
+      .from('doctor_patient')
+      .select('id, status, decline_count')
+      .eq('doctor_id', doctorId);
+    lookup = linkId ? lookup.eq('id', linkId) : lookup.eq('patient_id', patientUserId);
+    const { data: link, error: lookupError } = await lookup.maybeSingle();
+    if (lookupError && lookupError.code !== 'PGRST116') throw lookupError;
+
+    if (!link) {
+      return { message: 'Patient removed successfully.' };
+    }
+
+    // A link with decline history is never deleted: the history is what stops
+    // the doctor from asking again at once, and deleting the row would erase
+    // it. Removing the card just hides it. A request still waiting for the
+    // patient is closed so its email link can no longer be used.
+    if (link.status === 'declined' || Number(link.decline_count) > 0) {
+      const { error: hideError } = await supabase
+        .from('doctor_patient')
+        .update({
+          hidden_by_doctor: true,
+          ...(link.status === 'pending' ? { status: 'declined', email_action_token: null } : {}),
+        })
+        .eq('id', link.id)
+        .eq('doctor_id', doctorId);
+      if (hideError) throw hideError;
+      return { message: 'Patient removed successfully.' };
+    }
+
+    const { error } = await supabase
       .from('doctor_patient')
       .delete()
+      .eq('id', link.id)
       .eq('doctor_id', doctorId);
-
-    if (linkId) {
-      query = query.eq('id', linkId);
-    } else if (patientUserId) {
-      query = query.eq('patient_id', patientUserId);
-    }
-
-    const { error } = await query;
-
-    if (error) {
-      throw error;
-    }
+    if (error) throw error;
 
     return { message: 'Patient removed successfully.' };
   } catch (error) {
