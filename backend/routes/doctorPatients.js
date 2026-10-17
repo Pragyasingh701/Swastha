@@ -24,6 +24,7 @@ import {
   getIntakeSessionForPatients,
   setIntakeSessionDoctorAction,
   getIntakeActionHistoryForDoctor,
+  getIntakeSessionActionedByDoctor,
   getPatientNamesByIds,
 } from '../db/intakeSessions.js';
 import { verifyAuthToken } from '../config/jwt.js';
@@ -325,9 +326,9 @@ router.get('/intake-queue/history', requireDoctor, async (req, res) => {
  * GET /api/doctor-patients/intake-queue/:sessionId
  * DOCTOR-facing. Full detail for one intake session — the structured
  * SOCRATES/drug-allergy summary a doctor sees after clicking a queue row.
- * Same 'accepted' link gate as the queue list above: a session only
- * resolves if its patient_id belongs to one of the caller-doctor's
- * accepted-linked patients, otherwise 404 (not 403 — doesn't confirm or
+ * A session resolves if its patient belongs to one of the caller-doctor's
+ * accepted-linked patients, or if this doctor already completed/removed it
+ * (their own history stays readable after access ends), otherwise 404 (not 403 — doesn't confirm or
  * deny whether the session id exists at all to an unauthorized caller).
  *
  * Declared before any other '/:param' route so Express doesn't match
@@ -351,13 +352,22 @@ router.get('/intake-queue/:sessionId', requireDoctor, async (req, res) => {
     const accepted = patients.filter((p) => p.linkStatus === 'accepted');
     const patientById = new Map(accepted.map((p) => [p.patientUserId, p]));
 
-    if (patientById.size === 0) {
-      return res.status(404).json({ message: 'Intake session not found.' });
+    // A session of a currently accessible patient opens as before. Otherwise it
+    // still opens if this doctor already completed or removed it: that is their
+    // own record of what they handled, and it stays readable after the patient's
+    // access has ended.
+    let session = patientById.size
+      ? await getIntakeSessionForPatients(sessionId, [...patientById.keys()], authUser.userId)
+      : null;
+    if (!session) {
+      session = await getIntakeSessionActionedByDoctor(sessionId, authUser.userId);
     }
-
-    const session = await getIntakeSessionForPatients(sessionId, [...patientById.keys()], authUser.userId);
     if (!session) {
       return res.status(404).json({ message: 'Intake session not found.' });
+    }
+    if (!patientById.has(session.patient_id)) {
+      const names = await getPatientNamesByIds([session.patient_id]);
+      patientById.set(session.patient_id, { name: names[session.patient_id] });
     }
 
     return res.json({

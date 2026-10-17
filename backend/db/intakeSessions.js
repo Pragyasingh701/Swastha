@@ -110,6 +110,50 @@ export async function getIntakeSessionForPatients(sessionId, patientIds, doctorI
 }
 
 /**
+ * Detail for a session THIS doctor already completed or removed. It is the
+ * doctor's own record of the problems they handled, so it opens even after the
+ * patient's 24 hour access has ended. Scoped to the doctor's own action rows
+ * (intake_session_actions), so it never exposes a session the doctor did not
+ * act on.
+ *
+ * @param {string} sessionId
+ * @param {string} doctorId - the calling doctor's own id
+ * @returns {Promise<object|null>} the session row, or null if this doctor never
+ *   actioned it
+ */
+export async function getIntakeSessionActionedByDoctor(sessionId, doctorId) {
+  if (!sessionId || !doctorId || !supabase) {
+    return null;
+  }
+
+  const { data: actions, error: actionError } = await supabase
+    .from('intake_session_actions')
+    .select('id')
+    .eq('session_id', sessionId)
+    .eq('doctor_id', doctorId)
+    .limit(1);
+
+  if (actionError) {
+    throw new Error(`getIntakeSessionActionedByDoctor: failed to check actions: ${actionError.message}`);
+  }
+  if (!actions || actions.length === 0) {
+    return null;
+  }
+
+  const { data, error } = await supabase
+    .from('intake_sessions')
+    .select('id, patient_id, doctor_id, chief_complaint, structured_history, priority, red_flag_reason, status, origin, doctor_action, created_at, completed_at')
+    .eq('id', sessionId)
+    .maybeSingle();
+
+  if (error && error.code !== 'PGRST116') {
+    throw new Error(`getIntakeSessionActionedByDoctor: failed to load session: ${error.message}`);
+  }
+
+  return data || null;
+}
+
+/**
  * Marks a queue row as Completed or Removed by the doctor — sets
  * intake_sessions.doctor_action (so it drops out of the live queue) and
  * appends an audit row to intake_session_actions. Ownership (session's
