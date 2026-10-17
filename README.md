@@ -357,7 +357,9 @@ return nothing until real RLS policies are written.
 
 ## 🔒 Wire-format PII encryption
 
-Designated sensitive fields (name, email, phone, DOB, address, and similar —
+Designated sensitive fields (name, email, phone, DOB, address and similar,
+plus medical record content, family health details, intake answers and
+AI-written summaries —
 see `backend/config/sensitiveFields.js` and its frontend mirror,
 `frontend/src/api/pii/fields.js`, the single source of truth for the field
 list) are encrypted in every request/response body between the frontend and
@@ -396,10 +398,10 @@ stronger guarantee than it is):
   state to be shown, so it's visible there (Elements tab, a screenshot,
   React DevTools) regardless of what the Network tab shows for the same
   request.
-- **AI-generated narrative text** (`answer`, `summary`, `insights`, and
-  similar free-text fields from the `/rag` search/summarize endpoints) —
-  deliberately not field-encrypted; see the comment in
-  `backend/config/sensitiveFields.js` for why.
+- **A patient's typed intake answer** — it is sent under the generic key
+  `message`, which can't be listed without encrypting every status string in
+  the app, so that request field is readable on the wire. The questions and
+  recorded answers that come back, and the spoken transcript, are covered.
 - **Database/storage security** — entirely unrelated and unchanged. Data is
   stored in Supabase exactly as it always was; this is a wire-format-only
   concern layered on top, not an at-rest encryption scheme.

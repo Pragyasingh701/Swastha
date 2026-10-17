@@ -41,7 +41,18 @@ export const FIELD_ALIAS_GROUPS = {
 // tell the two apart, so including it would encrypt almost every status
 // string in the app for no PII benefit. See README's "Wire-format PII
 // encryption" section for this and other documented gaps.
-export const WHOLE_FIELD_KEYS = ['notes', 'metadata', 'query'];
+export const WHOLE_FIELD_KEYS = [
+  'notes', 'metadata', 'query',
+  // Medical record content.
+  'title', 'diagnosis', 'medicines', 'analysis',
+  // Family members' health details.
+  'healthOverview', 'conditions',
+  // Intake: what the patient said, and what was recorded from it.
+  'chief_complaint', 'structured_history', 'updated_fields', 'red_flag_reason',
+  'next_question', 'transcript', 'turns',
+  // AI-written text about a patient's records (answers, summaries, insights).
+  'answer', 'structured', 'summary', 'insights',
+];
 
 // Deleted from responses server-side — never appears in the wire format at
 // all, so there's nothing for the frontend to do with these; listed here

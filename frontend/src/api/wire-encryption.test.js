@@ -137,7 +137,7 @@ test('reports.js createTimelineReport with a file: FormData carries the binary p
   const file = new File(['fake-bytes'], 'scan.pdf', { type: 'application/pdf' });
   const doctorMarker = 'Dr Zzqx Marker';
   await createTimelineReport(
-    { title: 'Blood Test', doctor: doctorMarker, hospital: 'City Hospital', notes: 'routine notes' },
+    { title: 'Blood Test', category: 'Lab Report', doctor: doctorMarker, hospital: 'City Hospital', notes: 'routine notes' },
     'fake-jwt-token',
     file
   );
@@ -151,7 +151,9 @@ test('reports.js createTimelineReport with a file: FormData carries the binary p
 
   const parsed = JSON.parse(encryptedFieldsRaw);
   expect(parsed.doctor.__enc).toBe(1); // sensitive field: ciphertext envelope
-  expect(parsed.title).toBe('Blood Test'); // non-sensitive field: left as plain structure
+  expect(parsed.title.__enc).toBe(1); // the record's title is medical content: ciphertext too
+  expect(encryptedFieldsRaw).not.toContain('Blood Test');
+  expect(parsed.category).toBe('Lab Report'); // non-sensitive field: left as plain structure
 });
 
 test('reports.js getTimelineReports: memberEmail travels as an encrypted X-Enc-Params header, never in the URL query string', async () => {
@@ -170,4 +172,16 @@ test('reports.js getTimelineReports: memberEmail travels as an encrypted X-Enc-P
   expect(capturedUrl).not.toContain(email);
   expect(capturedHeaders['X-Enc-Params']).toBeTruthy();
   expect(capturedHeaders['X-Enc-Params']).not.toContain(email);
+});
+
+// The two field lists (this side and backend/config/sensitiveFields.js) must
+// name exactly the same keys: a field encrypted by one side and not recognised
+// by the other would show up as raw ciphertext in the UI, or travel in plaintext.
+test('the frontend and backend sensitive-field lists name the same keys', async () => {
+  const frontend = await import('./pii/fields.js');
+  const backend = await import('../../../backend/config/sensitiveFields.js');
+
+  expect(frontend.FIELD_ALIAS_GROUPS).toEqual(backend.FIELD_ALIAS_GROUPS);
+  expect(frontend.WHOLE_FIELD_KEYS).toEqual(backend.WHOLE_FIELD_KEYS);
+  expect(frontend.STRIP_RESPONSE_KEYS).toEqual(backend.STRIP_RESPONSE_KEYS);
 });

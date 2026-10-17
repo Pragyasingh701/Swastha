@@ -44,20 +44,34 @@ export const FIELD_ALIAS_GROUPS = {
 // the app for no PII benefit. This does leave notifications.message/.title
 // (which sometimes narrate a name, e.g. "Dr. X requested access") as a
 // known, documented gap — see README's "Wire-format PII encryption" section.
-export const WHOLE_FIELD_KEYS = ['notes', 'metadata', 'query'];
+export const WHOLE_FIELD_KEYS = [
+  'notes', 'metadata', 'query',
+  // Medical record content.
+  'title', 'diagnosis', 'medicines', 'analysis',
+  // Family members' health details.
+  'healthOverview', 'conditions',
+  // Intake: what the patient said, and what was recorded from it.
+  'chief_complaint', 'structured_history', 'updated_fields', 'red_flag_reason',
+  'next_question', 'transcript', 'turns',
+  // AI-written text about a patient's records (answers, summaries, insights).
+  'answer', 'structured', 'summary', 'insights',
+];
 
 // Deleted from outgoing responses entirely — never sent, not even
 // encrypted. There is no legitimate reason for a client to ever receive
 // these, hashed or not.
 export const STRIP_RESPONSE_KEYS = ['password_hash', 'passwordHash'];
 
-// Deliberately NOT covered here (see README's "Wire-format PII encryption"
-// section for the reasoning): AI-generated narrative text (`answer`,
-// `summary`, `insights`, `structured`) — these are the primary displayed
-// content of the search/summary features, so field-encrypting them wouldn't
-// reduce their real exposure (decrypt-to-render puts the same text in the
-// DOM either way), and there's no structural leak to close the way there is
-// for `notes`/`message`.
+// Notes on what is covered. The medical content of a record (title, diagnosis,
+// medicines, AI summary), family health details, intake answers and the
+// AI-written text about a patient's records (`answer`, `structured`,
+// `summary`, `insights`) are all in WHOLE_FIELD_KEYS above. As the README says,
+// this does not hide anything from the person looking at their own screen
+// (the browser decrypts to render it); it keeps the content out of what a
+// proxy, a HAR export or a request log can read. A patient's typed intake
+// answer travels under the generic key `message`, which can't be listed
+// without encrypting every status string in the app, so that one request
+// field stays readable on the wire (the reply to it is covered).
 
 const normalize = (key) => String(key).toLowerCase().replace(/_/g, '');
 
