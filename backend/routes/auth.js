@@ -16,6 +16,7 @@ import { sniffFileType } from '../config/supabaseStorage.js';
 import { publicUser } from '../utils/publicUser.js';
 import { passwordPolicyError } from '../utils/passwordPolicy.js';
 import { eraseAccountResidue } from '../db/accountErasure.js';
+import { checkNoticeAck } from '../db/aiNoticeAcknowledgements.js';
 import { verifyAuthToken, signAuthToken, sessionTokenTtl, rememberMeTokenTtl } from '../config/jwt.js';
 
 const router = express.Router();
@@ -799,6 +800,23 @@ router.post('/profile', authenticateToken, async (req, res) => {
       }
       if (address && !isValidFreeTextField(address, { minLength: 8, maxLength: 300 })) {
         return res.status(400).json({ message: 'Please enter a valid, complete practice address.' });
+      }
+
+      // The certificate is sent to an AI provider to be read, so the doctor must
+      // have accepted how Swastha uses AI first (the notice covers uploaded
+      // documents). The frontend shows it when it sees this 403 and the doctor
+      // submits again.
+      const certConsent = await checkNoticeAck(userToUpdate.id, 'ask_swastha');
+      if (!certConsent.ok) {
+        if (certConsent.status === 403) {
+          return res.status(403).json({
+            message: 'Please review how Swastha uses AI before we scan your certificate.',
+            code: certConsent.code,
+            feature: certConsent.feature,
+            notice_version: certConsent.noticeVersion,
+          });
+        }
+        return res.status(500).json({ message: 'Could not verify notice acknowledgement. Please try again.' });
       }
 
       // Process & Extract Medical Data from Uploaded Certificate via Gemini Vision AI
