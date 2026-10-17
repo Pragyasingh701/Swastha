@@ -174,17 +174,25 @@ export async function setIntakeSessionDoctorAction({ sessionId, doctorId, patien
  * @param {string} doctorId
  * @param {string[]} patientIds - already-verified 'accepted'-linked patient ids
  */
-export async function getIntakeActionHistoryForDoctor(doctorId, patientIds) {
-  if (!doctorId || !Array.isArray(patientIds) || patientIds.length === 0 || !supabase) {
+export async function getIntakeActionHistoryForDoctor(doctorId, patientIds = null) {
+  if (!doctorId || !supabase) {
+    return [];
+  }
+  // With no patient list, the history is simply everything THIS doctor did:
+  // it is the doctor's own record of their actions, so it stays visible after a
+  // patient's 24 hour access has ended. (Passing a list still narrows it.)
+  if (Array.isArray(patientIds) && patientIds.length === 0) {
     return [];
   }
 
-  const { data: actions, error: actionsError } = await supabase
+  let query = supabase
     .from('intake_session_actions')
     .select('id, session_id, patient_id, action, acted_at')
-    .eq('doctor_id', doctorId)
-    .in('patient_id', patientIds)
-    .order('acted_at', { ascending: false });
+    .eq('doctor_id', doctorId);
+  if (Array.isArray(patientIds)) {
+    query = query.in('patient_id', patientIds);
+  }
+  const { data: actions, error: actionsError } = await query.order('acted_at', { ascending: false });
 
   if (actionsError) {
     throw new Error(`getIntakeActionHistoryForDoctor: failed to load actions: ${actionsError.message}`);
@@ -266,4 +274,20 @@ export async function abandonStaleIntakeSessions() {
 
   const abandonedIds = (data || []).map((r) => r.id);
   return { abandonedCount: abandonedIds.length, abandonedIds };
+}
+
+/**
+ * Patient names for a list of ids, as { [id]: name }. Used where a screen lists
+ * sessions for patients the doctor may no longer have access to (the intake
+ * History tab), so the name can't come from an active link.
+ */
+export async function getPatientNamesByIds(patientIds) {
+  const ids = [...new Set((patientIds || []).filter(Boolean))];
+  if (ids.length === 0 || !supabase) return {};
+
+  const { data, error } = await supabase.from('patients').select('id, name').in('id', ids);
+  if (error) {
+    throw new Error(`getPatientNamesByIds: failed to load names: ${error.message}`);
+  }
+  return Object.fromEntries((data || []).map((row) => [row.id, row.name]));
 }

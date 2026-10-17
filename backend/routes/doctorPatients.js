@@ -24,6 +24,7 @@ import {
   getIntakeSessionForPatients,
   setIntakeSessionDoctorAction,
   getIntakeActionHistoryForDoctor,
+  getPatientNamesByIds,
 } from '../db/intakeSessions.js';
 import { verifyAuthToken } from '../config/jwt.js';
 import { renderMessagePage, renderConfirmPage } from '../utils/emailActionPage.js';
@@ -279,8 +280,9 @@ router.get('/intake-queue', requireDoctor, async (req, res) => {
  * DOCTOR-facing. Every session the caller-doctor has marked Completed or
  * Removed from the live queue, newest action first — the audit trail for
  * both actions (PRD ask: "keep a history of which he has completed and
- * also which he has removed"). Same 'accepted' link gate as the queue list
- * above.
+ * also which he has removed"). Unlike the live queue it is NOT limited to
+ * patients with an active link: it is the doctor's own record of their
+ * actions, so it stays visible after a patient's access has ended.
  *
  * Declared BEFORE '/intake-queue/:sessionId' so Express matches "history"
  * here rather than treating it as a :sessionId.
@@ -293,21 +295,17 @@ router.get('/intake-queue/history', requireDoctor, async (req, res) => {
   }
 
   try {
-    const patients = await getDoctorPatients(authUser.userId);
-    const accepted = patients.filter((p) => p.linkStatus === 'accepted');
-
-    if (accepted.length === 0) {
-      return res.json({ history: [] });
-    }
-
-    const patientById = new Map(accepted.map((p) => [p.patientUserId, p]));
-    const history = await getIntakeActionHistoryForDoctor(authUser.userId, [...patientById.keys()]);
+    // Not gated on an active link: this is the doctor's own record of what they
+    // did, scoped to their own actions, and it stays visible after a patient's
+    // 24 hour access ends.
+    const history = await getIntakeActionHistoryForDoctor(authUser.userId);
+    const names = await getPatientNamesByIds(history.map((h) => h.patient_id));
 
     return res.json({
       history: history.map((h) => ({
         session_id: h.session_id,
         patient_id: h.patient_id,
-        patient_name: patientById.get(h.patient_id)?.name || 'Patient',
+        patient_name: names[h.patient_id] || 'Patient',
         chief_complaint: h.chief_complaint,
         priority: h.priority,
         red_flag_reason: h.red_flag_reason,
