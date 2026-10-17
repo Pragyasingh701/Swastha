@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import DoctorSidebar from "../components/DoctorSidebar";
 import ProfileDropdown from "../../settings/components/ProfileDropdown";
+import PatientAccessNotice from "../components/PatientAccessNotice";
 import { getDoctorPatients } from "../../../api/doctorPatients";
 import { searchReportsConversational, clearConversation, submitAnswerFeedback } from "../../../api/search";
 import { openReportFile } from "../../../api/reports";
@@ -72,6 +73,9 @@ export default function DoctorAskSwastha() {
   const [isPickerOpen, setIsPickerOpen] = useState(false);
   const [selectedPatient, setSelectedPatient] = useState(null);
   const [patientSearch, setPatientSearch] = useState("");
+  // Set when the server refuses a question with 403 although the list still said
+  // accepted: the doctor's access ended while the page was open.
+  const [accessLostFor, setAccessLostFor] = useState(null);
 
   // patientUserId -> { sessionId, messages }
   const [threads, setThreads] = useState({});
@@ -152,6 +156,54 @@ export default function DoctorAskSwastha() {
     if (!selectedPatient) return null;
     return selectedPatient.patientUserId || selectedPatient.patientId || selectedPatient.id;
   }, [selectedPatient]);
+
+  // Only an accepted, unexpired link gives access: expired, pending and declined
+  // cards carry a linkStatus, an accepted card has none.
+  const linkStatus = selectedPatient ? selectedPatient.linkStatus || "accepted" : null;
+  const hasAccess = Boolean(selectedPatient) && linkStatus === "accepted" && accessLostFor !== patientUserId;
+  const noAccessPatient =
+    selectedPatient && !hasAccess
+      ? linkStatus !== "accepted"
+        ? selectedPatient
+        : { ...selectedPatient, linkStatus: "expired" }
+      : null;
+
+  // Reloads the list and re-selects the same patient, so a request that has
+  // since been accepted turns the page into the real chat.
+  async function refreshPatients() {
+    try {
+      const fresh = await getDoctorPatients();
+      setPatients(fresh);
+      if (patientUserId) {
+        const same = fresh.find((p) => (p.patientUserId || p.patientId || p.id) === patientUserId);
+        if (same) {
+          setSelectedPatient(same);
+          if ((same.linkStatus || "accepted") === "accepted") setAccessLostFor(null);
+        }
+      }
+    } catch {
+      // keep what is on screen; the next check will try again
+    }
+  }
+
+  // While a request is waiting for the patient, look again every 20 seconds so
+  // the chat opens by itself once they accept.
+  useEffect(() => {
+    if (!selectedPatient || hasAccess || linkStatus !== "pending") return undefined;
+    const timer = setInterval(refreshPatients, 20 * 1000);
+    return () => clearInterval(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedPatient, hasAccess, linkStatus]);
+
+  // Merge new fields into the selected patient's card (and the list), e.g. after
+  // a new request was sent from the no-access panel.
+  function patchSelectedPatient(patch) {
+    setSelectedPatient((prev) => (prev ? { ...prev, ...patch } : prev));
+    setPatients((prev) =>
+      prev.map((p) => ((p.patientUserId || p.patientId || p.id) === patientUserId ? { ...p, ...patch } : p))
+    );
+    setAccessLostFor(null);
+  }
 
   const thread = patientUserId ? threads[patientUserId] : null;
   const messages = thread?.messages || [];
@@ -234,6 +286,19 @@ export default function DoctorAskSwastha() {
         },
       }));
     } catch (err) {
+      // 403 without the consent code means the link ended while the page was
+      // open: drop the failed question and show the no-access panel.
+      if (err.status === 403 && err.data?.code !== "AI_NOTICE_ACK_REQUIRED") {
+        setThreads((prev) => ({
+          ...prev,
+          [patientUserId]: {
+            ...prev[patientUserId],
+            messages: prev[patientUserId].messages.slice(0, -1),
+          },
+        }));
+        setAccessLostFor(patientUserId);
+        return;
+      }
       // A 429 gets its own page-specific copy rather than the rate
       // limiter's generic server message. Both the top error banner and
       // the chat bubble show the same text, rather than the banner
@@ -364,6 +429,11 @@ export default function DoctorAskSwastha() {
                               {p.patient_email && (
                                 <span className="text-xs text-slate-400 truncate">· {p.patient_email}</span>
                               )}
+                              {p.linkStatus && p.linkStatus !== "accepted" && (
+                                <span className="ml-auto shrink-0 text-[11px] font-medium text-amber-700 bg-amber-50 border border-amber-200 rounded-full px-2 py-0.5">
+                                  {p.linkStatus === "pending" ? "Pending" : p.linkStatus === "declined" ? "Declined" : "No access"}
+                                </span>
+                              )}
                             </button>
                           );
                         })
@@ -379,7 +449,7 @@ export default function DoctorAskSwastha() {
                   <span>Answers are based only on the selected patient's uploaded records.</span>
                 </div>
 
-                {selectedPatient && (
+                {selectedPatient && hasAccess && (
                   <button
                     type="button"
                     onClick={handleNewChat}
@@ -416,6 +486,13 @@ export default function DoctorAskSwastha() {
                 ))}
               </div>
             </div>
+          ) : noAccessPatient ? (
+            <PatientAccessNotice
+              key={`${patientUserId}-${noAccessPatient.linkStatus}`}
+              patient={noAccessPatient}
+              onRequested={patchSelectedPatient}
+              onRefresh={refreshPatients}
+            />
           ) : (
             <>
               <div className="flex-1 bg-white rounded-2xl border border-slate-100 shadow-sm p-6 mb-4 overflow-y-auto min-h-[320px] max-h-[60vh]">
