@@ -1,7 +1,6 @@
 import express from 'express';
 import { OAuth2Client } from 'google-auth-library';
 import crypto from 'crypto';
-import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
 import multer from 'multer';
 import path from 'path';
@@ -14,11 +13,12 @@ import { deleteAllReportsForUser } from '../db/reports.js';
 import { processMedicalCertificate } from '../services/certificateParserService.js';
 import { createNotification } from '../db/notifications.js';
 import { sniffFileType } from '../config/supabaseStorage.js';
+import { publicUser } from '../utils/publicUser.js';
+import { verifyAuthToken, signAuthToken } from '../config/jwt.js';
 
 const router = express.Router();
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || '771272691038-s9h707grr3b4ojkgp48aa5vb9tej2sjh.apps.googleusercontent.com';
 const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET || '';
-const JWT_SECRET = process.env.JWT_SECRET || 'swastha_dev_secret_key_2026';
 const googleClient = new OAuth2Client(GOOGLE_CLIENT_ID);
 
 if (!global.__otpStoreRaw) {
@@ -259,7 +259,7 @@ const authenticateToken = (req, res, next) => {
   }
 
   try {
-    const decoded = jwt.verify(token, JWT_SECRET);
+    const decoded = verifyAuthToken(token);
     req.user = decoded;
     next();
   } catch (err) {
@@ -298,112 +298,33 @@ router.post('/upload', authenticateToken, (req, res) => {
 });
 
 /**
- * Helper to decode / verify Google Credentials (handles both OAuth Access Tokens and JWT ID Tokens)
+ * Verifies a Google-issued ID token (the id_token from the server-side code
+ * exchange) against our client ID and returns the profile. This used to also
+ * accept unverified tokens: it fell back to jwt.decode (which checks no
+ * signature) and to access tokens looked up at several userinfo endpoints.
+ * The only caller passes the id_token Google just returned over TLS, so
+ * those branches could only ever have weakened it.
  */
 async function decodeGoogleCredential(credential) {
-  let email;
-  let name;
-  let picture;
-  let sub;
-
   if (!credential || typeof credential !== 'string') {
     throw new Error('Google credential is required and must be a valid token');
   }
 
-  async function fetchGoogleUserInfo(accessToken) {
-    const endpoints = [
-      'https://www.googleapis.com/oauth2/v3/userinfo',
-      'https://www.googleapis.com/oauth2/v2/userinfo',
-      'https://www.googleapis.com/userinfo/v2/me',
-    ];
+  const ticket = await googleClient.verifyIdToken({
+    idToken: credential,
+    audience: GOOGLE_CLIENT_ID,
+  });
+  const payload = ticket.getPayload();
 
-    let lastError = null;
-    for (const url of endpoints) {
-      try {
-        const response = await fetch(url, {
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-          },
-        });
-
-        if (response.ok) {
-          return await response.json();
-        } else {
-          const errText = await response.text();
-          lastError = new Error(`Endpoint ${url} responded with status ${response.status}: ${errText}`);
-        }
-      } catch (err) {
-        lastError = err;
-      }
-    }
-    throw lastError || new Error('Failed to fetch user profile from Google endpoints');
-  }
-
-  const isJwt = credential.split('.').length === 3;
-
-  if (isJwt) {
-    if (GOOGLE_CLIENT_ID && GOOGLE_CLIENT_ID !== 'YOUR_GOOGLE_CLIENT_ID_HERE') {
-      try {
-        const ticket = await googleClient.verifyIdToken({
-          idToken: credential,
-          audience: GOOGLE_CLIENT_ID,
-        });
-        const payload = ticket.getPayload();
-        email = payload.email;
-        name = payload.name;
-        picture = payload.picture;
-        sub = payload.sub;
-      } catch (verifyErr) {
-        console.warn('googleClient.verifyIdToken failed, falling back to jwt.decode:', verifyErr.message);
-        try {
-          const decoded = jwt.decode(credential);
-          if (decoded && decoded.email) {
-            email = decoded.email;
-            name = decoded.name;
-            picture = decoded.picture;
-            sub = decoded.sub;
-          } else {
-            throw verifyErr;
-          }
-        } catch (e) {
-          throw verifyErr;
-        }
-      }
-    } else {
-      const decoded = jwt.decode(credential);
-      if (decoded && decoded.email) {
-        email = decoded.email;
-        name = decoded.name;
-        picture = decoded.picture;
-        sub = decoded.sub;
-      }
-    }
-  } else {
-    try {
-      const gUser = await fetchGoogleUserInfo(credential);
-      email = gUser.email;
-      name = gUser.name;
-      picture = gUser.picture;
-      sub = gUser.sub || gUser.id;
-    } catch (fetchErr) {
-      console.error('Google userinfo fetch failed:', fetchErr.message);
-      const decoded = jwt.decode(credential);
-      if (decoded && decoded.email) {
-        email = decoded.email;
-        name = decoded.name;
-        picture = decoded.picture;
-        sub = decoded.sub;
-      } else {
-        throw new Error(`Google token verification failed: ${fetchErr.message}`);
-      }
-    }
-  }
-
-  if (!email) {
+  if (!payload?.email) {
     throw new Error('Could not extract valid email from Google credentials');
   }
+  // An address Google hasn't verified must not be trusted as an identity.
+  if (payload.email_verified === false) {
+    throw new Error('The Google account email is not verified');
+  }
 
-  return { email, name, picture, sub };
+  return { email: payload.email, name: payload.name, picture: payload.picture, sub: payload.sub };
 }
 
 /**
@@ -446,9 +367,9 @@ router.post('/login', async (req, res) => {
     });
   } catch (error) {
     otpStore.deleteCode(normalizedEmail, otpCode);
+    console.error('Failed to send verification email.', error?.message || error);
     return res.status(500).json({
       message: 'Failed to send verification email.',
-      error: error.message,
     });
   }
 });
@@ -558,9 +479,9 @@ router.post('/register', async (req, res) => {
     });
   } catch (error) {
     otpStore.deleteCode(normalizedEmail, otpCode);
+    console.error('Account created, but the verification email could not be sent.', error?.message || error);
     return res.status(500).json({
       message: 'Account created, but the verification email could not be sent.',
-      error: error.message,
     });
   }
 });
@@ -598,9 +519,9 @@ async function completeGoogleAuth(res, { email, name, picture, sub }, { role } =
     });
   } catch (error) {
     otpStore.deleteCode(normalizedEmail, otpCode);
+    console.error('Could not send the verification email to your Google address.', error?.message || error);
     return res.status(500).json({
       message: 'Could not send the verification email to your Google address.',
-      error: error.message,
     });
   }
 }
@@ -639,7 +560,7 @@ router.post('/google/exchange', async (req, res) => {
 
     const tokenData = await tokenResponse.json();
     if (!tokenResponse.ok || !tokenData.id_token) {
-      console.error('Google token exchange failed:', tokenData);
+      console.error('Google token exchange failed:', tokenData?.error || tokenResponse.status);
       return res.status(401).json({ message: 'Google sign-in could not be completed. Please try again.' });
     }
 
@@ -651,7 +572,7 @@ router.post('/google/exchange', async (req, res) => {
     return await completeGoogleAuth(res, profile, { role: mode === 'register' ? role : undefined });
   } catch (error) {
     console.error('Google code exchange error:', error);
-    return res.status(401).json({ message: 'Google sign-in could not be completed.', error: error.message });
+    return res.status(401).json({ message: 'Google sign-in could not be completed.' });
   }
 });
 
@@ -707,16 +628,14 @@ router.post('/verify-otp', async (req, res) => {
   }
 
   const vault = await getFamilyVaultForUser(user.id);
-  const token = jwt.sign({ userId: user.id, email: user.email, role: user.role, vaultId: vault?.vaultId || null }, JWT_SECRET, {
-    expiresIn: '7d',
-  });
+  const token = signAuthToken({ userId: user.id, email: user.email, role: user.role, vaultId: vault?.vaultId || null });
 
   const response = {
     message: 'Verification successful',
     token,
     vaultId: vault?.vaultId || null,
     user: {
-      ...user,
+      ...publicUser(user),
       vaultId: vault?.vaultId || null,
       hasSelectedRole: !!(user.role && user.role !== 'none'),
     },
@@ -917,14 +836,23 @@ router.post('/profile', authenticateToken, async (req, res) => {
       hasSelectedRole: true,
     });
 
+    // The session token carries the role, and it was minted before role
+    // selection (role 'none'). Hand back a fresh one when the role changed, so
+    // checks that read the token's role work in this session instead of only
+    // after the next login.
+    const refreshedToken = savedUser.role && savedUser.role !== req.user.role
+      ? signAuthToken({ userId: savedUser.id, email: savedUser.email, role: savedUser.role, vaultId: req.user.vaultId || null })
+      : undefined;
+
     return res.json({
       message: 'User profile updated successfully',
       extractedCertificateData: extractedCertMeta.certExtractedData || null,
-      user: savedUser,
+      user: publicUser(savedUser),
+      ...(refreshedToken ? { token: refreshedToken } : {}),
     });
   } catch (error) {
     console.error('Profile update error:', error);
-    return res.status(500).json({ message: 'Failed to update profile', error: error.message });
+    return res.status(500).json({ message: 'Failed to update profile' });
   }
 });
 
@@ -975,7 +903,7 @@ router.delete('/user', async (req, res) => {
 
     let decoded;
     try {
-      decoded = jwt.verify(token, JWT_SECRET);
+      decoded = verifyAuthToken(token);
     } catch (err) {
       return res.status(401).json({ message: 'Invalid or expired token.' });
     }
@@ -998,7 +926,7 @@ router.delete('/user', async (req, res) => {
     return res.json({ message: 'Account and all associated records deleted successfully.' });
   } catch (error) {
     console.error('Delete user account error:', error);
-    return res.status(500).json({ message: 'Failed to delete account', error: error.message });
+    return res.status(500).json({ message: 'Failed to delete account' });
   }
 });
 
@@ -1028,14 +956,14 @@ router.post('/change-password/send-otp', authenticateToken, async (req, res) => 
       return res.json({ message: `Verification code sent to ${email}` });
     } catch (error) {
       otpStore.deleteCode(`changepwd:${email}`, otpCode);
+      console.error('Failed to send verification code to your email.', error?.message || error);
       return res.status(500).json({
         message: 'Failed to send verification code to your email.',
-        error: error.message,
       });
     }
   } catch (error) {
     console.error('Change-password send-otp error:', error);
-    return res.status(500).json({ message: 'Failed to send verification code', error: error.message });
+    return res.status(500).json({ message: 'Failed to send verification code' });
   }
 });
 
@@ -1218,7 +1146,7 @@ router.get('/users/:userId', authenticateToken, async (req, res) => {
 
     return res.json({
       user: {
-        ...user,
+        ...publicUser(user),
         patientId: user.patient_code || user.id,
         fullName: user.name || user.fullName,
         mobile: user.phone || user.mobile,
@@ -1237,7 +1165,7 @@ router.get('/users/:userId', authenticateToken, async (req, res) => {
     });
   } catch (error) {
     console.error('User lookup error:', error);
-    return res.status(500).json({ message: 'Failed to fetch user details.', error: error.message });
+    return res.status(500).json({ message: 'Failed to fetch user details.' });
   }
 });
 
@@ -1252,14 +1180,14 @@ router.get('/me', async (req, res) => {
 
   const token = authHeader.split(' ')[1];
   try {
-    const decoded = jwt.verify(token, JWT_SECRET);
+    const decoded = verifyAuthToken(token);
     const user = (await findUserById(decoded.userId)) || (await findUserByEmail(decoded.email));
     if (!user) {
       return res.status(404).json({ message: 'User not found' });
     }
     return res.json({
       user: {
-        ...user,
+        ...publicUser(user),
         fullName: user.name || user.fullName,
         mobile: user.phone || user.mobile,
         phone: user.phone || user.mobile,

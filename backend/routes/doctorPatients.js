@@ -1,5 +1,4 @@
 import express from 'express';
-import jwt from 'jsonwebtoken';
 import {
   getDoctorPatients,
   getDoctorLifetimeStats,
@@ -15,6 +14,7 @@ import {
   getPatientNotifications,
 } from '../db/doctorPatients.js';
 import { createNotification } from '../db/notifications.js';
+import { findUserById } from '../db/users.js';
 import { sendDoctorRequestEmail } from '../utils/mailer.js';
 import { listTimelineReports } from '../db/reports.js';
 import {
@@ -23,9 +23,10 @@ import {
   setIntakeSessionDoctorAction,
   getIntakeActionHistoryForDoctor,
 } from '../db/intakeSessions.js';
+import { verifyAuthToken } from '../config/jwt.js';
+import { renderMessagePage, renderConfirmPage } from '../utils/emailActionPage.js';
 
 const router = express.Router();
-const JWT_SECRET = process.env.JWT_SECRET || 'swastha_dev_secret_key_2026';
 // RAG used to be a separate service/process (RAG_BASE_URL pointed at its
 // own port); it's now mounted in-process at /rag (see server.js), so this
 // defaults to a loopback call on this same server instead of a second
@@ -42,13 +43,31 @@ function getAuthUser(req) {
   }
 
   try {
-    return jwt.verify(token, JWT_SECRET);
+    return verifyAuthToken(token);
   } catch {
     return null;
   }
 }
 
-router.get('/', async (req, res) => {
+
+// Doctor-only routes. Every one of these used to check only that SOME logged-in
+// user was calling (a patient could use /link, the intake queue, ...). The role
+// is read from the database, not the token's `role` claim: the token isn't
+// reissued when role selection completes, so a freshly registered doctor's
+// token can still say 'none', and a claim is the wrong thing to trust anyway.
+async function requireDoctor(req, res, next) {
+  const authUser = getAuthUser(req);
+  if (!authUser?.userId) {
+    return res.status(401).json({ message: 'Authentication required.' });
+  }
+  const user = await findUserById(authUser.userId);
+  if (!user || user.role !== 'doctor') {
+    return res.status(403).json({ message: 'This action is only available to doctor accounts.' });
+  }
+  next();
+}
+
+router.get('/', requireDoctor, async (req, res) => {
   const authUser = getAuthUser(req);
 
   if (!authUser?.userId) {
@@ -72,10 +91,10 @@ router.get('/', async (req, res) => {
  * Declared before any '/:param' route so Express doesn't match "stats" as a
  * :patientId.
  */
-router.get('/stats', async (req, res) => {
+router.get('/stats', requireDoctor, async (req, res) => {
   const authUser = getAuthUser(req);
 
-  if (!authUser?.userId || authUser.role !== 'doctor') {
+  if (!authUser?.userId) {
     return res.status(401).json({ message: 'Authentication required.' });
   }
 
@@ -160,7 +179,7 @@ router.get('/pending-requests', async (req, res) => {
  * Declared before any '/:param' route so Express doesn't match
  * "intake-queue" as a :patientId.
  */
-router.get('/intake-queue', async (req, res) => {
+router.get('/intake-queue', requireDoctor, async (req, res) => {
   const authUser = getAuthUser(req);
 
   if (!authUser?.userId) {
@@ -214,7 +233,7 @@ router.get('/intake-queue', async (req, res) => {
  * Declared BEFORE '/intake-queue/:sessionId' so Express matches "history"
  * here rather than treating it as a :sessionId.
  */
-router.get('/intake-queue/history', async (req, res) => {
+router.get('/intake-queue/history', requireDoctor, async (req, res) => {
   const authUser = getAuthUser(req);
 
   if (!authUser?.userId) {
@@ -265,7 +284,7 @@ router.get('/intake-queue/history', async (req, res) => {
  * "intake-queue" as a :patientId, and before '/requests/:linkId/...' so the
  * two nested-param routes don't collide.
  */
-router.get('/intake-queue/:sessionId', async (req, res) => {
+router.get('/intake-queue/:sessionId', requireDoctor, async (req, res) => {
   const authUser = getAuthUser(req);
 
   if (!authUser?.userId) {
@@ -365,7 +384,7 @@ async function handleIntakeQueueAction(req, res, action) {
  * backend/db/intakeSessions.js's setIntakeSessionDoctorAction). Row drops
  * out of the live queue and appears in intake-queue/history instead.
  */
-router.post('/intake-queue/:sessionId/complete', (req, res) => handleIntakeQueueAction(req, res, 'completed'));
+router.post('/intake-queue/:sessionId/complete', requireDoctor, (req, res) => handleIntakeQueueAction(req, res, 'completed'));
 
 /**
  * POST /api/doctor-patients/intake-queue/:sessionId/remove
@@ -374,7 +393,7 @@ router.post('/intake-queue/:sessionId/complete', (req, res) => handleIntakeQueue
  * underlying session — it drops out of the live queue and appears in
  * intake-queue/history instead, same as Complete above.
  */
-router.post('/intake-queue/:sessionId/remove', (req, res) => handleIntakeQueueAction(req, res, 'removed'));
+router.post('/intake-queue/:sessionId/remove', requireDoctor, (req, res) => handleIntakeQueueAction(req, res, 'removed'));
 
 /**
  * POST /api/doctor-patients/requests/:linkId/accept
@@ -448,31 +467,44 @@ router.post('/requests/:linkId/decline', async (req, res) => {
  *
  * Declared before '/:patientId' so Express doesn't swallow this path.
  */
+const urlencodedBody = express.urlencoded({ extended: false, limit: '4kb' });
+
 function renderEmailActionPage(res, { heading, message, isError = false }) {
-  return res.send(`<!DOCTYPE html>
-<html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Doctor Access Request</title>
-    <style>
-      body { font-family: Arial, sans-serif; background: #f8fafc; color: #0f172a; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; }
-      .card { background: white; border-radius: 16px; padding: 32px; box-shadow: 0 12px 30px rgba(15, 23, 42, 0.08); max-width: 560px; text-align: center; }
-      h2 { margin-top: 0; color: ${isError ? '#dc2626' : '#2563eb'}; }
-      p { line-height: 1.6; color: #475569; }
-    </style>
-  </head>
-  <body>
-    <div class="card">
-      <h2>${heading}</h2>
-      <p>${message}</p>
-    </div>
-  </body>
-</html>`);
+  return renderMessagePage(res, { title: 'Doctor Access Request', heading, message, isError });
 }
 
-router.get('/email-action/accept', async (req, res) => {
+// GET only shows a confirmation page — it never changes anything, because mail
+// scanners and prefetchers open links on their own. The button POSTs to the
+// same path (below), and that is what accepts or declines.
+function emailActionConfirmPage(res, req, { heading, message, buttonLabel }) {
   const token = String(req.query?.token ?? '').trim();
+  if (!token) {
+    return renderEmailActionPage(res, { heading: 'Missing token', message: 'This link is missing its access token.', isError: true });
+  }
+  return renderConfirmPage(res, {
+    title: 'Doctor Access Request',
+    heading,
+    message,
+    buttonLabel,
+    action: `${req.baseUrl}${req.path}`,
+    token,
+  });
+}
+
+router.get('/email-action/accept', (req, res) => emailActionConfirmPage(res, req, {
+  heading: 'Accept this access request?',
+  message: 'Accepting lets this doctor see your health records for the next 24 hours. Access expires automatically after that.',
+  buttonLabel: 'Accept access',
+}));
+
+router.get('/email-action/decline', (req, res) => emailActionConfirmPage(res, req, {
+  heading: 'Decline this access request?',
+  message: 'Declining means this doctor will not be able to see your health records.',
+  buttonLabel: 'Decline request',
+}));
+
+router.post('/email-action/accept', urlencodedBody, async (req, res) => {
+  const token = String(req.body?.token ?? '').trim();
   if (!token) {
     return renderEmailActionPage(res, { heading: 'Missing token', message: 'This link is missing its access token.', isError: true });
   }
@@ -481,7 +513,7 @@ router.get('/email-action/accept', async (req, res) => {
     await resolveDoctorLinkRequestByToken(token, 'accepted');
     return renderEmailActionPage(res, {
       heading: 'Request accepted',
-      message: 'You have granted this doctor access to your health records for the next 24 hours. Access expires automatically after that, and you can revoke it sooner at any time from the Swastha app.',
+      message: 'You have granted this doctor access to your health records for the next 24 hours. Access expires automatically after that.',
     });
   } catch (error) {
     return renderEmailActionPage(res, {
@@ -492,8 +524,8 @@ router.get('/email-action/accept', async (req, res) => {
   }
 });
 
-router.get('/email-action/decline', async (req, res) => {
-  const token = String(req.query?.token ?? '').trim();
+router.post('/email-action/decline', urlencodedBody, async (req, res) => {
+  const token = String(req.body?.token ?? '').trim();
   if (!token) {
     return renderEmailActionPage(res, { heading: 'Missing token', message: 'This link is missing its access token.', isError: true });
   }
@@ -513,7 +545,7 @@ router.get('/email-action/decline', async (req, res) => {
   }
 });
 
-router.post('/link', async (req, res) => {
+router.post('/link', requireDoctor, async (req, res) => {
   const authUser = getAuthUser(req);
 
   // Diagnostic logging — safe and minimal (do not log tokens or full patient codes)
@@ -605,7 +637,7 @@ router.post('/link', async (req, res) => {
  * even if the doctor hits this directly with a valid patient id. Never
  * relies on the frontend hiding a pending card.
  */
-router.get('/:patientId', async (req, res) => {
+router.get('/:patientId', requireDoctor, async (req, res) => {
   const authUser = getAuthUser(req);
 
   if (!authUser?.userId) {
@@ -656,7 +688,7 @@ router.get('/:patientId', async (req, res) => {
  * from the CURRENT report set rather than risk serving a stale summary —
  * mirrors the "regenerate on edit" behavior in reports.js's PUT handler.
  */
-router.get('/:patientId/summary', async (req, res) => {
+router.get('/:patientId/summary', requireDoctor, async (req, res) => {
   const authUser = getAuthUser(req);
 
   if (!authUser?.userId) {
@@ -728,7 +760,7 @@ router.get('/:patientId/summary', async (req, res) => {
     return res.json({ summary: data.summary, reportCount: reports.length });
   } catch (error) {
     console.error('Doctor patient summary error:', error);
-    return res.status(500).json({ message: 'Failed to load patient summary', error: error.message });
+    return res.status(500).json({ message: 'Failed to load patient summary' });
   }
 });
 
@@ -740,7 +772,7 @@ router.get('/:patientId/summary', async (req, res) => {
  * patient code. Rejects (via requestAccessAgain) anything that isn't an
  * actually-expired accepted link, e.g. a still-pending or declined pair.
  */
-router.post('/:patientId/re-request', async (req, res) => {
+router.post('/:patientId/re-request', requireDoctor, async (req, res) => {
   const authUser = getAuthUser(req);
 
   if (!authUser?.userId) {
@@ -773,7 +805,7 @@ router.post('/:patientId/re-request', async (req, res) => {
   }
 });
 
-router.delete('/:patientId', async (req, res) => {
+router.delete('/:patientId', requireDoctor, async (req, res) => {
   const authUser = getAuthUser(req);
 
   if (!authUser?.userId) {

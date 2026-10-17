@@ -769,6 +769,7 @@ export default function IntakeChat() {
     try {
       const session = await verifyClinicOtp({
         doctorId: clinicDoctor.doctorId,
+        checkinToken: clinicDoctor.checkinToken,
         language: languageCode,
       });
       // Same shape POST /api/intake/start returns — feed it straight into

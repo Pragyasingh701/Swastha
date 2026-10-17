@@ -10,7 +10,7 @@
 // behind one address. The tight limits are keyed per email (or per IP+email),
 // which is what actually stops guessing and mail-bombing without letting one
 // attacker lock a real user out from a different address.
-import jwt from 'jsonwebtoken';
+import { verifyAuthToken } from '../config/jwt.js';
 import { rateLimit, ipKeyGenerator } from 'express-rate-limit';
 
 const MINUTE = 60 * 1000;
@@ -92,7 +92,7 @@ export const limiters = {
         // bucket per request. Read lazily: dotenv hasn't run yet when this
         // module is first imported.
         const payload = token
-          ? jwt.verify(token, process.env.JWT_SECRET || 'swastha_dev_secret_key_2026')
+          ? verifyAuthToken(token)
           : null;
         if (payload?.userId) return `doctor|${payload.userId}`;
       } catch {

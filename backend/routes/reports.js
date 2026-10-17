@@ -1,5 +1,4 @@
 import express from 'express';
-import jwt from 'jsonwebtoken';
 import { listTimelineReports, getTimelineReport, getTimelineReportById, createTimelineReport, updateTimelineReport, deleteTimelineReport } from '../db/reports.js';
 import { findUserByEmail, findUserById } from '../db/users.js';
 import { isDoctorLinkedToPatient } from '../db/doctorPatients.js';
@@ -8,9 +7,9 @@ import { validateTimelineReportPayload } from '../utils/timelineValidation.js';
 import { uploadMemory, uploadFileToSupabase, createSignedFileUrl, removeStoredFiles } from '../config/supabaseStorage.js';
 import { createNotification } from '../db/notifications.js';
 import { decryptMultipartFields } from '../middleware/wireCrypto.js';
+import { verifyAuthToken } from '../config/jwt.js';
 
 const router = express.Router();
-const JWT_SECRET = process.env.JWT_SECRET || 'swastha_dev_secret_key_2026';
 // RAG used to be a separate service/process (RAG_BASE_URL pointed at its
 // own port); it's now mounted in-process at /rag (see server.js), so this
 // defaults to a loopback call on this same server instead of a second
@@ -76,7 +75,7 @@ function getAuthUser(req) {
   }
 
   try {
-    return jwt.verify(token, JWT_SECRET);
+    return verifyAuthToken(token);
   } catch {
     return null;
   }
@@ -245,7 +244,7 @@ router.get('/lab-insights', async (req, res) => {
     return res.json({ insights: data.insights, labReportCount: labReports.length });
   } catch (error) {
     console.error('Lab insights endpoint error:', error);
-    return res.status(500).json({ message: 'Failed to load lab insights', error: error.message });
+    return res.status(500).json({ message: 'Failed to load lab insights' });
   }
 });
 
@@ -316,7 +315,7 @@ router.get('/', async (req, res) => {
     return res.json({ reports });
   } catch (error) {
     console.error('Timeline reports load error:', error);
-    return res.status(500).json({ message: 'Failed to load timeline reports', error: error.message });
+    return res.status(500).json({ message: 'Failed to load timeline reports' });
   }
 });
 
@@ -404,7 +403,7 @@ router.post('/', handleReportFileUpload, async (req, res) => {
       return res.status(400).json({ message: error.message });
     }
     console.error('Timeline report save error:', error);
-    return res.status(500).json({ message: 'Failed to save timeline report', error: error.message });
+    return res.status(500).json({ message: 'Failed to save timeline report' });
   }
 });
 
@@ -512,7 +511,7 @@ router.put('/:id', handleReportFileUpload, async (req, res) => {
       return res.status(400).json({ message: error.message });
     }
     console.error('Timeline report update error:', error);
-    return res.status(500).json({ message: 'Failed to update timeline report', error: error.message });
+    return res.status(500).json({ message: 'Failed to update timeline report' });
   }
 });
 
@@ -562,7 +561,7 @@ router.post('/:id/summarize', async (req, res) => {
     return res.json({ report: updated });
   } catch (error) {
     console.error('On-demand summary generation error:', error);
-    return res.status(500).json({ message: 'Failed to generate summary', error: error.message });
+    return res.status(500).json({ message: 'Failed to generate summary' });
   }
 });
 
@@ -620,7 +619,7 @@ router.delete('/:id', async (req, res) => {
     return res.json({ report: deletedReport });
   } catch (error) {
     console.error('Timeline report delete error:', error);
-    return res.status(500).json({ message: 'Failed to delete timeline report', error: error.message });
+    return res.status(500).json({ message: 'Failed to delete timeline report' });
   }
 });
 

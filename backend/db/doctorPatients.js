@@ -54,9 +54,15 @@ export function accessExpiryFromNow() {
   return new Date(Date.now() + ACCESS_DURATION_MS).toISOString();
 }
 
+// Only ever called for links that are 'accepted'. An accepted link with no
+// recorded expiry used to count as "no expiry on record" (never expires), so
+// one written without a window — as the clinic check-in flow once did —
+// granted permanent access. It now counts as expired: access lasts only while
+// a valid, future access_expires_at says so.
 function isAccessExpired(link) {
-  if (!link?.access_expires_at) return false;
-  return new Date(link.access_expires_at).getTime() <= Date.now();
+  if (!link?.access_expires_at) return true;
+  const expiresAt = new Date(link.access_expires_at).getTime();
+  return !Number.isFinite(expiresAt) || expiresAt <= Date.now();
 }
 
 // "Linked Xm/Xh ago", relative to whenever access actually started (see

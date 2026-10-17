@@ -102,6 +102,17 @@ async function doRequest(method, path, options, allowRetry) {
     }
   }
 
+  // A 401 on a request that carried a token means the session is no longer
+  // valid; announce it once so the app can sign out (see AuthContext.jsx).
+  // Requests without a token (login, register, ...) legitimately 401 and are left alone.
+  if (res.status === 401 && finalHeaders.Authorization) {
+    try {
+      window.dispatchEvent(new CustomEvent('swastha:session-expired'))
+    } catch {
+      // no window (tests/SSR)
+    }
+  }
+
   return parseResponse(res, resolvedBaseUrl)
 }
 

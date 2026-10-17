@@ -1,5 +1,4 @@
 import express from 'express';
-import jwt from 'jsonwebtoken';
 import {
   getNotificationsForUser,
   getUnreadNotificationCount,
@@ -7,9 +6,9 @@ import {
   markNotificationAsRead,
 } from '../db/notifications.js';
 import { getDoctorLinkStatuses } from '../db/doctorPatients.js';
+import { verifyAuthToken } from '../config/jwt.js';
 
 const router = express.Router();
-const JWT_SECRET = process.env.JWT_SECRET || 'swastha_dev_secret_key_2026';
 
 function getAuthUser(req) {
   const authHeader = req.headers.authorization || '';
@@ -20,7 +19,7 @@ function getAuthUser(req) {
   }
 
   try {
-    return jwt.verify(token, JWT_SECRET);
+    return verifyAuthToken(token);
   } catch {
     return null;
   }
@@ -67,7 +66,7 @@ router.get('/', async (req, res) => {
     return res.json({ notifications, unreadCount });
   } catch (error) {
     console.error('Fetch notifications error:', error);
-    return res.status(500).json({ message: 'Unable to load notifications.', error: error.message });
+    return res.status(500).json({ message: 'Unable to load notifications.' });
   }
 });
 

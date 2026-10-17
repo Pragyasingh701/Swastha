@@ -128,7 +128,8 @@ Respond strictly in JSON format with exactly these keys, with all text fields in
   try {
     parsed = JSON.parse(jsonText);
   } catch (err) {
-    throw new Error(`Gemini Vision returned non-JSON extraction result: ${jsonText.slice(0, 300)}`);
+    // The text is not included: it is the patient's document content, and errors get logged.
+    throw new Error(`Gemini Vision returned non-JSON extraction result (${jsonText.length} characters)`);
   }
 
   const fields = {

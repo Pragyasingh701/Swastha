@@ -70,6 +70,18 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+  // Any authenticated request the server rejects with 401 (token expired or
+  // revoked, account gone) announces it (api/client.js); sign out so the route
+  // guards send the user to login instead of every page showing empty data.
+  useEffect(() => {
+    const onSessionExpired = () => {
+      saveAuthSession(null, null, false);
+    };
+    window.addEventListener('swastha:session-expired', onSessionExpired);
+    return () => window.removeEventListener('swastha:session-expired', onSessionExpired);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   useEffect(() => {
     if (!token) return;
     const isRemembered = localStorage.getItem('swastha_remember') === 'true';
@@ -226,6 +238,11 @@ export const AuthProvider = ({ children }) => {
         ...profileData,
       };
       const result = await authService.updateProfile(payload, token);
+      // Role selection changes the account's role, and the server hands back a
+      // fresh token that carries it (the old one still says 'none').
+      if (result?.token) {
+        setToken(result.token);
+      }
       if (result?.user) {
         setUser(result.user);
       } else {

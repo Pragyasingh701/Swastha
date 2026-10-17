@@ -1487,7 +1487,7 @@ export async function runIntakeTurn({ section, structuredHistory, patientMessage
   // correction, not a hard gate.
   let questionMarks = (parsed.next_question?.match(/[?？]/g) || []).length;
   if (questionMarks > 1) {
-    console.warn(`[intake] possible compound question (${questionMarks} "?"), retrying: ${parsed.next_question}`);
+    console.warn(`[intake] possible compound question (${questionMarks} "?"), retrying`);
     const retryPrompt = `${prompt}\n\nYour previous reply asked more than one question in "next_question": "${parsed.next_question}"\nThat breaks the ONE QUESTION PER TURN rule above. Re-answer the SAME turn, asking ONLY about the first field you were trying to ask about — drop the second question entirely (you'll get a separate turn for it later). Return the same JSON shape as before, corrected.`;
     const retryGen = await runAI({ task: 'intake-dialogue', input: retryPrompt, json: true, label: 'intake-dialogue-compound-retry' });
     if (retryGen.ok) {
@@ -2199,7 +2199,7 @@ export async function runIntakeTurn({ section, structuredHistory, patientMessage
     // otherwise an untranslated bank entry would just swap one
     // wrong-language question for another.
     if (substitute && matchesSessionLanguage(substitute.question, language)) {
-      console.warn(`[intake] language mismatch (${language}) in section "${resolvedSection}" — substituted bank question. Model wrote: ${JSON.stringify(languageCheckedQuestion.slice(0, 120))}`);
+      console.warn(`[intake] language mismatch (${language}) in section "${resolvedSection}" — substituted bank question.`);
       languageCheckedQuestion = substitute.question;
       quickReplyOptions = { options: substitute.options, allow_multiple: substitute.allow_multiple };
     } else {
@@ -2207,7 +2207,7 @@ export async function runIntakeTurn({ section, structuredHistory, patientMessage
       // observable rather than silent — which is what the ask specifically
       // called for ("or at minimum log it so we can see how often this
       // happens").
-      console.warn(`[intake] language mismatch (${language}) in section "${resolvedSection}" — NO localized substitute available, shipping as-is: ${JSON.stringify(languageCheckedQuestion.slice(0, 120))}`);
+      console.warn(`[intake] language mismatch (${language}) in section "${resolvedSection}" — NO localized substitute available, shipping as-is.`);
     }
   }
 

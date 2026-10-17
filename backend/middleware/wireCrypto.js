@@ -70,8 +70,11 @@ export function piiWireBoundary(req, res, next) {
       walkTree(body, identityTransform)
         .then((strippedBody) => originalJson(strippedBody))
         .catch((err) => {
+          // Fail closed: the body was never stripped of fields that must not
+          // leave the server, so it is not sent.
           console.error('[piiWireBoundary] response strip failed:', err.message);
-          originalJson(body);
+          res.status(500);
+          originalJson({ message: 'Could not prepare the response.' });
         });
       return res;
     };
@@ -108,8 +111,11 @@ export function piiWireBoundary(req, res, next) {
       walkTree(body, encrypt)
         .then((encryptedBody) => originalJson(encryptedBody))
         .catch((err) => {
+          // Fail closed: sending the original body would put fields that were
+          // meant to be encrypted on the wire in plaintext.
           console.error('[piiWireBoundary] response encryption failed:', err.message);
-          originalJson(body);
+          res.status(500);
+          originalJson({ message: 'Could not prepare the response.' });
         });
       return res;
     };

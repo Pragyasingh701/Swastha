@@ -40,7 +40,9 @@ export default function VerifyOTP() {
     setIsLoading(true);
     setError("");
     try {
-      const result = await verifyOTP(email, otpString);
+      // Only the password login screen has a "Remember me" box; register and
+      // Google sign-in carry no choice and keep the signed-in session.
+      const result = await verifyOTP(email, otpString, location.state?.rememberMe ?? true);
       setIsLoading(false);
       if (result?.user?.hasSelectedRole) {
         navigate(result?.user?.role === 'doctor' ? "/doctor-dashboard" : "/dashboard", { replace: true });

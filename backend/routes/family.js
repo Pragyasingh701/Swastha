@@ -1,5 +1,4 @@
 import express from 'express';
-import jwt from 'jsonwebtoken';
 import {
   createFamilyMember,
   createOrGetFamilyVaultForUser,
@@ -17,9 +16,10 @@ import {
 import { sendFamilyMemberAuthorizationEmail } from '../utils/mailer.js';
 import { findUserByEmail, findUserById } from '../db/users.js';
 import { createNotification } from '../db/notifications.js';
+import { verifyAuthToken } from '../config/jwt.js';
+import { renderMessagePage, renderConfirmPage } from '../utils/emailActionPage.js';
 
 const router = express.Router();
-const JWT_SECRET = process.env.JWT_SECRET || 'swastha_dev_secret_key_2026';
 
 function getAuthUser(req) {
   const authHeader = req.headers.authorization || '';
@@ -30,7 +30,7 @@ function getAuthUser(req) {
   }
 
   try {
-    return jwt.verify(token, JWT_SECRET);
+    return verifyAuthToken(token);
   } catch {
     return null;
   }
@@ -214,7 +214,7 @@ router.get('/vault', async (req, res) => {
     return res.json({ vault });
   } catch (error) {
     console.error('Family vault lookup error:', error);
-    return res.status(500).json({ message: 'Failed to load family vault', error: error.message });
+    return res.status(500).json({ message: 'Failed to load family vault' });
   }
 });
 
@@ -283,7 +283,7 @@ router.post('/vault', async (req, res) => {
     });
   } catch (error) {
     console.error('Create family vault error:', error);
-    return res.status(500).json({ message: 'Failed to create family vault', error: error.message });
+    return res.status(500).json({ message: 'Failed to create family vault' });
   }
 });
 
@@ -313,7 +313,7 @@ router.get('/summary', async (req, res) => {
     });
   } catch (error) {
     console.error('Family vault summary error:', error);
-    return res.status(500).json({ message: 'Failed to load Family Vault summary', error: error.message });
+    return res.status(500).json({ message: 'Failed to load Family Vault summary' });
   }
 });
 
@@ -382,7 +382,7 @@ async function createMemberHandler(req, res) {
     if (error.message?.includes('Family members table is not available')) {
       return res.status(503).json({ message: error.message });
     }
-    return res.status(500).json({ message: 'Failed to add family member', error: error.message });
+    return res.status(500).json({ message: 'Failed to add family member' });
   }
 }
 
@@ -469,64 +469,52 @@ router.post('/members/authorize', async (req, res) => {
     return res.json({ message: 'Authorization request sent. The member will be added after they approve it.' });
   } catch (error) {
     console.error('Family member authorization email error:', error);
-    return res.status(500).json({ message: 'Failed to send authorization mail', error: error.message });
+    return res.status(500).json({ message: 'Failed to send authorization mail' });
   }
 });
 
-router.get('/members/authorize/confirm', async (req, res) => {
+// GET only shows a confirmation page: mail scanners and prefetchers open links
+// on their own, so opening the link must not grant anything. The button POSTs
+// the token back to the same path, and that is what confirms.
+router.get('/members/authorize/confirm', (req, res) => {
+  const token = String(req.query?.token ?? '').trim();
+  if (!token) {
+    return renderMessagePage(res, { title: 'Family Vault Permission', heading: 'Missing token', message: 'This link is missing its authorization token.', isError: true });
+  }
+  return renderConfirmPage(res, {
+    title: 'Family Vault Permission',
+    heading: 'Give this family member access?',
+    message: 'If you confirm, this family member becomes an admin of the family vault and can see and manage your health records.',
+    buttonLabel: 'Confirm permission',
+    action: `${req.baseUrl}${req.path}`,
+    token,
+  });
+});
+
+router.post('/members/authorize/confirm', express.urlencoded({ extended: false, limit: '4kb' }), async (req, res) => {
+  const token = String(req.body?.token ?? '').trim();
+  if (!token) {
+    return renderMessagePage(res, { title: 'Family Vault Permission', heading: 'Missing token', message: 'This link is missing its authorization token.', isError: true });
+  }
+
   try {
-    const authorizationToken = req.query?.token?.trim();
-    if (!authorizationToken) {
-      return res.status(400).send('Missing authorization token.');
-    }
-
-    const confirmedMember = await confirmPendingFamilyMemberAuthorizationRequest(authorizationToken);
-    const message = confirmedMember
-      ? 'You gave permission for this family member to become an admin of the family vault.'
-      : 'This authorization link is invalid or has already been used.';
-
-    return res.send(`<!DOCTYPE html>
-<html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Family Vault Permission</title>
-    <style>
-      body { font-family: Arial, sans-serif; background: #f8fafc; color: #0f172a; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; }
-      .card { background: white; border-radius: 16px; padding: 32px; box-shadow: 0 12px 30px rgba(15, 23, 42, 0.08); max-width: 560px; text-align: center; }
-      h2 { margin-top: 0; color: #2563eb; }
-      p { line-height: 1.6; color: #475569; }
-    </style>
-  </head>
-  <body>
-    <div class="card">
-      <h2>Permission Updated</h2>
-      <p>${message}</p>
-    </div>
-  </body>
-</html>`);
+    const confirmedMember = await confirmPendingFamilyMemberAuthorizationRequest(token);
+    return renderMessagePage(res, {
+      title: 'Family Vault Permission',
+      heading: 'Permission Updated',
+      message: confirmedMember
+        ? 'You gave permission for this family member to become an admin of the family vault.'
+        : 'This authorization link is invalid or has already been used.',
+      isError: !confirmedMember,
+    });
   } catch (error) {
     console.error('Family member authorization confirmation error:', error);
-    return res.send(`<!DOCTYPE html>
-<html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Family Vault Permission</title>
-    <style>
-      body { font-family: Arial, sans-serif; background: #f8fafc; color: #0f172a; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; }
-      .card { background: white; border-radius: 16px; padding: 32px; box-shadow: 0 12px 30px rgba(15, 23, 42, 0.08); max-width: 560px; text-align: center; }
-      h2 { margin-top: 0; color: #2563eb; }
-      p { line-height: 1.6; color: #475569; }
-    </style>
-  </head>
-  <body>
-    <div class="card">
-      <h2>Permission Updated</h2>
-      <p>This authorization link is invalid or has already been used.</p>
-    </div>
-  </body>
-</html>`);
+    return renderMessagePage(res, {
+      title: 'Family Vault Permission',
+      heading: 'Permission Updated',
+      message: 'This authorization link is invalid or has already been used.',
+      isError: true,
+    });
   }
 });
 
@@ -549,7 +537,7 @@ async function listMembersHandler(req, res) {
     return res.json(members);
   } catch (error) {
     console.error('List family members error:', error);
-    return res.status(500).json({ message: 'Failed to load Family Vault members', error: error.message });
+    return res.status(500).json({ message: 'Failed to load Family Vault members' });
   }
 }
 
@@ -617,7 +605,7 @@ async function updateMemberHandler(req, res) {
     return res.json(member);
   } catch (error) {
     console.error('Edit family member error:', error);
-    return res.status(500).json({ message: 'Failed to update family member', error: error.message });
+    return res.status(500).json({ message: 'Failed to update family member' });
   }
 }
 
@@ -654,7 +642,7 @@ async function deleteMemberHandler(req, res) {
     return res.json({ message: 'Family member removed successfully', member });
   } catch (error) {
     console.error('Remove family member error:', error);
-    return res.status(500).json({ message: 'Failed to remove family member', error: error.message });
+    return res.status(500).json({ message: 'Failed to remove family member' });
   }
 }
 

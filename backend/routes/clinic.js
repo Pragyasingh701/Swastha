@@ -1,14 +1,13 @@
 import express from 'express';
-import jwt from 'jsonwebtoken';
 import supabase from '../config/supabase.js';
 import { resolveCheckinCode, getOrCreateTodayCode } from '../db/clinicCheckin.js';
 import { findUserById } from '../db/users.js';
 import { accessExpiryFromNow } from '../db/doctorPatients.js';
 import { startIntakeSession } from '../rag/services/intakeService.js';
 import { synthesizeSpeech } from '../rag/services/ttsService.js';
+import { verifyAuthToken, signPurposeToken, verifyPurposeToken } from '../config/jwt.js';
 
 const router = express.Router();
-const JWT_SECRET = process.env.JWT_SECRET || 'swastha_dev_secret_key_2026';
 
 // Clinic check-in flow (PRD §3). Lives in backend/routes/, not backend/rag/
 // routes/ — same reasoning as doctor-patients.js's intake-queue routes: this
@@ -38,7 +37,7 @@ async function requirePatientAuth(req, res, next) {
 
   let decoded;
   try {
-    decoded = jwt.verify(token, JWT_SECRET);
+    decoded = verifyAuthToken(token);
   } catch {
     return res.status(401).json({ message: 'Invalid or expired session.' });
   }
@@ -112,6 +111,10 @@ router.post('/verify-code', rateLimitVerifyCode, async (req, res) => {
       doctorId: resolved.doctorId,
       doctorName: resolved.doctorName,
       clinicName: resolved.clinicName,
+      // Proof that today's code was entered for THIS doctor. /verify-otp needs
+      // it: without it any logged-in patient could name any doctorId and be
+      // added to that doctor's list and queue without ever having the code.
+      checkinToken: signPurposeToken('clinic-checkin', { doctorId: resolved.doctorId }, '30m'),
     });
   } catch (error) {
     console.error('Clinic verify-code error:', error);
@@ -137,6 +140,15 @@ router.post('/verify-otp', requirePatientAuth, async (req, res) => {
 
   if (!doctorId) {
     return res.status(400).json({ message: 'doctorId is required.' });
+  }
+
+  // The code must actually have been entered: the token from /verify-code is
+  // bound to that doctor and expires after 30 minutes.
+  try {
+    const proof = verifyPurposeToken('clinic-checkin', String(req.body?.checkinToken ?? ''));
+    if (proof.doctorId !== doctorId) throw new Error('Token is for a different doctor.');
+  } catch {
+    return res.status(400).json({ message: 'Please enter the clinic code again to check in.' });
   }
 
   try {
@@ -228,7 +240,7 @@ async function requireDoctorAuth(req, res, next) {
 
   let decoded;
   try {
-    decoded = jwt.verify(token, JWT_SECRET);
+    decoded = verifyAuthToken(token);
   } catch {
     return res.status(401).json({ message: 'Invalid or expired session.' });
   }
