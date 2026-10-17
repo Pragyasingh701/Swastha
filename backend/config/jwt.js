@@ -8,7 +8,17 @@
 import crypto from 'crypto';
 import jwt from 'jsonwebtoken';
 
-export const SESSION_TOKEN_TTL = '7d';
+// How long a login lasts. Tokens can't be revoked, so a shorter life is the
+// main limit on a stolen or forgotten session. A normal login lasts a day; one
+// where the user ticked "Remember me" on the login screen lasts a week.
+// Both can be changed with environment variables; there is no inactivity logout.
+export function sessionTokenTtl() {
+  return process.env.SESSION_TOKEN_TTL || '24h';
+}
+
+export function rememberMeTokenTtl() {
+  return process.env.REMEMBER_ME_TOKEN_TTL || '7d';
+}
 
 export function getJwtSecret() {
   const secret = process.env.JWT_SECRET;
@@ -22,8 +32,9 @@ export function verifyAuthToken(token) {
   return jwt.verify(token, getJwtSecret());
 }
 
-export function signAuthToken({ userId, email, role, vaultId = null }) {
-  return jwt.sign({ userId, email, role, vaultId }, getJwtSecret(), { expiresIn: SESSION_TOKEN_TTL });
+// `expiresIn` is whatever jsonwebtoken accepts ('24h', '7d', or seconds as a number).
+export function signAuthToken({ userId, email, role, vaultId = null, expiresIn }) {
+  return jwt.sign({ userId, email, role, vaultId }, getJwtSecret(), { expiresIn: expiresIn || sessionTokenTtl() });
 }
 
 // Short-lived, single-purpose tokens (for example proof that a clinic code was

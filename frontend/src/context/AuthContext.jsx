@@ -186,11 +186,14 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  const verifyOTP = async (email, otpCode, remember = true) => {
+  // `remember` decides where the session is kept (localStorage vs. the tab);
+  // `longSession` asks the server for the longer "Remember me" login, and is
+  // only true when the box was ticked on the login screen.
+  const verifyOTP = async (email, otpCode, remember = true, longSession = false) => {
     setIsLoading(true);
     setError(null);
     try {
-      const result = await authService.verifyOTP(email, otpCode);
+      const result = await authService.verifyOTP(email, otpCode, longSession);
       if (result.token && result.user) {
         saveAuthSession(result.token, result.user, remember);
       }

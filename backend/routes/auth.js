@@ -16,7 +16,7 @@ import { sniffFileType } from '../config/supabaseStorage.js';
 import { publicUser } from '../utils/publicUser.js';
 import { passwordPolicyError } from '../utils/passwordPolicy.js';
 import { eraseAccountResidue } from '../db/accountErasure.js';
-import { verifyAuthToken, signAuthToken } from '../config/jwt.js';
+import { verifyAuthToken, signAuthToken, sessionTokenTtl, rememberMeTokenTtl } from '../config/jwt.js';
 
 const router = express.Router();
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || '771272691038-s9h707grr3b4ojkgp48aa5vb9tej2sjh.apps.googleusercontent.com';
@@ -648,7 +648,15 @@ router.post('/verify-otp', async (req, res) => {
   }
 
   const vault = await getFamilyVaultForUser(user.id);
-  const token = signAuthToken({ userId: user.id, email: user.email, role: user.role, vaultId: vault?.vaultId || null });
+  // "Remember me" (ticked on the login screen) gets the longer session; every
+  // other sign-in, including register and Google, gets the normal one.
+  const token = signAuthToken({
+    userId: user.id,
+    email: user.email,
+    role: user.role,
+    vaultId: vault?.vaultId || null,
+    expiresIn: req.body?.rememberMe === true ? rememberMeTokenTtl() : sessionTokenTtl(),
+  });
 
   const response = {
     message: 'Verification successful',
@@ -861,7 +869,14 @@ router.post('/profile', authenticateToken, async (req, res) => {
     // checks that read the token's role work in this session instead of only
     // after the next login.
     const refreshedToken = savedUser.role && savedUser.role !== req.user.role
-      ? signAuthToken({ userId: savedUser.id, email: savedUser.email, role: savedUser.role, vaultId: req.user.vaultId || null })
+      ? signAuthToken({
+          userId: savedUser.id,
+          email: savedUser.email,
+          role: savedUser.role,
+          vaultId: req.user.vaultId || null,
+          // Keep the time the session had left, instead of starting a fresh one.
+          expiresIn: Math.max(60, (req.user.exp || 0) - Math.floor(Date.now() / 1000)),
+        })
       : undefined;
 
     return res.json({
