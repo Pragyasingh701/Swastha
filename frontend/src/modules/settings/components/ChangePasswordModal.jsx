@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useAuth } from '../../../context/AuthContext';
 import { authService } from '../../../api/auth';
+import { getPasswordError } from '../../../utils/formValidation';
 import { X, KeyRound, MailCheck, CheckCircle2, AlertCircle, Eye, EyeOff, Loader2, LogIn } from 'lucide-react';
 
 export default function ChangePasswordModal({ isOpen, onClose }) {
@@ -63,8 +64,9 @@ export default function ChangePasswordModal({ isOpen, onClose }) {
 
   const handleResetPassword = async (e) => {
     e.preventDefault();
-    if (newPassword.length < 8) {
-      setError('Password must be at least 8 characters long.');
+    const passwordError = getPasswordError(newPassword);
+    if (passwordError) {
+      setError(passwordError);
       return;
     }
     if (newPassword !== confirmPassword) {

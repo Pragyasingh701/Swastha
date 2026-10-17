@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 import { startGoogleAuth } from "../../utils/googleAuth";
-import { sanitizePhoneInput, isValidIndianPhone, isValidEmail, isValidFullName } from "../../utils/formValidation";
+import { sanitizePhoneInput, isValidIndianPhone, isValidEmail, isValidFullName, getPasswordError } from "../../utils/formValidation";
 import swasthaLogo from "../../assets/swastha-logo.png"; // adjust this path to wherever you keep the logo asset
 
 export default function Register() {
@@ -18,7 +18,6 @@ export default function Register() {
   const [isLoading, setIsLoading] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
-  const [showLoginPrompt, setShowLoginPrompt] = useState(false);
 
   const handleChange = (e) => {
     const { id, value } = e.target;
@@ -47,13 +46,13 @@ export default function Register() {
       setErrorMessage("Passwords do not match.");
       return;
     }
-    if (formData.password.length < 6) {
-      setErrorMessage("Password must be at least 6 characters long.");
+    const passwordError = getPasswordError(formData.password);
+    if (passwordError) {
+      setErrorMessage(passwordError);
       return;
     }
 
     setErrorMessage("");
-    setShowLoginPrompt(false);
     setIsLoading(true);
 
     try {
@@ -80,12 +79,9 @@ export default function Register() {
       }, 800);
     } catch (err) {
       setIsLoading(false);
-      if (err.message?.includes("already exists") || err.message?.includes("log in instead")) {
-        setErrorMessage("An account with this email already exists.");
-        setShowLoginPrompt(true);
-      } else {
-        setErrorMessage(err.message || "Registration failed. Please try again.");
-      }
+      // The server answers a new and an already-registered address identically,
+      // so there is no "account exists" case to detect here.
+      setErrorMessage(err.message || "Registration failed. Please try again.");
     }
   };
 
@@ -159,14 +155,6 @@ export default function Register() {
                   <span className="material-symbols-outlined text-[20px]">error</span>
                   <span>{errorMessage}</span>
                 </div>
-                {showLoginPrompt && (
-                  <Link
-                    to="/login"
-                    className="mt-2 inline-flex items-center justify-center py-2 px-4 bg-primary text-white text-label-md rounded-lg font-semibold hover:bg-primary/90 transition-all"
-                  >
-                    Log into existing account
-                  </Link>
-                )}
               </div>
             )}
 

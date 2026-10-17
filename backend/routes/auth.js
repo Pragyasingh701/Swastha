@@ -6,7 +6,7 @@ import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
 import supabase from '../config/supabase.js';
-import { sendOTPEmail, sendPasswordResetEmail } from '../utils/mailer.js';
+import { sendOTPEmail, sendPasswordResetEmail, sendAccountExistsEmail } from '../utils/mailer.js';
 import { findUserByEmail, findUserById, findUserByIdOrPatientCode, createOrUpdateUser, updateUserPassword, deleteUserById, generatePatientCode } from '../db/users.js';
 import { getFamilyVaultForUser, deleteFamilyVaultForUser } from '../db/family.js';
 import { deleteAllReportsForUser } from '../db/reports.js';
@@ -14,6 +14,8 @@ import { processMedicalCertificate } from '../services/certificateParserService.
 import { createNotification } from '../db/notifications.js';
 import { sniffFileType } from '../config/supabaseStorage.js';
 import { publicUser } from '../utils/publicUser.js';
+import { passwordPolicyError } from '../utils/passwordPolicy.js';
+import { eraseAccountResidue } from '../db/accountErasure.js';
 import { verifyAuthToken, signAuthToken } from '../config/jwt.js';
 
 const router = express.Router();
@@ -429,6 +431,9 @@ function isValidPastDate(dateStr, { minAge = 0, maxAge = 120 } = {}) {
   return age >= minAge && age <= maxAge;
 }
 
+// Identical for a brand-new address and one that already has an account.
+const REGISTER_REPLY = 'Check your email to continue. If you already have an account, the email tells you how to log in.';
+
 /**
  * POST /api/auth/register
  * Email & Password Registration -> Creates account, sends 6-digit OTP
@@ -451,10 +456,25 @@ router.post('/register', async (req, res) => {
     return res.status(400).json({ message: 'Please enter a valid 10-digit mobile number.' });
   }
 
+  const passwordProblem = passwordPolicyError(password);
+  if (passwordProblem) {
+    return res.status(400).json({ message: passwordProblem });
+  }
+
   const normalizedEmail = email.toLowerCase().trim();
   const existing = await findUserByEmail(normalizedEmail);
   if (existing) {
-    return res.status(400).json({ accountExists: true, message: 'An account with this email already exists. Please log in instead.' });
+    // Answered exactly like a new registration, so this form can't be used to
+    // find out who has an account. The real owner is told by email instead.
+    // (The new-account path hashes the password, so this one does too — to
+    // keep the response time from giving it away.)
+    await bcrypt.hash(password, 12);
+    try {
+      await sendAccountExistsEmail(normalizedEmail);
+    } catch (mailError) {
+      console.error('Account-exists email failed:', mailError?.message || mailError);
+    }
+    return res.status(201).json({ requiresOTP: true, email: normalizedEmail, message: REGISTER_REPLY });
   }
 
   const user = await createOrUpdateUser({
@@ -475,7 +495,7 @@ router.post('/register', async (req, res) => {
     return res.status(201).json({
       requiresOTP: true,
       email: normalizedEmail,
-      message: 'Account created! Verification code sent to your email.',
+      message: REGISTER_REPLY,
     });
   } catch (error) {
     otpStore.deleteCode(normalizedEmail, otpCode);
@@ -913,6 +933,9 @@ router.delete('/user', async (req, res) => {
       return res.status(400).json({ message: 'User ID missing from token.' });
     }
 
+    // Read before the row is gone: a doctor's certificate file has to be removed too.
+    const accountBeingDeleted = await findUserById(userId);
+
     // Delete child records first (defensive — works whether or not DB-level
     // ON DELETE CASCADE is configured on reports/vault_table/family_members).
     await deleteAllReportsForUser(userId);
@@ -922,6 +945,12 @@ router.delete('/user', async (req, res) => {
     if (!deleted) {
       return res.status(500).json({ message: 'Failed to delete user account.' });
     }
+
+    // What has no foreign key to the user (notifications, consent records,
+    // feedback, the audit/provider logs' user ids, the certificate file): see
+    // db/accountErasure.js. Failures are logged there and don't undo the
+    // deletion the user asked for.
+    await eraseAccountResidue(userId, { certificateUrl: accountBeingDeleted?.reg_certificate_url });
 
     return res.json({ message: 'Account and all associated records deleted successfully.' });
   } catch (error) {
@@ -1000,9 +1029,10 @@ router.post('/change-password/verify-otp', authenticateToken, async (req, res) =
  * Consumes the change token issued above and sets the new password.
  */
 router.post('/change-password/confirm', authenticateToken, async (req, res) => {
-  const { changeToken, newPassword } = req.body;
-  if (!newPassword || newPassword.length < 8) {
-    return res.status(400).json({ message: 'New password must be at least 8 characters long.' });
+  const { changeToken, newPassword } = req.body || {};
+  const passwordProblem = passwordPolicyError(newPassword);
+  if (passwordProblem) {
+    return res.status(400).json({ message: passwordProblem });
   }
 
   const email = (req.user.email || '').toLowerCase().trim();
@@ -1089,9 +1119,13 @@ router.get('/verify-reset-token', (req, res) => {
  * POST /api/auth/reset-password
  */
 router.post('/reset-password', async (req, res) => {
-  const { token, email, newPassword } = req.body;
+  const { token, email, newPassword } = req.body || {};
   if (!newPassword) {
     return res.status(400).json({ message: 'New password is required' });
+  }
+  const passwordProblem = passwordPolicyError(newPassword);
+  if (passwordProblem) {
+    return res.status(400).json({ message: passwordProblem });
   }
 
   if (!token || !resetTokenStore.has(token)) {

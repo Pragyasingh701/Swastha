@@ -388,6 +388,9 @@ async function createMemberHandler(req, res) {
 
 router.post('/members', createMemberHandler);
 
+const FAMILY_INVITE_REPLY =
+  'If a patient account exists for that email, an authorization request has been sent. The member will be added once they approve it.';
+
 router.post('/members/authorize', async (req, res) => {
   try {
     const user = getAuthUser(req);
@@ -432,12 +435,11 @@ router.post('/members/authorize', async (req, res) => {
     const memberName = normalizeText(payload.name);
 
     const patientAccount = await findUserByEmail(recipientEmail);
+    // The reply is the same whether or not the address has a patient account,
+    // so this can't be used to check who is registered. If there is no account,
+    // nothing is created and nothing is sent.
     if (!patientAccount || patientAccount.role !== 'patient') {
-      return res.status(400).json({
-        message: 'This email is not registered as a patient account. Authorization email was not sent.',
-        errorCode: 'PATIENT_ACCOUNT_NOT_FOUND',
-        errorHint: 'Ask the family member to create a patient account first, then invite them again.',
-      });
+      return res.json({ message: FAMILY_INVITE_REPLY });
     }
 
     const { member, authorizationToken } = await createPendingFamilyMemberAuthorizationRequest({
@@ -451,10 +453,11 @@ router.post('/members/authorize', async (req, res) => {
       requestedByEmail: inviterEmail,
     });
 
-    const sent = await sendFamilyMemberAuthorizationEmail(recipientEmail, inviterEmail, memberName, authorizationToken);
-
-    if (!sent) {
-      console.error('Failed to send family authorization email to', recipientEmail);
+    try {
+      await sendFamilyMemberAuthorizationEmail(recipientEmail, inviterEmail, memberName, authorizationToken);
+    } catch (sendError) {
+      // Don't leave a pending member behind for an email that was never sent.
+      console.error('Failed to send family authorization email:', sendError?.message || sendError);
       try {
         if (member?.id) {
           await deleteFamilyMember(member.id, { userId: user.userId });
@@ -462,11 +465,10 @@ router.post('/members/authorize', async (req, res) => {
       } catch (delErr) {
         console.error('Failed to rollback pending member after email failure:', delErr);
       }
-
       return res.status(500).json({ message: 'Failed to send authorization email' });
     }
 
-    return res.json({ message: 'Authorization request sent. The member will be added after they approve it.' });
+    return res.json({ message: FAMILY_INVITE_REPLY });
   } catch (error) {
     console.error('Family member authorization email error:', error);
     return res.status(500).json({ message: 'Failed to send authorization mail' });

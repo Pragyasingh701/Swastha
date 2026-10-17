@@ -491,7 +491,7 @@ export default function FamilyVault() {
           lastVisitDate: payload.lastVisitDate,
           nextCheckupDate: payload.nextCheckupDate,
         }, token);
-        setNotice('Authorization request sent. The member will be added after they approve it.');
+        setNotice('If a patient account exists for that email, an authorization request has been sent. The member will be added once they approve it.');
       } else {
         await createFamilyMember(payload, token);
         setNotice('Family member added successfully.');

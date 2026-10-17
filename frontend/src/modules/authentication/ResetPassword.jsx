@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { authService } from "../../api/auth";
+import { getPasswordError } from "../../utils/formValidation";
 
 export default function ResetPassword() {
   const navigate = useNavigate();
@@ -46,8 +47,9 @@ export default function ResetPassword() {
       setError("Passwords do not match.");
       return;
     }
-    if (password.length < 8) {
-      setError("Password must be at least 8 characters long.");
+    const passwordError = getPasswordError(password);
+    if (passwordError) {
+      setError(passwordError);
       return;
     }
 
@@ -127,7 +129,7 @@ export default function ResetPassword() {
                         required
                         id="newPassword"
                         type={showPassword ? "text" : "password"}
-                        placeholder="At least 8 characters"
+                        placeholder="8+ characters, a letter and a number"
                         value={password}
                         onChange={(e) => setPassword(e.target.value)}
                         className="w-full pl-11 pr-11 py-3 bg-surface-container-lowest border border-outline-variant rounded-xl font-body-md text-on-surface focus:outline-none focus:border-primary"
