@@ -1,6 +1,7 @@
 // Routed through the shared failover client: Gemini (4 keys) -> OpenRouter.
 import { runAI } from '../config/aiClient.js';
 import { UNTRUSTED_DATA_RULES, wrapUntrusted, sanitizeModelText } from '../utils/untrustedData.js';
+import { extractJson } from '../utils/extractJson.js';
 
 // Lab Insights needs numbers a chart can plot, but reports only ever store
 // free text ("Key Results / Values" like "Hemoglobin 13.2 g/dL, WBC
@@ -26,20 +27,6 @@ function buildReportBlock(report, index) {
   append('Notes', notes);
   append('AI Summary', analysis);
   return lines.join('\n');
-}
-
-// Strips ```json fences etc. that free-tier chat models routinely wrap
-// around JSON output despite being asked not to.
-function extractJson(text) {
-  const trimmed = text.trim();
-  const fenced = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/i);
-  const candidate = fenced ? fenced[1].trim() : trimmed;
-  const start = candidate.indexOf('{');
-  const end = candidate.lastIndexOf('}');
-  if (start === -1 || end === -1 || end < start) {
-    throw new Error('No JSON object found in model output');
-  }
-  return JSON.parse(candidate.slice(start, end + 1));
 }
 
 /**

@@ -5,6 +5,7 @@ import { storagePathFromUrl } from '../../config/supabaseStorage.js';
 // runAI('generation') never throws — check `.ok` before parsing.
 import { embedText, runAI } from '../config/aiClient.js';
 import { FULL_CONTEXT_MAX_CHARS } from '../config/env.js';
+import { extractJson } from '../utils/extractJson.js';
 
 const MATCH_COUNT = 5;
 // Cosine similarity threshold below which a chunk is considered irrelevant.
@@ -834,21 +835,6 @@ Decide which of these two situations this is, and reply with ONE short, plain se
 - If this is NOT a question about health records at all (a greeting, small talk, asking about you, or anything unrelated to their medical history): write one short, friendly sentence redirecting them to ask about their health records instead (e.g. "I'm here to help you look through your health records — try asking about a diagnosis, medication, or report."). Do not answer the off-topic question itself.
 
 Reply with exactly one sentence, nothing more.`;
-}
-
-// Strips ```json fences etc. that free-tier chat models routinely wrap
-// around JSON output despite being asked not to (same defensive parsing as
-// rag/src/services/labInsightsService.js).
-function extractJson(text) {
-  const trimmed = text.trim();
-  const fenced = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/i);
-  const candidate = fenced ? fenced[1].trim() : trimmed;
-  const start = candidate.indexOf('{');
-  const end = candidate.lastIndexOf('}');
-  if (start === -1 || end === -1 || end < start) {
-    throw new Error('No JSON object found in model output');
-  }
-  return JSON.parse(candidate.slice(start, end + 1));
 }
 
 // A keyFacts entry counts as a duplicate of an earlier one if its label and
