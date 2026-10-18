@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import ResponsiveSidebar from "../../../components/common/ResponsiveSidebar";
 import {
   AreaChart,
@@ -15,7 +15,6 @@ import {
   TrendingUp,
   Folder,
   Users,
-  Settings,
   PlusCircle,
   HeartPulse,
   ArrowDown,
@@ -25,7 +24,6 @@ import {
   FlaskConical,
   Syringe,
   Loader2,
-  RefreshCw,
   Beaker,
 } from "lucide-react";
 import NotificationBell from "../../../components/common/NotificationBell";
@@ -447,7 +445,7 @@ function TrendCard({ activeSeries, chartData, range, setRange }) {
 function TrendTooltip({ active, payload, label, unit }) {
   if (!active || !payload?.length) return null;
   return (
-    <div className="bg-white rounded-xl shadow-lg border border-slate-100 px-3.5 py-2.5 animate-in fade-in duration-150">
+    <div className="bg-white rounded-xl shadow-lg border border-slate-100 px-3.5 py-2.5 animate-fade-in">
       <p className="text-xs text-slate-400 mb-0.5">{label}</p>
       <p className="text-sm font-semibold text-slate-900 ">
         {payload[0].value}{unit ? ` ${unit}` : ""}

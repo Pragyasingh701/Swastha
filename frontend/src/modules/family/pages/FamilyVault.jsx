@@ -1,19 +1,14 @@
 import React, { useEffect, useState } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import {
   AlertCircle,
-  ClipboardList,
   Folder,
-  HelpCircle,
   LayoutGrid,
-  Mail,
   PlusCircle,
-  Settings,
   ShieldCheck,
   Sparkles,
   TrendingUp,
   Users,
-  LogOut,
 } from 'lucide-react';
 import NotificationBell from "../../../components/common/NotificationBell";
 import { useAuth } from '../../../context/AuthContext';
@@ -182,7 +177,6 @@ const navItems = [
 ];
 
 const VAULT_PROMPT_STORAGE_KEY = 'swastha.familyVaultPromptShown';
-
 
 function Sidebar({ onOpenSettings }) {
   return (

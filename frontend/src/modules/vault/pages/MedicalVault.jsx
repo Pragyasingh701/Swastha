@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "../../../context/AuthContext";
 import { getTimelineReports, generateReportSummary } from "../../../api/reports";
 import ReportFilePreview from "../../../components/common/ReportFilePreview";
@@ -14,7 +14,6 @@ import {
   Folder,
   Users,
   ClipboardList,
-  Settings,
   PlusCircle,
   Search,
   ShieldCheck,
@@ -24,7 +23,6 @@ import {
   ScanLine,
   Syringe,
   X,
-  ExternalLink,
   Loader2,
   RefreshCw,
 } from "lucide-react";

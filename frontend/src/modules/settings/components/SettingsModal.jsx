@@ -18,16 +18,9 @@ import {
   Save,
   CheckCircle2,
   AlertCircle,
-  Calendar,
-  Heart,
   Phone,
-  Building2,
   FileCheck,
   Upload,
-  FileText,
-  Award,
-  Briefcase,
-  MapPin,
   Sparkles,
 } from 'lucide-react';
 
@@ -249,8 +242,8 @@ export default function SettingsModal({ isOpen, onClose }) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
-      <div className="relative w-full max-w-3xl bg-white rounded-3xl shadow-2xl border border-slate-200 overflow-hidden animate-in zoom-in-95 duration-200">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fade-in">
+      <div className="relative w-full max-w-3xl bg-white rounded-3xl shadow-2xl border border-slate-200 overflow-hidden animate-pop-in">
         {/* Modal Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-slate-50/50 ">
           <div className="flex items-center gap-3">
@@ -482,7 +475,7 @@ export default function SettingsModal({ isOpen, onClose }) {
 
           {/* 3. Doctor Mandatory Registration Credentials */}
           {formData.role === 'doctor' && (
-            <div className="pt-4 border-t border-slate-100 space-y-4 animate-in fade-in duration-200">
+            <div className="pt-4 border-t border-slate-100 space-y-4 animate-fade-in">
               <h4 className="text-xs font-extrabold uppercase tracking-wider text-slate-900 flex items-center gap-2">
                 <Stethoscope size={16} className="text-indigo-600 " />
                 Medical Accreditation & License Credentials

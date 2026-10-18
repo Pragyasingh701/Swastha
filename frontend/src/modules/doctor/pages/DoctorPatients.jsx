@@ -1,6 +1,17 @@
 import React, { useEffect, useState, useMemo, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import { Sparkles, Bell, X, CalendarDays, Stethoscope, XCircle, ChevronDown, ChevronRight, AlertTriangle, FlaskConical, ClipboardList, ScanLine, Syringe, FileText } from "lucide-react";
+import {
+  Sparkles,
+  X,
+  XCircle,
+  ChevronDown,
+  ChevronRight,
+  FlaskConical,
+  ClipboardList,
+  ScanLine,
+  Syringe,
+  FileText,
+} from "lucide-react";
 import NotificationBell from "../../../components/common/NotificationBell";
 import DoctorSidebar from "../components/DoctorSidebar";
 import ProfileDropdown from "../../settings/components/ProfileDropdown";
@@ -1425,7 +1436,6 @@ function EventDetails({ event, onClose }) {
         day: 'numeric',
       })
     : 'Unknown date';
-
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 px-4 py-6">

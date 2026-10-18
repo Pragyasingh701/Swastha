@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 import {
   sanitizePhoneInput,
@@ -218,7 +218,7 @@ export default function DoctorRegister() {
 
           <form className="space-y-8" onSubmit={handleSubmit}>
             {/* Section 1: Personal Information */}
-            <div className="glass-morphism rounded-[24px] shadow-sm border border-outline-variant/30 overflow-hidden">
+            <div className="rounded-[24px] shadow-sm border border-outline-variant/30 overflow-hidden">
               <div className="p-8 md:p-10">
                 <div className="flex items-center gap-3 mb-8">
                   <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center text-primary">
@@ -359,7 +359,7 @@ export default function DoctorRegister() {
             </div>
 
             {/* Section 2: Professional Credentials */}
-            <div className="glass-morphism rounded-[24px] shadow-sm border border-outline-variant/30 overflow-hidden">
+            <div className="rounded-[24px] shadow-sm border border-outline-variant/30 overflow-hidden">
               <div className="p-8 md:p-10">
                 <div className="flex items-center gap-3 mb-8">
                   <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center text-primary">
@@ -494,7 +494,7 @@ export default function DoctorRegister() {
             </div>
 
             {/* Section 3: Hospital/Clinic Details */}
-            <div className="glass-morphism rounded-[24px] shadow-sm border border-outline-variant/30 overflow-hidden">
+            <div className="rounded-[24px] shadow-sm border border-outline-variant/30 overflow-hidden">
               <div className="p-8 md:p-10">
                 <div className="flex items-center gap-3 mb-8">
                   <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center text-primary">
@@ -543,7 +543,7 @@ export default function DoctorRegister() {
             </div>
 
             {/* Section 4: Document Upload */}
-            <div className="glass-morphism rounded-[24px] shadow-sm border border-outline-variant/30 overflow-hidden">
+            <div className="rounded-[24px] shadow-sm border border-outline-variant/30 overflow-hidden">
               <div className="p-8 md:p-10">
                 <div className="flex items-center gap-3 mb-8">
                   <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center text-primary">

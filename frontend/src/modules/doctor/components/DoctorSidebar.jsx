@@ -1,7 +1,6 @@
 import React, { useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { Bell, Settings } from "lucide-react";
-import Logo from "../../../components/common/Logo";
+
 import ResponsiveSidebar from "../../../components/common/ResponsiveSidebar";
 import SettingsModal from "../../settings/components/SettingsModal";
 

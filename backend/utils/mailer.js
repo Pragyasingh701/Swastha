@@ -1,4 +1,4 @@
-import dotenv from 'dotenv';
+
 import { escapeHtml } from './emailActionPage.js';
 
 /**

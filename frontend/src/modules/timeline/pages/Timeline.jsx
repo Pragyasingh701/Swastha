@@ -16,12 +16,10 @@ import {
   Folder,
   Users,
   ClipboardList,
-  Settings,
   UploadCloud,
   ChevronDown,
   ChevronRight,
   X,
-  ExternalLink,
   Sparkles,
   FlaskConical,
   ScanLine,
@@ -516,7 +514,6 @@ export default function Timeline() {
 
 /* ---------------------------- Sidebar ---------------------------- */
 /* Copied from Dashboard.jsx / LabTrends.jsx so all pages share identical behavior. */
-
 
 function Sidebar({ onUploadClick, onOpenSettings }) {
   return (

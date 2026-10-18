@@ -1,6 +1,20 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Sparkles, Search, ChevronDown, User, ClipboardList, FlaskConical, ScanLine, Syringe, FileText, RefreshCw, Stethoscope, Pill, TrendingUp, CalendarClock } from "lucide-react";
+import {
+  Search,
+  ChevronDown,
+  User,
+  ClipboardList,
+  FlaskConical,
+  ScanLine,
+  Syringe,
+  FileText,
+  RefreshCw,
+  Stethoscope,
+  Pill,
+  TrendingUp,
+  CalendarClock,
+} from "lucide-react";
 import NotificationBell from "../../../components/common/NotificationBell";
 import DoctorSidebar from "../components/DoctorSidebar";
 import ProfileDropdown from "../../settings/components/ProfileDropdown";

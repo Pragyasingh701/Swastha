@@ -5,9 +5,16 @@ import bcrypt from 'bcryptjs';
 import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
-import supabase from '../config/supabase.js';
+
 import { sendOTPEmail, sendPasswordResetEmail, sendAccountExistsEmail } from '../utils/mailer.js';
-import { findUserByEmail, findUserById, findUserByIdOrPatientCode, createOrUpdateUser, updateUserPassword, deleteUserById, generatePatientCode } from '../db/users.js';
+import {
+  findUserByEmail,
+  findUserById,
+  findUserByIdOrPatientCode,
+  createOrUpdateUser,
+  updateUserPassword,
+  deleteUserById,
+} from '../db/users.js';
 import { getFamilyVaultForUser, deleteFamilyVaultForUser } from '../db/family.js';
 import { deleteAllReportsForUser } from '../db/reports.js';
 import { processMedicalCertificate } from '../services/certificateParserService.js';

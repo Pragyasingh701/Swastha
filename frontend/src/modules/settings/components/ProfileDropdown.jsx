@@ -128,7 +128,7 @@ export default function ProfileDropdown({ customProfile }) {
 
         {/* Popover Dropdown Card */}
         {isOpen && (
-          <div className="absolute right-0 top-full mt-2 w-76 rounded-2xl bg-white/95 text-slate-900 shadow-2xl shadow-slate-900/15 border border-slate-200/90 p-3 z-50 animate-in fade-in slide-in-from-top-2 duration-150 backdrop-blur-xl origin-top-right">
+          <div className="absolute right-0 top-full mt-2 w-[19rem] rounded-2xl bg-white/95 text-slate-900 shadow-2xl shadow-slate-900/15 border border-slate-200/90 p-3 z-50 animate-fade-in backdrop-blur-xl origin-top-right">
             {/* Top User Info Header */}
             <div className="pb-2 mb-2 border-b border-slate-100 flex items-start justify-between">
               <div className="min-w-0 pr-2">

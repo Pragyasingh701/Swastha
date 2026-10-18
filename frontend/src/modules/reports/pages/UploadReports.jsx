@@ -2,12 +2,6 @@ import React, { useState } from "react";
 import {
   X,
   UploadCloud,
-  FileText,
-  Calendar,
-  User,
-  Building2,
-  Pill,
-  FileHeart,
   Sparkles,
   Loader2,
   CheckCircle2,
@@ -269,7 +263,6 @@ export default function UploadReports({ onClose, onSubmit, token, initialEvent }
       setSaving(false);
     }
   };
-
 
   return (
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">

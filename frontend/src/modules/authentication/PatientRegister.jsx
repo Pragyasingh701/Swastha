@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 import { sanitizePhoneInput, isValidIndianPhone, isValidPastDate } from "../../utils/formValidation";
 import swasthaLogo from "../../assets/swastha-logo.png";
@@ -132,7 +132,7 @@ export default function PatientRegister() {
           )}
 
           <form className="space-y-8" onSubmit={handleSubmit}>
-            <div className="glass-morphism rounded-[24px] shadow-sm border border-outline-variant/30 overflow-hidden">
+            <div className="rounded-[24px] shadow-sm border border-outline-variant/30 overflow-hidden">
               <div className="p-8 md:p-10">
                 <div className="flex items-center gap-3 mb-8">
                   <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center text-primary">

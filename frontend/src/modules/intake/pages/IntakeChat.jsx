@@ -15,7 +15,6 @@ import {
   TrendingUp,
   Folder,
   Users,
-  Settings,
   UploadCloud,
   ClipboardList,
   Send,
