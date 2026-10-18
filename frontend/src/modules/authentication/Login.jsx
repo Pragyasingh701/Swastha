@@ -80,7 +80,7 @@ export default function Login() {
               Your Family&apos;s Health. <br /> <span className="text-primary">Organized by AI.</span>
             </h1>
             <p className="font-body-lg text-body-lg text-on-surface-variant max-w-lg mx-auto">
-              Securely access all your medical records, AI insights, medicine alerts, and family health timeline from one place.
+              Securely access all your medical records, AI insights, medicines, and family health timeline from one place.
             </p>
           </div>
 
