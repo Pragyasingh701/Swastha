@@ -26,7 +26,7 @@ import {
   getIntakeSessionActionedByDoctor,
   getPatientNamesByIds,
 } from '../db/intakeSessions.js';
-import { verifyAuthToken } from '../config/jwt.js';
+import { getAuthUser } from '../config/jwt.js';
 import { renderMessagePage, renderConfirmPage } from '../utils/emailActionPage.js';
 
 const router = express.Router();
@@ -36,21 +36,6 @@ const router = express.Router();
 // service. RAG_BASE_URL is still overridable for anyone still running it
 // standalone.
 const RAG_BASE_URL = process.env.RAG_BASE_URL || `http://localhost:${process.env.PORT || 5001}/rag/api`;
-
-function getAuthUser(req) {
-  const authHeader = req.headers.authorization || '';
-  const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : '';
-
-  if (!token) {
-    return null;
-  }
-
-  try {
-    return verifyAuthToken(token);
-  } catch {
-    return null;
-  }
-}
 
 
 // Doctor-only routes. Every one of these used to check only that SOME logged-in

@@ -1,6 +1,7 @@
 import crypto from 'crypto';
 import supabase from '../config/supabase.js';
 import { findUserById } from './users.js';
+import { ageFromDob } from '../utils/age.js';
 
 const FAMILY_VAULT_TABLE = 'vault_table';
 const FAMILY_MEMBERS_TABLE = 'family_members';
@@ -9,21 +10,6 @@ const FAMILY_USER_ID_COLUMN = 'patient_id';
 
 function escapeRegExp(value) {
   return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
-
-function calculateAgeFromDob(dobValue) {
-  if (!dobValue) return null;
-  const dateValue = new Date(dobValue);
-  if (Number.isNaN(dateValue.getTime())) return null;
-
-  const today = new Date();
-  let age = today.getFullYear() - dateValue.getFullYear();
-  const monthDiff = today.getMonth() - dateValue.getMonth();
-  if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < dateValue.getDate())) {
-    age -= 1;
-  }
-
-  return age >= 0 && age <= 150 ? age : null;
 }
 
 function isPendingAuthorizationMember(member) {
@@ -126,7 +112,7 @@ function applyUserScope(query, { userId }) {
 function buildMemberPayload(memberData = {}) {
   const now = new Date().toISOString();
   const normalizedDob = memberData.dob || memberData.date_of_birth || null;
-  const computedAge = calculateAgeFromDob(normalizedDob);
+  const computedAge = ageFromDob(normalizedDob);
 
   return {
     name: memberData.name?.trim() || null,
@@ -164,7 +150,7 @@ function buildMemberUpdatePayload(memberData = {}) {
   if (has('name')) payload.name = memberData.name?.trim() || null;
   if (has('dob') || has('date_of_birth')) {
     payload.dob = memberData.dob || memberData.date_of_birth || null;
-    const computedAge = calculateAgeFromDob(payload.dob);
+    const computedAge = ageFromDob(payload.dob);
     if (computedAge !== null) {
       payload.age = computedAge;
     }

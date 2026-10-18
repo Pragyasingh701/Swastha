@@ -2,6 +2,7 @@ import crypto from 'crypto';
 import supabase from '../config/supabase.js';
 import { createNotification } from './notifications.js';
 import { listReportActivityForPatients } from './reports.js';
+import { ageFromDob } from '../utils/age.js';
 
 // Pushing a notification is best-effort from a linking action's point of
 // view — a doctor's request/patient's response must NOT fail just because
@@ -135,18 +136,6 @@ function formatLinkedAgo(linkedSince) {
 
   const diffHours = Math.floor(diffMinutes / 60);
   return `${diffHours}hr ago`;
-}
-
-// Whole years lived, so a patient born in December is not a year older in January.
-export function ageFromDob(dob, now = new Date()) {
-  if (!dob) return null;
-  const born = new Date(dob);
-  if (Number.isNaN(born.getTime())) return null;
-  let age = now.getFullYear() - born.getFullYear();
-  const beforeBirthday =
-    now.getMonth() < born.getMonth() || (now.getMonth() === born.getMonth() && now.getDate() < born.getDate());
-  if (beforeBirthday) age -= 1;
-  return age >= 0 && age <= 150 ? age : null;
 }
 
 // "Access active · 5h left", from the link's real expiry.

@@ -25,6 +25,7 @@ import { passwordPolicyError } from '../utils/passwordPolicy.js';
 import { eraseAccountResidue } from '../db/accountErasure.js';
 import { checkNoticeAck } from '../db/aiNoticeAcknowledgements.js';
 import { verifyAuthToken, signAuthToken, sessionTokenTtl, rememberMeTokenTtl } from '../config/jwt.js';
+import { wholeYears } from '../utils/age.js';
 
 const router = express.Router();
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || '771272691038-s9h707grr3b4ojkgp48aa5vb9tej2sjh.apps.googleusercontent.com';
@@ -365,18 +366,14 @@ router.post('/login', async (req, res) => {
     return res.status(401).json({ message: LOGIN_FAILED_MESSAGE });
   }
 
-  // Generate 6-digit OTP code for Login Verification
-  const otpCode = issueOtp(normalizedEmail, { fresh: true });
-
   try {
-    await sendOTPEmail(normalizedEmail, otpCode);
+    await issueAndSendOtp(normalizedEmail);
     return res.json({
       requiresOTP: true,
       email: normalizedEmail,
       message: 'Verification code sent to your email.',
     });
   } catch (error) {
-    otpStore.deleteCode(normalizedEmail, otpCode);
     console.error('Failed to send verification email.', error?.message || error);
     return res.status(500).json({
       message: 'Failed to send verification email.',
@@ -431,12 +428,21 @@ function isValidPastDate(dateStr, { minAge = 0, maxAge = 120 } = {}) {
   today.setHours(0, 0, 0, 0);
   if (dob > today) return false;
 
-  let age = today.getFullYear() - dob.getFullYear();
-  const monthDiff = today.getMonth() - dob.getMonth();
-  if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < dob.getDate())) {
-    age -= 1;
-  }
+  const age = wholeYears(dob, today);
   return age >= minAge && age <= maxAge;
+}
+
+// Issues a verification code for `key` and emails it to `email`. If the email cannot be
+// sent, only that code is discarded (not a concurrent login's valid one) and the error is
+// rethrown for the caller to turn into a response.
+async function issueAndSendOtp(email, { key = email, fresh = true } = {}) {
+  const otpCode = issueOtp(key, { fresh });
+  try {
+    await sendOTPEmail(email, otpCode);
+  } catch (error) {
+    otpStore.deleteCode(key, otpCode);
+    throw error;
+  }
 }
 
 // Identical for a brand-new address and one that already has an account.
@@ -495,18 +501,14 @@ router.post('/register', async (req, res) => {
     authProvider: 'email',
   });
 
-  // Generate 6-digit OTP code for Registration Verification
-  const otpCode = issueOtp(normalizedEmail, { fresh: true });
-
   try {
-    await sendOTPEmail(normalizedEmail, otpCode);
+    await issueAndSendOtp(normalizedEmail);
     return res.status(201).json({
       requiresOTP: true,
       email: normalizedEmail,
       message: REGISTER_REPLY,
     });
   } catch (error) {
-    otpStore.deleteCode(normalizedEmail, otpCode);
     console.error('Account created, but the verification email could not be sent.', error?.message || error);
     return res.status(500).json({
       message: 'Account created, but the verification email could not be sent.',
@@ -535,18 +537,14 @@ async function completeGoogleAuth(res, { email, name, picture, sub }, { role } =
     });
   }
 
-  // Generate 6-digit OTP code for Google Verification
-  const otpCode = issueOtp(normalizedEmail, { fresh: true });
-
   try {
-    await sendOTPEmail(normalizedEmail, otpCode);
+    await issueAndSendOtp(normalizedEmail);
     return res.json({
       requiresOTP: true,
       email: normalizedEmail,
       message: 'Verification code sent to your Google email address.',
     });
   } catch (error) {
-    otpStore.deleteCode(normalizedEmail, otpCode);
     console.error('Could not send the verification email to your Google address.', error?.message || error);
     return res.status(500).json({
       message: 'Could not send the verification email to your Google address.',
@@ -937,11 +935,9 @@ router.post('/send-otp', async (req, res) => {
     return res.json(genericReply);
   }
 
-  const otpCode = issueOtp(normalizedEmail, { fresh: false });
   try {
-    await sendOTPEmail(normalizedEmail, otpCode);
+    await issueAndSendOtp(normalizedEmail, { fresh: false });
   } catch (error) {
-    otpStore.deleteCode(normalizedEmail, otpCode);
     console.error('Resend OTP email failed:', error?.message || error);
     return res.status(500).json({ message: 'Failed to send verification code.' });
   }
@@ -1018,13 +1014,10 @@ router.post('/change-password/send-otp', authenticateToken, async (req, res) => 
       });
     }
 
-    const otpCode = issueOtp(`changepwd:${email}`, { fresh: true });
-
     try {
-      await sendOTPEmail(email, otpCode);
+      await issueAndSendOtp(email, { key: `changepwd:${email}` });
       return res.json({ message: `Verification code sent to ${email}` });
     } catch (error) {
-      otpStore.deleteCode(`changepwd:${email}`, otpCode);
       console.error('Failed to send verification code to your email.', error?.message || error);
       return res.status(500).json({
         message: 'Failed to send verification code to your email.',

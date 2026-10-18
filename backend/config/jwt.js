@@ -32,6 +32,22 @@ export function verifyAuthToken(token) {
   return jwt.verify(token, getJwtSecret());
 }
 
+// The logged-in user from a request's `Authorization: Bearer ...` header, or null when there
+// is no token or it is invalid or expired. Routes that need a 401 call this and check the result.
+export function getAuthUser(req) {
+  const authHeader = req.headers.authorization || '';
+  const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : '';
+  if (!token) {
+    return null;
+  }
+
+  try {
+    return verifyAuthToken(token);
+  } catch {
+    return null;
+  }
+}
+
 // `expiresIn` is whatever jsonwebtoken accepts ('24h', '7d', or seconds as a number).
 export function signAuthToken({ userId, email, role, vaultId = null, expiresIn }) {
   return jwt.sign({ userId, email, role, vaultId }, getJwtSecret(), { expiresIn: expiresIn || sessionTokenTtl() });

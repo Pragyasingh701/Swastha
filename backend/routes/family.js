@@ -16,25 +16,11 @@ import {
 import { sendFamilyMemberAuthorizationEmail } from '../utils/mailer.js';
 import { findUserByEmail, findUserById } from '../db/users.js';
 import { createNotification } from '../db/notifications.js';
-import { verifyAuthToken } from '../config/jwt.js';
+import { getAuthUser } from '../config/jwt.js';
 import { renderMessagePage, renderConfirmPage } from '../utils/emailActionPage.js';
+import { ageFromDob } from '../utils/age.js';
 
 const router = express.Router();
-
-function getAuthUser(req) {
-  const authHeader = req.headers.authorization || '';
-  const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : '';
-
-  if (!token) {
-    return null;
-  }
-
-  try {
-    return verifyAuthToken(token);
-  } catch {
-    return null;
-  }
-}
 
 const NAME_REGEX = /^[a-zA-Z\s.'-]{1,80}$/;
 
@@ -242,20 +228,7 @@ router.post('/vault', async (req, res) => {
       const profileName = userProfile?.name || userProfile?.fullName || user?.name || user?.fullName || user?.email?.split('@')[0] || 'Me';
       const dob = userProfile?.dob || userProfile?.date_of_birth || null;
       const bloodGroup = userProfile?.bloodGroup || userProfile?.blood_group || null;
-      const age = dob ? (() => {
-        const birthDate = new Date(dob);
-        if (Number.isNaN(birthDate.getTime())) {
-          return null;
-        }
-
-        const today = new Date();
-        let calculatedAge = today.getFullYear() - birthDate.getFullYear();
-        const monthDifference = today.getMonth() - birthDate.getMonth();
-        if (monthDifference < 0 || (monthDifference === 0 && today.getDate() < birthDate.getDate())) {
-          calculatedAge -= 1;
-        }
-        return calculatedAge;
-      })() : null;
+      const age = ageFromDob(dob);
       const profileDetails = [dob ? `DOB: ${dob}` : '', bloodGroup ? `Blood Group: ${bloodGroup}` : ''].filter(Boolean).join(' • ');
       const hasSelfMember = existingMembers.some((member) => {
         const relationship = String(member?.relationship || '').trim().toLowerCase();

@@ -5,24 +5,9 @@ import {
   markNotificationAsRead,
 } from '../db/notifications.js';
 import { getDoctorLinkStatuses } from '../db/doctorPatients.js';
-import { verifyAuthToken } from '../config/jwt.js';
+import { getAuthUser } from '../config/jwt.js';
 
 const router = express.Router();
-
-function getAuthUser(req) {
-  const authHeader = req.headers.authorization || '';
-  const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : '';
-
-  if (!token) {
-    return null;
-  }
-
-  try {
-    return verifyAuthToken(token);
-  } catch {
-    return null;
-  }
-}
 
 router.get('/', async (req, res) => {
   const user = getAuthUser(req);
