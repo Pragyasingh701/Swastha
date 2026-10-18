@@ -451,7 +451,7 @@ export default function DoctorPatients() {
                   )}
 
                   <div className="rounded-xl bg-blue-50 border border-blue-100 px-3 py-2.5 text-xs text-blue-700 ">
-                  Use the patient’s existing patient code from the database to link the record.
+                  Ask the patient for the patient code shown in their profile, then enter it here to request access.
                   </div>
                 </div>
 
@@ -942,15 +942,24 @@ export default function DoctorPatients() {
                   >
                     <div className="flex justify-between items-start mb-4">
                       <div className="flex items-center gap-4">
-                        <img
-                          alt="Patient Photo"
-                          className="w-14 h-14 rounded-full object-cover border border-[#c3c6d7]/30 "
-                          src={patient.avatar}
-                        />
+                        {patient.avatar ? (
+                          <img
+                            alt={`${patient.name}'s photo`}
+                            className="w-14 h-14 rounded-full object-cover border border-[#c3c6d7]/30 "
+                            src={patient.avatar}
+                          />
+                        ) : (
+                          <div
+                            aria-hidden="true"
+                            className="w-14 h-14 rounded-full bg-[#dbe1ff] text-[#004ac6] border border-[#c3c6d7]/30 flex items-center justify-center text-lg font-semibold shrink-0"
+                          >
+                            {String(patient.name || "?").trim().split(/\s+/).slice(0, 2).map((part) => part[0]?.toUpperCase()).join("") || "?"}
+                          </div>
+                        )}
                         <div>
                           <h3 className="font-semibold text-lg text-[#191b23] ">{patient.name}</h3>
                           <p className="text-sm text-[#434655] ">
-                            ID: {patient.id} • {patient.age} Y • {patient.gender}
+                            ID: {patient.id}{patient.age != null ? ` • ${patient.age} Y` : ""} • {patient.gender}
                           </p>
                         </div>
                       </div>
@@ -992,8 +1001,8 @@ export default function DoctorPatients() {
                         </span>
                       </div>
                       <div className="flex items-center justify-between">
-                        <span className="text-sm text-[#434655] ">Last Visit</span>
-                        <span className="text-sm font-medium text-[#191b23] ">{patient.lastVisit}</span>
+                        <span className="text-sm text-[#434655] ">Access granted</span>
+                        <span className="text-sm font-medium text-[#191b23] ">{patient.accessGrantedAgo}</span>
                       </div>
                       <div className="flex items-center justify-between">
                         <span className="text-sm text-[#434655] ">Status</span>

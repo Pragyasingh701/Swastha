@@ -121,20 +121,41 @@ function isAccessExpired(link) {
   return !Number.isFinite(expiresAt) || expiresAt <= Date.now();
 }
 
-// "Linked Xm/Xh ago", relative to whenever access actually started (see
-// linkedSince below) — access only ever lives for ACCESS_DURATION_MS (24h),
-// so minutes/hours is all this ever needs to express.
+// "Xm/Xh ago", relative to whenever access actually started (see linkedSince
+// below) — access only ever lives for ACCESS_DURATION_MS (24h), so
+// minutes/hours is all this ever needs to express. Shown under "Access granted".
 function formatLinkedAgo(linkedSince) {
-  if (!linkedSince) return 'Recently linked';
+  if (!linkedSince) return 'Recently';
   const diffMs = Date.now() - new Date(linkedSince).getTime();
-  if (!Number.isFinite(diffMs) || diffMs < 0) return 'Recently linked';
+  if (!Number.isFinite(diffMs) || diffMs < 0) return 'Recently';
 
   const diffMinutes = Math.floor(diffMs / (60 * 1000));
-  if (diffMinutes < 1) return 'Linked just now';
-  if (diffMinutes < 60) return `Linked ${diffMinutes}m ago`;
+  if (diffMinutes < 1) return 'Just now';
+  if (diffMinutes < 60) return `${diffMinutes}m ago`;
 
   const diffHours = Math.floor(diffMinutes / 60);
-  return `Linked ${diffHours}hr ago`;
+  return `${diffHours}hr ago`;
+}
+
+// Whole years lived, so a patient born in December is not a year older in January.
+export function ageFromDob(dob, now = new Date()) {
+  if (!dob) return null;
+  const born = new Date(dob);
+  if (Number.isNaN(born.getTime())) return null;
+  let age = now.getFullYear() - born.getFullYear();
+  const beforeBirthday =
+    now.getMonth() < born.getMonth() || (now.getMonth() === born.getMonth() && now.getDate() < born.getDate());
+  if (beforeBirthday) age -= 1;
+  return age >= 0 && age <= 150 ? age : null;
+}
+
+// "Access active · 5h left", from the link's real expiry.
+function describeAccessLeft(accessExpiresAt) {
+  if (!accessExpiresAt) return 'Access active';
+  const msLeft = new Date(accessExpiresAt).getTime() - Date.now();
+  if (!Number.isFinite(msLeft) || msLeft <= 0) return 'Access active';
+  const minutes = Math.ceil(msLeft / (60 * 1000));
+  return minutes < 60 ? `Access active · ${minutes}m left` : `Access active · ${Math.ceil(minutes / 60)}h left`;
 }
 
 // Best-effort: the chief complaint from this patient's most recent intake
@@ -165,7 +186,7 @@ async function fetchLatestCondition(patientId) {
   }
 }
 
-function normalizeDoctorPatientCard(patient = {}, { condition, linkedSince } = {}) {
+function normalizeDoctorPatientCard(patient = {}, { condition, linkedSince, accessExpiresAt } = {}) {
   const patientIdValue = patient.patient_code || patient.id;
   const patient_email = patient.patient_email || patient.email || null;
   const patient_name = patient.patient_name || patient.name || patient.fullName || patient_email || 'Patient';
@@ -173,7 +194,7 @@ function normalizeDoctorPatientCard(patient = {}, { condition, linkedSince } = {
   const patient_gender = patient.patient_gender || patient.gender || 'U';
   const patient_dob = patient.patient_dob || patient.dob || patient.date_of_birth || patient.dateOfBirth || null;
   const patient_blood_group = patient.patient_blood_group || patient.blood_group || patient.bloodGroup || patient.blood_type || null;
-  const calculatedAge = patient_dob ? Math.max(0, new Date().getFullYear() - new Date(patient_dob).getFullYear()) : 0;
+  const calculatedAge = ageFromDob(patient_dob);
 
   return {
     id: `#${String(patientIdValue || '').replace(/^#/, '')}` || '#Unknown',
@@ -192,12 +213,15 @@ function normalizeDoctorPatientCard(patient = {}, { condition, linkedSince } = {
     dob: patient_dob,
     blood_group: patient_blood_group,
     age: calculatedAge,
-    condition: condition || 'General Care',
-    conditionTone: 'bg-[#dbeafe] text-[#1d4ed8]',
-    lastVisit: formatLinkedAgo(linkedSince),
-    status: 'Active', // display-only condition/activity label — unrelated
-    statusTone: 'bg-emerald-100 text-emerald-800', // to the link's request status below
-    avatar: patient.picture || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=400&q=80',
+    // The chief complaint from the latest intake, or a plain statement that there is none.
+    condition: condition || 'No intake yet',
+    conditionTone: condition ? 'bg-[#dbeafe] text-[#1d4ed8]' : 'bg-slate-100 text-slate-500',
+    accessGrantedAgo: formatLinkedAgo(linkedSince),
+    // The real state of the doctor's access, from the link's expiry.
+    status: describeAccessLeft(accessExpiresAt),
+    statusTone: 'bg-emerald-100 text-emerald-800',
+    // The patient's own photo only; the page draws initials when there is none.
+    avatar: patient.picture || null,
   };
 }
 
@@ -308,7 +332,7 @@ export const getDoctorPatients = async (doctorId) => {
             patient_dob: link.patient_dob || patient.dob || patient.date_of_birth || patient.dateOfBirth || null,
             patient_blood_group: link.patient_blood_group || patient.blood_group || patient.bloodGroup || patient.blood_type || null,
           },
-          { condition, linkedSince: link.responded_at || link.created_at }
+          { condition, linkedSince: link.responded_at || link.created_at, accessExpiresAt: link.access_expires_at }
         );
 
         return {

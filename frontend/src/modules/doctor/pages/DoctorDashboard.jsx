@@ -3,7 +3,7 @@ import DoctorSidebar from "../components/DoctorSidebar";
 import ProfileDropdown from "../../settings/components/ProfileDropdown";
 import {
   Users,
-  Video,
+  ClipboardCheck,
   Activity,
   UserPlus,
   FileCheck2,
@@ -154,15 +154,8 @@ function computeStats(patients, reports, lifetime) {
   const now = new Date();
   const today = startOfDay(now);
   const sevenDaysAgo = new Date(today.getTime() - 7 * MS_PER_DAY);
-  const fourteenDaysAgo = new Date(today.getTime() - 14 * MS_PER_DAY);
 
   const reportDate = (r) => new Date(r.createdAt || r.reportDate || 0);
-
-  const reportsThisWeek = reports.filter((r) => reportDate(r) >= sevenDaysAgo).length;
-  const reportsPrevWeek = reports.filter((r) => {
-    const d = reportDate(r);
-    return d >= fourteenDaysAgo && d < sevenDaysAgo;
-  }).length;
 
   const newPatientsThisWeek = patients.filter((p) => {
     if (!p.linkedAt) return false;
@@ -179,9 +172,11 @@ function computeStats(patients, reports, lifetime) {
   // only the fallback when that request fails.
   return {
     totalPatients: lifetime?.totalPatients ?? patients.length,
-    totalReports: lifetime?.totalReports ?? reports.length,
-    reportsThisWeek: lifetime?.reportsThisWeek ?? reportsThisWeek,
-    reportsPrevWeek: lifetime?.reportsPrevWeek ?? reportsPrevWeek,
+    // Sessions the doctor completed or removed. Uploaded reports are a different
+    // thing, so there is no fallback to them when the server figures are missing.
+    totalReports: lifetime?.totalReports ?? 0,
+    reportsThisWeek: lifetime?.reportsThisWeek ?? 0,
+    reportsPrevWeek: lifetime?.reportsPrevWeek ?? 0,
     newPatientsThisWeek: lifetime?.newPatientsThisWeek ?? newPatientsThisWeek,
     prescriptionsThisWeek: lifetime?.prescriptionsThisWeek ?? prescriptionsThisWeek,
   };
@@ -237,14 +232,14 @@ function StatGrid({ stats, isLoading }) {
       value: isLoading ? "—" : String(stats.totalPatients),
     },
     {
-      icon: Video,
-      label: "Reports Logged",
+      icon: ClipboardCheck,
+      label: "Intake Sessions Handled",
       value: isLoading ? "—" : String(stats.totalReports),
       accent: true,
     },
     {
       icon: Activity,
-      label: "Reports This Week",
+      label: "Handled This Week",
       value: isLoading ? "—" : String(stats.reportsThisWeek),
     },
   ];
@@ -299,7 +294,7 @@ function WeeklyActivitySummary({ stats, isLoading }) {
     {
       icon: FileCheck2,
       value: stats.reportsThisWeek,
-      label: "Reports logged",
+      label: "Intake sessions handled",
     },
     {
       icon: UserPlus,
