@@ -15,14 +15,15 @@ import {
   TrendingUp,
   CalendarClock,
 } from "lucide-react";
-import NotificationBell from "../../../components/common/NotificationBell";
+
 import DoctorSidebar from "../components/DoctorSidebar";
-import ProfileDropdown from "../../settings/components/ProfileDropdown";
+
 import PatientAccessNotice from "../components/PatientAccessNotice";
 import { getDoctorPatients, getDoctorPatientSummary } from "../../../api/doctorPatients";
 import { getTimelineReports } from "../../../api/reports";
 import { useAuth } from "../../../context/AuthContext";
 import { AiGeneratedNote } from "../../../components/common/AiNotice";
+import AppHeader from "../../../components/common/AppHeader";
 
 const CATEGORY_META = {
   Prescription: { icon: ClipboardList },
@@ -267,10 +268,7 @@ export default function ClinicalIntelligence() {
       <DoctorSidebar />
 
       <div className="flex-1 flex flex-col h-screen overflow-hidden min-w-0">
-        <header className="shrink-0 flex items-center justify-end gap-4 px-6 lg:px-8 py-5 border-b border-slate-200 bg-white ">
-          <NotificationBell />
-          <ProfileDropdown />
-        </header>
+        <AppHeader />
 
         <main className="flex-1 overflow-y-auto p-6 md:p-10 space-y-8">
           <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-4">

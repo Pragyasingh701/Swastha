@@ -4,15 +4,8 @@ import { useAuth } from "../../../context/AuthContext";
 import { getTimelineReports, generateReportSummary } from "../../../api/reports";
 import ReportFilePreview from "../../../components/common/ReportFilePreview";
 import { AI_NOTICE_ACCEPTED_EVENT } from "../../../components/common/AiNoticeGate";
-import ResponsiveSidebar from "../../../components/common/ResponsiveSidebar";
-import SettingsModal from "../../settings/components/SettingsModal";
-import ProfileDropdown from "../../settings/components/ProfileDropdown";
-import PatientIdBadge from "../../../components/common/PatientIdBadge";
+
 import {
-  LayoutGrid,
-  TrendingUp,
-  Folder,
-  Users,
   ClipboardList,
   PlusCircle,
   Search,
@@ -26,22 +19,15 @@ import {
   Loader2,
   RefreshCw,
 } from "lucide-react";
-import NotificationBell from "../../../components/common/NotificationBell";
+
 import { AiGeneratedNote } from "../../../components/common/AiNotice";
+import AppHeader from "../../../components/common/AppHeader";
+import PatientSidebar from "../../../components/common/PatientSidebar";
 
 /* -----------------------------------------------------------
    Nav + category config — same shape as Timeline.jsx so a report's
    category always maps to the same icon everywhere in the app.
 ------------------------------------------------------------ */
-
-const navItems = [
-  { label: "Dashboard", icon: LayoutGrid, route: "/dashboard" },
-  { label: "Health Timeline", icon: TrendingUp, route: "/timeline" },
-  { label: "Medical Vault", icon: Folder, active: true, route: "/vault" },
-  { label: "Family Vault", icon: Users, route: "/family-vault" },
-  { label: "Lab Trends", icon: TrendingUp, route: "/lab-trends" },
-  { label: "Ask Swastha", icon: Sparkles, route: "/search" },
-];
 
 const CATEGORY_META = {
   Prescription: { icon: ClipboardList, tone: "bg-blue-50 text-blue-600 " },
@@ -192,7 +178,6 @@ export default function MedicalVault() {
   const [searchQuery, setSearchQuery] = useState("");
   const [categoryFilter, setCategoryFilter] = useState(null);
   const [detailsReport, setDetailsReport] = useState(null);
-  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
   // Closing the details modal also drops ?document=, otherwise a reload
   // (or any later reports update) would reopen it.
@@ -273,10 +258,10 @@ export default function MedicalVault() {
 
   return (
     <div className="flex h-screen overflow-hidden bg-slate-50 text-slate-900 ">
-      <Sidebar onOpenSettings={() => setIsSettingsOpen(true)} />
+      <PatientSidebar action={{ label: "Upload New Report", icon: PlusCircle, route: "/timeline?upload=true" }} />
 
       <div className="flex-1 flex flex-col min-w-0 h-screen overflow-hidden">
-        <Header profile={user} />
+        <AppHeader profile={user} />
 
         <main className="flex-1 overflow-y-auto px-4 sm:px-6 lg:px-8 py-6 lg:py-8 min-w-0 overflow-x-hidden">
           <div className="flex items-center justify-between mb-6">
@@ -340,42 +325,13 @@ export default function MedicalVault() {
         />
       )}
 
-      <SettingsModal
-        isOpen={isSettingsOpen}
-        onClose={() => setIsSettingsOpen(false)}
-      />
     </div>
   );
 }
 
 /* ---------------------------- Sidebar ---------------------------- */
 
-function Sidebar({ onOpenSettings }) {
-  return (
-    <ResponsiveSidebar
-      navItems={navItems}
-      action={{ label: "Upload New Report", icon: PlusCircle, route: "/timeline?upload=true" }}
-      onOpenSettings={onOpenSettings}
-      className="bg-slate-50"
-    />
-  );
-}
-
 /* ------------------------------ Header ------------------------------ */
-
-function Header({ profile }) {
-  const navigate = useNavigate();
-
-  return (
-    <header className="shrink-0 flex items-center justify-end gap-4 px-6 lg:px-8 py-5 border-b border-slate-200 bg-white ">
-      <NotificationBell />
-
-      <PatientIdBadge customProfile={profile} />
-
-      <ProfileDropdown customProfile={profile} />
-    </header>
-  );
-}
 
 /* --------------------------- Summary cards --------------------------- */
 

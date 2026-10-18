@@ -12,14 +12,15 @@ import {
   Syringe,
   FileText,
 } from "lucide-react";
-import NotificationBell from "../../../components/common/NotificationBell";
+
 import DoctorSidebar from "../components/DoctorSidebar";
-import ProfileDropdown from "../../settings/components/ProfileDropdown";
+
 import { getDoctorPatients, linkPatientToDoctor, deletePatientFromDoctor, requestAccessAgain } from "../../../api/doctorPatients";
 import { getTimelineReports } from "../../../api/reports";
 import { useAuth } from "../../../context/AuthContext";
 import { usePolling } from "../../../hooks/usePolling";
 import ReportFilePreview from "../../../components/common/ReportFilePreview";
+import AppHeader from "../../../components/common/AppHeader";
 
 // Diagnosis/Medicines are stored under the same column names for every
 // category, but what they actually MEAN differs by category — mirrors
@@ -382,10 +383,7 @@ export default function DoctorPatients() {
       <DoctorSidebar />
 
       <div className="flex-1 flex flex-col h-screen overflow-hidden min-w-0">
-        <header className="shrink-0 flex items-center justify-end gap-4 px-6 lg:px-8 py-5 border-b border-slate-200 bg-white ">
-          <NotificationBell />
-          <ProfileDropdown />
-        </header>
+        <AppHeader />
 
         <main className="flex-1 overflow-y-auto p-4 md:p-10 lg:px-12 py-8 space-y-8 overflow-x-hidden bg-[#f5f6f8]">
           <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">

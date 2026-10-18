@@ -5,6 +5,7 @@ import SettingsModal from './SettingsModal';
 import ChangePasswordModal from './ChangePasswordModal';
 import DeleteAccountModal from './DeleteAccountModal';
 import DoctorAccessModal from './DoctorAccessModal';
+import { OPEN_SETTINGS_EVENT } from '../../../components/common/settingsEvents';
 import {
   User,
   LogOut,
@@ -25,6 +26,14 @@ export default function ProfileDropdown({ customProfile }) {
   const [isDeleteAccountOpen, setIsDeleteAccountOpen] = useState(false);
   const [isDoctorAccessOpen, setIsDoctorAccessOpen] = useState(false);
   const dropdownRef = useRef(null);
+
+  // The sidebar's Settings link asks for this window through an event, so the page
+  // only ever has one Settings window mounted.
+  useEffect(() => {
+    const open = () => setIsSettingsOpen(true);
+    window.addEventListener(OPEN_SETTINGS_EVENT, open);
+    return () => window.removeEventListener(OPEN_SETTINGS_EVENT, open);
+  }, []);
 
   const profile = customProfile || authUser;
 

@@ -4,34 +4,17 @@ import { useAuth } from "../../../context/AuthContext";
 import { authService } from "../../../api/auth";
 import { getFamilyDashboard } from "../../../api/family";
 import { getTimelineReports } from "../../../api/reports";
-import ProfileDropdown from "../../settings/components/ProfileDropdown";
-import SettingsModal from "../../settings/components/SettingsModal";
-
-import ResponsiveSidebar from "../../../components/common/ResponsiveSidebar";
-import PatientIdBadge from "../../../components/common/PatientIdBadge";
-import NotificationBell from "../../../components/common/NotificationBell";
 
 import {
-  LayoutGrid,
-  TrendingUp,
-  Folder,
   Users,
   ClipboardList,
   PlusCircle,
   Pill,
   FileText,
-  Sparkles,
   ChevronRight,
 } from "lucide-react";
-
-const navItems = [
-  { label: "Dashboard", icon: LayoutGrid, active: true, route: "/dashboard" },
-  { label: "Health Timeline", icon: TrendingUp, route: "/timeline" },
-  { label: "Medical Vault", icon: Folder, route: "/vault" },
-  { label: "Family Vault", icon: Users, route: "/family-vault" },
-  { label: "Lab Trends", icon: TrendingUp, route: "/lab-trends" },
-  { label: "Ask Swastha", icon: Sparkles, route: "/search" },
-];
+import AppHeader from "../../../components/common/AppHeader";
+import PatientSidebar from "../../../components/common/PatientSidebar";
 
 function parseMedicationEntries(reports = []) {
   const meds = [];
@@ -87,28 +70,6 @@ function parseMedicationEntries(reports = []) {
   }
 
   return meds;
-}
-
-function Sidebar({ onOpenSettings }) {
-  return (
-    <ResponsiveSidebar
-      navItems={navItems}
-      action={{ label: "Open Family Vault", icon: PlusCircle, route: "/family-vault" }}
-      onOpenSettings={onOpenSettings}
-    />
-  );
-}
-
-function Header({ profile }) {
-  return (
-    <header className="shrink-0 flex items-center justify-end gap-4 px-6 lg:px-8 py-5 border-b border-slate-200 bg-white ">
-      <NotificationBell />
-
-      <PatientIdBadge customProfile={profile} />
-
-      <ProfileDropdown customProfile={profile} />
-    </header>
-  );
 }
 
 function StatCard({ icon: Icon, tag, tagColor, value, label, iconBg }) {
@@ -281,7 +242,6 @@ export default function Dashboard() {
   const { token, user: cachedUser, isAuthenticated } = useAuth();
   const [profile, setProfile] = useState(cachedUser);
   const [isProfileLoading, setIsProfileLoading] = useState(false);
-  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [vaultReports, setVaultReports] = useState([]);
   const [familySummary, setFamilySummary] = useState({
     totalMembers: 0,
@@ -419,10 +379,10 @@ export default function Dashboard() {
 
   return (
     <div className="flex h-screen overflow-hidden bg-slate-50 text-slate-900 ">
-      <Sidebar onOpenSettings={() => setIsSettingsOpen(true)} />
+      <PatientSidebar action={{ label: "Open Family Vault", icon: PlusCircle, route: "/family-vault" }} />
 
       <div className="flex-1 flex flex-col min-w-0 h-screen overflow-hidden">
-        <Header profile={profile} />
+        <AppHeader profile={profile} />
 
         <main className="flex-1 overflow-y-auto px-6 lg:px-8 py-8">
           <div className="flex items-center justify-between mb-6">
@@ -477,10 +437,6 @@ export default function Dashboard() {
         </main>
       </div>
 
-      <SettingsModal
-        isOpen={isSettingsOpen}
-        onClose={() => setIsSettingsOpen(false)}
-      />
     </div>
   );
 }

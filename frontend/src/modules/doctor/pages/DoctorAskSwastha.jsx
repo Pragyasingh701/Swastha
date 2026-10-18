@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import DoctorSidebar from "../components/DoctorSidebar";
-import ProfileDropdown from "../../settings/components/ProfileDropdown";
+
 import PatientAccessNotice from "../components/PatientAccessNotice";
 import { getDoctorPatients } from "../../../api/doctorPatients";
 import { searchReportsConversational, clearConversation, submitAnswerFeedback } from "../../../api/search";
@@ -22,7 +22,8 @@ import {
   ThumbsUp,
   ThumbsDown,
 } from "lucide-react";
-import NotificationBell from "../../../components/common/NotificationBell";
+
+import AppHeader from "../../../components/common/AppHeader";
 
 const EXAMPLE_QUESTIONS = [
   "Has this patient had any drug allergies or reactions?",
@@ -340,11 +341,9 @@ export default function DoctorAskSwastha() {
       <DoctorSidebar />
 
       <div className="flex-1 flex flex-col min-w-0 h-screen overflow-hidden">
-        <header className="shrink-0 flex items-center justify-end gap-4 px-6 lg:px-8 py-5 border-b border-slate-200 bg-white">
+        <AppHeader>
           <AiNoticeInfoLink feature="ask_swastha" />
-          <NotificationBell />
-          <ProfileDropdown />
-        </header>
+        </AppHeader>
 
         {noticeAcknowledged === false && (
           <AiNoticeAckModal feature="ask_swastha" onAccept={handleAcknowledgeNotice} accepting={acknowledging} />

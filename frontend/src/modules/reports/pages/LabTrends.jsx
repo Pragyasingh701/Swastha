@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import ResponsiveSidebar from "../../../components/common/ResponsiveSidebar";
+
 import {
   AreaChart,
   Area,
@@ -11,39 +11,25 @@ import {
   ResponsiveContainer,
 } from "recharts";
 import {
-  LayoutGrid,
-  TrendingUp,
-  Folder,
-  Users,
   PlusCircle,
   HeartPulse,
   ArrowDown,
   ArrowUp,
   Minus,
-  Sparkles,
   FlaskConical,
   Syringe,
   Loader2,
   Beaker,
 } from "lucide-react";
-import NotificationBell from "../../../components/common/NotificationBell";
+
 import { useAuth } from "../../../context/AuthContext";
 import { getLabInsights } from "../../../api/reports";
-import SettingsModal from "../../settings/components/SettingsModal";
-import ProfileDropdown from "../../settings/components/ProfileDropdown";
-import PatientIdBadge from "../../../components/common/PatientIdBadge";
+
 import { AiGeneratedNote } from "../../../components/common/AiNotice";
+import AppHeader from "../../../components/common/AppHeader";
+import PatientSidebar from "../../../components/common/PatientSidebar";
 
 // Same nav list as Dashboard.jsx, with Lab Trends marked active
-const navItems = [
-  { label: "Dashboard", icon: LayoutGrid, route: "/dashboard" },
-  { label: "Health Timeline", icon: TrendingUp, route: "/timeline" },
-  { label: "Medical Vault", icon: Folder, route: "/vault" },
-  { label: "Family Vault", icon: Users, route: "/family-vault" },
-  { label: "Lab Trends", icon: TrendingUp, active: true, route: "/lab-trends" },
-  { label: "Ask Swastha", icon: Sparkles, route: "/search" },
-];
-
 const toneStyles = {
   good: {
     iconBg: "bg-emerald-50 text-emerald-500 ",
@@ -99,7 +85,6 @@ export default function LabInsights() {
   const [error, setError] = useState(null);
   const [activeTest, setActiveTest] = useState(null);
   const [range, setRange] = useState("All");
-  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
   useEffect(() => {
     if (!isAuthenticated || !token) {
@@ -148,16 +133,10 @@ export default function LabInsights() {
 
   return (
     <div className="flex h-screen overflow-hidden bg-slate-50 text-slate-900 ">
-      <Sidebar onOpenSettings={() => setIsSettingsOpen(true)} />
+      <PatientSidebar action={{ label: "Open Family Vault", icon: PlusCircle, route: "/family-vault" }} />
 
       <div className="flex-1 flex flex-col min-w-0 h-screen overflow-hidden">
-        <header className="shrink-0 flex items-center justify-end gap-4 px-6 lg:px-8 py-5 border-b border-slate-200 bg-white ">
-          <NotificationBell />
-
-          <PatientIdBadge />
-
-          <ProfileDropdown />
-        </header>
+        <AppHeader />
 
       <div className="flex-1 overflow-y-auto px-4 sm:px-6 lg:px-10 py-6 lg:py-8 min-w-0 overflow-x-hidden">
         <PageHeader />
@@ -199,27 +178,12 @@ export default function LabInsights() {
       </div>
       </div>
 
-      <SettingsModal
-        isOpen={isSettingsOpen}
-        onClose={() => setIsSettingsOpen(false)}
-      />
     </div>
   );
 }
 
 /* ------------------------------ Sidebar ------------------------------ */
 /* Copied from Dashboard.jsx so both pages share identical behavior. */
-
-function Sidebar({ onOpenSettings }) {
-  return (
-    <ResponsiveSidebar
-      navItems={navItems}
-      action={{ label: "Open Family Vault", icon: PlusCircle, route: "/family-vault" }}
-      onOpenSettings={onOpenSettings}
-      className="bg-slate-50"
-    />
-  );
-}
 
 /* ------------------------------ Header ------------------------------ */
 

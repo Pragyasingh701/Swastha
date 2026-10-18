@@ -6,15 +6,8 @@ import { useAuth } from "../../../context/AuthContext";
 import * as reportService from "../../../api/reports";
 import * as familyService from "../../../api/family";
 import { indexReport } from "../../../api/search";
-import ResponsiveSidebar from "../../../components/common/ResponsiveSidebar";
-import SettingsModal from "../../settings/components/SettingsModal";
-import ProfileDropdown from "../../settings/components/ProfileDropdown";
-import PatientIdBadge from "../../../components/common/PatientIdBadge";
+
 import {
-  LayoutGrid,
-  TrendingUp,
-  Folder,
-  Users,
   ClipboardList,
   UploadCloud,
   ChevronDown,
@@ -27,23 +20,16 @@ import {
   FileText,
   AlertTriangle,
 } from "lucide-react";
-import NotificationBell from "../../../components/common/NotificationBell";
+
 import ReportFilePreview from "../../../components/common/ReportFilePreview";
+import AppHeader from "../../../components/common/AppHeader";
+import PatientSidebar from "../../../components/common/PatientSidebar";
 
 /* -----------------------------------------------------------
    Nav + category config.
 ------------------------------------------------------------ */
 
 // Same nav list as Dashboard.jsx / LabTrends.jsx, with Health Timeline active
-const navItems = [
-  { label: "Dashboard", icon: LayoutGrid, route: "/dashboard" },
-  { label: "Health Timeline", icon: TrendingUp, active: true, route: "/timeline" },
-  { label: "Medical Vault", icon: Folder, route: "/vault" },
-  { label: "Family Vault", icon: Users, route: "/family-vault" },
-  { label: "Lab Trends", icon: TrendingUp, route: "/lab-trends" },
-  { label: "Ask Swastha", icon: Sparkles, route: "/search" },
-];
-
 // Categories a user can pick when uploading a new report manually.
 const UPLOAD_CATEGORIES = [
   { value: "Lab Reports", icon: FlaskConical, kind: "upload" },
@@ -125,7 +111,6 @@ export default function Timeline() {
   const [editingEvent, setEditingEvent] = useState(null);
   const [selectedEvent, setSelectedEvent] = useState(null);
   const [loading, setLoading] = useState(false);
-  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
   const [categoryFilter, setCategoryFilter] = useState("All Categories");
   const [dateFrom, setDateFrom] = useState("");
@@ -348,16 +333,10 @@ export default function Timeline() {
 
   return (
     <div className="flex h-screen overflow-hidden bg-slate-50 text-slate-900 ">
-      <Sidebar onUploadClick={() => setShowUploadModal(true)} onOpenSettings={() => setIsSettingsOpen(true)} />
+      <PatientSidebar action={{ label: "Upload New Report", icon: UploadCloud, onClick: () => setShowUploadModal(true) }} />
 
       <div className="flex-1 flex flex-col min-w-0 h-screen overflow-hidden">
-        <header className="shrink-0 flex items-center justify-end gap-4 px-6 lg:px-8 py-5 border-b border-slate-200 bg-white ">
-          <NotificationBell />
-
-          <PatientIdBadge />
-
-          <ProfileDropdown />
-        </header>
+        <AppHeader />
 
       <main className="flex-1 overflow-y-auto px-6 sm:px-10 py-8">
         <div className="flex flex-wrap items-start justify-between gap-4 mb-6">
@@ -504,27 +483,12 @@ export default function Timeline() {
         />
       )}
 
-      <SettingsModal
-        isOpen={isSettingsOpen}
-        onClose={() => setIsSettingsOpen(false)}
-      />
     </div>
   );
 }
 
 /* ---------------------------- Sidebar ---------------------------- */
 /* Copied from Dashboard.jsx / LabTrends.jsx so all pages share identical behavior. */
-
-function Sidebar({ onUploadClick, onOpenSettings }) {
-  return (
-    <ResponsiveSidebar
-      navItems={navItems}
-      action={{ label: "Upload New Report", icon: UploadCloud, onClick: onUploadClick }}
-      onOpenSettings={onOpenSettings}
-      className="bg-slate-50"
-    />
-  );
-}
 
 /* --------------------------- Filter bar --------------------------- */
 

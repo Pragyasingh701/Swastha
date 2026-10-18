@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import DoctorSidebar from "../components/DoctorSidebar";
-import ProfileDropdown from "../../settings/components/ProfileDropdown";
+
 import {
   Users,
   ClipboardCheck,
@@ -9,11 +9,12 @@ import {
   FileCheck2,
   Trophy,
 } from "lucide-react";
-import NotificationBell from "../../../components/common/NotificationBell";
+
 import { useAuth } from "../../../context/AuthContext";
 import { getDoctorPatients, getDoctorLifetimeStats } from "../../../api/doctorPatients";
 import { getTimelineReports } from "../../../api/reports";
 import CheckInCodeCard from "../components/CheckInCodeCard";
+import AppHeader from "../../../components/common/AppHeader";
 
 /* -----------------------------------------------------------
    Sidebar nav — Appointments, Consultations, and Schedule
@@ -107,10 +108,10 @@ export default function DoctorDashboard() {
 
   return (
     <div className="h-screen overflow-hidden bg-slate-50 flex">
-      <Sidebar />
+      <DoctorSidebar />
 
       <div className="flex-1 flex flex-col h-screen overflow-hidden min-w-0">
-        <TopBar />
+        <AppHeader shadow />
 
         <main className="flex-1 overflow-y-auto px-6 md:px-10 py-8">
           <PageHeader doctorName={doctorName} />
@@ -180,23 +181,6 @@ function computeStats(patients, reports, lifetime) {
     newPatientsThisWeek: lifetime?.newPatientsThisWeek ?? newPatientsThisWeek,
     prescriptionsThisWeek: lifetime?.prescriptionsThisWeek ?? prescriptionsThisWeek,
   };
-}
-
-/* ---------------------------- Sidebar ---------------------------- */
-
-function Sidebar() {
-  return <DoctorSidebar />;
-}
-
-/* ----------------------------- Top bar ----------------------------- */
-
-function TopBar() {
-  return (
-    <header className="shrink-0 flex items-center justify-end gap-4 px-6 lg:px-8 py-5 border-b border-slate-200 bg-white shadow-sm">
-      <NotificationBell />
-      <ProfileDropdown />
-    </header>
-  );
 }
 
 /* --------------------------- Page header --------------------------- */
