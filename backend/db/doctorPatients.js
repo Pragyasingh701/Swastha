@@ -728,55 +728,6 @@ async function notifyPatientOfNewRequest({ doctorId, patient, link }) {
 }
 
 /**
- * All pending doctor link requests for a given patient — what the
- * patient's "Doctor Requests" page lists. Returns doctor identity only
- * (name/email/specialty), not the patient's own data — this is read from
- * the patient's own perspective, no health data involved either way.
- */
-export const getPendingRequestsForPatient = async (patientUserId) => {
-  if (!patientUserId || !supabase) return [];
-
-  try {
-    const { data: pendingLinks, error } = await supabase
-      .from('doctor_patient')
-      .select('*')
-      .eq('patient_id', patientUserId)
-      .eq('status', 'pending')
-      .order('created_at', { ascending: false });
-
-    if (error) throw error;
-    // A request nobody answered in 24 hours has lapsed and is no longer listed.
-    const links = Array.isArray(pendingLinks) ? pendingLinks.filter((l) => !isPendingRequestExpired(l)) : [];
-    if (links.length === 0) return [];
-
-    const doctorIds = [...new Set(links.map((l) => l.doctor_id).filter(Boolean))];
-    const { data: doctors, error: doctorsError } = await supabase
-      .from('doctors')
-      .select('id, name, email, specialty, hospital_name')
-      .in('id', doctorIds);
-
-    if (doctorsError) throw doctorsError;
-    const doctorById = new Map((doctors || []).map((d) => [d.id, d]));
-
-    return links.map((link) => {
-      const doctor = doctorById.get(link.doctor_id);
-      return {
-        linkId: link.id,
-        doctorId: link.doctor_id,
-        doctorName: doctor?.name || 'Unknown Doctor',
-        doctorEmail: doctor?.email || null,
-        doctorSpecialty: doctor?.specialty || null,
-        doctorHospital: doctor?.hospital_name || null,
-        requestedAt: link.created_at,
-      };
-    });
-  } catch (error) {
-    console.warn('Pending requests fetch warning:', error?.message || error);
-    return [];
-  }
-};
-
-/**
  * Notification feed for a PATIENT's bell icon: one event per doctor_patient
  * row for "a doctor requested access" (created_at), plus a second event
  * for "you accepted/declined" if responded_at is set. Sorted newest first.

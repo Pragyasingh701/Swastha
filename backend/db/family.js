@@ -2,13 +2,10 @@ import crypto from 'crypto';
 import supabase from '../config/supabase.js';
 import { findUserById } from './users.js';
 
-const FAMILY_VAULT_TABLE = process.env.FAMILY_VAULT_TABLE_NAME || 'vault_table';
-const FAMILY_MEMBERS_TABLE = process.env.FAMILY_MEMBERS_TABLE_NAME || 'family_members';
-// M5 (DB reorg, decision D8): both vault_table.user_id and
-// family_members.user_id were renamed to patient_id — they point at
-// `patients` now, not the removed shared `users` table. Every read/write
-// in this file already goes through this constant.
-const FAMILY_USER_ID_COLUMN = process.env.FAMILY_USER_ID_COLUMN || 'patient_id';
+const FAMILY_VAULT_TABLE = 'vault_table';
+const FAMILY_MEMBERS_TABLE = 'family_members';
+// vault_table.patient_id and family_members.patient_id point at `patients`.
+const FAMILY_USER_ID_COLUMN = 'patient_id';
 
 function escapeRegExp(value) {
   return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');

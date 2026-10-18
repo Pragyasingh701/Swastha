@@ -2,7 +2,6 @@ import express from 'express';
 import {
   getNotificationsForUser,
   getUnreadNotificationCount,
-  markAllNotificationsAsRead,
   markNotificationAsRead,
 } from '../db/notifications.js';
 import { getDoctorLinkStatuses } from '../db/doctorPatients.js';
@@ -83,22 +82,6 @@ router.patch('/:id/read', async (req, res) => {
   } catch (error) {
     console.error('Mark notification as read error:', error);
     return res.status(500).json({ message: 'Unable to update notification.' });
-  }
-});
-
-router.patch('/read-all', async (req, res) => {
-  const user = getAuthUser(req);
-
-  if (!user?.userId) {
-    return res.status(401).json({ message: 'Authentication required.' });
-  }
-
-  try {
-    const notifications = await markAllNotificationsAsRead(user.userId);
-    return res.json({ notifications });
-  } catch (error) {
-    console.error('Mark all notifications read error:', error);
-    return res.status(500).json({ message: 'Unable to update notifications.' });
   }
 });
 
