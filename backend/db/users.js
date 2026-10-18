@@ -262,7 +262,7 @@ export const createOrUpdateUser = async (userData) => {
   if (!isDoctor && role === 'patient' && !patientCode) {
     try {
       patientCode = await generatePatientCode();
-      console.log(`✅ Generated patient code: ${patientCode} for user ${normalizedEmail}`);
+      console.log(`✅ Generated a patient code for user ${userId}`);
     } catch (err) {
       console.error('⚠️ Failed to generate patient code:', err.message);
       patientCode = null;
@@ -397,7 +397,7 @@ export const createOrUpdateUser = async (userData) => {
 
       if (!error && data && data.length > 0) {
         const userRow = data[0];
-        console.log(`⚡ [Supabase] User profile updated in ${targetTable}: ${normalizedEmail} (Role: ${role}, Specialty: ${userRow.specialty}, License: ${userRow.license_number}, PatientCode: ${userRow.patient_code})`);
+        console.log(`⚡ [Supabase] User profile updated in ${targetTable}: ${userId} (Role: ${role})`);
         savedUser = {
           ...savedUser,
           ...userRow,

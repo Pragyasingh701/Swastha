@@ -9,18 +9,20 @@
 // reviewed consent/legal language. Needs sign-off before this ships to real
 // patients.
 
-export const AI_NOTICE_VERSION = 1;
+export const AI_NOTICE_VERSION = 2;
 
 export const AI_NOTICES = {
+  // The one consent that covers every AI feature that reads health records or
+  // documents (the key stays 'ask_swastha' — it is what the backend stores).
   ask_swastha: {
-    title: 'How Ask Swastha uses AI',
+    title: 'How Swastha uses AI with your records',
     body:
-      'Ask Swastha uses AI to read the selected patient’s records and questions, and to generate answers. Records and questions are sent to an AI service for this purpose.',
+      'Swastha uses AI to read health records and uploaded documents: to answer questions in Ask Swastha, to fill in forms from scanned reports, to write summaries and lab insights, and to make records searchable. Records, documents and questions are sent to AI services for this purpose.',
   },
   voice_intake: {
     title: 'How voice intake uses AI',
     body:
-      'Your voice recording and its transcript are sent to an AI service to convert your speech to text, and to read questions aloud to you.',
+      'Your answers, typed or spoken, are sent to AI services to understand and organise them. If you speak, your voice recording and its transcript are sent to a speech service to convert it to text, and questions are read aloud to you by one.',
   },
   report_upload: {
     title: 'How report scanning uses AI',

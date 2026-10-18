@@ -8,6 +8,7 @@ import { getDoctorPatients, linkPatientToDoctor, deletePatientFromDoctor, reques
 import { getTimelineReports } from "../../../api/reports";
 import { useAuth } from "../../../context/AuthContext";
 import { usePolling } from "../../../hooks/usePolling";
+import ReportFilePreview from "../../../components/common/ReportFilePreview";
 
 // Diagnosis/Medicines are stored under the same column names for every
 // category, but what they actually MEAN differs by category — mirrors
@@ -219,7 +220,16 @@ export default function DoctorPatients() {
     try {
       await requestAccessAgain(patientUserId);
       setPatients((prev) =>
-        prev.map((p) => (p.linkId === patient.linkId ? { ...p, linkStatus: 'pending' } : p))
+        prev.map((p) => (p.linkId === patient.linkId
+          ? {
+              ...p,
+              linkStatus: 'pending',
+              requestExpired: false,
+              requestExpiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+              canRequestAgain: undefined,
+              retryAt: null,
+            }
+          : p))
       );
     } catch (err) {
       alert(err.message || 'Failed to send request. Please try again.');
@@ -1035,10 +1045,42 @@ export default function DoctorPatients() {
 // passed (see backend/db/doctorPatients.js's isAccessExpired) — shown as
 // an inactive/red card with a "Request Access Again" button in place of
 // the pending/declined status message.
+// "23h 10m" / "45m" until `isoTime`; '' once it has passed.
+function formatWaitUntil(isoTime, now) {
+  const ms = new Date(isoTime).getTime() - now;
+  if (!Number.isFinite(ms) || ms <= 0) return '';
+  const minutes = Math.max(1, Math.ceil(ms / 60000));
+  const hours = Math.floor(minutes / 60);
+  return hours > 0 ? `${hours}h ${minutes % 60}m` : `${minutes}m`;
+}
+
 function LockedPatientCard({ patient, linkStatus, openMenuId, setOpenMenuId, deletingPatientId, onDelete, onRequestAgain, isRequestingAgain }) {
   const isPending = linkStatus === 'pending';
   const isExpired = linkStatus === 'expired';
-  const badgeText = isPending ? 'Pending Verification' : isExpired ? 'Inactive' : 'Declined';
+  const isDeclined = !isPending && !isExpired;
+  // A pending request cannot be cancelled while the patient still has time to
+  // answer; it lapses after 24 hours, and then the doctor can ask again.
+  const requestLapsed = isPending && (patient.requestExpired === true
+    || (patient.requestExpiresAt && new Date(patient.requestExpiresAt).getTime() <= Date.now()));
+
+  // A declined card may be in a 24 hour cooldown (the patient declined twice):
+  // tick once a minute so the countdown stays right and the button comes back
+  // by itself when the wait is over.
+  const [now, setNow] = useState(() => Date.now());
+  const tickUntil = isDeclined ? patient.retryAt : isPending ? patient.requestExpiresAt : null;
+  useEffect(() => {
+    if (!tickUntil) return undefined;
+    const timer = setInterval(() => setNow(Date.now()), 30 * 1000);
+    return () => clearInterval(timer);
+  }, [tickUntil]);
+  const waitLeft = isDeclined && patient.retryAt ? formatWaitUntil(patient.retryAt, now) : '';
+  const inCooldown = isDeclined && Boolean(waitLeft);
+  const pendingWaitLeft = isPending && patient.requestExpiresAt ? formatWaitUntil(patient.requestExpiresAt, now) : '';
+  // The request is still waiting for the patient (no cancel, just a countdown).
+  const requestWaiting = isPending && !requestLapsed && Boolean(pendingWaitLeft || !patient.requestExpiresAt);
+  const requestHasLapsed = isPending && !requestWaiting;
+  const declinedOnce = isDeclined && !inCooldown && Number(patient.declineCount) % 2 === 1;
+  const badgeText = isPending ? (requestHasLapsed ? 'No Response' : 'Pending Verification') : isExpired ? 'Inactive' : 'Declined';
   const badgeTone = isPending
     ? 'bg-amber-50 text-amber-700 border-amber-200'
     : isExpired
@@ -1083,6 +1125,8 @@ function LockedPatientCard({ patient, linkStatus, openMenuId, setOpenMenuId, del
           </div>
         </div>
 
+        {/* No menu while a request is waiting: it can't be cancelled. */}
+        {!requestWaiting && (
         <div className="relative">
           <button
             type="button"
@@ -1106,11 +1150,12 @@ function LockedPatientCard({ patient, linkStatus, openMenuId, setOpenMenuId, del
                 className="w-full text-left px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 flex items-center gap-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <XCircle size={16} />
-                {deletingPatientId === patient.patientUserId ? 'Removing...' : isExpired ? 'Remove Patient' : 'Cancel Request'}
+                {deletingPatientId === patient.patientUserId ? 'Removing...' : 'Remove'}
               </button>
             </div>
           )}
         </div>
+        )}
       </div>
 
       {isExpired ? (
@@ -1129,16 +1174,64 @@ function LockedPatientCard({ patient, linkStatus, openMenuId, setOpenMenuId, del
             {!isRequestingAgain && <span className="material-symbols-outlined text-[16px]">refresh</span>}
           </button>
         </div>
+      ) : isDeclined ? (
+        // Declined: the doctor may ask once more after a first decline, and
+        // must wait 24 hours after a second (decided by the server; this just
+        // shows it and counts down).
+        <div className="mt-auto pt-4 border-t border-dashed border-[#c3c6d7]/40 space-y-3">
+          <p className="text-sm text-[#737686] text-center">
+            {inCooldown
+              ? 'This patient declined again. You can request access again after the wait below.'
+              : declinedOnce
+              ? "This patient declined your request. You can ask once more; if they decline again you'll have to wait 24 hours."
+              : 'The wait is over. You can request access again.'}
+          </p>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onRequestAgain();
+            }}
+            disabled={inCooldown || isRequestingAgain}
+            className="w-full py-2.5 rounded-lg border border-slate-300 text-slate-700 hover:bg-slate-100 transition-all flex justify-center items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {isRequestingAgain
+              ? 'Sending request...'
+              : inCooldown
+              ? `Available in ${waitLeft}`
+              : 'Request Again'}
+            {!isRequestingAgain && !inCooldown && <span className="material-symbols-outlined text-[16px]">refresh</span>}
+          </button>
+        </div>
+      ) : requestHasLapsed ? (
+        <div className="mt-auto pt-4 border-t border-dashed border-[#c3c6d7]/40 space-y-3">
+          <p className="text-sm text-[#737686] text-center">
+            The patient didn't respond within 24 hours. You can send a new request.
+          </p>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onRequestAgain();
+            }}
+            disabled={isRequestingAgain}
+            className="w-full py-2.5 rounded-lg border border-amber-300 text-amber-800 hover:bg-amber-50 transition-all flex justify-center items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {isRequestingAgain ? 'Sending request...' : 'Request Again'}
+            {!isRequestingAgain && <span className="material-symbols-outlined text-[16px]">refresh</span>}
+          </button>
+        </div>
       ) : (
-        // No "View Profile" button — a pending/declined card is not
-        // clickable-through to any detail view. This message replaces it
-        // rather than a disabled button, so there's no interactive-looking
-        // element that a doctor might expect to do something.
-        <p className="mt-auto text-sm text-[#737686] text-center py-2 border-t border-dashed border-[#c3c6d7]/40">
-          {isPending
-            ? 'Waiting for patient to accept your request.'
-            : 'This patient has declined your request.'}
-        </p>
+        // A request that is waiting for the patient: no buttons at all, since it
+        // can't be cancelled. If there's no answer within 24 hours the card
+        // offers Request Again instead.
+        <div className="mt-auto py-2 border-t border-dashed border-[#c3c6d7]/40 text-center space-y-1">
+          <p className="text-sm font-medium text-[#737686]">Request pending</p>
+          <p className="text-xs text-[#737686]">
+            Waiting for the patient to respond.
+            {pendingWaitLeft ? ` If they don't, you can send a new request in ${pendingWaitLeft}.` : ''}
+          </p>
+        </div>
       )}
     </div>
   );
@@ -1315,26 +1408,6 @@ function EventCard({ event }) {
   );
 }
 
-function getPreviewType(fileUrl) {
-  if (!fileUrl) return null;
-  const lower = String(fileUrl).toLowerCase();
-  if (/\.pdf(\?|$)/.test(lower)) return 'pdf';
-  if (/\.(png|jpe?g|webp)(\?|$)/.test(lower)) return 'image';
-  return null;
-}
-
-function getPreviewUrl(fileUrl) {
-  if (!fileUrl) return null;
-  const apiBase = import.meta.env.VITE_API_BASE_URL || `${window.location.origin}/api`;
-
-  try {
-    const parsed = new URL(fileUrl);
-    return fileUrl;
-  } catch (e) {
-    return `${apiBase}/reports/signed-url?path=${encodeURIComponent(fileUrl)}`;
-  }
-}
-
 function EventDetails({ event, onClose }) {
   const formattedDate = event.reportDate
     ? new Date(event.reportDate).toLocaleDateString('en-US', {
@@ -1344,8 +1417,6 @@ function EventDetails({ event, onClose }) {
       })
     : 'Unknown date';
 
-  const previewType = getPreviewType(event.fileUrl);
-  const previewUrl = getPreviewUrl(event.fileUrl);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 px-4 py-6">
@@ -1415,32 +1486,17 @@ function EventDetails({ event, onClose }) {
             {event.fileUrl ? (
               <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3 h-full flex flex-col">
                 <p className="text-sm text-slate-500 ">Document preview</p>
-                {previewType === 'pdf' ? (
-                  <iframe
-                    src={previewUrl}
-                    title="PDF preview"
-                    className="mt-3 flex-1 w-full rounded-xl border border-slate-200 "
-                    style={{ minHeight: 420 }}
+                <div className="mt-3 flex-1 flex flex-col">
+                  <ReportFilePreview
+                    reportId={event.id}
+                    fileUrl={event.fileUrl}
+                    title={event.title}
+                    frameClassName="flex-1 w-full rounded-xl border border-slate-200"
+                    frameStyle={{ minHeight: 420 }}
+                    imageClassName="max-h-[520px] w-full rounded-xl object-contain"
+                    linkClassName="mt-3 inline-flex items-center gap-2 rounded-2xl border border-blue-100 bg-blue-50 px-4 py-2 text-blue-700 text-sm font-semibold transition-colors hover:bg-blue-100"
                   />
-                ) : previewType === 'image' ? (
-                  <img
-                    src={previewUrl}
-                    alt={event.title || 'Uploaded document'}
-                    className="mt-3 max-h-[520px] w-full rounded-xl object-contain"
-                  />
-                ) : (
-                  <p className="mt-3 text-sm text-slate-500 ">Preview not available for this file type.</p>
-                )}
-
-                <a
-                  href={previewUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="mt-3 inline-flex items-center gap-2 rounded-2xl border border-blue-100 bg-blue-50 px-4 py-2 text-blue-700 text-sm font-semibold transition-colors hover:bg-blue-100 "
-                >
-                  <FileText size={16} />
-                  View original document
-                </a>
+                </div>
               </div>
             ) : event.fileName ? (
               <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4">

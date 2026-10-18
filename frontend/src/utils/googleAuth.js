@@ -9,7 +9,14 @@ export function getGoogleRedirectUri() {
 // ad blockers commonly block window.open()/OAuth popups, but a plain top-level
 // navigation to accounts.google.com is effectively never blocked.
 export function startGoogleAuth({ mode, role } = {}) {
-  sessionStorage.setItem(OAUTH_CONTEXT_KEY, JSON.stringify({ mode, role }));
+  // Random `state`, kept in this tab's sessionStorage and checked again when
+  // Google redirects back (GoogleCallback.jsx). Without it, anyone could send a
+  // victim to /auth/google/callback?code=<their own code> and sign them in to
+  // the attacker's account (login CSRF).
+  const stateBytes = new Uint8Array(16);
+  window.crypto.getRandomValues(stateBytes);
+  const state = Array.from(stateBytes, (b) => b.toString(16).padStart(2, '0')).join('');
+  sessionStorage.setItem(OAUTH_CONTEXT_KEY, JSON.stringify({ mode, role, state }));
 
   const params = new URLSearchParams({
     client_id: GOOGLE_CLIENT_ID,
@@ -18,6 +25,7 @@ export function startGoogleAuth({ mode, role } = {}) {
     scope: 'openid email profile',
     access_type: 'online',
     prompt: 'select_account',
+    state,
   });
 
   window.location.href = `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`;

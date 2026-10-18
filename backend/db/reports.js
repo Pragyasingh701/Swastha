@@ -1,4 +1,5 @@
 import supabase from '../config/supabase.js';
+import { removeStoredFiles } from '../config/supabaseStorage.js';
 
 const REPORTS_TABLE = process.env.REPORTS_TABLE_NAME || 'reports';
 // M5 (DB reorg, decision D8): reports.user_id was renamed to patient_id —
@@ -122,6 +123,24 @@ export const getTimelineReport = async (userId, reportId) => {
     console.error('Supabase get timeline report error:', err.message || err);
     throw err;
   }
+};
+
+// Looks a report up by id alone (the owner is on the result as user_id), for
+// callers that must authorize the requester against that owner themselves.
+export const getTimelineReportById = async (reportId) => {
+  const normalizedReportId = String(reportId || '').trim();
+  if (!normalizedReportId || !supabase) {
+    throw new Error('Missing reportId or database client.');
+  }
+
+  const { data, error } = await supabase
+    .from(REPORTS_TABLE)
+    .select('*')
+    .eq('id', normalizedReportId)
+    .maybeSingle();
+
+  if (error) throw error;
+  return normalizeReport(data);
 };
 
 export const createTimelineReport = async (reportData) => {
@@ -279,13 +298,15 @@ export const deleteAllReportsForUser = async (userId) => {
       .from(REPORTS_TABLE)
       .delete()
       .eq(REPORTS_USER_ID_COLUMN, normalizedUserId)
-      .select('id');
+      .select('id, file_url');
 
     if (error) {
       throw error;
     }
 
-    return Array.isArray(data) ? data.length : 0;
+    const rows = Array.isArray(data) ? data : [];
+    await removeStoredFiles(rows.map((row) => row.file_url));
+    return rows.length;
   } catch (err) {
     console.error('Supabase delete all reports for user error:', err.message || err);
     throw err;

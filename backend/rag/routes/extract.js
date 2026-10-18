@@ -2,6 +2,7 @@ import express from 'express';
 import multer from 'multer';
 import { extractReportFromImage } from '../config/gemini.js';
 import { requireAuth } from '../middleware/auth.js';
+import { requireNoticeAck } from '../middleware/requireNoticeAck.js';
 
 const router = express.Router();
 
@@ -32,7 +33,7 @@ const upload = multer({
  * handwriting), for the user to review/fill in before saving via
  * backend/api/reports. Never saves anything itself.
  */
-router.post('/', requireAuth, (req, res) => {
+router.post('/', requireAuth, requireNoticeAck('ask_swastha'), (req, res) => {
   upload.single('file')(req, res, async (err) => {
     if (err) {
       return res.status(400).json({ error: err.message || 'File upload failed.' });

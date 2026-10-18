@@ -4,6 +4,7 @@ import { Sparkles, Search, ChevronDown, User, ClipboardList, FlaskConical, ScanL
 import NotificationBell from "../../../components/common/NotificationBell";
 import DoctorSidebar from "../components/DoctorSidebar";
 import ProfileDropdown from "../../settings/components/ProfileDropdown";
+import PatientAccessNotice from "../components/PatientAccessNotice";
 import { getDoctorPatients, getDoctorPatientSummary } from "../../../api/doctorPatients";
 import { getTimelineReports } from "../../../api/reports";
 import { useAuth } from "../../../context/AuthContext";
@@ -41,6 +42,9 @@ export default function ClinicalIntelligence() {
   const [isFetchingPatients, setIsFetchingPatients] = useState(true);
   const [isPickerOpen, setIsPickerOpen] = useState(false);
   const [selectedPatient, setSelectedPatient] = useState(null);
+  // The server refused this patient's records (403) although the list still said
+  // accepted: the access ended while the page was open.
+  const [accessLostFor, setAccessLostFor] = useState(null);
   const [patientSearch, setPatientSearch] = useState("");
   const pickerRef = useRef(null);
 
@@ -104,10 +108,62 @@ export default function ClinicalIntelligence() {
     ? selectedPatient.patientUserId || selectedPatient.patientId || selectedPatient.id
     : null;
 
+  // Does the doctor have access to this patient right now? Only an accepted,
+  // unexpired link does: expired, pending and declined cards carry a
+  // linkStatus, and an accepted card has none.
+  const linkStatus = selectedPatient ? selectedPatient.linkStatus || "accepted" : null;
+  const hasAccess = Boolean(selectedPatient) && linkStatus === "accepted" && accessLostFor !== patientUserId;
+  const noAccessPatient =
+    selectedPatient && !hasAccess
+      ? linkStatus !== "accepted"
+        ? selectedPatient
+        : { ...selectedPatient, linkStatus: "expired" }
+      : null;
+
+  // Reloads the patient list, and re-selects the same patient from it, so a
+  // request that has since been accepted turns the page into the real profile.
+  async function refreshPatients() {
+    try {
+      const fresh = await getDoctorPatients();
+      setPatients(fresh);
+      if (patientUserId) {
+        const same = fresh.find((p) => (p.patientUserId || p.patientId || p.id) === patientUserId);
+        if (same) {
+          setSelectedPatient(same);
+          if ((same.linkStatus || "accepted") === "accepted") setAccessLostFor(null);
+        }
+      }
+    } catch {
+      // keep what is on screen; the next check will try again
+    }
+  }
+
+  // While a request is waiting for the patient, look again every 20 seconds so
+  // the page opens up by itself once they accept.
+  useEffect(() => {
+    if (!selectedPatient || hasAccess || linkStatus !== "pending") return undefined;
+    const timer = setInterval(refreshPatients, 20 * 1000);
+    return () => clearInterval(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedPatient, hasAccess, linkStatus]);
+
+  // Merge new fields into the selected patient's card (and the list), e.g. after
+  // a new request has been sent from the no-access panel.
+  function patchSelectedPatient(patch) {
+    setSelectedPatient((prev) => (prev ? { ...prev, ...patch } : prev));
+    setPatients((prev) =>
+      prev.map((p) => ((p.patientUserId || p.patientId || p.id) === patientUserId ? { ...p, ...patch } : p))
+    );
+    setAccessLostFor(null);
+  }
+
   // Real timeline for the selected patient.
   useEffect(() => {
-    if (!selectedPatient || !token) {
+    // No fetch (and so no 403 and no screen of zeros) for a patient the doctor
+    // can't see: the no-access panel is shown instead.
+    if (!selectedPatient || !token || !hasAccess) {
       setReports([]);
+      setReportsError(null);
       return;
     }
     let cancelled = false;
@@ -119,7 +175,11 @@ export default function ClinicalIntelligence() {
         if (!cancelled) setReports(res.reports || []);
       } catch (err) {
         if (!cancelled) {
-          setReportsError(err.message || "Failed to load patient records.");
+          if (err.status === 403) {
+            setAccessLostFor(patientUserId);
+          } else {
+            setReportsError(err.message || "Failed to load patient records.");
+          }
           setReports([]);
         }
       } finally {
@@ -129,7 +189,7 @@ export default function ClinicalIntelligence() {
     return () => {
       cancelled = true;
     };
-  }, [selectedPatient, patientUserId, token]);
+  }, [selectedPatient, patientUserId, token, hasAccess]);
 
   // AI summary — regenerates automatically whenever the patient's report
   // set changes (new report added/edited, or a different patient chosen).
@@ -272,6 +332,11 @@ export default function ClinicalIntelligence() {
                             {p.patient_email && (
                               <span className="text-xs text-slate-400 truncate">· {p.patient_email}</span>
                             )}
+                            {p.linkStatus && p.linkStatus !== "accepted" && (
+                              <span className="ml-auto shrink-0 text-[11px] font-medium text-amber-700 bg-amber-50 border border-amber-200 rounded-full px-2 py-0.5">
+                                {p.linkStatus === "pending" ? "Pending" : p.linkStatus === "declined" ? "Declined" : "No access"}
+                              </span>
+                            )}
                           </button>
                         );
                       })
@@ -292,6 +357,13 @@ export default function ClinicalIntelligence() {
                 Select a patient above to view their clinical profile and AI insights.
               </p>
             </div>
+          ) : noAccessPatient ? (
+            <PatientAccessNotice
+              key={`${patientUserId}-${noAccessPatient.linkStatus}`}
+              patient={noAccessPatient}
+              onRequested={patchSelectedPatient}
+              onRefresh={refreshPatients}
+            />
           ) : (
             <>
               <section className="bg-white border border-[#c3c6d7]/20 rounded-2xl p-5 shadow-sm">

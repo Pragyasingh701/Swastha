@@ -1,22 +1,27 @@
 import express from 'express';
 import { OAuth2Client } from 'google-auth-library';
-import jwt from 'jsonwebtoken';
+import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
 import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
 import supabase from '../config/supabase.js';
-import { sendOTPEmail, sendPasswordResetEmail } from '../utils/mailer.js';
+import { sendOTPEmail, sendPasswordResetEmail, sendAccountExistsEmail } from '../utils/mailer.js';
 import { findUserByEmail, findUserById, findUserByIdOrPatientCode, createOrUpdateUser, updateUserPassword, deleteUserById, generatePatientCode } from '../db/users.js';
 import { getFamilyVaultForUser, deleteFamilyVaultForUser } from '../db/family.js';
 import { deleteAllReportsForUser } from '../db/reports.js';
 import { processMedicalCertificate } from '../services/certificateParserService.js';
 import { createNotification } from '../db/notifications.js';
+import { sniffFileType } from '../config/supabaseStorage.js';
+import { publicUser } from '../utils/publicUser.js';
+import { passwordPolicyError } from '../utils/passwordPolicy.js';
+import { eraseAccountResidue } from '../db/accountErasure.js';
+import { checkNoticeAck } from '../db/aiNoticeAcknowledgements.js';
+import { verifyAuthToken, signAuthToken, sessionTokenTtl, rememberMeTokenTtl } from '../config/jwt.js';
 
 const router = express.Router();
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || '771272691038-s9h707grr3b4ojkgp48aa5vb9tej2sjh.apps.googleusercontent.com';
 const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET || '';
-const JWT_SECRET = process.env.JWT_SECRET || 'swastha_dev_secret_key_2026';
 const googleClient = new OAuth2Client(GOOGLE_CLIENT_ID);
 
 if (!global.__otpStoreRaw) {
@@ -101,6 +106,80 @@ const otpStore = {
     return true;
   },
 };
+
+// --- OTP challenge state (per key) ----------------------------------------
+// A "challenge" starts when a code is issued by something that has already
+// proven part of the login: a correct password (/login), a Google sign-in
+// (/google/exchange), a new registration (/register), or a logged-in user
+// (/change-password/send-otp). It tracks resend and wrong-attempt budgets.
+//
+// /send-otp can then only RESEND inside an existing challenge. Before this it
+// issued a code for any email with no prior step, so the password (or Google)
+// step could be skipped: ask for a code, then guess it.
+if (!global.__otpMeta) {
+  global.__otpMeta = new Map();
+}
+const otpMeta = global.__otpMeta; // key => { startedAt, lastIssuedAt, resends, failed, locked }
+
+const OTP_TTL_MS = 10 * 60 * 1000;
+const OTP_CHALLENGE_WINDOW_MS = 30 * 60 * 1000; // how long after start a resend is still allowed
+const OTP_RESEND_COOLDOWN_MS = 30 * 1000;
+const OTP_MAX_RESENDS = 5;
+const OTP_MAX_WRONG_ATTEMPTS = 5;
+
+// Issue a code. `fresh` starts a new challenge (resetting the budgets);
+// otherwise it counts as a resend within the current one.
+function issueOtp(key, { fresh }) {
+  const now = Date.now();
+  const code = crypto.randomInt(100000, 1000000).toString();
+  otpStore.set(key, { code, expiresAt: now + OTP_TTL_MS });
+  if (fresh) {
+    otpMeta.set(key, { startedAt: now, lastIssuedAt: now, resends: 0, failed: 0, locked: false });
+  } else {
+    const meta = otpMeta.get(key);
+    if (meta) {
+      meta.resends += 1;
+      meta.lastIssuedAt = now;
+    }
+  }
+  return code;
+}
+
+function canResendOtp(key) {
+  const meta = otpMeta.get(key);
+  if (!meta || meta.locked) return false;
+  const now = Date.now();
+  if (now - meta.startedAt > OTP_CHALLENGE_WINDOW_MS) return false;
+  if (meta.resends >= OTP_MAX_RESENDS) return false;
+  if (now - meta.lastIssuedAt < OTP_RESEND_COOLDOWN_MS) return false;
+  return true;
+}
+
+// Checks a submitted code and enforces the wrong-attempt budget. After
+// OTP_MAX_WRONG_ATTEMPTS misses every outstanding code for the key is thrown
+// away and the challenge is locked: the only way to get a new code is to go
+// through the password / Google step again, so there's nothing for a guesser
+// to keep trying, and a real user is never locked out by someone else.
+function verifyOtp(key, submittedCode) {
+  const meta = otpMeta.get(key);
+  if (!meta || meta.locked) return { ok: false, reason: 'invalid' };
+
+  if (otpStore.verify(key, submittedCode)) {
+    otpMeta.delete(key);
+    return { ok: true };
+  }
+
+  meta.failed += 1;
+  if (meta.failed >= OTP_MAX_WRONG_ATTEMPTS) {
+    meta.locked = true;
+    otpStore.delete(key);
+    return { ok: false, reason: 'locked' };
+  }
+  return { ok: false, reason: 'invalid' };
+}
+
+const OTP_LOCKED_MESSAGE = 'Too many incorrect codes. Please start again to get a new verification code.';
+
 const resetTokenStore = global.__resetTokenStore; // token => { email, expiresAt }
 const passwordChangeTokenStore = global.__passwordChangeTokenStore; // token => { email, expiresAt }
 
@@ -113,6 +192,9 @@ if (!global.__storeCleanupInterval) {
       if (fresh.length === 0) otpStoreRaw.delete(key);
       else if (fresh.length !== list.length) otpStoreRaw.set(key, fresh);
     }
+    for (const [key, meta] of otpMeta.entries()) {
+      if (now - meta.startedAt > OTP_CHALLENGE_WINDOW_MS) otpMeta.delete(key);
+    }
     for (const [key, data] of resetTokenStore.entries()) {
       if (data.expiresAt < now) resetTokenStore.delete(key);
     }
@@ -122,19 +204,25 @@ if (!global.__storeCleanupInterval) {
   }, 5 * 60 * 1000);
 }
 
-// Multer Storage Setup for uploaded documents (Certificates, ID Proofs)
+// Multer Storage Setup for uploaded documents (Certificates, ID Proofs).
+// Files are written to a local directory that is NOT served over HTTP (they
+// used to be exposed at /uploads/<name> with no authentication): the doctor
+// certificates and ID proofs in here are identity documents. The stored
+// name is random and its extension comes from the file's real type, never
+// from the client's filename.
+const UPLOAD_DIR = 'uploads/';
+const UPLOAD_EXTENSIONS = { 'application/pdf': '.pdf', 'image/jpeg': '.jpg', 'image/png': '.png', 'image/webp': '.webp' };
+
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
-    const uploadDir = 'uploads/';
-    if (!fs.existsSync(uploadDir)) {
-      fs.mkdirSync(uploadDir, { recursive: true });
+    if (!fs.existsSync(UPLOAD_DIR)) {
+      fs.mkdirSync(UPLOAD_DIR, { recursive: true });
     }
-    cb(null, uploadDir);
+    cb(null, UPLOAD_DIR);
   },
   filename: (req, file, cb) => {
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
-    const ext = path.extname(file.originalname);
-    cb(null, file.fieldname + '-' + uniqueSuffix + ext);
+    const ext = UPLOAD_EXTENSIONS[file.mimetype] || '';
+    cb(null, `file-${Date.now()}-${crypto.randomBytes(8).toString('hex')}${ext}`);
   },
 });
 
@@ -142,14 +230,27 @@ const upload = multer({
   storage,
   limits: { fileSize: 10 * 1024 * 1024 }, // 10MB file size limit
   fileFilter: (req, file, cb) => {
-    const allowed = ['application/pdf', 'image/jpeg', 'image/png', 'image/webp'];
-    if (allowed.includes(file.mimetype)) {
+    if (UPLOAD_EXTENSIONS[file.mimetype]) {
       cb(null, true);
     } else {
       cb(new Error('Invalid file type. Only PDF, JPEG, PNG, and WEBP files are allowed.'));
     }
   },
 });
+
+// The declared Content-Type is client-controlled, so the file's first bytes
+// must also match an allowed type, otherwise it is deleted again.
+function fileMatchesAllowedType(filePath) {
+  try {
+    const fd = fs.openSync(filePath, 'r');
+    const head = Buffer.alloc(12);
+    fs.readSync(fd, head, 0, 12, 0);
+    fs.closeSync(fd);
+    return Boolean(sniffFileType(head));
+  } catch {
+    return false;
+  }
+}
 
 // Middleware to authenticate JWT bearer tokens
 const authenticateToken = (req, res, next) => {
@@ -161,7 +262,7 @@ const authenticateToken = (req, res, next) => {
   }
 
   try {
-    const decoded = jwt.verify(token, JWT_SECRET);
+    const decoded = verifyAuthToken(token);
     req.user = decoded;
     next();
   } catch (err) {
@@ -181,6 +282,10 @@ router.post('/upload', authenticateToken, (req, res) => {
     if (!req.file) {
       return res.status(400).json({ message: 'No file uploaded.' });
     }
+    if (!fileMatchesAllowedType(req.file.path)) {
+      fs.unlink(req.file.path, () => {});
+      return res.status(400).json({ message: 'The uploaded file is not a valid PDF, JPEG, PNG or WEBP document.' });
+    }
     const protocol = req.protocol || 'http';
     const host = req.get('host') || 'localhost:5001';
     const fullFileUrl = `${protocol}://${host}/uploads/${req.file.filename}`;
@@ -196,147 +301,65 @@ router.post('/upload', authenticateToken, (req, res) => {
 });
 
 /**
- * Helper to decode / verify Google Credentials (handles both OAuth Access Tokens and JWT ID Tokens)
+ * Verifies a Google-issued ID token (the id_token from the server-side code
+ * exchange) against our client ID and returns the profile. This used to also
+ * accept unverified tokens: it fell back to jwt.decode (which checks no
+ * signature) and to access tokens looked up at several userinfo endpoints.
+ * The only caller passes the id_token Google just returned over TLS, so
+ * those branches could only ever have weakened it.
  */
 async function decodeGoogleCredential(credential) {
-  let email;
-  let name;
-  let picture;
-  let sub;
-
   if (!credential || typeof credential !== 'string') {
     throw new Error('Google credential is required and must be a valid token');
   }
 
-  async function fetchGoogleUserInfo(accessToken) {
-    const endpoints = [
-      'https://www.googleapis.com/oauth2/v3/userinfo',
-      'https://www.googleapis.com/oauth2/v2/userinfo',
-      'https://www.googleapis.com/userinfo/v2/me',
-    ];
+  const ticket = await googleClient.verifyIdToken({
+    idToken: credential,
+    audience: GOOGLE_CLIENT_ID,
+  });
+  const payload = ticket.getPayload();
 
-    let lastError = null;
-    for (const url of endpoints) {
-      try {
-        const response = await fetch(url, {
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-          },
-        });
-
-        if (response.ok) {
-          return await response.json();
-        } else {
-          const errText = await response.text();
-          lastError = new Error(`Endpoint ${url} responded with status ${response.status}: ${errText}`);
-        }
-      } catch (err) {
-        lastError = err;
-      }
-    }
-    throw lastError || new Error('Failed to fetch user profile from Google endpoints');
-  }
-
-  const isJwt = credential.split('.').length === 3;
-
-  if (isJwt) {
-    if (GOOGLE_CLIENT_ID && GOOGLE_CLIENT_ID !== 'YOUR_GOOGLE_CLIENT_ID_HERE') {
-      try {
-        const ticket = await googleClient.verifyIdToken({
-          idToken: credential,
-          audience: GOOGLE_CLIENT_ID,
-        });
-        const payload = ticket.getPayload();
-        email = payload.email;
-        name = payload.name;
-        picture = payload.picture;
-        sub = payload.sub;
-      } catch (verifyErr) {
-        console.warn('googleClient.verifyIdToken failed, falling back to jwt.decode:', verifyErr.message);
-        try {
-          const decoded = jwt.decode(credential);
-          if (decoded && decoded.email) {
-            email = decoded.email;
-            name = decoded.name;
-            picture = decoded.picture;
-            sub = decoded.sub;
-          } else {
-            throw verifyErr;
-          }
-        } catch (e) {
-          throw verifyErr;
-        }
-      }
-    } else {
-      const decoded = jwt.decode(credential);
-      if (decoded && decoded.email) {
-        email = decoded.email;
-        name = decoded.name;
-        picture = decoded.picture;
-        sub = decoded.sub;
-      }
-    }
-  } else {
-    try {
-      const gUser = await fetchGoogleUserInfo(credential);
-      email = gUser.email;
-      name = gUser.name;
-      picture = gUser.picture;
-      sub = gUser.sub || gUser.id;
-    } catch (fetchErr) {
-      console.error('Google userinfo fetch failed:', fetchErr.message);
-      const decoded = jwt.decode(credential);
-      if (decoded && decoded.email) {
-        email = decoded.email;
-        name = decoded.name;
-        picture = decoded.picture;
-        sub = decoded.sub;
-      } else {
-        throw new Error(`Google token verification failed: ${fetchErr.message}`);
-      }
-    }
-  }
-
-  if (!email) {
+  if (!payload?.email) {
     throw new Error('Could not extract valid email from Google credentials');
   }
+  // An address Google hasn't verified must not be trusted as an identity.
+  if (payload.email_verified === false) {
+    throw new Error('The Google account email is not verified');
+  }
 
-  return { email, name, picture, sub };
+  return { email: payload.email, name: payload.name, picture: payload.picture, sub: payload.sub };
 }
 
 /**
  * POST /api/auth/login
  * Email & Password Login -> Sends 6-digit OTP code to email
  */
+// A real bcrypt hash of a throwaway string, compared against when the account
+// doesn't exist (or has no password) so that case takes as long as a wrong
+// password and the response time doesn't reveal which addresses are registered.
+const DUMMY_PASSWORD_HASH = bcrypt.hashSync('swastha-dummy-password-for-timing', 12);
+
+// Every login failure says the same thing: which part was wrong (no such
+// account, Google-only account, bad password) is not disclosed.
+const LOGIN_FAILED_MESSAGE =
+  'Incorrect email or password. If you signed up with Google, use "Continue with Google".';
+
 router.post('/login', async (req, res) => {
-  const { email, password } = req.body;
-  if (!email || !password) {
+  const { email, password } = req.body || {};
+  if (typeof email !== 'string' || typeof password !== 'string' || !email.trim() || !password) {
     return res.status(400).json({ message: 'Email and password are required' });
   }
 
   const normalizedEmail = email.toLowerCase().trim();
   const user = await findUserByEmail(normalizedEmail);
 
-  if (!user) {
-    return res.status(404).json({ message: 'No account found with this email address. Please create an account first.' });
-  }
-
-  // Check if account was registered strictly via Google Sign-In (no password created)
-  if (!user.password_hash) {
-    return res.status(400).json({
-      message: 'This account was registered using Google Sign-In. Please click "Continue with Google" to log in.',
-      isGoogleUser: true,
-    });
-  }
-
-  // Password Verification
-  if (!(await bcrypt.compare(password, user.password_hash))) {
-    return res.status(401).json({ message: 'Incorrect password. Please try again.' });
+  const passwordOk = await bcrypt.compare(password, user?.password_hash || DUMMY_PASSWORD_HASH);
+  if (!user || !user.password_hash || !passwordOk) {
+    return res.status(401).json({ message: LOGIN_FAILED_MESSAGE });
   }
 
   // Generate 6-digit OTP code for Login Verification
-  const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
-  otpStore.set(normalizedEmail, { code: otpCode, expiresAt: Date.now() + 10 * 60 * 1000 });
+  const otpCode = issueOtp(normalizedEmail, { fresh: true });
 
   try {
     await sendOTPEmail(normalizedEmail, otpCode);
@@ -347,9 +370,9 @@ router.post('/login', async (req, res) => {
     });
   } catch (error) {
     otpStore.deleteCode(normalizedEmail, otpCode);
+    console.error('Failed to send verification email.', error?.message || error);
     return res.status(500).json({
       message: 'Failed to send verification email.',
-      error: error.message,
     });
   }
 });
@@ -409,6 +432,9 @@ function isValidPastDate(dateStr, { minAge = 0, maxAge = 120 } = {}) {
   return age >= minAge && age <= maxAge;
 }
 
+// Identical for a brand-new address and one that already has an account.
+const REGISTER_REPLY = 'Check your email to continue. If you already have an account, the email tells you how to log in.';
+
 /**
  * POST /api/auth/register
  * Email & Password Registration -> Creates account, sends 6-digit OTP
@@ -431,10 +457,25 @@ router.post('/register', async (req, res) => {
     return res.status(400).json({ message: 'Please enter a valid 10-digit mobile number.' });
   }
 
+  const passwordProblem = passwordPolicyError(password);
+  if (passwordProblem) {
+    return res.status(400).json({ message: passwordProblem });
+  }
+
   const normalizedEmail = email.toLowerCase().trim();
   const existing = await findUserByEmail(normalizedEmail);
   if (existing) {
-    return res.status(400).json({ accountExists: true, message: 'An account with this email already exists. Please log in instead.' });
+    // Answered exactly like a new registration, so this form can't be used to
+    // find out who has an account. The real owner is told by email instead.
+    // (The new-account path hashes the password, so this one does too — to
+    // keep the response time from giving it away.)
+    await bcrypt.hash(password, 12);
+    try {
+      await sendAccountExistsEmail(normalizedEmail);
+    } catch (mailError) {
+      console.error('Account-exists email failed:', mailError?.message || mailError);
+    }
+    return res.status(201).json({ requiresOTP: true, email: normalizedEmail, message: REGISTER_REPLY });
   }
 
   const user = await createOrUpdateUser({
@@ -448,21 +489,20 @@ router.post('/register', async (req, res) => {
   });
 
   // Generate 6-digit OTP code for Registration Verification
-  const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
-  otpStore.set(normalizedEmail, { code: otpCode, expiresAt: Date.now() + 10 * 60 * 1000 });
+  const otpCode = issueOtp(normalizedEmail, { fresh: true });
 
   try {
     await sendOTPEmail(normalizedEmail, otpCode);
     return res.status(201).json({
       requiresOTP: true,
       email: normalizedEmail,
-      message: 'Account created! Verification code sent to your email.',
+      message: REGISTER_REPLY,
     });
   } catch (error) {
     otpStore.deleteCode(normalizedEmail, otpCode);
+    console.error('Account created, but the verification email could not be sent.', error?.message || error);
     return res.status(500).json({
       message: 'Account created, but the verification email could not be sent.',
-      error: error.message,
     });
   }
 });
@@ -489,8 +529,7 @@ async function completeGoogleAuth(res, { email, name, picture, sub }, { role } =
   }
 
   // Generate 6-digit OTP code for Google Verification
-  const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
-  otpStore.set(normalizedEmail, { code: otpCode, expiresAt: Date.now() + 10 * 60 * 1000 });
+  const otpCode = issueOtp(normalizedEmail, { fresh: true });
 
   try {
     await sendOTPEmail(normalizedEmail, otpCode);
@@ -501,9 +540,9 @@ async function completeGoogleAuth(res, { email, name, picture, sub }, { role } =
     });
   } catch (error) {
     otpStore.deleteCode(normalizedEmail, otpCode);
+    console.error('Could not send the verification email to your Google address.', error?.message || error);
     return res.status(500).json({
       message: 'Could not send the verification email to your Google address.',
-      error: error.message,
     });
   }
 }
@@ -542,7 +581,7 @@ router.post('/google/exchange', async (req, res) => {
 
     const tokenData = await tokenResponse.json();
     if (!tokenResponse.ok || !tokenData.id_token) {
-      console.error('Google token exchange failed:', tokenData);
+      console.error('Google token exchange failed:', tokenData?.error || tokenResponse.status);
       return res.status(401).json({ message: 'Google sign-in could not be completed. Please try again.' });
     }
 
@@ -554,7 +593,7 @@ router.post('/google/exchange', async (req, res) => {
     return await completeGoogleAuth(res, profile, { role: mode === 'register' ? role : undefined });
   } catch (error) {
     console.error('Google code exchange error:', error);
-    return res.status(401).json({ message: 'Google sign-in could not be completed.', error: error.message });
+    return res.status(401).json({ message: 'Google sign-in could not be completed.' });
   }
 });
 
@@ -563,18 +602,30 @@ router.post('/google/exchange', async (req, res) => {
  * Verifies 6-digit OTP and logs user in
  */
 router.post('/verify-otp', async (req, res) => {
-  const { email, otpCode } = req.body;
-  if (!otpCode || otpCode.length !== 6) {
+  const { email, otpCode } = req.body || {};
+  if (typeof otpCode !== 'string' || !/^\d{6}$/.test(otpCode)) {
     return res.status(400).json({ message: 'Valid 6-digit OTP code is required' });
   }
+  if (typeof email !== 'string' || !email.trim()) {
+    return res.status(400).json({ message: 'Email address is required' });
+  }
 
-  const key = email ? email.toLowerCase().trim() : '';
-  // .verify() checks against ANY still-active code for this email, not
-  // just the most recently issued one — a second concurrent login to the
-  // same email no longer invalidates a still-pending first login's code.
-  const isValid = otpStore.verify(key, otpCode);
+  const key = email.toLowerCase().trim();
+  // ':' is reserved for internal keys such as "changepwd:<email>" — a real
+  // address never contains it, and the public endpoint must not be able to
+  // reach those.
+  if (key.includes(':')) {
+    return res.status(400).json({ message: 'Invalid or expired OTP verification code.' });
+  }
 
-  if (!isValid) {
+  // Checks ANY still-active code for this email (not just the newest), so a
+  // second concurrent login to the same email doesn't invalidate the first —
+  // and enforces the wrong-attempt budget.
+  const result = verifyOtp(key, otpCode);
+  if (!result.ok) {
+    if (result.reason === 'locked') {
+      return res.status(429).json({ message: OTP_LOCKED_MESSAGE });
+    }
     return res.status(400).json({ message: 'Invalid or expired OTP verification code.' });
   }
 
@@ -598,8 +649,14 @@ router.post('/verify-otp', async (req, res) => {
   }
 
   const vault = await getFamilyVaultForUser(user.id);
-  const token = jwt.sign({ userId: user.id, email: user.email, role: user.role, vaultId: vault?.vaultId || null }, JWT_SECRET, {
-    expiresIn: '7d',
+  // "Remember me" (ticked on the login screen) gets the longer session; every
+  // other sign-in, including register and Google, gets the normal one.
+  const token = signAuthToken({
+    userId: user.id,
+    email: user.email,
+    role: user.role,
+    vaultId: vault?.vaultId || null,
+    expiresIn: req.body?.rememberMe === true ? rememberMeTokenTtl() : sessionTokenTtl(),
   });
 
   const response = {
@@ -607,7 +664,7 @@ router.post('/verify-otp', async (req, res) => {
     token,
     vaultId: vault?.vaultId || null,
     user: {
-      ...user,
+      ...publicUser(user),
       vaultId: vault?.vaultId || null,
       hasSelectedRole: !!(user.role && user.role !== 'none'),
     },
@@ -632,51 +689,42 @@ router.post('/verify-otp', async (req, res) => {
   return res.json(response);
 });
 
-/**
- * POST /api/auth/role
- *
- * First-time role selection out of pending_registrations (RoleSelection.jsx).
- * NOT a role switch — role is immutable once a user has a patients/doctors
- * row (see backend/db/users.js: createOrUpdateUser leaves `role` untouched
- * for an already-assigned user, no matter what's sent here). This endpoint
- * now goes through createOrUpdateUser's promotion path instead of the
- * removed updateUserRole(), since choosing a role is a table move (pending
- * -> patients/doctors), not a column update.
- */
-router.post('/role', async (req, res) => {
-  const { userId, role } = req.body;
-  if (!userId || !role) {
-    return res.status(400).json({ message: 'UserId and role are required' });
-  }
-
-  const existingUser = await findUserById(userId);
-  if (!existingUser) {
-    return res.status(404).json({ message: 'User not found.' });
-  }
-
-  const savedUser = await createOrUpdateUser({ ...existingUser, id: userId, role });
-  return res.json({ message: 'Role updated successfully', role: savedUser.role });
-});
+// Fields a client must never be able to set through the profile form: they
+// either identify/authenticate the account or record a server-side decision.
+const PROFILE_FORBIDDEN_FIELDS = [
+  'id', 'userId', 'email', 'password', 'password_hash', 'passwordHash',
+  'patient_code', 'patientCode', 'auth_provider', 'authProvider',
+  'verification_status', 'verificationStatus',
+  'cert_extracted_data', 'certExtractedData',
+  'license_expiry_date', 'licenseExpiryDate',
+  'created_at', 'updated_at',
+];
 
 /**
  * POST /api/auth/profile
  * Updates user profile details (Patient or Doctor registration forms)
  */
 router.post('/profile', authenticateToken, async (req, res) => {
-  const { email, userId, role, ...profileDetails } = req.body;
-  let targetEmail = email || (userId && userId.includes('@') ? userId : null);
-  const targetRole = role || profileDetails.role;
-
-  const authEmail = (req.user.email || '').toLowerCase().trim();
-  if (!targetEmail && authEmail) {
-    targetEmail = authEmail;
+  const { role, ...rawProfileDetails } = req.body || {};
+  const profileDetails = { ...rawProfileDetails };
+  for (const field of PROFILE_FORBIDDEN_FIELDS) {
+    delete profileDetails[field];
   }
 
-  let userToUpdate = null;
-  if (targetEmail) {
-    userToUpdate = await findUserByEmail(targetEmail);
-  } else if (userId) {
-    userToUpdate = await findUserById(userId);
+  // The account being edited is ALWAYS the one the token belongs to — never
+  // an id/email taken from the body, which would let any logged-in user
+  // overwrite (or take over) someone else's profile.
+  const userToUpdate = (req.user.userId && await findUserById(req.user.userId))
+    || (req.user.email && await findUserByEmail(req.user.email))
+    || null;
+  if (!userToUpdate) {
+    return res.status(401).json({ message: 'This account no longer exists. Please log in again.' });
+  }
+
+  const targetEmail = userToUpdate.email;
+  const targetRole = role || profileDetails.role;
+  if (targetRole !== undefined && targetRole !== 'patient' && targetRole !== 'doctor') {
+    return res.status(400).json({ message: 'Role must be either patient or doctor.' });
   }
 
   const isSettingsUpdate = Boolean(profileDetails.isSettingsUpdate || profileDetails.isUpdate);
@@ -754,6 +802,23 @@ router.post('/profile', authenticateToken, async (req, res) => {
         return res.status(400).json({ message: 'Please enter a valid, complete practice address.' });
       }
 
+      // The certificate is sent to an AI provider to be read, so the doctor must
+      // have accepted how Swastha uses AI first (the notice covers uploaded
+      // documents). The frontend shows it when it sees this 403 and the doctor
+      // submits again.
+      const certConsent = await checkNoticeAck(userToUpdate.id, 'ask_swastha');
+      if (!certConsent.ok) {
+        if (certConsent.status === 403) {
+          return res.status(403).json({
+            message: 'Please review how Swastha uses AI before we scan your certificate.',
+            code: certConsent.code,
+            feature: certConsent.feature,
+            notice_version: certConsent.noticeVersion,
+          });
+        }
+        return res.status(500).json({ message: 'Could not verify notice acknowledgement. Please try again.' });
+      }
+
       // Process & Extract Medical Data from Uploaded Certificate via Gemini Vision AI
       const certAnalysis = await processMedicalCertificate(certUrl, {
         fullName: nameVal,
@@ -817,42 +882,63 @@ router.post('/profile', authenticateToken, async (req, res) => {
       hasSelectedRole: true,
     });
 
+    // The session token carries the role, and it was minted before role
+    // selection (role 'none'). Hand back a fresh one when the role changed, so
+    // checks that read the token's role work in this session instead of only
+    // after the next login.
+    const refreshedToken = savedUser.role && savedUser.role !== req.user.role
+      ? signAuthToken({
+          userId: savedUser.id,
+          email: savedUser.email,
+          role: savedUser.role,
+          vaultId: req.user.vaultId || null,
+          // Keep the time the session had left, instead of starting a fresh one.
+          expiresIn: Math.max(60, (req.user.exp || 0) - Math.floor(Date.now() / 1000)),
+        })
+      : undefined;
+
     return res.json({
       message: 'User profile updated successfully',
       extractedCertificateData: extractedCertMeta.certExtractedData || null,
-      user: savedUser,
+      user: publicUser(savedUser),
+      ...(refreshedToken ? { token: refreshedToken } : {}),
     });
   } catch (error) {
     console.error('Profile update error:', error);
-    return res.status(500).json({ message: 'Failed to update profile', error: error.message });
+    return res.status(500).json({ message: 'Failed to update profile' });
   }
 });
 
 /**
  * POST /api/auth/send-otp
+ * RESEND only. A code can only be re-sent inside a verification that has
+ * already been started by /login, /register or Google sign-in — never issued
+ * cold for an arbitrary address (see the OTP challenge helpers above). The
+ * reply is identical whether or not anything was sent, so this can't be used
+ * to find out which addresses have accounts or sign-ins in progress.
  */
 router.post('/send-otp', async (req, res) => {
-  const { email } = req.body;
-  if (!email) {
+  const { email } = req.body || {};
+  if (typeof email !== 'string' || !email.trim()) {
     return res.status(400).json({ message: 'Email address is required' });
   }
 
   const normalizedEmail = email.toLowerCase().trim();
-  const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
-  otpStore.set(normalizedEmail, { code: otpCode, expiresAt: Date.now() + 10 * 60 * 1000 });
+  const genericReply = { message: 'If a sign-in is in progress for this email, a new verification code has been sent.' };
 
+  if (normalizedEmail.includes(':') || !canResendOtp(normalizedEmail)) {
+    return res.json(genericReply);
+  }
+
+  const otpCode = issueOtp(normalizedEmail, { fresh: false });
   try {
     await sendOTPEmail(normalizedEmail, otpCode);
-    return res.json({
-      message: `Verification code sent to ${normalizedEmail}`,
-    });
   } catch (error) {
     otpStore.deleteCode(normalizedEmail, otpCode);
-    return res.status(500).json({
-      message: 'Failed to send verification code.',
-      error: error.message,
-    });
+    console.error('Resend OTP email failed:', error?.message || error);
+    return res.status(500).json({ message: 'Failed to send verification code.' });
   }
+  return res.json(genericReply);
 });
 
 /**
@@ -870,7 +956,7 @@ router.delete('/user', async (req, res) => {
 
     let decoded;
     try {
-      decoded = jwt.verify(token, JWT_SECRET);
+      decoded = verifyAuthToken(token);
     } catch (err) {
       return res.status(401).json({ message: 'Invalid or expired token.' });
     }
@@ -879,6 +965,9 @@ router.delete('/user', async (req, res) => {
     if (!userId) {
       return res.status(400).json({ message: 'User ID missing from token.' });
     }
+
+    // Read before the row is gone: a doctor's certificate file has to be removed too.
+    const accountBeingDeleted = await findUserById(userId);
 
     // Delete child records first (defensive — works whether or not DB-level
     // ON DELETE CASCADE is configured on reports/vault_table/family_members).
@@ -890,10 +979,16 @@ router.delete('/user', async (req, res) => {
       return res.status(500).json({ message: 'Failed to delete user account.' });
     }
 
+    // What has no foreign key to the user (notifications, consent records,
+    // feedback, the audit/provider logs' user ids, the certificate file): see
+    // db/accountErasure.js. Failures are logged there and don't undo the
+    // deletion the user asked for.
+    await eraseAccountResidue(userId, { certificateUrl: accountBeingDeleted?.reg_certificate_url });
+
     return res.json({ message: 'Account and all associated records deleted successfully.' });
   } catch (error) {
     console.error('Delete user account error:', error);
-    return res.status(500).json({ message: 'Failed to delete account', error: error.message });
+    return res.status(500).json({ message: 'Failed to delete account' });
   }
 });
 
@@ -916,22 +1011,21 @@ router.post('/change-password/send-otp', authenticateToken, async (req, res) => 
       });
     }
 
-    const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
-    otpStore.set(`changepwd:${email}`, { code: otpCode, expiresAt: Date.now() + 10 * 60 * 1000 });
+    const otpCode = issueOtp(`changepwd:${email}`, { fresh: true });
 
     try {
       await sendOTPEmail(email, otpCode);
       return res.json({ message: `Verification code sent to ${email}` });
     } catch (error) {
       otpStore.deleteCode(`changepwd:${email}`, otpCode);
+      console.error('Failed to send verification code to your email.', error?.message || error);
       return res.status(500).json({
         message: 'Failed to send verification code to your email.',
-        error: error.message,
       });
     }
   } catch (error) {
     console.error('Change-password send-otp error:', error);
-    return res.status(500).json({ message: 'Failed to send verification code', error: error.message });
+    return res.status(500).json({ message: 'Failed to send verification code' });
   }
 });
 
@@ -941,20 +1035,23 @@ router.post('/change-password/send-otp', authenticateToken, async (req, res) => 
  * authorizes the following /change-password/confirm call.
  */
 router.post('/change-password/verify-otp', authenticateToken, async (req, res) => {
-  const { otpCode } = req.body;
-  if (!otpCode || otpCode.length !== 6) {
+  const { otpCode } = req.body || {};
+  if (typeof otpCode !== 'string' || !/^\d{6}$/.test(otpCode)) {
     return res.status(400).json({ message: 'Valid 6-digit OTP code is required' });
   }
 
   const email = (req.user.email || '').toLowerCase().trim();
   const key = `changepwd:${email}`;
-  const isValid = otpStore.verify(key, otpCode);
+  const result = verifyOtp(key, otpCode);
 
-  if (!isValid) {
+  if (!result.ok) {
+    if (result.reason === 'locked') {
+      return res.status(429).json({ message: OTP_LOCKED_MESSAGE });
+    }
     return res.status(400).json({ message: 'Invalid or expired verification code.' });
   }
 
-  const changeToken = 'chg_' + Math.random().toString(36).substring(2) + Date.now().toString(36);
+  const changeToken = 'chg_' + crypto.randomBytes(24).toString('hex');
   passwordChangeTokenStore.set(changeToken, { email, expiresAt: Date.now() + 10 * 60 * 1000 });
 
   return res.json({ message: 'Verification successful', changeToken });
@@ -965,9 +1062,10 @@ router.post('/change-password/verify-otp', authenticateToken, async (req, res) =
  * Consumes the change token issued above and sets the new password.
  */
 router.post('/change-password/confirm', authenticateToken, async (req, res) => {
-  const { changeToken, newPassword } = req.body;
-  if (!newPassword || newPassword.length < 8) {
-    return res.status(400).json({ message: 'New password must be at least 8 characters long.' });
+  const { changeToken, newPassword } = req.body || {};
+  const passwordProblem = passwordPolicyError(newPassword);
+  if (passwordProblem) {
+    return res.status(400).json({ message: passwordProblem });
   }
 
   const email = (req.user.email || '').toLowerCase().trim();
@@ -996,26 +1094,20 @@ router.post('/change-password/confirm', authenticateToken, async (req, res) => {
  * POST /api/auth/forgot-password
  */
 router.post('/forgot-password', async (req, res) => {
-  const { email } = req.body;
-  if (!email) {
+  const { email } = req.body || {};
+  if (typeof email !== 'string' || !email.trim()) {
     return res.status(400).json({ message: 'Email address is required.' });
   }
 
   const normalizedEmail = email.toLowerCase().trim();
+  // The reply never depends on whether the address has an account (or only a
+  // Google login), so this can't be used to find out who is registered.
+  const genericReply = { message: 'If an account exists for that email, we\'ve sent a password reset link to it.' };
+
   const existingUser = await findUserByEmail(normalizedEmail);
-
-  // 1. Check if the user exists in database records
-  if (!existingUser) {
-    return res.status(404).json({
-      message: 'No registered account found with this email address. Please check your email or create a new account.',
-    });
-  }
-
-  // 2. Check if account has a password created (Google-only accounts do not use passwords)
-  if (!existingUser.password_hash) {
-    return res.status(400).json({
-      message: 'This account was registered using Google Sign-In and does not have a password. Please log in using "Continue with Google".',
-    });
+  // Google-only accounts have no password to reset.
+  if (!existingUser || !existingUser.password_hash) {
+    return res.json(genericReply);
   }
 
   // Clear any existing reset tokens for this email
@@ -1025,21 +1117,17 @@ router.post('/forgot-password', async (req, res) => {
     }
   }
 
-  const resetToken = 'rst_' + Math.random().toString(36).substring(2) + Date.now().toString(36);
+  const resetToken = 'rst_' + crypto.randomBytes(24).toString('hex');
   resetTokenStore.set(resetToken, { email: normalizedEmail, expiresAt: Date.now() + 30 * 60 * 1000 });
 
+  // Replied to before the email goes out: otherwise the extra time a real
+  // send takes would itself reveal that the account exists.
+  res.json(genericReply);
   try {
     await sendPasswordResetEmail(normalizedEmail, resetToken);
-    return res.json({
-      message: `Password reset link sent to ${normalizedEmail}`,
-      resetToken,
-    });
   } catch (error) {
     resetTokenStore.delete(resetToken);
-    return res.status(500).json({
-      message: 'Failed to send password reset email.',
-      error: error.message,
-    });
+    console.error('Password reset email failed:', error?.message || error);
   }
 });
 
@@ -1064,9 +1152,13 @@ router.get('/verify-reset-token', (req, res) => {
  * POST /api/auth/reset-password
  */
 router.post('/reset-password', async (req, res) => {
-  const { token, email, newPassword } = req.body;
+  const { token, email, newPassword } = req.body || {};
   if (!newPassword) {
     return res.status(400).json({ message: 'New password is required' });
+  }
+  const passwordProblem = passwordPolicyError(newPassword);
+  if (passwordProblem) {
+    return res.status(400).json({ message: passwordProblem });
   }
 
   if (!token || !resetTokenStore.has(token)) {
@@ -1121,7 +1213,7 @@ router.get('/users/:userId', authenticateToken, async (req, res) => {
 
     return res.json({
       user: {
-        ...user,
+        ...publicUser(user),
         patientId: user.patient_code || user.id,
         fullName: user.name || user.fullName,
         mobile: user.phone || user.mobile,
@@ -1140,7 +1232,7 @@ router.get('/users/:userId', authenticateToken, async (req, res) => {
     });
   } catch (error) {
     console.error('User lookup error:', error);
-    return res.status(500).json({ message: 'Failed to fetch user details.', error: error.message });
+    return res.status(500).json({ message: 'Failed to fetch user details.' });
   }
 });
 
@@ -1155,14 +1247,14 @@ router.get('/me', async (req, res) => {
 
   const token = authHeader.split(' ')[1];
   try {
-    const decoded = jwt.verify(token, JWT_SECRET);
+    const decoded = verifyAuthToken(token);
     const user = (await findUserById(decoded.userId)) || (await findUserByEmail(decoded.email));
     if (!user) {
       return res.status(404).json({ message: 'User not found' });
     }
     return res.json({
       user: {
-        ...user,
+        ...publicUser(user),
         fullName: user.name || user.fullName,
         mobile: user.phone || user.mobile,
         phone: user.phone || user.mobile,

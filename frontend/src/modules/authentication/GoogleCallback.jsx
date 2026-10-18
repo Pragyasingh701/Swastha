@@ -28,6 +28,14 @@ export default function GoogleCallback() {
       return;
     }
 
+    // The state sent to Google must come back unchanged, and this tab must be
+    // the one that started the sign-in — otherwise the code didn't come from a
+    // sign-in this user began.
+    if (!context.state || params.get("state") !== context.state) {
+      setError("Google sign-in couldn't be verified. Please start again from the login page.");
+      return;
+    }
+
     (async () => {
       try {
         const result = await finishGoogleAuth({

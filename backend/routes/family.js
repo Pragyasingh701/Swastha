@@ -1,5 +1,4 @@
 import express from 'express';
-import jwt from 'jsonwebtoken';
 import {
   createFamilyMember,
   createOrGetFamilyVaultForUser,
@@ -10,13 +9,17 @@ import {
   deleteFamilyMember,
   updateFamilyMember,
   confirmPendingFamilyMemberAuthorizationRequest,
+  stripEmailTags,
+  withEmailTag,
+  getMemberEmail,
 } from '../db/family.js';
 import { sendFamilyMemberAuthorizationEmail } from '../utils/mailer.js';
 import { findUserByEmail, findUserById } from '../db/users.js';
 import { createNotification } from '../db/notifications.js';
+import { verifyAuthToken } from '../config/jwt.js';
+import { renderMessagePage, renderConfirmPage } from '../utils/emailActionPage.js';
 
 const router = express.Router();
-const JWT_SECRET = process.env.JWT_SECRET || 'swastha_dev_secret_key_2026';
 
 function getAuthUser(req) {
   const authHeader = req.headers.authorization || '';
@@ -27,7 +30,7 @@ function getAuthUser(req) {
   }
 
   try {
-    return jwt.verify(token, JWT_SECRET);
+    return verifyAuthToken(token);
   } catch {
     return null;
   }
@@ -180,13 +183,14 @@ function validateFamilyMemberPayload(payload = {}, options = {}) {
   return errors;
 }
 
-async function validateDuplicateFamilyMember(userId, payload) {
+async function validateDuplicateFamilyMember(userId, payload, excludeMemberId = null) {
   const members = await listFamilyMembers({ userId });
   const normalizedName = normalizeText(payload.name).toLowerCase();
   const normalizedRelationship = normalizeText(payload.relationship).toLowerCase();
 
   if (normalizedName && normalizedRelationship) {
     const existing = members.find((member) =>
+      String(member.id) !== String(excludeMemberId) &&
       normalizeText(member.name).toLowerCase() === normalizedName &&
       normalizeText(member.relationship).toLowerCase() === normalizedRelationship
     );
@@ -210,7 +214,7 @@ router.get('/vault', async (req, res) => {
     return res.json({ vault });
   } catch (error) {
     console.error('Family vault lookup error:', error);
-    return res.status(500).json({ message: 'Failed to load family vault', error: error.message });
+    return res.status(500).json({ message: 'Failed to load family vault' });
   }
 });
 
@@ -279,7 +283,7 @@ router.post('/vault', async (req, res) => {
     });
   } catch (error) {
     console.error('Create family vault error:', error);
-    return res.status(500).json({ message: 'Failed to create family vault', error: error.message });
+    return res.status(500).json({ message: 'Failed to create family vault' });
   }
 });
 
@@ -309,7 +313,7 @@ router.get('/summary', async (req, res) => {
     });
   } catch (error) {
     console.error('Family vault summary error:', error);
-    return res.status(500).json({ message: 'Failed to load Family Vault summary', error: error.message });
+    return res.status(500).json({ message: 'Failed to load Family Vault summary' });
   }
 });
 
@@ -332,12 +336,16 @@ async function createMemberHandler(req, res) {
       relationship: req.body?.relationship,
       relationshipTag: req.body?.relationshipTag,
       healthOverview: req.body?.healthOverview,
-      notes: req.body?.notes,
+      // A member added here has no linked account: the client can neither pick
+      // its approval state nor attach an email (the [Email: ...] tag in notes
+      // is what links a record to a real account, so it's only ever written
+      // by the invite-by-email flow below, after that account's owner
+      // confirms). Anything of the sort in the body is dropped.
+      notes: stripEmailTags(req.body?.notes) || undefined,
       conditions: req.body?.conditions,
-      email: req.body?.email,
       lastVisitDate: req.body?.lastVisitDate,
       nextCheckupDate: req.body?.nextCheckupDate,
-      authorizationMethod: req.body?.authorizationMethod || 'mail',
+      authorizationMethod: 'manual',
     };
 
     const fieldErrors = validateFamilyMemberPayload(payload, { requireName: true, requireEmail: false });
@@ -374,11 +382,14 @@ async function createMemberHandler(req, res) {
     if (error.message?.includes('Family members table is not available')) {
       return res.status(503).json({ message: error.message });
     }
-    return res.status(500).json({ message: 'Failed to add family member', error: error.message });
+    return res.status(500).json({ message: 'Failed to add family member' });
   }
 }
 
 router.post('/members', createMemberHandler);
+
+const FAMILY_INVITE_REPLY =
+  'If a patient account exists for that email, an authorization request has been sent. The member will be added once they approve it.';
 
 router.post('/members/authorize', async (req, res) => {
   try {
@@ -399,7 +410,6 @@ router.post('/members/authorize', async (req, res) => {
       email: req.body?.email,
       lastVisitDate: req.body?.lastVisitDate,
       nextCheckupDate: req.body?.nextCheckupDate,
-      inviterEmail: req.body?.inviterEmail,
     };
 
     const fieldErrors = validateFamilyMemberPayload(payload, { requireName: true, requireEmail: true });
@@ -418,28 +428,36 @@ router.post('/members/authorize', async (req, res) => {
     }
 
     const recipientEmail = normalizeText(payload.email);
-    const inviterEmail = normalizeText(payload.inviterEmail) || user?.email || null;
+    // The inviter is always the logged-in account — a client-supplied
+    // inviterEmail let anyone send the official "X invited you" email in
+    // someone else's name.
+    const inviterEmail = user?.email || null;
     const memberName = normalizeText(payload.name);
 
     const patientAccount = await findUserByEmail(recipientEmail);
+    // The reply is the same whether or not the address has a patient account,
+    // so this can't be used to check who is registered. If there is no account,
+    // nothing is created and nothing is sent.
     if (!patientAccount || patientAccount.role !== 'patient') {
-      return res.status(400).json({
-        message: 'This email is not registered as a patient account. Authorization email was not sent.',
-        errorCode: 'PATIENT_ACCOUNT_NOT_FOUND',
-        errorHint: 'Ask the family member to create a patient account first, then invite them again.',
-      });
+      return res.json({ message: FAMILY_INVITE_REPLY });
     }
 
     const { member, authorizationToken } = await createPendingFamilyMemberAuthorizationRequest({
       ...payload,
+      // The link to the account is the address the token is mailed to,
+      // whatever the client wrote in notes — otherwise a request could be
+      // mailed to the requester's own second account while the record
+      // claims to be someone else's.
+      notes: withEmailTag(payload.notes, patientAccount.email),
       userId: user.userId,
       requestedByEmail: inviterEmail,
     });
 
-    const sent = await sendFamilyMemberAuthorizationEmail(recipientEmail, inviterEmail, memberName, authorizationToken);
-
-    if (!sent) {
-      console.error('Failed to send family authorization email to', recipientEmail);
+    try {
+      await sendFamilyMemberAuthorizationEmail(recipientEmail, inviterEmail, memberName, authorizationToken);
+    } catch (sendError) {
+      // Don't leave a pending member behind for an email that was never sent.
+      console.error('Failed to send family authorization email:', sendError?.message || sendError);
       try {
         if (member?.id) {
           await deleteFamilyMember(member.id, { userId: user.userId });
@@ -447,71 +465,58 @@ router.post('/members/authorize', async (req, res) => {
       } catch (delErr) {
         console.error('Failed to rollback pending member after email failure:', delErr);
       }
-
       return res.status(500).json({ message: 'Failed to send authorization email' });
     }
 
-    return res.json({ message: 'Authorization request sent. The member will be added after they approve it.' });
+    return res.json({ message: FAMILY_INVITE_REPLY });
   } catch (error) {
     console.error('Family member authorization email error:', error);
-    return res.status(500).json({ message: 'Failed to send authorization mail', error: error.message });
+    return res.status(500).json({ message: 'Failed to send authorization mail' });
   }
 });
 
-router.get('/members/authorize/confirm', async (req, res) => {
+// GET only shows a confirmation page: mail scanners and prefetchers open links
+// on their own, so opening the link must not grant anything. The button POSTs
+// the token back to the same path, and that is what confirms.
+router.get('/members/authorize/confirm', (req, res) => {
+  const token = String(req.query?.token ?? '').trim();
+  if (!token) {
+    return renderMessagePage(res, { title: 'Family Vault Permission', heading: 'Missing token', message: 'This link is missing its authorization token.', isError: true });
+  }
+  return renderConfirmPage(res, {
+    title: 'Family Vault Permission',
+    heading: 'Give this family member access?',
+    message: 'If you confirm, this family member becomes an admin of the family vault and can see and manage your health records.',
+    buttonLabel: 'Confirm permission',
+    action: `${req.baseUrl}${req.path}`,
+    token,
+  });
+});
+
+router.post('/members/authorize/confirm', express.urlencoded({ extended: false, limit: '4kb' }), async (req, res) => {
+  const token = String(req.body?.token ?? '').trim();
+  if (!token) {
+    return renderMessagePage(res, { title: 'Family Vault Permission', heading: 'Missing token', message: 'This link is missing its authorization token.', isError: true });
+  }
+
   try {
-    const authorizationToken = req.query?.token?.trim();
-    if (!authorizationToken) {
-      return res.status(400).send('Missing authorization token.');
-    }
-
-    const confirmedMember = await confirmPendingFamilyMemberAuthorizationRequest(authorizationToken);
-    const message = confirmedMember
-      ? 'You gave permission for this family member to become an admin of the family vault.'
-      : 'This authorization link is invalid or has already been used.';
-
-    return res.send(`<!DOCTYPE html>
-<html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Family Vault Permission</title>
-    <style>
-      body { font-family: Arial, sans-serif; background: #f8fafc; color: #0f172a; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; }
-      .card { background: white; border-radius: 16px; padding: 32px; box-shadow: 0 12px 30px rgba(15, 23, 42, 0.08); max-width: 560px; text-align: center; }
-      h2 { margin-top: 0; color: #2563eb; }
-      p { line-height: 1.6; color: #475569; }
-    </style>
-  </head>
-  <body>
-    <div class="card">
-      <h2>Permission Updated</h2>
-      <p>${message}</p>
-    </div>
-  </body>
-</html>`);
+    const confirmedMember = await confirmPendingFamilyMemberAuthorizationRequest(token);
+    return renderMessagePage(res, {
+      title: 'Family Vault Permission',
+      heading: 'Permission Updated',
+      message: confirmedMember
+        ? 'You gave permission for this family member to become an admin of the family vault.'
+        : 'This authorization link is invalid or has already been used.',
+      isError: !confirmedMember,
+    });
   } catch (error) {
     console.error('Family member authorization confirmation error:', error);
-    return res.send(`<!DOCTYPE html>
-<html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Family Vault Permission</title>
-    <style>
-      body { font-family: Arial, sans-serif; background: #f8fafc; color: #0f172a; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; }
-      .card { background: white; border-radius: 16px; padding: 32px; box-shadow: 0 12px 30px rgba(15, 23, 42, 0.08); max-width: 560px; text-align: center; }
-      h2 { margin-top: 0; color: #2563eb; }
-      p { line-height: 1.6; color: #475569; }
-    </style>
-  </head>
-  <body>
-    <div class="card">
-      <h2>Permission Updated</h2>
-      <p>This authorization link is invalid or has already been used.</p>
-    </div>
-  </body>
-</html>`);
+    return renderMessagePage(res, {
+      title: 'Family Vault Permission',
+      heading: 'Permission Updated',
+      message: 'This authorization link is invalid or has already been used.',
+      isError: true,
+    });
   }
 });
 
@@ -534,7 +539,7 @@ async function listMembersHandler(req, res) {
     return res.json(members);
   } catch (error) {
     console.error('List family members error:', error);
-    return res.status(500).json({ message: 'Failed to load Family Vault members', error: error.message });
+    return res.status(500).json({ message: 'Failed to load Family Vault members' });
   }
 }
 
@@ -552,17 +557,35 @@ async function updateMemberHandler(req, res) {
       return res.status(403).json({ message: 'Create a family vault before updating family members.' });
     }
 
-    const payload = {
-      ...req.body,
-      userId: user.userId,
-    };
+    const existingMembers = await listFamilyMembers({ userId: user.userId });
+    const existingMember = existingMembers.find((entry) => String(entry.id) === String(req.params.id));
+    if (!existingMember) {
+      return res.status(404).json({ message: 'Family member not found.' });
+    }
+
+    // Only plain profile fields are editable. Approval state, tokens and the
+    // account link are never taken from the body (a member could otherwise
+    // approve itself, or be re-pointed at another account's email).
+    const EDITABLE_FIELDS = [
+      'name', 'dob', 'age', 'relationship', 'relationshipTag', 'parentMemberId',
+      'healthOverview', 'conditions', 'lastVisitDate', 'nextCheckupDate',
+    ];
+    const payload = { userId: user.userId };
+    for (const field of EDITABLE_FIELDS) {
+      if (req.body?.[field] !== undefined) payload[field] = req.body[field];
+    }
+    if (req.body?.notes !== undefined) {
+      // Keep whatever account link the record already has; ignore any
+      // [Email: ...] the client sent.
+      payload.notes = withEmailTag(req.body.notes, getMemberEmail(existingMember)) || '';
+    }
 
     const fieldErrors = validateFamilyMemberPayload(payload, { requireName: false, requireEmail: false });
     if (Object.keys(fieldErrors).length > 0) {
       return res.status(400).json({ message: 'Validation failed', fieldErrors });
     }
 
-    const duplicateError = await validateDuplicateFamilyMember(user.userId, payload);
+    const duplicateError = await validateDuplicateFamilyMember(user.userId, payload, existingMember.id);
     if (duplicateError) {
       return res.status(409).json({ message: duplicateError });
     }
@@ -584,7 +607,7 @@ async function updateMemberHandler(req, res) {
     return res.json(member);
   } catch (error) {
     console.error('Edit family member error:', error);
-    return res.status(500).json({ message: 'Failed to update family member', error: error.message });
+    return res.status(500).json({ message: 'Failed to update family member' });
   }
 }
 
@@ -621,7 +644,7 @@ async function deleteMemberHandler(req, res) {
     return res.json({ message: 'Family member removed successfully', member });
   } catch (error) {
     console.error('Remove family member error:', error);
-    return res.status(500).json({ message: 'Failed to remove family member', error: error.message });
+    return res.status(500).json({ message: 'Failed to remove family member' });
   }
 }
 

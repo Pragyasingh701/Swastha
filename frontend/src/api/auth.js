@@ -13,16 +13,12 @@ export const authService = {
     return apiPost('/auth/google/exchange', { code, redirectUri, mode, role });
   },
 
-  async verifyOTP(email, otpCode) {
-    return apiPost('/auth/verify-otp', { email, otpCode });
+  async verifyOTP(email, otpCode, rememberMe = false) {
+    return apiPost('/auth/verify-otp', { email, otpCode, rememberMe });
   },
 
   async sendOTP(email) {
     return apiPost('/auth/send-otp', { email });
-  },
-
-  async updateRole(userId, role) {
-    return apiPost('/auth/role', { userId, role });
   },
 
   async updateProfile(profileData, token) {

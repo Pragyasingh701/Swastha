@@ -1,5 +1,8 @@
+import './utils/asyncErrors.js';
 import express from 'express';
-import cors from 'cors';
+import helmet from 'helmet';
+import { corsMiddleware } from './middleware/corsConfig.js';
+import { limiters } from './middleware/rateLimits.js';
 import dotenv from 'dotenv';
 import authRoutes from './routes/auth.js';
 import familyRoutes from './routes/family.js';
@@ -12,7 +15,6 @@ import cryptoRoutes from './routes/crypto.js';
 import { piiWireBoundary } from './middleware/wireCrypto.js';
 
 import fs from 'fs';
-import path from 'path';
 
 if (fs.existsSync('./backend/.env')) {
   dotenv.config({ path: './backend/.env' });
@@ -35,13 +37,16 @@ const app = express();
 // the real client's.
 app.set('trust proxy', 1);
 
-// Set Security & Cross-Origin-Opener-Policy Headers for Google OAuth
-app.use((req, res, next) => {
-  res.setHeader('Cross-Origin-Opener-Policy', 'same-origin-allow-popups');
-  next();
-});
+// Security headers for the API. CSP is off here on purpose: this serves JSON
+// (and the static /uploads files), not pages — the SPA's own CSP is set by the
+// frontend host (vercel.json). CORP is "cross-origin" because the SPA lives on
+// a different origin and loads files this API serves.
+app.use(helmet({
+  contentSecurityPolicy: false,
+  crossOriginResourcePolicy: { policy: 'cross-origin' },
+}));
 
-app.use(cors());
+app.use(corsMiddleware());
 // 2mb limit (not Express's 100kb default): shared with the /rag sub-app,
 // whose OCR'd report text can be long.
 app.use(express.json({ limit: '2mb' }));
@@ -53,8 +58,26 @@ app.use(express.json({ limit: '2mb' }));
 // req/res the parent already has, with no re-wrapping.
 app.use(piiWireBoundary);
 
-app.use('/uploads', express.static(path.resolve('uploads')));
-app.use('/uploads', express.static(path.resolve('backend/uploads')));
+// Rate limits (see middleware/rateLimits.js). After the wire boundary so the
+// per-email keys can read the decrypted body.
+app.use(['/api', '/rag'], limiters.general);
+app.post('/api/auth/login', limiters.loginByIpAndEmail, limiters.loginByEmail);
+app.post('/api/auth/register', limiters.register, limiters.emailByIp, limiters.emailByEmail);
+app.post('/api/auth/send-otp', limiters.emailByIp, limiters.emailByEmail);
+app.post('/api/auth/change-password/send-otp', limiters.emailByIp);
+app.post('/api/auth/forgot-password', limiters.emailByIp, limiters.forgotByEmail);
+app.post('/api/auth/verify-otp', limiters.verifyByIp);
+app.post('/api/auth/change-password/verify-otp', limiters.verifyByIp);
+app.post('/api/auth/change-password/confirm', limiters.verifyByIp);
+app.get('/api/auth/verify-reset-token', limiters.resetByIp);
+app.post('/api/auth/reset-password', limiters.resetByIp);
+app.post('/api/auth/google/exchange', limiters.googleByIp);
+app.post('/api/crypto/handshake', limiters.handshakeByIp);
+app.post('/api/doctor-patients/link', limiters.linkByDoctor);
+
+// Note: uploaded doctor certificates / ID proofs (written to ./uploads by
+// POST /api/auth/upload) are deliberately NOT served — they used to be
+// reachable by anyone with the URL.
 
 // Routes
 app.use('/api/crypto', cryptoRoutes);
@@ -78,5 +101,29 @@ app.use('/rag', ragApp);
 app.get('/', (req, res) => res.status(200).send('OK'));
 app.get('/health', (req, res) => res.status(200).send('OK'));
 app.get('/api/health', (req, res) => res.status(200).send('OK'));
+
+// Last in the chain: anything a route threw or rejected with (see
+// utils/asyncErrors.js) ends up here as a clean JSON error instead of Express's
+// default HTML page, which also leaks stack traces outside production.
+// eslint-disable-next-line no-unused-vars
+app.use((err, req, res, next) => {
+  if (res.headersSent) {
+    return next(err);
+  }
+  if (err?.type === 'entity.parse.failed') {
+    return res.status(400).json({ message: 'Malformed JSON request body.' });
+  }
+  if (err?.type === 'entity.too.large') {
+    return res.status(413).json({ message: 'Request body is too large.' });
+  }
+  console.error(`Unhandled error on ${req.method} ${req.originalUrl}:`, err);
+  return res.status(500).json({ message: 'Something went wrong. Please try again.' });
+});
+
+// Backstop: a stray rejection from outside a request (a timer, a floating
+// promise) shouldn't take the whole service down either.
+process.on('unhandledRejection', (reason) => {
+  console.error('Unhandled promise rejection:', reason);
+});
 
 export default app;

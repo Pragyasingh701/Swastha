@@ -11,7 +11,13 @@ import { matchSensitiveField, isStripField } from '../config/sensitiveFields.js'
 const MAX_DEPTH = 12;
 
 async function walk(value, transform, depth) {
-  if (depth > MAX_DEPTH || value === null || typeof value !== 'object') {
+  // Too deep to inspect means fields in it could not be stripped or encrypted;
+  // refusing is safer than letting such a value through untouched (callers
+  // fail closed on this error).
+  if (depth > MAX_DEPTH) {
+    throw new Error('Value is nested too deeply to process.');
+  }
+  if (value === null || typeof value !== 'object') {
     return value;
   }
 

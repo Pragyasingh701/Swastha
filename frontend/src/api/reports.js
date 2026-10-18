@@ -78,6 +78,30 @@ export async function generateReportSummary(reportId, token) {
   }, token);
 }
 
+// Short-lived signed URL for a report's attached file. The backend only
+// issues it after checking the caller may see that report (owner, linked
+// doctor, confirmed family admin), so a stored file URL by itself grants
+// nothing and the bucket can be private.
+export async function getReportFileUrl(reportId, token) {
+  return request(`/${encodeURIComponent(reportId)}/file-url`, {}, token);
+}
+
+// Opens a report's file in a new tab. The tab is opened synchronously (inside
+// the click) and pointed at the signed URL once it arrives, so the popup
+// blocker doesn't treat it as an unrequested popup.
+export async function openReportFile(reportId, token) {
+  const tab = window.open('', '_blank');
+  if (tab) tab.opener = null;
+  try {
+    const { url } = await getReportFileUrl(reportId, token);
+    if (tab) tab.location.href = url;
+    else window.location.href = url;
+  } catch (err) {
+    if (tab) tab.close();
+    throw err;
+  }
+}
+
 export async function getLabInsights(token) {
   return request('/lab-insights', {}, token);
 }
@@ -88,5 +112,7 @@ export default {
   updateTimelineReport,
   deleteTimelineReport,
   generateReportSummary,
+  getReportFileUrl,
+  openReportFile,
   getLabInsights,
 };

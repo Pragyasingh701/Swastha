@@ -4,6 +4,7 @@ import { useAuth } from '../../../context/AuthContext';
 import SettingsModal from './SettingsModal';
 import ChangePasswordModal from './ChangePasswordModal';
 import DeleteAccountModal from './DeleteAccountModal';
+import DoctorAccessModal from './DoctorAccessModal';
 import {
   User,
   LogOut,
@@ -12,6 +13,7 @@ import {
   Stethoscope,
   KeyRound,
   Trash2,
+  ShieldOff,
 } from 'lucide-react';
 
 export default function ProfileDropdown({ customProfile }) {
@@ -21,6 +23,7 @@ export default function ProfileDropdown({ customProfile }) {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isChangePasswordOpen, setIsChangePasswordOpen] = useState(false);
   const [isDeleteAccountOpen, setIsDeleteAccountOpen] = useState(false);
+  const [isDoctorAccessOpen, setIsDoctorAccessOpen] = useState(false);
   const dropdownRef = useRef(null);
 
   const profile = customProfile || authUser;
@@ -54,6 +57,11 @@ export default function ProfileDropdown({ customProfile }) {
   const handleOpenChangePassword = () => {
     setIsOpen(false);
     setIsChangePasswordOpen(true);
+  };
+
+  const handleOpenDoctorAccess = () => {
+    setIsOpen(false);
+    setIsDoctorAccessOpen(true);
   };
 
   const handleOpenDeleteAccount = () => {
@@ -195,6 +203,27 @@ export default function ProfileDropdown({ customProfile }) {
                 </div>
               </button>
 
+              {/* Doctor access: patients only (doctors have no one to revoke) */}
+              {displayRole === 'patient' && (
+                <button
+                  type="button"
+                  onClick={handleOpenDoctorAccess}
+                  className="w-full flex items-center gap-3 p-2 rounded-xl transition-all duration-150 hover:bg-slate-100/70 group text-left"
+                >
+                  <div className="w-9 h-9 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center border border-emerald-100 group-hover:scale-105 transition-transform shrink-0">
+                    <ShieldOff size={18} />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-bold uppercase tracking-wider text-slate-800 group-hover:text-blue-600 transition-colors">
+                      Doctor Access
+                    </p>
+                    <p className="text-[11px] text-slate-400 truncate mt-0.5">
+                      See who can view your records, revoke access
+                    </p>
+                  </div>
+                </button>
+              )}
+
               {/* Delete Account */}
               <button
                 type="button"
@@ -247,6 +276,12 @@ export default function ProfileDropdown({ customProfile }) {
       <ChangePasswordModal
         isOpen={isChangePasswordOpen}
         onClose={() => setIsChangePasswordOpen(false)}
+      />
+
+      {/* Doctor Access Modal */}
+      <DoctorAccessModal
+        isOpen={isDoctorAccessOpen}
+        onClose={() => setIsDoctorAccessOpen(false)}
       />
 
       {/* Delete Account Modal */}

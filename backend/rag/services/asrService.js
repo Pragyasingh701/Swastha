@@ -15,6 +15,7 @@
 // Single-blob upload, not streaming (PRD §8.1, §10 — WebSocket streaming
 // on Render is unproven and explicitly deferred). Tap to record, tap to
 // stop, one POST, one transcript back.
+import { recordAiRequest } from '../utils/aiRequestLog.js';
 import { Buffer } from 'node:buffer';
 import { currentKey, retireKey, __resetKeyPool } from '../config/sarvamKeys.js';
 
@@ -140,7 +141,9 @@ export async function transcribeSpeech(audioBuffer, mimetype, language) {
       return { ok: false, error_code: lastError === 'NO_KEY' ? 'NO_KEY' : `ALL_KEYS_SPENT (${lastError})` };
     }
 
+    const attemptStartedAt = Date.now();
     const result = await attemptTranscribe(audioBuffer, mimetype, language, active.key);
+    recordAiRequest({ kind: 'asr', provider: result.ok ? 'sarvam' : null, ok: result.ok, latencyMs: Date.now() - attemptStartedAt, errorCode: result.ok ? null : result.error_code });
     if (result.ok) return result;
 
     lastError = result.error_code;

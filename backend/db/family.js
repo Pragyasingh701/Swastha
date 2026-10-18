@@ -48,6 +48,22 @@ export function getMemberEmail(member = {}) {
   return String(emailMatch?.[1] || '').trim().toLowerCase();
 }
 
+const EMAIL_TAG_PATTERN = /\[Email:\s*[^\]]*\]/gi;
+
+// The `[Email: ...]` tag inside notes is what links a member record to a real
+// account, so it must only ever be written by the server (see
+// isPatientLinkedToFamilyMember) — never taken from what a client typed.
+export function stripEmailTags(notes) {
+  return String(notes || '').replace(EMAIL_TAG_PATTERN, '').replace(/\n{3,}/g, '\n\n').trim();
+}
+
+export function withEmailTag(notes, email) {
+  const cleaned = stripEmailTags(notes);
+  const normalizedEmail = String(email || '').trim().toLowerCase();
+  if (!normalizedEmail) return cleaned || null;
+  return `[Email: ${normalizedEmail}]\n${cleaned}`.trim();
+}
+
 function sanitizeConditions(list) {
   if (!Array.isArray(list)) return [];
 
@@ -166,13 +182,9 @@ function buildMemberUpdatePayload(memberData = {}) {
   if (has('conditions')) payload.conditions = sanitizeConditions(memberData.conditions);
   if (has('lastVisitDate') || has('last_visit_date')) payload.last_visit_date = memberData.lastVisitDate || memberData.last_visit_date || null;
   if (has('nextCheckupDate') || has('next_checkup_date')) payload.next_checkup_date = memberData.nextCheckupDate || memberData.next_checkup_date || null;
-  if (has('authorizationStatus') || has('authorization_status')) payload.authorization_status = memberData.authorizationStatus || memberData.authorization_status;
-  if (has('authorizationToken') || has('authorization_token')) payload.authorization_token = memberData.authorizationToken || memberData.authorization_token;
-  if (has('authorizationRequestedAt') || has('authorization_requested_at')) payload.authorization_requested_at = memberData.authorizationRequestedAt || memberData.authorization_requested_at;
-  if (has('authorizationApprovedAt') || has('authorization_approved_at')) payload.authorization_approved_at = memberData.authorizationApprovedAt || memberData.authorization_approved_at;
-  if (has('requestedByEmail') || has('requested_by_email')) payload.requested_by_email = memberData.requestedByEmail || memberData.requested_by_email;
-  if (has('authorizedByEmail') || has('authorized_by_email')) payload.authorized_by_email = memberData.authorizedByEmail || memberData.authorized_by_email;
 
+  // Authorization fields (status, token, timestamps, approver) are deliberately
+  // NOT updatable here: they're only ever set by the invite/confirm flow.
   payload.updated_at = now;
 
   return payload;
@@ -273,6 +285,17 @@ export const createOrGetFamilyVaultForUser = async (userId) => {
       .single();
 
     if (error) {
+      // Two requests creating the first vault at the same moment: the unique key
+      // on vault_table.patient_id lets one win. Use the winner's row.
+      if (error.code === '23505') {
+        const { data: winner, error: winnerError } = await supabase
+          .from(FAMILY_VAULT_TABLE)
+          .select('*')
+          .eq(FAMILY_USER_ID_COLUMN, userId)
+          .maybeSingle();
+        if (winnerError) throw winnerError;
+        return normalizeVault(winner || null);
+      }
       throw error;
     }
 
@@ -590,5 +613,16 @@ export const isPatientLinkedToFamilyMember = async (patientId, targetUserId) => 
 
   const targetEmail = String(targetUser.email).trim().toLowerCase();
   const members = await listFamilyMembers({ userId: patientId });
-  return members.some((member) => getMemberEmail(member) === targetEmail);
+  // Only a member whose link went through the invite-by-email flow counts:
+  // that flow stamps both authorization_requested_at (invite created, token
+  // mailed to the target's own address) and authorization_approved_at (the
+  // target clicked it). A member created or edited directly never has both,
+  // so nobody can grant themselves access to an account by typing its email
+  // into a member record.
+  return members.some((member) =>
+    member.authorizationStatus === 'approved'
+    && Boolean(member.authorizationRequestedAt)
+    && Boolean(member.authorizationApprovedAt)
+    && getMemberEmail(member) === targetEmail
+  );
 };

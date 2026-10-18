@@ -54,3 +54,22 @@ export function isValidPastDate(dateStr, { minAge = 0, maxAge = 120 } = {}) {
   }
   return age >= minAge && age <= maxAge;
 }
+
+// Password rules — the same as the server's (backend/utils/passwordPolicy.js);
+// keep the two in step. Returns an error message, or '' when the password is fine.
+export const PASSWORD_RULES_MESSAGE = 'Password must be 8 to 72 characters and include at least one letter and one number.';
+
+const COMMON_PASSWORDS = new Set([
+  'password1', 'password12', 'password123', 'passw0rd1', 'qwerty123', 'qwerty1234',
+  'abc12345', 'abcd1234', 'admin123', 'admin1234', 'welcome1', 'welcome123',
+  'letmein123', 'iloveyou1', 'iloveyou123', '12345678a', 'a12345678', 'swastha123',
+]);
+
+export function getPasswordError(password) {
+  if (typeof password !== 'string') return PASSWORD_RULES_MESSAGE;
+  const byteLength = new TextEncoder().encode(password).length;
+  if (password.length < 8 || byteLength > 72) return PASSWORD_RULES_MESSAGE;
+  if (!/[A-Za-z]/.test(password) || !/\d/.test(password)) return PASSWORD_RULES_MESSAGE;
+  if (COMMON_PASSWORDS.has(password.toLowerCase())) return 'That password is too common. Please choose a less predictable one.';
+  return '';
+}

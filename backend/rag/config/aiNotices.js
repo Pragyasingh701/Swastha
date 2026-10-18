@@ -15,18 +15,21 @@
 // wording change, or a new AI provider is added). A row in
 // ai_notice_acknowledgements only satisfies requireNoticeAck for the exact
 // version it was recorded against.
-export const AI_NOTICE_VERSION = 1;
+export const AI_NOTICE_VERSION = 2;
 
 // TODO(legal): review wording for regulatory/consent-language requirements
 // (this is engineering copy, not reviewed legal text).
 export const AI_NOTICES = {
+  // The one consent that covers every AI feature that reads health records or
+  // documents (the feature key stays 'ask_swastha': it is what the
+  // ai_notice_acknowledgements table and requireNoticeAck already use).
   ask_swastha: {
     short:
-      'Ask Swastha uses AI to read the selected records and generate answers to your questions.',
+      'Swastha uses AI to read health records and uploaded documents: to answer questions in Ask Swastha, to fill in forms from scanned reports, to write summaries and lab insights, and to make records searchable. Records, documents and questions are sent to AI services for this.',
   },
   voice_intake: {
     short:
-      'Your voice and its transcript are sent to an AI service to convert speech to text and to read questions aloud.',
+      'Your answers, typed or spoken, are sent to AI services to understand and organise them. If you speak, your voice and its transcript are sent to a speech service to convert it to text, and questions are read aloud by one.',
   },
   report_upload: {
     short: 'Uploaded documents are read by AI to auto-fill this form.',

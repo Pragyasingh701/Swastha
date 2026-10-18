@@ -32,7 +32,7 @@ export default function Login() {
       setIsLoading(false);
 
       if (result?.requiresOTP) {
-        navigate("/verify-otp", { state: { email: email.trim(), mode: "login" } });
+        navigate("/verify-otp", { state: { email: email.trim(), mode: "login", rememberMe } });
         return;
       }
 

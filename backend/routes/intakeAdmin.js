@@ -1,7 +1,18 @@
+import crypto from 'crypto';
 import express from 'express';
 import { abandonStaleIntakeSessions } from '../db/intakeSessions.js';
 
 const router = express.Router();
+
+// Constant-time comparison, so response timing can't be used to guess the
+// secret one character at a time. Hashing first makes both sides the same
+// length, which timingSafeEqual requires.
+function secretsMatch(provided, expected) {
+  if (typeof provided !== 'string' || typeof expected !== 'string') return false;
+  const a = crypto.createHash('sha256').update(provided).digest();
+  const b = crypto.createHash('sha256').update(expected).digest();
+  return crypto.timingSafeEqual(a, b);
+}
 
 // Issue #10 fix (audit report): triggers the abandoned-session sweep
 // (db/intakeSessions.js's abandonStaleIntakeSessions). No in-process
@@ -31,7 +42,7 @@ router.post('/sweep-abandoned', async (req, res) => {
   }
 
   const providedSecret = req.headers['x-sweep-secret'];
-  if (providedSecret !== configuredSecret) {
+  if (!secretsMatch(providedSecret, configuredSecret)) {
     return res.status(401).json({ message: 'Unauthorized.' });
   }
 

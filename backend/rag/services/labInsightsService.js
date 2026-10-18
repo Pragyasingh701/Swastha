@@ -1,5 +1,6 @@
 // Routed through the shared failover client: Gemini (4 keys) -> OpenRouter.
 import { runAI } from '../config/aiClient.js';
+import { UNTRUSTED_DATA_RULES, wrapUntrusted, sanitizeModelText } from '../utils/untrustedData.js';
 
 // Lab Insights needs numbers a chart can plot, but reports only ever store
 // free text ("Key Results / Values" like "Hemoglobin 13.2 g/dL, WBC
@@ -63,7 +64,9 @@ export async function generateLabInsights(labReports) {
 
   const prompt = `You are a clinical data assistant. Below are a patient's Lab Report records, in free-text form. Extract ONLY what is explicitly stated — never invent values, dates, or findings.
 
-${reportBlocks}
+${UNTRUSTED_DATA_RULES}
+
+${wrapUntrusted('records', reportBlocks)}
 
 Return ONLY a single JSON object (no prose, no markdown fences) with this exact shape:
 {
@@ -112,14 +115,14 @@ Rules:
 
   return {
     healthScore: Number.isFinite(parsed.healthScore) ? Math.max(0, Math.min(100, Math.round(parsed.healthScore))) : null,
-    healthScoreNote: typeof parsed.healthScoreNote === 'string' ? parsed.healthScoreNote.trim() : '',
+    healthScoreNote: sanitizeModelText(parsed.healthScoreNote, 300),
     series: Array.isArray(parsed.series)
       ? parsed.series
           .filter((s) => s && s.testName && Array.isArray(s.points) && s.points.length > 0)
           .map((s) => ({
-            testName: String(s.testName).trim(),
-            unit: typeof s.unit === 'string' ? s.unit.trim() : '',
-            normalRange: typeof s.normalRange === 'string' ? s.normalRange.trim() : '',
+            testName: sanitizeModelText(String(s.testName), 120),
+            unit: sanitizeModelText(s.unit, 40),
+            normalRange: sanitizeModelText(s.normalRange, 60),
             points: s.points
               .filter((p) => p && p.date && Number.isFinite(Number(p.value)))
               .map((p) => ({ date: String(p.date), value: Number(p.value) }))
@@ -130,16 +133,17 @@ Rules:
     physicianSummary: Array.isArray(parsed.physicianSummary)
       ? parsed.physicianSummary
           .filter((item) => item && item.title && item.body)
+          .slice(0, 5)
           .map((item) => ({
-            title: String(item.title).trim(),
-            body: String(item.body).trim(),
+            title: sanitizeModelText(String(item.title), 120),
+            body: sanitizeModelText(String(item.body), 500),
             tone: ['good', 'watch', 'neutral'].includes(item.tone) ? item.tone : 'neutral',
           }))
       : [],
     followUps: Array.isArray(parsed.followUps)
       ? parsed.followUps
           .filter((f) => f && f.title)
-          .map((f) => ({ title: String(f.title).trim(), reason: typeof f.reason === 'string' ? f.reason.trim() : '' }))
+          .map((f) => ({ title: sanitizeModelText(String(f.title), 120), reason: sanitizeModelText(f.reason, 300) }))
       : [],
   };
 }

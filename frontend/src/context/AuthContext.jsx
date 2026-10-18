@@ -70,6 +70,18 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+  // Any authenticated request the server rejects with 401 (token expired or
+  // revoked, account gone) announces it (api/client.js); sign out so the route
+  // guards send the user to login instead of every page showing empty data.
+  useEffect(() => {
+    const onSessionExpired = () => {
+      saveAuthSession(null, null, false);
+    };
+    window.addEventListener('swastha:session-expired', onSessionExpired);
+    return () => window.removeEventListener('swastha:session-expired', onSessionExpired);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   useEffect(() => {
     if (!token) return;
     const isRemembered = localStorage.getItem('swastha_remember') === 'true';
@@ -174,11 +186,14 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  const verifyOTP = async (email, otpCode, remember = true) => {
+  // `remember` decides where the session is kept (localStorage vs. the tab);
+  // `longSession` asks the server for the longer "Remember me" login, and is
+  // only true when the box was ticked on the login screen.
+  const verifyOTP = async (email, otpCode, remember = true, longSession = false) => {
     setIsLoading(true);
     setError(null);
     try {
-      const result = await authService.verifyOTP(email, otpCode);
+      const result = await authService.verifyOTP(email, otpCode, longSession);
       if (result.token && result.user) {
         saveAuthSession(result.token, result.user, remember);
       }
@@ -206,7 +221,6 @@ export const AuthProvider = ({ children }) => {
     if (currentUser) {
       const updated = { ...currentUser, role, hasSelectedRole: !!currentUser.hasSelectedRole };
       setUser(updated);
-      authService.updateRole(currentUser.id || currentUser.email, role);
     }
   };
 
@@ -227,6 +241,11 @@ export const AuthProvider = ({ children }) => {
         ...profileData,
       };
       const result = await authService.updateProfile(payload, token);
+      // Role selection changes the account's role, and the server hands back a
+      // fresh token that carries it (the old one still says 'none').
+      if (result?.token) {
+        setToken(result.token);
+      }
       if (result?.user) {
         setUser(result.user);
       } else {

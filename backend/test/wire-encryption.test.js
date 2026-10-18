@@ -235,17 +235,15 @@ test('an unresolvable X-Enc-Session-Id returns 401 ENC_SESSION_EXPIRED', async (
 test('POST /api/auth/verify-otp: response user object is ciphertext on the wire and decrypts back to the real profile', async () => {
   const { key, sessionId } = await handshake();
 
-  // Real OTP issuance (also sends a real email via Brevo) — read the code
-  // straight out of the in-process store rather than wiring up email
-  // receipt in a test.
-  await fetch(`${baseUrl}/api/auth/send-otp`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email: testUser.email }),
-  });
-  const otpList = global.__otpStoreRaw.get(testUser.email.toLowerCase().trim());
-  assert.ok(otpList && otpList.length > 0, 'an OTP was actually queued for this test user');
-  const otpCode = otpList[otpList.length - 1].code;
+  // /send-otp can only RESEND inside a verification that /login, /register or
+  // Google sign-in already started, so a code can no longer be requested cold.
+  // Start one directly in the in-process stores (the same state issueOtp()
+  // writes) instead of going through a password login — this also means no real
+  // email is sent.
+  const otpKey = testUser.email.toLowerCase().trim();
+  const otpCode = '482913';
+  global.__otpStoreRaw.set(otpKey, [{ code: otpCode, expiresAt: Date.now() + 10 * 60 * 1000 }]);
+  global.__otpMeta.set(otpKey, { startedAt: Date.now(), lastIssuedAt: Date.now(), resends: 0, failed: 0, locked: false });
 
   const res = await fetch(`${baseUrl}/api/auth/verify-otp`, {
     method: 'POST',

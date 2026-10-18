@@ -26,10 +26,11 @@ export async function verifyClinicCode(code) {
  * next_question, quick_reply_options, section, red_flag } — ready to hand
  * straight into IntakeChat.jsx.
  */
-export async function verifyClinicOtp({ doctorId, language }) {
+export async function verifyClinicOtp({ doctorId, checkinToken, language }) {
   return request('/verify-otp', {
     method: 'POST',
-    body: { doctorId, ...(language ? { language } : {}), skip_audio: true },
+    // checkinToken is the proof of the entered code that verifyClinicCode returned.
+    body: { doctorId, checkinToken, ...(language ? { language } : {}), skip_audio: true },
   });
 }
 

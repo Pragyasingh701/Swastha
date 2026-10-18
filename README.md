@@ -91,11 +91,11 @@ Swastha/
 
 ---
 
-## 🗄️ Supabase Database Architecture (9 Tables + 1 View)
+## 🗄️ Supabase Database Architecture (9 Tables)
 
 **Patients and doctors are separate tables**, not a shared `users` table with a role column — that
 split (`patients` / `doctors` / `pending_registrations`, replacing the old single `users` table)
-landed in a dedicated DB reorg; see `supabase/migrations/` at the repo root for the migration
+landed in a dedicated DB reorg; see `supabase/migrations_archive/` at the repo root for the migration
 history if you need it.
 
 `reports`, `report_embeddings`, `vault_table`, and `family_members` all reference `patients.id` via
@@ -113,7 +113,7 @@ application code (`backend/db/*.js`), not copied from a migration file. Cross-ch
 Run the following in your **Supabase Dashboard > SQL Editor** to construct the schema:
 
 ```sql
--- 1. Patients (from supabase/migrations/20260819171220_create_patients_doctors_pending_tables.sql)
+-- 1. Patients (from supabase/migrations_archive/20260819171220_create_patients_doctors_pending_tables.sql)
 CREATE TABLE public.patients (
   id                   VARCHAR PRIMARY KEY,
   email                VARCHAR NOT NULL UNIQUE,
@@ -170,16 +170,6 @@ CREATE TABLE public.pending_registrations (
   updated_at           TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- Read-only convenience view for the login lookup path — a UNION across all
--- 3 identity tables, not a merge. Lets auth code check one place for "does
--- this email exist, and with which password_hash / role."
-CREATE VIEW public.auth_identities AS
-  SELECT id, email, password_hash, auth_provider, 'patient'::text AS role FROM public.patients
-  UNION ALL
-  SELECT id, email, password_hash, auth_provider, 'doctor'::text AS role FROM public.doctors
-  UNION ALL
-  SELECT id, email, password_hash, auth_provider, 'none'::text AS role FROM public.pending_registrations;
-
 -- 4. Medical Reports & Timeline Table
 -- NOTE: id is BIGINT (verified via pg_dump), not UUID, despite this table
 -- predating migrations — report_embeddings.report_id below has always
@@ -225,7 +215,7 @@ CREATE INDEX IF NOT EXISTS report_embeddings_user_id_idx ON public.report_embedd
 -- search over the whole table. An exact scan over that already-small,
 -- already-scoped set is not meaningfully slower than an ANN lookup would
 -- be, and it's exact rather than approximate. See
--- supabase/migrations/20260930051136_drop_report_embeddings_hnsw_idx.sql.
+-- supabase/migrations_archive/20260930051136_drop_report_embeddings_hnsw_idx.sql.
 
 -- 6. Family Vault Table (⚠️ hand-created, see note above)
 CREATE TABLE public.vault_table (
@@ -270,7 +260,7 @@ CREATE INDEX IF NOT EXISTS idx_family_members_parent_member_id ON public.family_
 
 -- 8. Doctor ↔ Patient Link Table (⚠️ hand-created, see note above — except
 -- access_expires_at, which DOES have a real migration:
--- supabase/migrations/20260830010000_add_access_expires_at_to_doctor_patient.sql)
+-- supabase/migrations_archive/20260830010000_add_access_expires_at_to_doctor_patient.sql)
 -- A doctor sends a link request (status='pending'); the patient accepts or
 -- declines, in-app or via a one-shot emailed token (email_action_token).
 -- Acceptance is NOT permanent: access_expires_at is stamped to 24h from the
@@ -367,7 +357,9 @@ return nothing until real RLS policies are written.
 
 ## 🔒 Wire-format PII encryption
 
-Designated sensitive fields (name, email, phone, DOB, address, and similar —
+Designated sensitive fields (name, email, phone, DOB, address and similar,
+plus medical record content, family health details, intake answers and
+AI-written summaries —
 see `backend/config/sensitiveFields.js` and its frontend mirror,
 `frontend/src/api/pii/fields.js`, the single source of truth for the field
 list) are encrypted in every request/response body between the frontend and
@@ -406,10 +398,10 @@ stronger guarantee than it is):
   state to be shown, so it's visible there (Elements tab, a screenshot,
   React DevTools) regardless of what the Network tab shows for the same
   request.
-- **AI-generated narrative text** (`answer`, `summary`, `insights`, and
-  similar free-text fields from the `/rag` search/summarize endpoints) —
-  deliberately not field-encrypted; see the comment in
-  `backend/config/sensitiveFields.js` for why.
+- **A patient's typed intake answer** — it is sent under the generic key
+  `message`, which can't be listed without encrypting every status string in
+  the app, so that request field is readable on the wire. The questions and
+  recorded answers that come back, and the spoken transcript, are covered.
 - **Database/storage security** — entirely unrelated and unchanged. Data is
   stored in Supabase exactly as it always was; this is a wire-format-only
   concern layered on top, not an at-rest encryption scheme.
@@ -446,8 +438,12 @@ JWT_SECRET=your_jwt_secret_key_here
 
 # Used to build links in transactional emails (password reset, family authorization confirm).
 # Defaults to localhost if unset — set these explicitly in production.
+# FRONTEND_URL is also the CORS allow-list: only browsers on that origin (plus localhost:5173
+# outside production) may call the API. If it is unset the API accepts every origin and logs
+# a warning. CORS_ORIGINS (comma-separated) adds extra origins, e.g. Vercel preview URLs.
 FRONTEND_URL=http://localhost:5173
 BACKEND_URL=http://localhost:5001
+# CORS_ORIGINS=https://my-preview-branch.vercel.app
 
 # Supabase Credentials
 SUPABASE_URL=https://your-project-ref.supabase.co

@@ -1,7 +1,7 @@
 // Talks to the rag/ sub-app, mounted inside this same backend process at
 // /rag (see backend/rag/app.js) — not a separate service, despite the
 // dedicated env var below.
-import { apiRequest, getAuthHeader } from './client';
+import { apiRequest, getAuthHeader, notifyAiNoticeRequired } from './client';
 import { decryptPiiFields } from './pii/walk.js';
 import { ensureSession } from './pii/session.js';
 
@@ -22,12 +22,6 @@ export async function indexReport(report) {
   return request('/reports/index', {
     method: 'POST',
     body: report,
-  });
-}
-
-export async function removeReportFromIndex(reportId) {
-  return request(`/reports/index/${encodeURIComponent(reportId)}`, {
-    method: 'DELETE',
   });
 }
 
@@ -81,6 +75,9 @@ export async function extractReportFromFile(file) {
   let data = await response.json();
   data = await decryptPiiFields(data, RAG_BASE_URL);
   if (!response.ok) {
+    if (response.status === 403 && data?.code === 'AI_NOTICE_ACK_REQUIRED') {
+      notifyAiNoticeRequired(data.feature);
+    }
     const error = new Error(data.error || data.message || 'Extraction request failed');
     error.status = response.status;
     error.details = data;
@@ -92,7 +89,6 @@ export async function extractReportFromFile(file) {
 export default {
   searchReports,
   indexReport,
-  removeReportFromIndex,
   searchReportsConversational,
   clearConversation,
   extractReportFromFile,

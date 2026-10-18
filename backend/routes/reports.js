@@ -1,17 +1,15 @@
 import express from 'express';
-import jwt from 'jsonwebtoken';
-import { listTimelineReports, getTimelineReport, createTimelineReport, updateTimelineReport, deleteTimelineReport } from '../db/reports.js';
+import { listTimelineReports, getTimelineReport, getTimelineReportById, createTimelineReport, updateTimelineReport, deleteTimelineReport } from '../db/reports.js';
 import { findUserByEmail, findUserById } from '../db/users.js';
 import { isDoctorLinkedToPatient } from '../db/doctorPatients.js';
 import { isPatientLinkedToFamilyMember } from '../db/family.js';
 import { validateTimelineReportPayload } from '../utils/timelineValidation.js';
-import { uploadMemory, uploadFileToSupabase } from '../config/supabaseStorage.js';
-import supabase from '../config/supabase.js';
+import { uploadMemory, uploadFileToSupabase, createSignedFileUrl, removeStoredFiles } from '../config/supabaseStorage.js';
 import { createNotification } from '../db/notifications.js';
 import { decryptMultipartFields } from '../middleware/wireCrypto.js';
+import { verifyAuthToken } from '../config/jwt.js';
 
 const router = express.Router();
-const JWT_SECRET = process.env.JWT_SECRET || 'swastha_dev_secret_key_2026';
 // RAG used to be a separate service/process (RAG_BASE_URL pointed at its
 // own port); it's now mounted in-process at /rag (see server.js), so this
 // defaults to a loopback call on this same server instead of a second
@@ -29,7 +27,7 @@ const RAG_BASE_URL = process.env.RAG_BASE_URL || `http://localhost:${process.env
 // "AI Summary" — never generated on click. Failure here does NOT fail the
 // report save — the report is still valid without a summary, same
 // graceful-degradation pattern as AI extraction elsewhere in this app.
-async function generateSummary(authHeader, report) {
+async function generateSummaryResult(authHeader, report) {
   try {
     const res = await fetch(`${RAG_BASE_URL}/summarize`, {
       method: 'POST',
@@ -49,14 +47,24 @@ async function generateSummary(authHeader, report) {
       }),
     });
     const data = await res.json();
+    // The user hasn't accepted how Swastha uses AI yet: not an error to hide —
+    // callers that can ask the user (the on-demand route) pass it on so the UI
+    // can show the notice; the save paths just skip the summary.
+    if (res.status === 403 && data?.code === 'AI_NOTICE_ACK_REQUIRED') {
+      return { summary: null, consentRequired: { code: data.code, feature: data.feature, notice_version: data.notice_version } };
+    }
     if (!res.ok) {
       throw new Error(data?.error || `rag summarize returned HTTP ${res.status}`);
     }
-    return data.summary || null;
+    return { summary: data.summary || null };
   } catch (err) {
     console.error(`AI summary generation failed for report ${report.id}:`, err.message || err);
-    return null;
+    return { summary: null };
   }
+}
+
+async function generateSummary(authHeader, report) {
+  return (await generateSummaryResult(authHeader, report)).summary;
 }
 
 function getAuthUser(req) {
@@ -67,26 +75,18 @@ function getAuthUser(req) {
   }
 
   try {
-    return jwt.verify(token, JWT_SECRET);
+    return verifyAuthToken(token);
   } catch {
     return null;
   }
 }
 
-async function resolveTargetUser(req, authUser) {
-  const requestedUserId = String(req.body?.userId || req.query?.userId || '').trim();
-  const requestedEmail = String(req.body?.targetEmail || req.query?.email || '').trim().toLowerCase();
-  let targetUser = null;
-
-  if (requestedUserId) {
-    targetUser = await findUserById(requestedUserId);
-  } else if (requestedEmail) {
-    targetUser = await findUserByEmail(requestedEmail);
-  }
-
-  const targetUserId = targetUser?.id || authUser.userId;
+// The single access gate for touching someone else's timeline — shared by
+// the read route and every write route so the two can't drift apart again
+// (GET used to check doctors only, leaving every other role unchecked).
+async function assertCanAccessTarget(authUser, targetUserId) {
   if (targetUserId === authUser.userId) {
-    return targetUserId;
+    return;
   }
 
   if (authUser.role === 'doctor') {
@@ -108,17 +108,33 @@ async function resolveTargetUser(req, authUser) {
     if (!linked) {
       throw new Error('You are not linked to this patient.');
     }
-    return targetUserId;
+    return;
   }
 
   if (authUser.role === 'patient') {
     const isFamilyMember = await isPatientLinkedToFamilyMember(authUser.userId, targetUserId);
     if (isFamilyMember) {
-      return targetUserId;
+      return;
     }
   }
 
-  throw new Error('You do not have permission to edit this timeline.');
+  throw new Error('You do not have permission to access this timeline.');
+}
+
+async function resolveTargetUser(req, authUser) {
+  const requestedUserId = String(req.body?.userId || req.query?.userId || '').trim();
+  const requestedEmail = String(req.body?.targetEmail || req.query?.email || '').trim().toLowerCase();
+  let targetUser = null;
+
+  if (requestedUserId) {
+    targetUser = await findUserById(requestedUserId);
+  } else if (requestedEmail) {
+    targetUser = await findUserByEmail(requestedEmail);
+  }
+
+  const targetUserId = targetUser?.id || authUser.userId;
+  await assertCanAccessTarget(authUser, targetUserId);
+  return targetUserId;
 }
 
 // Multer middleware wrapper with error handling
@@ -126,6 +142,12 @@ function handleReportFileUpload(req, res, next) {
   const contentType = String(req.headers['content-type'] || '');
   if (!contentType.startsWith('multipart/form-data')) {
     return next();
+  }
+
+  // Checked before the body is parsed: multer buffers up to 10 MB in memory,
+  // which an anonymous caller must not be able to make the server do.
+  if (!getAuthUser(req)?.userId) {
+    return res.status(401).json({ message: 'Authentication required.' });
   }
 
   uploadMemory.single('file')(req, res, async (err) => {
@@ -163,29 +185,6 @@ function sanitizeUnclearFields(value) {
   }
   return Array.isArray(fields) ? fields.filter((f) => KNOWN_UNCLEAR_FIELDS.includes(f)) : [];
 }
-
-// Return a short-lived signed URL for a storage object path (private buckets)
-router.get('/signed-url', async (req, res) => {
-  const path = String(req.query.path || '').trim();
-  if (!path) {
-    return res.status(400).json({ message: 'A storage path is required (e.g. reports/123.pdf).' });
-  }
-
-  try {
-    const bucket = process.env.SUPABASE_REPORTS_BUCKET || 'reports';
-    const expiresIn = Number(req.query.expiresIn) || 60; // seconds
-    const { data, error } = await supabase.storage.from(bucket).createSignedUrl(path, expiresIn);
-    if (error) {
-      console.error('Signed URL generation error:', error.message || error);
-      return res.status(502).json({ message: error.message || 'Failed to generate signed URL.' });
-    }
-
-    return res.json({ url: data.signedUrl });
-  } catch (err) {
-    console.error('Signed URL endpoint error:', err);
-    return res.status(500).json({ message: 'Unable to generate signed URL.' });
-  }
-});
 
 // Matches both "Lab Report" and "Lab Reports" (both appear in the wild —
 // see MedicalVault.jsx/Timeline.jsx's category configs), case-insensitively.
@@ -229,6 +228,14 @@ router.get('/lab-insights', async (req, res) => {
     });
 
     const data = await ragRes.json();
+    if (ragRes.status === 403 && data?.code === 'AI_NOTICE_ACK_REQUIRED') {
+      return res.status(403).json({
+        message: 'Please review how Swastha uses AI before generating lab insights.',
+        code: data.code,
+        feature: data.feature,
+        notice_version: data.notice_version,
+      });
+    }
     if (!ragRes.ok) {
       console.error('Lab insights generation failed:', data?.error || ragRes.status);
       return res.status(502).json({ message: data?.error || 'Could not generate lab insights.' });
@@ -237,7 +244,41 @@ router.get('/lab-insights', async (req, res) => {
     return res.json({ insights: data.insights, labReportCount: labReports.length });
   } catch (error) {
     console.error('Lab insights endpoint error:', error);
-    return res.status(500).json({ message: 'Failed to load lab insights', error: error.message });
+    return res.status(500).json({ message: 'Failed to load lab insights' });
+  }
+});
+
+// Short-lived signed URL for a report's attached file. The file is served
+// only after the same access check the timeline uses (owner, linked doctor,
+// confirmed family admin) — so it keeps working if the bucket is made private,
+// and a file URL alone is never what grants access.
+router.get('/:id/file-url', async (req, res) => {
+  try {
+    const user = getAuthUser(req);
+    if (!user?.userId) {
+      return res.status(401).json({ message: 'Authentication required.' });
+    }
+
+    const report = await getTimelineReportById(req.params.id);
+    const denied = () => res.status(403).json({ message: 'You do not have permission to access this file.' });
+    if (!report?.user_id || !report.fileUrl) {
+      return denied();
+    }
+
+    try {
+      await assertCanAccessTarget(user, report.user_id);
+    } catch (accessError) {
+      return res.status(accessError.status === 500 ? 500 : 403).json({ message: accessError.status === 500 ? accessError.message : 'You do not have permission to access this file.' });
+    }
+
+    const url = await createSignedFileUrl(report.fileUrl, 300);
+    if (!url) {
+      return res.status(404).json({ message: 'This report has no viewable file.' });
+    }
+    return res.json({ url, expiresInSeconds: 300 });
+  } catch (error) {
+    console.error('Report file URL error:', error);
+    return res.status(500).json({ message: 'Could not open this file.' });
   }
 });
 
@@ -252,40 +293,29 @@ router.get('/', async (req, res) => {
     const requestedUserId = String(req.query.userId || '').trim();
     let targetUserId = user.userId;
 
-    if (requestedUserId) {
-      targetUserId = requestedUserId;
-    } else if (requestedEmail) {
-      const targetUser = await findUserByEmail(requestedEmail);
+    if (requestedUserId || requestedEmail) {
+      const targetUser = requestedUserId
+        ? await findUserById(requestedUserId)
+        : await findUserByEmail(requestedEmail);
+      // An unknown target gets the same answer as an unauthorized one, so
+      // this can't be used to probe which emails/ids have accounts.
       if (!targetUser?.id) {
-        return res.status(404).json({ message: 'No account found for that email.' });
+        return res.status(403).json({ message: 'You do not have permission to access this timeline.' });
       }
       targetUserId = targetUser.id;
     }
 
-    // SECURITY: a DOCTOR requesting someone ELSE's reports (targetUserId
-    // !== the caller's own id) requires an accepted doctor_patient link.
-    // This was previously unchecked for doctors — any doctor could read
-    // any patient's reports by passing their id/email as a query param,
-    // link or no link. Scoped to role === 'doctor' only: this same query
-    // param shape is also used by the family-vault "view a family
-    // member's timeline" feature (Timeline.jsx), which has its own,
-    // separate authorization workflow (see backend/routes/family.js) that
-    // this route does not check — narrowing to doctors avoids breaking
-    // that path while still closing the doctor-side hole.
-    if (targetUserId !== user.userId && user.role === 'doctor') {
-      const allowed = await isDoctorLinkedToPatient(user.userId, targetUserId);
-      if (!allowed) {
-        return res.status(403).json({
-          message: 'You do not have access to this patient. The patient must accept your request first.',
-        });
-      }
+    try {
+      await assertCanAccessTarget(user, targetUserId);
+    } catch (accessError) {
+      return res.status(accessError.status || 403).json({ message: accessError.message });
     }
 
     const reports = await listTimelineReports(targetUserId);
     return res.json({ reports });
   } catch (error) {
     console.error('Timeline reports load error:', error);
-    return res.status(500).json({ message: 'Failed to load timeline reports', error: error.message });
+    return res.status(500).json({ message: 'Failed to load timeline reports' });
   }
 });
 
@@ -313,9 +343,11 @@ router.post('/', handleReportFileUpload, async (req, res) => {
     }
 
     const { sanitized } = validation;
-    const uploadedFileUrl = req.file
-      ? await uploadFileToSupabase(req.file)
-      : String(req.body?.fileUrl || '').trim() || null;
+    // A report's file only ever comes from an actual upload. A client-supplied
+    // fileUrl used to be stored as-is and later rendered in an iframe/link
+    // (script injection via "javascript:" URLs, or pointing at someone else's
+    // file), so it is ignored here.
+    const uploadedFileUrl = req.file ? await uploadFileToSupabase(req.file, targetUserId) : null;
 
     let report = await createTimelineReport({
       userId: targetUserId,
@@ -367,8 +399,11 @@ router.post('/', handleReportFileUpload, async (req, res) => {
 
     return res.status(201).json({ report });
   } catch (error) {
+    if (error?.status === 400) {
+      return res.status(400).json({ message: error.message });
+    }
     console.error('Timeline report save error:', error);
-    return res.status(500).json({ message: 'Failed to save timeline report', error: error.message });
+    return res.status(500).json({ message: 'Failed to save timeline report' });
   }
 });
 
@@ -400,10 +435,22 @@ router.put('/:id', handleReportFileUpload, async (req, res) => {
       return res.status(400).json({ message: validation.message });
     }
 
+    const existingReport = await getTimelineReport(targetUserId, reportId);
+    if (!existingReport) {
+      return res.status(404).json({ message: 'Report not found, or you do not have permission to edit it.' });
+    }
+
     const { sanitized } = validation;
-    const uploadedFileUrl = req.file
-      ? await uploadFileToSupabase(req.file)
-      : String(req.body?.fileUrl || '').trim() || null;
+    // The file changes only by uploading a new one, or is cleared when the
+    // client explicitly sends an empty fileUrl. Any other fileUrl value (a
+    // different URL, a script string) is ignored and the stored file kept.
+    let nextFileUrl = existingReport.fileUrl || null;
+    if (req.file) {
+      nextFileUrl = await uploadFileToSupabase(req.file, targetUserId);
+    } else if (req.body && Object.prototype.hasOwnProperty.call(req.body, 'fileUrl') && !String(req.body.fileUrl || '').trim()) {
+      nextFileUrl = null;
+    }
+    const uploadedFileUrl = nextFileUrl;
 
     let report = await updateTimelineReport(targetUserId, reportId, {
       title: sanitized.title,
@@ -421,6 +468,10 @@ router.put('/:id', handleReportFileUpload, async (req, res) => {
 
     if (!report) {
       return res.status(404).json({ message: 'Report not found, or you do not have permission to edit it.' });
+    }
+
+    if (existingReport.fileUrl && existingReport.fileUrl !== uploadedFileUrl) {
+      removeStoredFiles([existingReport.fileUrl]);
     }
 
     // Content may have changed — regenerate the summary before responding,
@@ -456,8 +507,11 @@ router.put('/:id', handleReportFileUpload, async (req, res) => {
 
     return res.json({ report });
   } catch (error) {
+    if (error?.status === 400) {
+      return res.status(400).json({ message: error.message });
+    }
     console.error('Timeline report update error:', error);
-    return res.status(500).json({ message: 'Failed to update timeline report', error: error.message });
+    return res.status(500).json({ message: 'Failed to update timeline report' });
   }
 });
 
@@ -488,7 +542,13 @@ router.post('/:id/summarize', async (req, res) => {
       return res.json({ report: existing });
     }
 
-    const summary = await generateSummary(req.headers.authorization, existing);
+    const { summary, consentRequired } = await generateSummaryResult(req.headers.authorization, existing);
+    if (consentRequired) {
+      return res.status(403).json({
+        message: 'Please review how Swastha uses AI before generating summaries.',
+        ...consentRequired,
+      });
+    }
     if (!summary) {
       return res.status(502).json({ message: 'Could not generate an AI summary for this report. Please try again.' });
     }
@@ -501,7 +561,7 @@ router.post('/:id/summarize', async (req, res) => {
     return res.json({ report: updated });
   } catch (error) {
     console.error('On-demand summary generation error:', error);
-    return res.status(500).json({ message: 'Failed to generate summary', error: error.message });
+    return res.status(500).json({ message: 'Failed to generate summary' });
   }
 });
 
@@ -529,6 +589,9 @@ router.delete('/:id', async (req, res) => {
     }
 
     const deletedReport = await deleteTimelineReport(targetUserId, reportId);
+    if (deletedReport?.fileUrl) {
+      removeStoredFiles([deletedReport.fileUrl]);
+    }
 
     const targetPatientId = targetUserId;
     const isFamilyAdminChange = user.role === 'patient' && targetPatientId !== user.userId;
@@ -556,7 +619,7 @@ router.delete('/:id', async (req, res) => {
     return res.json({ report: deletedReport });
   } catch (error) {
     console.error('Timeline report delete error:', error);
-    return res.status(500).json({ message: 'Failed to delete timeline report', error: error.message });
+    return res.status(500).json({ message: 'Failed to delete timeline report' });
   }
 });
 

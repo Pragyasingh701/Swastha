@@ -1,16 +1,14 @@
 import express from 'express';
-import jwt from 'jsonwebtoken';
 import {
-  createNotification,
   getNotificationsForUser,
   getUnreadNotificationCount,
   markAllNotificationsAsRead,
   markNotificationAsRead,
 } from '../db/notifications.js';
 import { getDoctorLinkStatuses } from '../db/doctorPatients.js';
+import { verifyAuthToken } from '../config/jwt.js';
 
 const router = express.Router();
-const JWT_SECRET = process.env.JWT_SECRET || 'swastha_dev_secret_key_2026';
 
 function getAuthUser(req) {
   const authHeader = req.headers.authorization || '';
@@ -21,7 +19,7 @@ function getAuthUser(req) {
   }
 
   try {
-    return jwt.verify(token, JWT_SECRET);
+    return verifyAuthToken(token);
   } catch {
     return null;
   }
@@ -68,43 +66,7 @@ router.get('/', async (req, res) => {
     return res.json({ notifications, unreadCount });
   } catch (error) {
     console.error('Fetch notifications error:', error);
-    return res.status(500).json({ message: 'Unable to load notifications.', error: error.message });
-  }
-});
-
-router.post('/', async (req, res) => {
-  const user = getAuthUser(req);
-
-  if (!user?.userId) {
-    return res.status(401).json({ message: 'Authentication required.' });
-  }
-
-  try {
-    const {
-      recipientId,
-      actorId,
-      actorRole = 'system',
-      eventType,
-      title,
-      message,
-      metadata = {},
-    } = req.body || {};
-
-    const targetRecipientId = recipientId || user.userId;
-    const notification = await createNotification({
-      recipientId: targetRecipientId,
-      actorId: actorId || user.userId,
-      actorRole,
-      eventType,
-      title,
-      message,
-      metadata,
-    });
-
-    return res.status(201).json({ notification });
-  } catch (error) {
-    console.error('Create notification error:', error);
-    return res.status(400).json({ message: error?.message || 'Unable to create notification.' });
+    return res.status(500).json({ message: 'Unable to load notifications.' });
   }
 });
 

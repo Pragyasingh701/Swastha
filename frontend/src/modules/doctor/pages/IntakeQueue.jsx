@@ -385,7 +385,7 @@ function IntakeQueueList({ sessions, isLoading, error, onSelect, onComplete, onR
   );
 }
 
-function IntakeHistoryList({ history, isLoading, error }) {
+function IntakeHistoryList({ history, isLoading, error, onSelect }) {
   if (error) {
     return (
       <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
@@ -405,7 +405,11 @@ function IntakeHistoryList({ history, isLoading, error }) {
       ) : (
         <ul className="divide-y divide-slate-100">
           {history.map((h) => (
-            <li key={h.session_id} className="flex items-center justify-between gap-4 px-5 py-4">
+            <li
+              key={h.session_id}
+              onClick={() => onSelect?.(h.session_id)}
+              className="flex items-center justify-between gap-4 px-5 py-4 cursor-pointer hover:bg-slate-50 transition-colors"
+            >
               <div className="flex items-center gap-3 min-w-0">
                 <span
                   className={`shrink-0 w-9 h-9 rounded-lg flex items-center justify-center ${
@@ -724,7 +728,12 @@ export default function IntakeQueue() {
               actioningId={actioningId}
             />
           ) : (
-            <IntakeHistoryList history={history} isLoading={historyLoading} error={historyError} />
+            <IntakeHistoryList
+              history={history}
+              isLoading={historyLoading}
+              error={historyError}
+              onSelect={setSelectedSessionId}
+            />
           )}
         </main>
       </div>

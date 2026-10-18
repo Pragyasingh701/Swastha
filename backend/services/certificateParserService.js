@@ -18,6 +18,20 @@ if (fs.existsSync('./backend/.env')) {
   dotenv.config();
 }
 
+// Maps a "/uploads/<name>" reference to a real path, only if the result stays
+// inside an uploads directory. Anything else (other absolute paths, "..", URLs)
+// returns null.
+function resolveUploadPath(fileInput) {
+  if (typeof fileInput !== 'string' || !fileInput.startsWith('/uploads/')) return null;
+  const roots = [path.resolve(process.cwd(), 'uploads'), path.resolve(process.cwd(), 'backend', 'uploads')];
+  const relative = fileInput.slice('/uploads/'.length);
+  for (const root of roots) {
+    const candidate = path.resolve(root, relative);
+    if (candidate.startsWith(root + path.sep) && fs.existsSync(candidate)) return candidate;
+  }
+  return null;
+}
+
 /**
  * Helper to convert file path or relative URL to clean Base64 data and mime type
  */
@@ -32,13 +46,13 @@ async function fileToBase64Payload(fileInput) {
   }
 
   try {
-    let filePath = fileInput;
-    if (typeof fileInput === 'string' && fileInput.startsWith('/uploads/')) {
-      filePath = path.join(process.cwd(), fileInput);
-      if (!fs.existsSync(filePath)) {
-        filePath = path.join(process.cwd(), 'backend', fileInput);
-      }
-    }
+    // Only files inside the uploads directory may be read. The path used to be
+    // taken from the request unchecked ("/uploads/../../etc/passwd", or any
+    // absolute path), which let a caller have arbitrary server files read and
+    // sent to the AI provider.
+    const resolved = resolveUploadPath(fileInput);
+    if (!resolved) return null;
+    const filePath = resolved;
 
     if (fs.existsSync(filePath)) {
       const fileBuffer = await fs.promises.readFile(filePath);

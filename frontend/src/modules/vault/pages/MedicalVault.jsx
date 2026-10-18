@@ -2,6 +2,8 @@ import React, { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "../../../context/AuthContext";
 import { getTimelineReports, generateReportSummary } from "../../../api/reports";
+import ReportFilePreview from "../../../components/common/ReportFilePreview";
+import { AI_NOTICE_ACCEPTED_EVENT } from "../../../components/common/AiNoticeGate";
 import ResponsiveSidebar from "../../../components/common/ResponsiveSidebar";
 import SettingsModal from "../../settings/components/SettingsModal";
 import ProfileDropdown from "../../settings/components/ProfileDropdown";
@@ -25,9 +27,6 @@ import {
   ExternalLink,
   Loader2,
   RefreshCw,
-  Stethoscope,
-  Building2,
-  CalendarDays,
 } from "lucide-react";
 import NotificationBell from "../../../components/common/NotificationBell";
 
@@ -182,30 +181,10 @@ function matchesReportSearch(report, query) {
   return searchableText.includes(normalizedQuery);
 }
 
-function getPreviewType(fileUrl) {
-  if (!fileUrl) return null;
-  const lower = String(fileUrl).toLowerCase();
-  if (/\.pdf(\?|$)/.test(lower)) return "pdf";
-  if (/\.(png|jpe?g|webp)(\?|$)/.test(lower)) return "image";
-  return null;
-}
-
-function getPreviewUrl(fileUrl) {
-  if (!fileUrl) return null;
-  const apiBase = import.meta.env.VITE_API_BASE_URL || `${window.location.origin}/api`;
-
-  try {
-    const parsed = new URL(fileUrl);
-    return fileUrl;
-  } catch (e) {
-    return `${apiBase}/reports/signed-url?path=${encodeURIComponent(fileUrl)}`;
-  }
-}
-
 export default function MedicalVault() {
   const { token, user, isAuthenticated } = useAuth();
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const requestedDocumentId = searchParams.get('document');
 
   const [reports, setReports] = useState([]);
@@ -213,12 +192,19 @@ export default function MedicalVault() {
   const [error, setError] = useState(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [categoryFilter, setCategoryFilter] = useState(null);
-  // View Details and AI Summary are two completely separate views now —
-  // each has its own selected-report state so opening one never shows
-  // content from the other.
   const [detailsReport, setDetailsReport] = useState(null);
-  const [summaryReport, setSummaryReport] = useState(null);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+
+  // Closing the details modal also drops ?document=, otherwise a reload
+  // (or any later reports update) would reopen it.
+  const closeDetails = () => {
+    setDetailsReport(null);
+    if (searchParams.has('document')) {
+      const next = new URLSearchParams(searchParams);
+      next.delete('document');
+      setSearchParams(next, { replace: true });
+    }
+  };
 
   useEffect(() => {
     if (!requestedDocumentId || reports.length === 0) return;
@@ -334,27 +320,21 @@ export default function MedicalVault() {
             activeCategory={categoryFilter}
             onClearFilter={() => setCategoryFilter(null)}
             onViewDetails={setDetailsReport}
-            onViewSummary={setSummaryReport}
           />
         </main>
       </div>
 
       {detailsReport && (
-        <ReportPreview report={detailsReport} onClose={() => setDetailsReport(null)} />
-      )}
-
-      {summaryReport && (
-        <AISummaryView
-          report={summaryReport}
+        <ReportPreview
+          report={detailsReport}
           token={token}
           onSummaryGenerated={(reportId, summary) => {
             // Reflect the freshly-generated summary in the list too, so
-            // reopening it later (or the "N summaries ready" style counts,
-            // if added later) doesn't need a full reload.
+            // reopening it later doesn't need a full reload.
             setReports((prev) => prev.map((r) => (r.id === reportId ? { ...r, analysis: summary } : r)));
-            setSummaryReport((prev) => (prev && prev.id === reportId ? { ...prev, analysis: summary } : prev));
+            setDetailsReport((prev) => (prev && prev.id === reportId ? { ...prev, analysis: summary } : prev));
           }}
-          onClose={() => setSummaryReport(null)}
+          onClose={closeDetails}
         />
       )}
 
@@ -521,7 +501,7 @@ function SmartCategorization({ categoryCounts, activeCategory, onSelectCategory 
 
 /* --------------------------- Recent activity --------------------------- */
 
-function RecentActivity({ reports, loading, error, activeCategory, onClearFilter, onViewDetails, onViewSummary }) {
+function RecentActivity({ reports, loading, error, activeCategory, onClearFilter, onViewDetails }) {
   const visibleDocs = reports;
 
   return (
@@ -559,7 +539,6 @@ function RecentActivity({ reports, loading, error, activeCategory, onClearFilter
                 key={doc.id}
                 doc={doc}
                 onViewDetails={() => onViewDetails(doc)}
-                onViewSummary={() => onViewSummary(doc)}
               />
             ))}
           </div>
@@ -581,8 +560,7 @@ function RecentActivity({ reports, loading, error, activeCategory, onClearFilter
                     key={doc.id}
                     doc={doc}
                     onViewDetails={() => onViewDetails(doc)}
-                    onViewSummary={() => onViewSummary(doc)}
-                  />
+                      />
                 ))}
               </tbody>
             </table>
@@ -593,7 +571,7 @@ function RecentActivity({ reports, loading, error, activeCategory, onClearFilter
   );
 }
 
-function DocCard({ doc, onViewDetails, onViewSummary }) {
+function DocCard({ doc, onViewDetails }) {
   const meta = categoryMeta(doc.category);
   const Icon = meta.icon;
 
@@ -618,28 +596,19 @@ function DocCard({ doc, onViewDetails, onViewSummary }) {
         </span>
       </div>
 
-      <div className="flex items-center gap-2">
-        <button
-          type="button"
-          onClick={onViewDetails}
-          className="flex-1 text-xs font-semibold px-3.5 py-2 rounded-lg bg-slate-100 text-slate-700 hover:bg-slate-200 transition-all duration-200"
-        >
-          View Details
-        </button>
-        <button
-          type="button"
-          onClick={onViewSummary}
-          className="flex-1 flex items-center justify-center gap-1.5 text-xs font-semibold px-3.5 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 hover:shadow-md transition-all duration-200"
-        >
-          <Sparkles size={13} />
-          AI Summary
-        </button>
-      </div>
+      <button
+        type="button"
+        onClick={onViewDetails}
+        className="w-full flex items-center justify-center gap-1.5 text-xs font-semibold px-3.5 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 hover:shadow-md transition-all duration-200"
+      >
+        <Sparkles size={13} />
+        View Details
+      </button>
     </div>
   );
 }
 
-function DocRow({ doc, onViewDetails, onViewSummary }) {
+function DocRow({ doc, onViewDetails }) {
   const meta = categoryMeta(doc.category);
   const Icon = meta.icon;
 
@@ -665,23 +634,14 @@ function DocRow({ doc, onViewDetails, onViewSummary }) {
         {formatDate(doc.reportDate)}
       </td>
       <td className="py-4 text-right">
-        <div className="flex items-center justify-end gap-2">
-          <button
-            type="button"
-            onClick={onViewDetails}
-            className="text-xs font-semibold px-3.5 py-2 rounded-lg whitespace-nowrap bg-slate-100 text-slate-700 hover:bg-slate-200 transition-all duration-200"
-          >
-            View Details
-          </button>
-          <button
-            type="button"
-            onClick={onViewSummary}
-            className="flex items-center gap-1.5 text-xs font-semibold px-3.5 py-2 rounded-lg whitespace-nowrap bg-blue-600 text-white hover:bg-blue-700 hover:shadow-md transition-all duration-200"
-          >
-            <Sparkles size={13} />
-            AI Summary
-          </button>
-        </div>
+        <button
+          type="button"
+          onClick={onViewDetails}
+          className="inline-flex items-center gap-1.5 text-xs font-semibold px-3.5 py-2 rounded-lg whitespace-nowrap bg-blue-600 text-white hover:bg-blue-700 hover:shadow-md transition-all duration-200"
+        >
+          <Sparkles size={13} />
+          View Details
+        </button>
       </td>
     </tr>
   );
@@ -689,10 +649,46 @@ function DocRow({ doc, onViewDetails, onViewSummary }) {
 
 /* --------------------------- Report preview --------------------------- */
 
-function ReportPreview({ report, onClose }) {
+/* One modal for both the record and its AI summary. If the report has no
+   summary yet, generation kicks off the moment the modal opens. */
+function ReportPreview({ report, token, onSummaryGenerated, onClose }) {
+  const [generating, setGenerating] = useState(false);
+  const [genError, setGenError] = useState(null);
+
   const meta = categoryMeta(report.category);
   const Icon = meta.icon;
   const fieldLabels = summaryFieldLabels(report.category);
+
+  async function runGenerate() {
+    setGenerating(true);
+    setGenError(null);
+    try {
+      const { report: updated } = await generateReportSummary(report.id, token);
+      onSummaryGenerated(report.id, updated.analysis);
+    } catch (err) {
+      console.error("Failed to generate AI summary:", err);
+      setGenError(err.message || "Could not generate a summary. Please try again.");
+    } finally {
+      setGenerating(false);
+    }
+  }
+
+  useEffect(() => {
+    if (!report.analysis && !generating) {
+      runGenerate();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [report.id]);
+
+  // Generation was refused because the AI notice hadn't been accepted; once the
+  // global notice (AiNoticeGate) is accepted, try again without a manual retry.
+  useEffect(() => {
+    if (!genError || report.analysis) return undefined;
+    const retry = () => runGenerate();
+    window.addEventListener(AI_NOTICE_ACCEPTED_EVENT, retry);
+    return () => window.removeEventListener(AI_NOTICE_ACCEPTED_EVENT, retry);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [genError, report.analysis]);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 px-4 py-6">
@@ -723,6 +719,43 @@ function ReportPreview({ report, onClose }) {
         <div className="mt-6 grid gap-6 md:grid-cols-2">
           {/* Left: text, metadata and notes/analysis */}
           <div className="space-y-4">
+            <div className="rounded-2xl border border-blue-100 bg-blue-50/60 p-4">
+              <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-blue-700">
+                <Sparkles size={13} />
+                AI Summary
+              </p>
+              {generating ? (
+                <div className="flex items-center gap-2 mt-3 text-sm text-slate-600">
+                  <Loader2 className="w-4 h-4 text-blue-600 animate-spin" />
+                  Generating AI summary...
+                </div>
+              ) : genError ? (
+                <div className="mt-3">
+                  <p className="text-sm text-red-600">{genError}</p>
+                  <button
+                    type="button"
+                    onClick={runGenerate}
+                    className="mt-2 inline-flex items-center gap-1.5 text-xs font-semibold text-red-600 hover:text-red-700"
+                  >
+                    <RefreshCw size={12} />
+                    Retry
+                  </button>
+                </div>
+              ) : (
+                <>
+                  <p className="mt-2 text-sm text-slate-800 leading-relaxed whitespace-pre-line">{report.analysis}</p>
+                  <button
+                    type="button"
+                    onClick={runGenerate}
+                    className="mt-3 inline-flex items-center gap-1.5 text-xs font-medium text-blue-600 hover:text-blue-700"
+                  >
+                    <RefreshCw size={12} />
+                    Regenerate
+                  </button>
+                </>
+              )}
+            </div>
+
             <div className="grid gap-3 sm:grid-cols-2">
               <div className="rounded-xl border border-slate-100 bg-slate-50 p-3">
                 <p className="text-xs text-slate-500 ">Date</p>
@@ -761,244 +794,23 @@ function ReportPreview({ report, onClose }) {
               </div>
             )}
 
-            {report.analysis && (
-              <div className="rounded-2xl border border-blue-100 bg-blue-50 p-4">
-                <p className="text-sm text-blue-700 ">Analysis / Summary</p>
-                <p className="mt-2 text-sm text-slate-700 whitespace-pre-line">{report.analysis}</p>
-              </div>
-            )}
           </div>
 
           {/* Right: document preview */}
           <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 h-full flex flex-col">
             <p className="text-sm text-slate-500 mb-3">Document preview</p>
-            <div className="flex-1 overflow-hidden">
+            <div className="flex-1 overflow-hidden flex flex-col">
               {report.fileUrl ? (
-                getPreviewType(report.fileUrl) === "pdf" ? (
-                  <iframe
-                    src={getPreviewUrl(report.fileUrl)}
-                    title="Report PDF preview"
-                    className="w-full h-full rounded-xl border border-slate-200 "
-                    style={{ minHeight: 360 }}
-                  />
-                ) : getPreviewType(report.fileUrl) === "image" ? (
-                  <img
-                    src={getPreviewUrl(report.fileUrl)}
-                    alt={report.title || "Uploaded document"}
-                    className="w-full h-full rounded-xl object-contain"
-                  />
-                ) : (
-                  <p className="text-sm text-slate-500 ">Preview not available for this file type.</p>
-                )
+                <ReportFilePreview
+                  reportId={report.id}
+                  fileUrl={report.fileUrl}
+                  title={report.title}
+                  linkLabel="Open document"
+                />
               ) : (
                 <p className="text-xs text-slate-400 ">No file attached to this report.</p>
               )}
             </div>
-
-            {report.fileUrl && (
-              <a
-                href={getPreviewUrl(report.fileUrl)}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="mt-4 inline-flex items-center gap-2 rounded-2xl border border-blue-100 bg-blue-50 px-4 py-2 text-blue-700 text-sm font-semibold transition-colors hover:bg-blue-100 "
-              >
-                <FileText size={16} />
-                Open document
-              </a>
-            )}
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-/* --------------------------- AI Summary view --------------------------- */
-/* Completely separate from ReportPreview — no shared modal, no shared
-   content. If the report has no summary yet, generation kicks off the
-   moment this view opens (not on a separate button click). */
-
-function AISummaryView({ report: initialReport, token, onSummaryGenerated, onClose }) {
-  const [report, setReport] = useState(initialReport);
-  const [generating, setGenerating] = useState(false);
-  const [genError, setGenError] = useState(null);
-
-  const meta = categoryMeta(report.category);
-  const Icon = meta.icon;
-  const fieldLabels = summaryFieldLabels(report.category);
-
-  async function runGenerate() {
-    setGenerating(true);
-    setGenError(null);
-    try {
-      const { report: updated } = await generateReportSummary(report.id, token);
-      setReport(updated);
-      onSummaryGenerated(report.id, updated.analysis);
-    } catch (err) {
-      console.error("Failed to generate AI summary:", err);
-      setGenError(err.message || "Could not generate a summary. Please try again.");
-    } finally {
-      setGenerating(false);
-    }
-  }
-
-  useEffect(() => {
-    if (!report.analysis && !generating) {
-      runGenerate();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  const highlights = [
-    fieldLabels.diagnosis && report.diagnosis
-      ? { label: fieldLabels.diagnosis, value: report.diagnosis, icon: Stethoscope }
-      : null,
-    fieldLabels.medicines && report.medicines
-      ? { label: fieldLabels.medicines, value: report.medicines, icon: ClipboardList }
-      : null,
-  ].filter(Boolean);
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 px-4 py-6">
-      <div className="w-full max-w-5xl max-h-[90vh] overflow-y-auto rounded-3xl bg-white shadow-2xl">
-        {/* Header banner */}
-        <div className="bg-gradient-to-br from-blue-600 to-blue-700 rounded-t-3xl p-6 text-white">
-          <div className="flex items-start justify-between gap-4">
-            <div className="flex items-center gap-3 min-w-0">
-              <div className="w-11 h-11 rounded-xl bg-white/15 flex items-center justify-center shrink-0">
-                <Sparkles size={20} />
-              </div>
-              <div className="min-w-0">
-                <p className="text-xs font-semibold uppercase tracking-wide text-blue-100">AI Summary</p>
-                <h2 className="text-lg font-semibold truncate">{report.title || "Untitled report"}</h2>
-              </div>
-            </div>
-            <button
-              type="button"
-              onClick={onClose}
-              className="rounded-full bg-white/15 p-2.5 text-white transition-colors hover:bg-white/25 shrink-0"
-            >
-              <X size={16} />
-            </button>
-          </div>
-
-          <div className="flex items-center flex-wrap gap-x-4 gap-y-1.5 mt-4 text-xs text-blue-100">
-            <span className="flex items-center gap-1.5">
-              <CalendarDays size={13} />
-              {formatDate(report.reportDate)}
-            </span>
-            {report.doctor && (
-              <span className="flex items-center gap-1.5">
-                <Stethoscope size={13} />
-                {report.doctor}
-              </span>
-            )}
-            {report.hospital && (
-              <span className="flex items-center gap-1.5">
-                <Building2 size={13} />
-                {report.hospital}
-              </span>
-            )}
-          </div>
-        </div>
-
-        <div className="p-6 grid gap-6 md:grid-cols-2">
-          {/* Left: AI summary and highlights */}
-          <div>
-            {generating ? (
-              <div className="flex flex-col items-center justify-center py-10 text-center">
-                <Loader2 className="w-7 h-7 text-blue-600 animate-spin mb-3" />
-                <p className="text-sm font-medium text-slate-700 ">Generating AI summary...</p>
-                <p className="text-xs text-slate-400 mt-1">Reading the full report to write a plain-language summary.</p>
-              </div>
-            ) : genError ? (
-              <div className="rounded-xl border border-red-100 bg-red-50 p-4 text-center">
-                <p className="text-sm font-semibold text-red-700 ">Couldn't generate a summary</p>
-                <p className="text-xs text-red-600 mt-1">{genError}</p>
-                <button
-                  type="button"
-                  onClick={runGenerate}
-                  className="mt-3 inline-flex items-center gap-2 bg-red-600 hover:bg-red-700 transition-colors text-white text-xs font-semibold px-4 py-2 rounded-lg"
-                >
-                  <RefreshCw size={13} />
-                  Retry
-                </button>
-              </div>
-            ) : (
-              <>
-                <div className="rounded-2xl border border-blue-100 bg-blue-50/60 p-4">
-                  <p className="text-sm text-slate-800 leading-relaxed whitespace-pre-line">{report.analysis}</p>
-                </div>
-
-                {highlights.length > 0 && (
-                  <div className="grid gap-3 sm:grid-cols-2 mt-4">
-                    {highlights.map(({ label, value, icon: HighlightIcon }) => (
-                      <div key={label} className="rounded-xl border border-slate-100 bg-slate-50 p-3">
-                        <p className="flex items-center gap-1.5 text-xs text-slate-500 ">
-                          <HighlightIcon size={13} />
-                          {label}
-                        </p>
-                        <p className="mt-1 text-sm font-semibold text-slate-900 whitespace-pre-line">{value}</p>
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                <div className="flex items-center gap-2 mt-4">
-                  <span className={`inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full ${meta.tone}`}>
-                    <Icon size={12} />
-                    {report.category || "Consultation"}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={runGenerate}
-                    className="ml-auto inline-flex items-center gap-1.5 text-xs font-medium text-blue-600 hover:text-blue-700 "
-                  >
-                    <RefreshCw size={12} />
-                    Regenerate
-                  </button>
-                </div>
-              </>
-            )}
-          </div>
-
-          {/* Right: preview */}
-          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 h-full flex flex-col">
-            <p className="text-sm text-slate-500 mb-3">Document preview</p>
-            <div className="flex-1 overflow-hidden">
-              {report.fileUrl ? (
-                getPreviewType(report.fileUrl) === "pdf" ? (
-                  <iframe
-                    src={getPreviewUrl(report.fileUrl)}
-                    title="Summary PDF preview"
-                    className="w-full h-full rounded-xl border border-slate-200 "
-                    style={{ minHeight: 360 }}
-                  />
-                ) : getPreviewType(report.fileUrl) === "image" ? (
-                  <img
-                    src={getPreviewUrl(report.fileUrl)}
-                    alt={report.title || "Uploaded document"}
-                    className="w-full h-full rounded-xl object-contain"
-                  />
-                ) : (
-                  <p className="text-sm text-slate-500 ">Preview not available for this file type.</p>
-                )
-              ) : (
-                <p className="text-xs text-slate-400 ">No file attached to this report.</p>
-              )}
-            </div>
-
-            {report.fileUrl && (
-              <a
-                href={getPreviewUrl(report.fileUrl)}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="mt-4 inline-flex items-center gap-2 rounded-2xl border border-blue-100 bg-blue-50 px-4 py-2 text-blue-700 text-sm font-semibold transition-colors hover:bg-blue-100 "
-              >
-                <FileText size={16} />
-                Open document
-              </a>
-            )}
           </div>
         </div>
       </div>

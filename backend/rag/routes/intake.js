@@ -5,6 +5,7 @@ import { supabase } from '../config/supabase.js';
 import { synthesizeSpeech, buildOptionsSpeech, normalizeLanguage, DEFAULT_LANGUAGE } from '../services/ttsService.js';
 import { transcribeSpeech, isSupportedAudioMime } from '../services/asrService.js';
 import { requireAuth } from '../middleware/auth.js';
+import { requireNoticeAck } from '../middleware/requireNoticeAck.js';
 
 const router = express.Router();
 
@@ -173,8 +174,15 @@ router.get('/:sessionId', requireAuth, async (req, res) => {
  * the first dialogue-engine turn. patient_id comes from the JWT
  * (req.user.userId), never from the request body — a client can't start a
  * session on someone else's behalf.
+ *
+ * requireNoticeAck gates here (session creation), not on every later
+ * turn/transcribe/replay call — those all require an existing session, which
+ * only this route (or clinic.js's verify-otp, gated the same way) can create,
+ * so this is the one point that actually needs to block. Intake sends the
+ * patient's answers to AI services and, for voice, their audio to a speech
+ * provider, so the patient has to have accepted that first.
  */
-router.post('/start', requireAuth, async (req, res) => {
+router.post('/start', requireAuth, requireNoticeAck('voice_intake'), async (req, res) => {
   const patientId = req.user.userId;
   // Language is chosen once, here, and stored on the session row (Voice
   // Layer PRD §6). Unrecognised or absent values fall back to the default
@@ -219,14 +227,10 @@ router.post('/turn', requireAuth, async (req, res) => {
   }
 
   try {
-    const { session, turn } = await advanceIntakeSession({ sessionId, patientMessage: message });
-
-    // Ownership check after the fetch (advanceIntakeSession already loaded
-    // the row) — a patient cannot advance someone else's session by
-    // guessing a session_id.
-    if (session.patient_id !== patientId) {
-      return res.status(403).json({ error: 'This session does not belong to you.' });
-    }
+    // advanceIntakeSession verifies the session belongs to patientId before
+    // it calls the model or writes anything — a patient cannot advance
+    // someone else's session by guessing a session_id.
+    const { session, turn } = await advanceIntakeSession({ sessionId, patientId, patientMessage: message });
 
     // Read back from the session row, not the request — the language is
     // fixed at /start and a client cannot switch voices mid-session.
@@ -251,6 +255,9 @@ router.post('/turn', requireAuth, async (req, res) => {
       skipAudio === true ? payload : await withAudio(payload, turn.next_question, language)
     );
   } catch (err) {
+    if (err.status === 403) {
+      return res.status(403).json({ error: err.message });
+    }
     console.error(`[POST /api/intake/turn] failed for patient ${patientId}, session ${sessionId}:`, err);
     return res.status(500).json({ error: 'Could not process intake turn.' });
   }
@@ -269,11 +276,7 @@ router.post('/finalize', requireAuth, async (req, res) => {
   }
 
   try {
-    const session = await finalizeIntakeSession(sessionId);
-
-    if (session.patient_id !== patientId) {
-      return res.status(403).json({ error: 'This session does not belong to you.' });
-    }
+    const session = await finalizeIntakeSession(sessionId, patientId);
 
     return res.status(200).json({
       session_id: session.id,
@@ -282,6 +285,9 @@ router.post('/finalize', requireAuth, async (req, res) => {
       completed_at: session.completed_at,
     });
   } catch (err) {
+    if (err.status === 403) {
+      return res.status(403).json({ error: err.message });
+    }
     console.error(`[POST /api/intake/finalize] failed for patient ${patientId}, session ${sessionId}:`, err);
     return res.status(500).json({ error: 'Could not finalize intake session.' });
   }

@@ -18,6 +18,7 @@
 // Returns base64 inline for the caller to embed in JSON (PRD: no Supabase
 // Storage / signed-URL setup for this phase, and audio is played inline
 // rather than served as a forced download).
+import { recordAiRequest } from '../utils/aiRequestLog.js';
 import { Buffer } from 'node:buffer';
 import { EdgeTTS } from 'edge-tts-universal';
 import { currentKey, retireKey, __resetKeyPool } from '../config/sarvamKeys.js';
@@ -322,7 +323,9 @@ export async function synthesizeSpeech(text, language = DEFAULT_LANGUAGE) {
   const cached = readCache(cleanText, lang);
   if (cached) return { ...cached, cached: true };
 
+  const sarvamStartedAt = Date.now();
   const sarvam = await synthesizeWithSarvam(cleanText, lang);
+  recordAiRequest({ kind: 'tts', provider: sarvam.ok ? 'sarvam' : null, ok: sarvam.ok, latencyMs: Date.now() - sarvamStartedAt, errorCode: sarvam.ok ? null : sarvam.error_code });
   if (sarvam.ok) {
     writeCache(cleanText, lang, sarvam);
     return { ...sarvam, cached: false };
@@ -332,7 +335,9 @@ export async function synthesizeSpeech(text, language = DEFAULT_LANGUAGE) {
   // quota, rate limit, timeout, 5xx. A lesser voice beats a silent turn.
   console.warn(`[tts] sarvam failed (${sarvam.error_code}), falling back to edge-tts`);
 
+  const edgeStartedAt = Date.now();
   const edge = await synthesizeWithEdge(cleanText, lang);
+  recordAiRequest({ kind: 'tts', provider: edge.ok ? 'edge-tts' : null, ok: edge.ok, latencyMs: Date.now() - edgeStartedAt, errorCode: edge.ok ? null : edge.error_code });
   if (edge.ok) {
     writeCache(cleanText, lang, edge);
     return { ...edge, cached: false, degraded: true };
