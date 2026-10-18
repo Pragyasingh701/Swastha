@@ -16,7 +16,7 @@ async function notifySafely(args) {
 }
 
 // Doctor -> patient linking is now request-based (status column, added in
-// supabase/migrations/20260820051121_add_status_to_doctor_patient.sql):
+// supabase/migrations_archive/20260820051121_add_status_to_doctor_patient.sql):
 //   pending   -> doctor requested, patient hasn't responded. No health
 //                data is ever returned for a pending link — only
 //                { id, patient_name, status } (see minimalDoctorPatientCard).
@@ -32,7 +32,7 @@ async function notifySafely(args) {
 // route that forgets to check status separately.
 //
 // ACCESS EXPIRY (access_expires_at column, added in
-// supabase/migrations/20260830010000_add_access_expires_at_to_doctor_patient.sql):
+// supabase/migrations_archive/20260830010000_add_access_expires_at_to_doctor_patient.sql):
 // an 'accepted' link only grants access for ACCESS_DURATION_MS from the
 // moment of acceptance — isDoctorLinkedToPatient and getDoctorPatients
 // both treat an accepted-but-expired link as if it were no longer

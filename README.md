@@ -95,7 +95,7 @@ Swastha/
 
 **Patients and doctors are separate tables**, not a shared `users` table with a role column — that
 split (`patients` / `doctors` / `pending_registrations`, replacing the old single `users` table)
-landed in a dedicated DB reorg; see `supabase/migrations/` at the repo root for the migration
+landed in a dedicated DB reorg; see `supabase/migrations_archive/` at the repo root for the migration
 history if you need it.
 
 `reports`, `report_embeddings`, `vault_table`, and `family_members` all reference `patients.id` via
@@ -113,7 +113,7 @@ application code (`backend/db/*.js`), not copied from a migration file. Cross-ch
 Run the following in your **Supabase Dashboard > SQL Editor** to construct the schema:
 
 ```sql
--- 1. Patients (from supabase/migrations/20260819171220_create_patients_doctors_pending_tables.sql)
+-- 1. Patients (from supabase/migrations_archive/20260819171220_create_patients_doctors_pending_tables.sql)
 CREATE TABLE public.patients (
   id                   VARCHAR PRIMARY KEY,
   email                VARCHAR NOT NULL UNIQUE,
@@ -215,7 +215,7 @@ CREATE INDEX IF NOT EXISTS report_embeddings_user_id_idx ON public.report_embedd
 -- search over the whole table. An exact scan over that already-small,
 -- already-scoped set is not meaningfully slower than an ANN lookup would
 -- be, and it's exact rather than approximate. See
--- supabase/migrations/20260930051136_drop_report_embeddings_hnsw_idx.sql.
+-- supabase/migrations_archive/20260930051136_drop_report_embeddings_hnsw_idx.sql.
 
 -- 6. Family Vault Table (⚠️ hand-created, see note above)
 CREATE TABLE public.vault_table (
@@ -260,7 +260,7 @@ CREATE INDEX IF NOT EXISTS idx_family_members_parent_member_id ON public.family_
 
 -- 8. Doctor ↔ Patient Link Table (⚠️ hand-created, see note above — except
 -- access_expires_at, which DOES have a real migration:
--- supabase/migrations/20260830010000_add_access_expires_at_to_doctor_patient.sql)
+-- supabase/migrations_archive/20260830010000_add_access_expires_at_to_doctor_patient.sql)
 -- A doctor sends a link request (status='pending'); the patient accepts or
 -- declines, in-app or via a one-shot emailed token (email_action_token).
 -- Acceptance is NOT permanent: access_expires_at is stamped to 24h from the
