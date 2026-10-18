@@ -93,7 +93,7 @@ Swastha/
 ├── supabase/
 │   ├── schema/                     # 00000000000000_baseline_schema.sql: the whole database schema, kept up to date
 │   └── migrations_archive/         # Every migration script, kept as history (run in the Supabase SQL editor)
-├── scripts/                        # hash-legacy-passwords.js (one-off), purge-audit-log.js (scheduled)
+├── scripts/                        # purge-audit-log.js (scheduled)
 ├── vercel.json                     # Frontend hosting: SPA rewrite, security headers, Content-Security-Policy
 ├── package.json                    # Monorepo root script & dependency manifest
 └── README.md
