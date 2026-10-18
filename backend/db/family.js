@@ -560,11 +560,24 @@ export const deleteFamilyVaultForUser = async (userId) => {
   }
 };
 
+// Checkups due from today up to 30 days ahead. A date in the past is overdue, not
+// upcoming, and one further out is not due yet. Dates are stored as YYYY-MM-DD.
+export const UPCOMING_CHECKUP_DAYS = 30;
+
+export const countUpcomingCheckups = (members = [], now = new Date()) => {
+  const today = now.toISOString().slice(0, 10);
+  const limit = new Date(now.getTime() + UPCOMING_CHECKUP_DAYS * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  return members.filter((member) => {
+    const due = String(member.nextCheckupDate || '').slice(0, 10);
+    return due >= today && due <= limit;
+  }).length;
+};
+
 export const getFamilyVaultSummary = async ({ userId } = {}) => {
   const members = await listFamilyMembers({ userId, includeDeleted: false });
 
   const relationshipTags = [...new Set(members.map((member) => member.relationshipTag).filter(Boolean))].sort();
-  const upcomingCheckups = members.filter((member) => member.nextCheckupDate).length;
+  const upcomingCheckups = countUpcomingCheckups(members);
   const membersWithHealthNotes = members.filter((member) => member.healthOverview || member.notes).length;
   const recentVisits = members.filter((member) => member.lastVisitDate).length;
 

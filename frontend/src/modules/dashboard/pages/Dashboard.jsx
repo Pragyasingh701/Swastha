@@ -19,7 +19,7 @@ import {
   ClipboardList,
   Settings,
   PlusCircle,
-  AlertTriangle,
+  Pill,
   FileText,
   Sparkles,
   ChevronRight,
@@ -65,18 +65,24 @@ function parseMedicationEntries(reports = []) {
       const cleaned = line.replace(/^[•*\-\d.\s]+/, '').trim();
       if (!cleaned) continue;
 
-      const separatorIndex = cleaned.search(/\s*[-–—]\s*/);
-      const name = separatorIndex >= 0 ? cleaned.slice(0, separatorIndex).trim() : cleaned;
-      const schedule = separatorIndex >= 0 ? cleaned.slice(separatorIndex + 1).trim() : 'As prescribed';
-      const finalName = name || cleaned;
-      const cleanedName = finalName.replace(/\s+\d+(?:\.\d+)?\s*(?:mg|mcg|g|ml|iu|%|tablet|tablets|capsule|capsules)\s*$/i, '').trim();
+      // A name and its dosing are split at a dash that stands apart (" - ", an en or
+      // em dash) or a colon. A hyphen inside a name ("Dolo-650") stays in the name.
+      const separator = cleaned.match(/\s+[-–—]\s+|\s*[–—]\s*|\s*:\s+/);
+      const separatorIndex = separator ? separator.index : -1;
+      const nameText = (separatorIndex >= 0 ? cleaned.slice(0, separatorIndex) : cleaned).trim() || cleaned;
+      const dosing = separatorIndex >= 0 ? cleaned.slice(separatorIndex + separator[0].length).trim() : '';
+      // A strength written after the name ("Metformin 500mg") is kept, shown with the dosing.
+      const strengthMatch = nameText.match(/\s+(\d+(?:\.\d+)?\s*(?:mg|mcg|g|ml|iu|%|tablet|tablets|capsule|capsules))\s*$/i);
+      const cleanedName = strengthMatch ? nameText.slice(0, strengthMatch.index).trim() : nameText;
+      const finalName = cleanedName || nameText;
+      const schedule = [strengthMatch ? strengthMatch[1].replace(/\s+/g, '') : '', dosing].filter(Boolean).join(' · ') || 'As prescribed';
       const key = normalizeMedicationKey(cleanedName || finalName);
 
       if (seen.has(key)) continue;
       seen.add(key);
       meds.push({
         name: cleanedName || finalName,
-        schedule: schedule || 'As prescribed',
+        schedule,
         color: meds.length % 2 === 0 ? 'bg-blue-600' : 'bg-orange-500',
       });
     }
@@ -207,9 +213,12 @@ function CurrentMedications({ medications = [] }) {
   return (
     <div className="bg-white border border-slate-200 rounded-xl p-5">
       <div className="flex items-center justify-between mb-4">
-        <h3 className="text-base font-semibold text-slate-900 ">
-          Current Medications
-        </h3>
+        <div>
+          <h3 className="text-base font-semibold text-slate-900 ">
+            Medicines on Record
+          </h3>
+          <p className="text-xs text-slate-400 mt-0.5">From your uploaded prescriptions</p>
+        </div>
         <button
           type="button"
           onClick={() => setIsMedicationModalOpen(true)}
@@ -222,7 +231,7 @@ function CurrentMedications({ medications = [] }) {
 
       <div className="space-y-3">
         {medications.length === 0 ? (
-          <p className="text-sm text-slate-500">No active medications found in your uploaded reports.</p>
+          <p className="text-sm text-slate-500">No medicines found in your uploaded prescriptions.</p>
         ) : (
           visibleMedications.map(({ name, schedule, color }) => (
             <div key={name} className="flex items-center gap-3">
@@ -242,14 +251,14 @@ function CurrentMedications({ medications = [] }) {
             <div className="flex items-start justify-between gap-4">
               <div>
                 <p className="text-xs font-semibold uppercase tracking-wide text-blue-600">Medication list</p>
-                <h2 className="mt-2 text-xl font-semibold text-slate-900">All medications</h2>
+                <h2 className="mt-2 text-xl font-semibold text-slate-900">All medicines on record</h2>
               </div>
               <button type="button" onClick={() => setIsMedicationModalOpen(false)} className="rounded-lg px-2 py-1 text-2xl leading-none text-slate-400 hover:bg-slate-100 hover:text-slate-700" aria-label="Close medication list">&times;</button>
             </div>
 
             <div className="mt-5 max-h-[60vh] space-y-3 overflow-y-auto pr-1">
               {medications.length === 0 ? (
-                <p className="text-sm text-slate-500">No active medications found in your uploaded reports.</p>
+                <p className="text-sm text-slate-500">No medicines found in your uploaded prescriptions.</p>
               ) : (
                 medications.map(({ name, schedule, color }) => (
                   <div key={`${name}-modal`} className="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
@@ -395,12 +404,11 @@ export default function Dashboard() {
       iconBg: "bg-blue-50 text-blue-600",
     },
     {
-      icon: AlertTriangle,
-      tag: medications.length > 0 ? "Active meds" : "No alerts",
-      tagColor: "text-orange-600",
+      icon: Pill,
+      tag: medications.length > 0 ? "From your prescriptions" : null,
       value: String(medications.length || 0),
-      label: "Medicine Alerts",
-      iconBg: "bg-orange-50 text-orange-600",
+      label: "Medicines on Record",
+      iconBg: "bg-blue-50 text-blue-600",
     },
     {
       icon: ClipboardList,
@@ -426,10 +434,10 @@ export default function Dashboard() {
               </h2>
               <p className="text-sm text-slate-500 mt-1">
                 {isProfileLoading
-                  ? 'Loading your profile from the database...'
+                  ? 'Loading your profile...'
                   : profile?.role
-                    ? `${profile.role.charAt(0).toUpperCase() + profile.role.slice(1)} profile from the database.`
-                    : 'Your clinical intelligence overview for today.'}
+                    ? `${profile.role.charAt(0).toUpperCase() + profile.role.slice(1)} account`
+                    : 'Your health overview for today.'}
               </p>
             </div>
           </div>
