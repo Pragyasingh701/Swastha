@@ -5,6 +5,7 @@ import SettingsModal from './SettingsModal';
 import ChangePasswordModal from './ChangePasswordModal';
 import DeleteAccountModal from './DeleteAccountModal';
 import DoctorAccessModal from './DoctorAccessModal';
+import { OPEN_SETTINGS_EVENT } from '../../../components/common/settingsEvents';
 import {
   User,
   LogOut,
@@ -26,10 +27,18 @@ export default function ProfileDropdown({ customProfile }) {
   const [isDoctorAccessOpen, setIsDoctorAccessOpen] = useState(false);
   const dropdownRef = useRef(null);
 
+  // The sidebar's Settings link asks for this window through an event, so the page
+  // only ever has one Settings window mounted.
+  useEffect(() => {
+    const open = () => setIsSettingsOpen(true);
+    window.addEventListener(OPEN_SETTINGS_EVENT, open);
+    return () => window.removeEventListener(OPEN_SETTINGS_EVENT, open);
+  }, []);
+
   const profile = customProfile || authUser;
 
   const displayName = profile?.name || profile?.fullName || 'User Profile';
-  const displayEmail = profile?.email || 'user@swastha.ai';
+  const displayEmail = profile?.email || '';
   const displayRole = (profile?.role || 'patient').toLowerCase();
 
   // Close dropdown on click outside
@@ -86,9 +95,11 @@ export default function ProfileDropdown({ customProfile }) {
             <p className="text-sm font-bold text-slate-800 group-hover:text-blue-600 transition-colors leading-tight">
               {displayName}
             </p>
-            <p className="text-xs text-slate-400 font-normal leading-tight mt-0.5 max-w-[170px] truncate">
-              {displayEmail}
-            </p>
+            {displayEmail && (
+              <p className="text-xs text-slate-400 font-normal leading-tight mt-0.5 max-w-[170px] truncate">
+                {displayEmail}
+              </p>
+            )}
           </div>
 
           <div className="relative">
@@ -126,7 +137,7 @@ export default function ProfileDropdown({ customProfile }) {
 
         {/* Popover Dropdown Card */}
         {isOpen && (
-          <div className="absolute right-0 top-full mt-2 w-76 rounded-2xl bg-white/95 text-slate-900 shadow-2xl shadow-slate-900/15 border border-slate-200/90 p-3 z-50 animate-in fade-in slide-in-from-top-2 duration-150 backdrop-blur-xl origin-top-right">
+          <div className="absolute right-0 top-full mt-2 w-[19rem] rounded-2xl bg-white/95 text-slate-900 shadow-2xl shadow-slate-900/15 border border-slate-200/90 p-3 z-50 animate-fade-in backdrop-blur-xl origin-top-right">
             {/* Top User Info Header */}
             <div className="pb-2 mb-2 border-b border-slate-100 flex items-start justify-between">
               <div className="min-w-0 pr-2">
@@ -136,9 +147,11 @@ export default function ProfileDropdown({ customProfile }) {
                 <h4 className="text-sm font-extrabold text-slate-900 truncate leading-tight">
                   {displayName}
                 </h4>
-                <p className="text-xs text-slate-500 font-medium truncate mt-0.5">
-                  {displayEmail}
-                </p>
+                {displayEmail && (
+                  <p className="text-xs text-slate-500 font-medium truncate mt-0.5">
+                    {displayEmail}
+                  </p>
+                )}
               </div>
 
               {/* Role Badge */}

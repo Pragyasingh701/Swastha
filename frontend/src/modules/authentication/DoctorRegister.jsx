@@ -1,15 +1,7 @@
 import React, { useState, useRef, useEffect } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
-import {
-  sanitizePhoneInput,
-  isValidIndianPhone,
-  isValidPastDate,
-  isValidRegistrationNumber,
-  isValidWordsField,
-  isValidFreeTextField,
-  isValidFullName,
-} from "../../utils/formValidation";
+import { sanitizePhoneInput, isValidIndianPhone, isValidFullName, getDoctorProfileError } from "../../utils/formValidation";
 
 export default function DoctorRegister() {
   const navigate = useNavigate();
@@ -43,7 +35,7 @@ export default function DoctorRegister() {
     council: "",
     degree: "",
     specialization: "",
-    experience: 5,
+    experience: "",
     hospitalName: "",
     address: "",
   });
@@ -82,38 +74,14 @@ export default function DoctorRegister() {
       return;
     }
 
-    if (!isValidPastDate(form.dob, { minAge: 21, maxAge: 100 })) {
-      setErrorMessage("Please enter a valid date of birth (doctors must be at least 21 years old).");
-      return;
-    }
-
     if (!form.gender) {
       setErrorMessage("Please select your gender before completing registration.");
       return;
     }
 
-    if (!isValidRegistrationNumber(form.regNumber)) {
-      setErrorMessage("Please enter a valid Medical Registration Number (must include at least one digit, e.g. MCI-12345).");
-      return;
-    }
-
-    if (!isValidWordsField(form.degree)) {
-      setErrorMessage("Please enter a valid Primary Degree (e.g. MBBS, MD).");
-      return;
-    }
-
-    if (!isValidWordsField(form.specialization)) {
-      setErrorMessage("Please enter a valid Specialization (e.g. Cardiology).");
-      return;
-    }
-
-    if (!isValidFreeTextField(form.hospitalName, { minLength: 3, maxLength: 150 })) {
-      setErrorMessage("Please enter a valid Hospital or Clinic Name.");
-      return;
-    }
-
-    if (!isValidFreeTextField(form.address, { minLength: 8, maxLength: 300 })) {
-      setErrorMessage("Please enter a valid, complete practice address.");
+    const profileError = getDoctorProfileError(form);
+    if (profileError) {
+      setErrorMessage(profileError);
       return;
     }
 
@@ -151,7 +119,7 @@ export default function DoctorRegister() {
           degree: form.degree,
           specialization: form.specialization,
           specialty: form.specialization,
-          experience: form.experience,
+          experience: form.experience === "" ? null : form.experience,
           hospitalName: form.hospitalName,
           address: form.address,
           regCertificateUrl,
@@ -218,7 +186,7 @@ export default function DoctorRegister() {
 
           <form className="space-y-8" onSubmit={handleSubmit}>
             {/* Section 1: Personal Information */}
-            <div className="glass-morphism rounded-[24px] shadow-sm border border-outline-variant/30 overflow-hidden">
+            <div className="rounded-[24px] shadow-sm border border-outline-variant/30 overflow-hidden">
               <div className="p-8 md:p-10">
                 <div className="flex items-center gap-3 mb-8">
                   <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center text-primary">
@@ -359,7 +327,7 @@ export default function DoctorRegister() {
             </div>
 
             {/* Section 2: Professional Credentials */}
-            <div className="glass-morphism rounded-[24px] shadow-sm border border-outline-variant/30 overflow-hidden">
+            <div className="rounded-[24px] shadow-sm border border-outline-variant/30 overflow-hidden">
               <div className="p-8 md:p-10">
                 <div className="flex items-center gap-3 mb-8">
                   <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center text-primary">
@@ -465,11 +433,11 @@ export default function DoctorRegister() {
                         max="50"
                         step="1"
                         name="experience"
-                        value={form.experience}
+                        value={form.experience === "" ? 0 : form.experience}
                         onChange={handleChange}
                       />
                       <div className="min-w-[80px] text-center bg-primary-container/20 text-primary font-bold px-3 py-1.5 rounded-lg border border-primary/10">
-                        <span>{form.experience}</span> yrs
+                        <span>{form.experience === "" ? "—" : form.experience}</span> yrs
                       </div>
                     </div>
                   </div>
@@ -494,7 +462,7 @@ export default function DoctorRegister() {
             </div>
 
             {/* Section 3: Hospital/Clinic Details */}
-            <div className="glass-morphism rounded-[24px] shadow-sm border border-outline-variant/30 overflow-hidden">
+            <div className="rounded-[24px] shadow-sm border border-outline-variant/30 overflow-hidden">
               <div className="p-8 md:p-10">
                 <div className="flex items-center gap-3 mb-8">
                   <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center text-primary">
@@ -543,7 +511,7 @@ export default function DoctorRegister() {
             </div>
 
             {/* Section 4: Document Upload */}
-            <div className="glass-morphism rounded-[24px] shadow-sm border border-outline-variant/30 overflow-hidden">
+            <div className="rounded-[24px] shadow-sm border border-outline-variant/30 overflow-hidden">
               <div className="p-8 md:p-10">
                 <div className="flex items-center gap-3 mb-8">
                   <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center text-primary">

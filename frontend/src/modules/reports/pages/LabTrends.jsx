@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
-import ResponsiveSidebar from "../../../components/common/ResponsiveSidebar";
+import { useNavigate } from "react-router-dom";
+
 import {
   AreaChart,
   Area,
@@ -11,40 +11,25 @@ import {
   ResponsiveContainer,
 } from "recharts";
 import {
-  LayoutGrid,
-  TrendingUp,
-  Folder,
-  Users,
-  Settings,
   PlusCircle,
   HeartPulse,
   ArrowDown,
   ArrowUp,
   Minus,
-  Sparkles,
   FlaskConical,
   Syringe,
   Loader2,
-  RefreshCw,
   Beaker,
 } from "lucide-react";
-import NotificationBell from "../../../components/common/NotificationBell";
+
 import { useAuth } from "../../../context/AuthContext";
 import { getLabInsights } from "../../../api/reports";
-import SettingsModal from "../../settings/components/SettingsModal";
-import ProfileDropdown from "../../settings/components/ProfileDropdown";
-import PatientIdBadge from "../../../components/common/PatientIdBadge";
 
-// Same nav list as Dashboard.jsx, with Lab Insights marked active
-const navItems = [
-  { label: "Dashboard", icon: LayoutGrid, route: "/dashboard" },
-  { label: "Health Timeline", icon: TrendingUp, route: "/timeline" },
-  { label: "Medical Vault", icon: Folder, route: "/vault" },
-  { label: "Family Records", icon: Users, route: "/family-vault" },
-  { label: "Lab Insights", icon: TrendingUp, active: true, route: "/lab-trends" },
-  { label: "Ask Swastha", icon: Sparkles, route: "/search" },
-];
+import { AiGeneratedNote } from "../../../components/common/AiNotice";
+import AppHeader from "../../../components/common/AppHeader";
+import PatientSidebar from "../../../components/common/PatientSidebar";
 
+// Same nav list as Dashboard.jsx, with Lab Trends marked active
 const toneStyles = {
   good: {
     iconBg: "bg-emerald-50 text-emerald-500 ",
@@ -100,7 +85,6 @@ export default function LabInsights() {
   const [error, setError] = useState(null);
   const [activeTest, setActiveTest] = useState(null);
   const [range, setRange] = useState("All");
-  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
   useEffect(() => {
     if (!isAuthenticated || !token) {
@@ -149,16 +133,10 @@ export default function LabInsights() {
 
   return (
     <div className="flex h-screen overflow-hidden bg-slate-50 text-slate-900 ">
-      <Sidebar onOpenSettings={() => setIsSettingsOpen(true)} />
+      <PatientSidebar action={{ label: "Open Family Vault", icon: PlusCircle, route: "/family-vault" }} />
 
       <div className="flex-1 flex flex-col min-w-0 h-screen overflow-hidden">
-        <header className="shrink-0 flex items-center justify-end gap-4 px-6 lg:px-8 py-5 border-b border-slate-200 bg-white ">
-          <NotificationBell />
-
-          <PatientIdBadge />
-
-          <ProfileDropdown />
-        </header>
+        <AppHeader />
 
       <div className="flex-1 overflow-y-auto px-4 sm:px-6 lg:px-10 py-6 lg:py-8 min-w-0 overflow-x-hidden">
         <PageHeader />
@@ -200,27 +178,12 @@ export default function LabInsights() {
       </div>
       </div>
 
-      <SettingsModal
-        isOpen={isSettingsOpen}
-        onClose={() => setIsSettingsOpen(false)}
-      />
     </div>
   );
 }
 
 /* ------------------------------ Sidebar ------------------------------ */
 /* Copied from Dashboard.jsx so both pages share identical behavior. */
-
-function Sidebar({ onOpenSettings }) {
-  return (
-    <ResponsiveSidebar
-      navItems={navItems}
-      action={{ label: "Open Family Vault", icon: PlusCircle, route: "/family-vault" }}
-      onOpenSettings={onOpenSettings}
-      className="bg-slate-50"
-    />
-  );
-}
 
 /* ------------------------------ Header ------------------------------ */
 
@@ -229,7 +192,7 @@ function PageHeader() {
     <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 mb-8">
       <div>
         <h1 className="text-2xl sm:text-3xl font-semibold text-slate-900 leading-snug">
-          Lab Insights
+          Lab Trends
         </h1>
         <p className="text-sm text-slate-500 mt-1">
           AI-powered trend analysis across your lab reports.
@@ -446,7 +409,7 @@ function TrendCard({ activeSeries, chartData, range, setRange }) {
 function TrendTooltip({ active, payload, label, unit }) {
   if (!active || !payload?.length) return null;
   return (
-    <div className="bg-white rounded-xl shadow-lg border border-slate-100 px-3.5 py-2.5 animate-in fade-in duration-150">
+    <div className="bg-white rounded-xl shadow-lg border border-slate-100 px-3.5 py-2.5 animate-fade-in">
       <p className="text-xs text-slate-400 mb-0.5">{label}</p>
       <p className="text-sm font-semibold text-slate-900 ">
         {payload[0].value}{unit ? ` ${unit}` : ""}
@@ -477,9 +440,14 @@ function AiInsightCard({ healthScore, note }) {
         )}
       </div>
 
-      <p className="relative z-10 text-sm text-blue-50 leading-relaxed">
-        {note || "Upload more Lab Reports to get a personalized health score."}
-      </p>
+      <div className="relative z-10">
+        <p className="text-sm text-blue-50 leading-relaxed">
+          {note || "Upload more Lab Reports to get a personalized health score."}
+        </p>
+        <p className="mt-2 text-[11px] text-blue-100/90">
+          An AI estimate from your lab reports, not a medical assessment.
+        </p>
+      </div>
     </div>
   );
 }
@@ -491,9 +459,10 @@ function FollowUpCard({ followUps }) {
 
   return (
     <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5 transition-shadow duration-300 hover:shadow-lg">
-      <h3 className="font-semibold text-slate-900 mb-4">
-        Recommended Follow-up
+      <h3 className="font-semibold text-slate-900">
+        Suggested Follow-up
       </h3>
+      <AiGeneratedNote className="mt-1 mb-4" />
 
       {items.length === 0 ? (
         <p className="text-sm text-slate-400 ">
@@ -531,9 +500,10 @@ function PhysicianSummary({ items }) {
   return (
     <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6 sm:p-8 mt-6 transition-shadow duration-300 hover:shadow-lg">
       <div>
-        <h2 className="text-2xl font-semibold text-slate-900 mb-6">
-          AI Physician's Summary
+        <h2 className="text-2xl font-semibold text-slate-900">
+          AI Summary of Your Lab Results
         </h2>
+        <AiGeneratedNote className="mt-1 mb-6" />
 
         <div className="flex flex-col gap-6">
           {items.map((item) => (

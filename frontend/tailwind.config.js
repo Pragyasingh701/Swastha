@@ -4,19 +4,14 @@ import containerQueries from "@tailwindcss/container-queries";
 /** @type {import('tailwindcss').Config} */
 export default {
   content: [
+    // Relative to wherever Tailwind runs from: the frontend folder, or the repo root
+    // (`vite frontend` from the root).
     "./index.html",
-    "./src/**/*.{js,ts,jsx,tsx}",
-    "./layout/**/*.{js,ts,jsx,tsx}",
-    "./routes/**/*.{js,ts,jsx,tsx}",
-    "./services/**/*.{js,ts,jsx,tsx}",
-    "./utils/**/*.{js,ts,jsx,tsx}",
+    "./src/**/*.{js,jsx}",
     "./frontend/index.html",
-    "./frontend/src/**/*.{js,ts,jsx,tsx}",
-    "./frontend/layout/**/*.{js,ts,jsx,tsx}",
-    "./frontend/routes/**/*.{js,ts,jsx,tsx}",
-    "./frontend/services/**/*.{js,ts,jsx,tsx}",
-    "./frontend/utils/**/*.{js,ts,jsx,tsx}",
+    "./frontend/src/**/*.{js,jsx}",
   ],
+
   theme: {
     extend: {
       colors: {

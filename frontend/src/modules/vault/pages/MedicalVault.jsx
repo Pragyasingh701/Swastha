@@ -1,98 +1,50 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "../../../context/AuthContext";
 import { getTimelineReports, generateReportSummary } from "../../../api/reports";
 import ReportFilePreview from "../../../components/common/ReportFilePreview";
 import { AI_NOTICE_ACCEPTED_EVENT } from "../../../components/common/AiNoticeGate";
-import ResponsiveSidebar from "../../../components/common/ResponsiveSidebar";
-import SettingsModal from "../../settings/components/SettingsModal";
-import ProfileDropdown from "../../settings/components/ProfileDropdown";
-import PatientIdBadge from "../../../components/common/PatientIdBadge";
+
 import {
-  LayoutGrid,
-  TrendingUp,
-  Folder,
-  Users,
-  ClipboardList,
-  Settings,
   PlusCircle,
   Search,
   ShieldCheck,
   FileText,
   Sparkles,
-  FlaskConical,
-  ScanLine,
-  Syringe,
   X,
-  ExternalLink,
   Loader2,
   RefreshCw,
 } from "lucide-react";
-import NotificationBell from "../../../components/common/NotificationBell";
+
+import { AiGeneratedNote } from "../../../components/common/AiNotice";
+import AppHeader from "../../../components/common/AppHeader";
+import PatientSidebar from "../../../components/common/PatientSidebar";
+import {
+  VAULT_CATEGORY_CARDS as CATEGORY_CARDS,
+  getReportCategory,
+  vaultCardIndex,
+} from "../../../config/reportCategories";
+import { formatDate as formatDateText } from "../../../utils/dateFormat";
 
 /* -----------------------------------------------------------
    Nav + category config — same shape as Timeline.jsx so a report's
    category always maps to the same icon everywhere in the app.
 ------------------------------------------------------------ */
 
-const navItems = [
-  { label: "Dashboard", icon: LayoutGrid, route: "/dashboard" },
-  { label: "Health Timeline", icon: TrendingUp, route: "/timeline" },
-  { label: "Medical Vault", icon: Folder, active: true, route: "/vault" },
-  { label: "Family Records", icon: Users, route: "/family-vault" },
-  { label: "Lab Insights", icon: TrendingUp, route: "/lab-trends" },
-  { label: "Ask Swastha", icon: Sparkles, route: "/search" },
-];
-
-const CATEGORY_META = {
-  Prescription: { icon: ClipboardList, tone: "bg-blue-50 text-blue-600 " },
-  Prescriptions: { icon: ClipboardList, tone: "bg-blue-50 text-blue-600 " },
-  "Lab Report": { icon: FlaskConical, tone: "bg-orange-50 text-orange-600 " },
-  "Lab Reports": { icon: FlaskConical, tone: "bg-orange-50 text-orange-600 " },
-  Imaging: { icon: ScanLine, tone: "bg-slate-100 text-slate-600 " },
-  Vaccination: { icon: Syringe, tone: "bg-slate-100 text-slate-600 " },
-  Consultation: { icon: FileText, tone: "bg-slate-100 text-slate-600 " },
-};
-
-// Category cards shown in "AI Smart Categorization" — fixed set of labels
-// the four common report categories map into (Consultation/Vaccination
-// reports fall under a general "Other Records" bucket rather than being
-// hidden).
-const CATEGORY_CARDS = [
-  { title: "Prescriptions", match: ["Prescription", "Prescriptions"], icon: ClipboardList },
-  { title: "Lab Reports", match: ["Lab Report", "Lab Reports"], icon: FlaskConical },
-  { title: "Scans & Imaging", match: ["Imaging"], icon: ScanLine },
-  { title: "Other Records", match: ["Vaccination", "Consultation"], icon: FileText },
-];
-
 function categoryMeta(category) {
-  return CATEGORY_META[category] || CATEGORY_META.Consultation;
+  return getReportCategory(category);
 }
 
 // What the "diagnosis" and "medicines" fields actually mean depends on
 // category (matches UploadReports.jsx's CATEGORY_FIELD_CONFIG) — used to
 // label the highlight chips in the AI Summary view correctly, e.g. a Lab
 // Report's diagnosis slot is really the test/panel name, not a diagnosis.
-const SUMMARY_FIELD_LABELS = {
-  Prescription: { diagnosis: "Diagnosis", medicines: "Medicines" },
-  Prescriptions: { diagnosis: "Diagnosis", medicines: "Medicines" },
-  "Lab Report": { diagnosis: "Test / Panel", medicines: "Key Results" },
-  "Lab Reports": { diagnosis: "Test / Panel", medicines: "Key Results" },
-  Imaging: { diagnosis: "Findings", medicines: "Scan Type" },
-  Vaccination: { diagnosis: "Vaccine", medicines: "Dose / Batch" },
-  Consultation: { diagnosis: "Reason for Visit", medicines: null },
-};
-
 function summaryFieldLabels(category) {
-  return SUMMARY_FIELD_LABELS[category] || SUMMARY_FIELD_LABELS.Consultation;
+  const { fields } = getReportCategory(category);
+  return { diagnosis: fields.diagnosis.short, medicines: fields.medicines ? fields.medicines.short : null };
 }
 
-function formatDate(value) {
-  if (!value) return "Unknown date";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "Unknown date";
-  return date.toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" });
-}
+const formatDate = (value) => formatDateText(value, { fallback: "Unknown date" });
 
 function flattenSearchableValues(value, values = []) {
   if (value === null || value === undefined) return values;
@@ -193,7 +145,6 @@ export default function MedicalVault() {
   const [searchQuery, setSearchQuery] = useState("");
   const [categoryFilter, setCategoryFilter] = useState(null);
   const [detailsReport, setDetailsReport] = useState(null);
-  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
   // Closing the details modal also drops ?document=, otherwise a reload
   // (or any later reports update) would reopen it.
@@ -251,7 +202,7 @@ export default function MedicalVault() {
   const categoryCounts = useMemo(() => {
     const counts = CATEGORY_CARDS.map(() => 0);
     for (const report of reports) {
-      const idx = CATEGORY_CARDS.findIndex((c) => c.match.includes(report.category));
+      const idx = vaultCardIndex(report.category);
       if (idx !== -1) counts[idx] += 1;
     }
     return counts;
@@ -262,7 +213,7 @@ export default function MedicalVault() {
 
     if (categoryFilter) {
       const card = CATEGORY_CARDS.find((c) => c.title === categoryFilter);
-      if (card) list = list.filter((r) => card.match.includes(r.category));
+      if (card) list = list.filter((r) => CATEGORY_CARDS[vaultCardIndex(r.category)] === card);
     }
 
     if (searchQuery.trim()) {
@@ -274,10 +225,10 @@ export default function MedicalVault() {
 
   return (
     <div className="flex h-screen overflow-hidden bg-slate-50 text-slate-900 ">
-      <Sidebar onOpenSettings={() => setIsSettingsOpen(true)} />
+      <PatientSidebar action={{ label: "Upload New Report", icon: PlusCircle, route: "/timeline?upload=true" }} />
 
       <div className="flex-1 flex flex-col min-w-0 h-screen overflow-hidden">
-        <Header profile={user} />
+        <AppHeader profile={user} />
 
         <main className="flex-1 overflow-y-auto px-4 sm:px-6 lg:px-8 py-6 lg:py-8 min-w-0 overflow-x-hidden">
           <div className="flex items-center justify-between mb-6">
@@ -287,9 +238,12 @@ export default function MedicalVault() {
                 All your clinical documents, securely stored in one place.
               </p>
             </div>
-            <span className="flex items-center gap-1.5 bg-blue-50 text-blue-700 text-xs font-semibold px-3 py-2 rounded-full whitespace-nowrap transition-transform duration-200 hover:scale-105 shrink-0">
+            <span
+              title="Files are stored privately and opened only through short-lived links that your account requests."
+              className="flex items-center gap-1.5 bg-blue-50 text-blue-700 text-xs font-semibold px-3 py-2 rounded-full whitespace-nowrap transition-transform duration-200 hover:scale-105 shrink-0"
+            >
               <ShieldCheck size={14} />
-              PRIVATE
+              Private storage
             </span>
           </div>
 
@@ -338,42 +292,13 @@ export default function MedicalVault() {
         />
       )}
 
-      <SettingsModal
-        isOpen={isSettingsOpen}
-        onClose={() => setIsSettingsOpen(false)}
-      />
     </div>
   );
 }
 
 /* ---------------------------- Sidebar ---------------------------- */
 
-function Sidebar({ onOpenSettings }) {
-  return (
-    <ResponsiveSidebar
-      navItems={navItems}
-      action={{ label: "Upload New Report", icon: PlusCircle, route: "/timeline?upload=true" }}
-      onOpenSettings={onOpenSettings}
-      className="bg-slate-50"
-    />
-  );
-}
-
 /* ------------------------------ Header ------------------------------ */
-
-function Header({ profile }) {
-  const navigate = useNavigate();
-
-  return (
-    <header className="shrink-0 flex items-center justify-end gap-4 px-6 lg:px-8 py-5 border-b border-slate-200 bg-white ">
-      <NotificationBell />
-
-      <PatientIdBadge customProfile={profile} />
-
-      <ProfileDropdown customProfile={profile} />
-    </header>
-  );
-}
 
 /* --------------------------- Summary cards --------------------------- */
 
@@ -744,6 +669,7 @@ function ReportPreview({ report, token, onSummaryGenerated, onClose }) {
               ) : (
                 <>
                   <p className="mt-2 text-sm text-slate-800 leading-relaxed whitespace-pre-line">{report.analysis}</p>
+                  <AiGeneratedNote className="mt-2" />
                   <button
                     type="button"
                     onClick={runGenerate}

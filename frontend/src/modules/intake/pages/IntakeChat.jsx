@@ -5,17 +5,8 @@ import { startIntake, resumeIntake, sendIntakeTurn, finalizeIntake, transcribeIn
 import { verifyClinicCode, verifyClinicOtp } from "../../../api/clinic";
 import { getNoticeAckStatus, acknowledgeNotice } from "../../../api/notices";
 import { AiNoticeAckModal } from "../../../components/common/AiNotice";
-import ResponsiveSidebar from "../../../components/common/ResponsiveSidebar";
-import ProfileDropdown from "../../settings/components/ProfileDropdown";
-import PatientIdBadge from "../../../components/common/PatientIdBadge";
-import NotificationBell from "../../../components/common/NotificationBell";
-import SettingsModal from "../../settings/components/SettingsModal";
+
 import {
-  LayoutGrid,
-  TrendingUp,
-  Folder,
-  Users,
-  Settings,
   UploadCloud,
   ClipboardList,
   Send,
@@ -29,31 +20,12 @@ import {
   Building2,
   ArrowRight,
   AlertTriangle,
-  Sparkles,
 } from "lucide-react";
+import AppHeader from "../../../components/common/AppHeader";
+import PatientSidebar from "../../../components/common/PatientSidebar";
 
 // Same nav list as Dashboard.jsx / AISearch.jsx / Timeline.jsx / etc.
-const navItems = [
-  { label: "Dashboard", icon: LayoutGrid, route: "/dashboard" },
-  { label: "Health Timeline", icon: TrendingUp, route: "/timeline" },
-  { label: "Medical Vault", icon: Folder, route: "/vault" },
-  { label: "Family Records", icon: Users, route: "/family-vault" },
-  { label: "Lab Insights", icon: TrendingUp, route: "/lab-trends" },
-  { label: "Ask Swastha", icon: Sparkles, route: "/search" },
-];
-
 const MAX_MESSAGE_LENGTH = 500;
-
-function Sidebar({ onOpenSettings }) {
-  return (
-    <ResponsiveSidebar
-      navItems={navItems}
-      action={{ label: "Upload New Report", icon: UploadCloud, route: "/timeline?upload=true" }}
-      onOpenSettings={onOpenSettings}
-      className="bg-slate-50"
-    />
-  );
-}
 
 // Section labels shown in the progress strip — order matches the backend
 // state machine (intakeService.js SECTIONS).
@@ -265,7 +237,6 @@ export default function IntakeChat() {
   const navigate = useNavigate();
   const location = useLocation();
   const { isAuthenticated } = useAuth();
-  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
   // Clinic Check-In flow can hand off an already-started session — created
   // by POST /api/clinic/verify-otp — instead of this page starting a fresh
@@ -1025,7 +996,7 @@ export default function IntakeChat() {
 
   return (
     <div className="flex h-screen overflow-hidden bg-slate-50 text-slate-900 ">
-      <Sidebar onOpenSettings={() => setIsSettingsOpen(true)} />
+      <PatientSidebar action={{ label: "Upload New Report", icon: UploadCloud, route: "/timeline?upload=true" }} />
 
       {gateStep === GATE_STEPS.ACK && voiceNoticeAcknowledged === false && (
         <AiNoticeAckModal
@@ -1036,11 +1007,7 @@ export default function IntakeChat() {
       )}
 
       <div className="flex-1 flex flex-col min-w-0 h-screen overflow-hidden">
-        <header className="shrink-0 flex items-center justify-end gap-4 px-6 lg:px-8 py-5 border-b border-slate-200 bg-white ">
-          <NotificationBell />
-          <PatientIdBadge />
-          <ProfileDropdown />
-        </header>
+        <AppHeader />
 
         <main className="flex-1 overflow-y-auto px-10 py-8 flex flex-col max-w-3xl mx-auto w-full">
           <div className="mb-6">
@@ -1524,7 +1491,6 @@ export default function IntakeChat() {
         </main>
       </div>
 
-      <SettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} />
     </div>
   );
 }

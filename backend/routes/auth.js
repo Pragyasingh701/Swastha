@@ -3,11 +3,18 @@ import { OAuth2Client } from 'google-auth-library';
 import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
 import multer from 'multer';
-import path from 'path';
+
 import fs from 'fs';
-import supabase from '../config/supabase.js';
+
 import { sendOTPEmail, sendPasswordResetEmail, sendAccountExistsEmail } from '../utils/mailer.js';
-import { findUserByEmail, findUserById, findUserByIdOrPatientCode, createOrUpdateUser, updateUserPassword, deleteUserById, generatePatientCode } from '../db/users.js';
+import {
+  findUserByEmail,
+  findUserById,
+  findUserByIdOrPatientCode,
+  createOrUpdateUser,
+  updateUserPassword,
+  deleteUserById,
+} from '../db/users.js';
 import { getFamilyVaultForUser, deleteFamilyVaultForUser } from '../db/family.js';
 import { deleteAllReportsForUser } from '../db/reports.js';
 import { processMedicalCertificate } from '../services/certificateParserService.js';
@@ -18,6 +25,7 @@ import { passwordPolicyError } from '../utils/passwordPolicy.js';
 import { eraseAccountResidue } from '../db/accountErasure.js';
 import { checkNoticeAck } from '../db/aiNoticeAcknowledgements.js';
 import { verifyAuthToken, signAuthToken, sessionTokenTtl, rememberMeTokenTtl } from '../config/jwt.js';
+import { wholeYears } from '../utils/age.js';
 
 const router = express.Router();
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || '771272691038-s9h707grr3b4ojkgp48aa5vb9tej2sjh.apps.googleusercontent.com';
@@ -358,18 +366,14 @@ router.post('/login', async (req, res) => {
     return res.status(401).json({ message: LOGIN_FAILED_MESSAGE });
   }
 
-  // Generate 6-digit OTP code for Login Verification
-  const otpCode = issueOtp(normalizedEmail, { fresh: true });
-
   try {
-    await sendOTPEmail(normalizedEmail, otpCode);
+    await issueAndSendOtp(normalizedEmail);
     return res.json({
       requiresOTP: true,
       email: normalizedEmail,
       message: 'Verification code sent to your email.',
     });
   } catch (error) {
-    otpStore.deleteCode(normalizedEmail, otpCode);
     console.error('Failed to send verification email.', error?.message || error);
     return res.status(500).json({
       message: 'Failed to send verification email.',
@@ -424,12 +428,21 @@ function isValidPastDate(dateStr, { minAge = 0, maxAge = 120 } = {}) {
   today.setHours(0, 0, 0, 0);
   if (dob > today) return false;
 
-  let age = today.getFullYear() - dob.getFullYear();
-  const monthDiff = today.getMonth() - dob.getMonth();
-  if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < dob.getDate())) {
-    age -= 1;
-  }
+  const age = wholeYears(dob, today);
   return age >= minAge && age <= maxAge;
+}
+
+// Issues a verification code for `key` and emails it to `email`. If the email cannot be
+// sent, only that code is discarded (not a concurrent login's valid one) and the error is
+// rethrown for the caller to turn into a response.
+async function issueAndSendOtp(email, { key = email, fresh = true } = {}) {
+  const otpCode = issueOtp(key, { fresh });
+  try {
+    await sendOTPEmail(email, otpCode);
+  } catch (error) {
+    otpStore.deleteCode(key, otpCode);
+    throw error;
+  }
 }
 
 // Identical for a brand-new address and one that already has an account.
@@ -488,18 +501,14 @@ router.post('/register', async (req, res) => {
     authProvider: 'email',
   });
 
-  // Generate 6-digit OTP code for Registration Verification
-  const otpCode = issueOtp(normalizedEmail, { fresh: true });
-
   try {
-    await sendOTPEmail(normalizedEmail, otpCode);
+    await issueAndSendOtp(normalizedEmail);
     return res.status(201).json({
       requiresOTP: true,
       email: normalizedEmail,
       message: REGISTER_REPLY,
     });
   } catch (error) {
-    otpStore.deleteCode(normalizedEmail, otpCode);
     console.error('Account created, but the verification email could not be sent.', error?.message || error);
     return res.status(500).json({
       message: 'Account created, but the verification email could not be sent.',
@@ -528,18 +537,14 @@ async function completeGoogleAuth(res, { email, name, picture, sub }, { role } =
     });
   }
 
-  // Generate 6-digit OTP code for Google Verification
-  const otpCode = issueOtp(normalizedEmail, { fresh: true });
-
   try {
-    await sendOTPEmail(normalizedEmail, otpCode);
+    await issueAndSendOtp(normalizedEmail);
     return res.json({
       requiresOTP: true,
       email: normalizedEmail,
       message: 'Verification code sent to your Google email address.',
     });
   } catch (error) {
-    otpStore.deleteCode(normalizedEmail, otpCode);
     console.error('Could not send the verification email to your Google address.', error?.message || error);
     return res.status(500).json({
       message: 'Could not send the verification email to your Google address.',
@@ -604,7 +609,7 @@ router.post('/google/exchange', async (req, res) => {
 router.post('/verify-otp', async (req, res) => {
   const { email, otpCode } = req.body || {};
   if (typeof otpCode !== 'string' || !/^\d{6}$/.test(otpCode)) {
-    return res.status(400).json({ message: 'Valid 6-digit OTP code is required' });
+    return res.status(400).json({ message: 'A valid 6-digit verification code is required.' });
   }
   if (typeof email !== 'string' || !email.trim()) {
     return res.status(400).json({ message: 'Email address is required' });
@@ -615,7 +620,7 @@ router.post('/verify-otp', async (req, res) => {
   // address never contains it, and the public endpoint must not be able to
   // reach those.
   if (key.includes(':')) {
-    return res.status(400).json({ message: 'Invalid or expired OTP verification code.' });
+    return res.status(400).json({ message: 'Invalid or expired verification code.' });
   }
 
   // Checks ANY still-active code for this email (not just the newest), so a
@@ -626,7 +631,7 @@ router.post('/verify-otp', async (req, res) => {
     if (result.reason === 'locked') {
       return res.status(429).json({ message: OTP_LOCKED_MESSAGE });
     }
-    return res.status(400).json({ message: 'Invalid or expired OTP verification code.' });
+    return res.status(400).json({ message: 'Invalid or expired verification code.' });
   }
 
   let user = await findUserByEmail(key);
@@ -930,11 +935,9 @@ router.post('/send-otp', async (req, res) => {
     return res.json(genericReply);
   }
 
-  const otpCode = issueOtp(normalizedEmail, { fresh: false });
   try {
-    await sendOTPEmail(normalizedEmail, otpCode);
+    await issueAndSendOtp(normalizedEmail, { fresh: false });
   } catch (error) {
-    otpStore.deleteCode(normalizedEmail, otpCode);
     console.error('Resend OTP email failed:', error?.message || error);
     return res.status(500).json({ message: 'Failed to send verification code.' });
   }
@@ -1011,13 +1014,10 @@ router.post('/change-password/send-otp', authenticateToken, async (req, res) => 
       });
     }
 
-    const otpCode = issueOtp(`changepwd:${email}`, { fresh: true });
-
     try {
-      await sendOTPEmail(email, otpCode);
+      await issueAndSendOtp(email, { key: `changepwd:${email}` });
       return res.json({ message: `Verification code sent to ${email}` });
     } catch (error) {
-      otpStore.deleteCode(`changepwd:${email}`, otpCode);
       console.error('Failed to send verification code to your email.', error?.message || error);
       return res.status(500).json({
         message: 'Failed to send verification code to your email.',
@@ -1037,7 +1037,7 @@ router.post('/change-password/send-otp', authenticateToken, async (req, res) => 
 router.post('/change-password/verify-otp', authenticateToken, async (req, res) => {
   const { otpCode } = req.body || {};
   if (typeof otpCode !== 'string' || !/^\d{6}$/.test(otpCode)) {
-    return res.status(400).json({ message: 'Valid 6-digit OTP code is required' });
+    return res.status(400).json({ message: 'A valid 6-digit verification code is required.' });
   }
 
   const email = (req.user.email || '').toLowerCase().trim();
@@ -1072,11 +1072,11 @@ router.post('/change-password/confirm', authenticateToken, async (req, res) => {
   const data = changeToken ? passwordChangeTokenStore.get(changeToken) : null;
 
   if (!data || data.email !== email) {
-    return res.status(400).json({ message: 'This verification session is invalid. Please verify the OTP again.' });
+    return res.status(400).json({ message: 'This verification session is invalid. Please verify your code again.' });
   }
   if (data.expiresAt <= Date.now()) {
     passwordChangeTokenStore.delete(changeToken);
-    return res.status(400).json({ message: 'This verification session has expired. Please verify the OTP again.' });
+    return res.status(400).json({ message: 'This verification session has expired. Please verify your code again.' });
   }
 
   const existingUser = await findUserByEmail(email);
@@ -1084,9 +1084,14 @@ router.post('/change-password/confirm', authenticateToken, async (req, res) => {
     return res.status(400).json({ message: 'This password is already being used. Please use a different password.' });
   }
 
+  // Update first, then spend the one-time token: if the database write fails the
+  // user gets an error and can try again with the same verification.
+  try {
+    await updateUserPassword(email, newPassword);
+  } catch (updateError) {
+    return res.status(500).json({ message: 'Could not update your password. Please try again.' });
+  }
   passwordChangeTokenStore.delete(changeToken); // Single-use consumption!
-
-  await updateUserPassword(email, newPassword);
   return res.json({ message: 'Password updated successfully.' });
 });
 
@@ -1179,9 +1184,14 @@ router.post('/reset-password', async (req, res) => {
     return res.status(400).json({ message: 'This password is already being used. Please use a different password.' });
   }
 
+  // Reset first, then spend the one-time link: if the database write fails the user
+  // gets an error and the same link still works for another try.
+  try {
+    await updateUserPassword(targetEmail, newPassword);
+  } catch (updateError) {
+    return res.status(500).json({ message: 'Could not reset your password. Please try again.' });
+  }
   resetTokenStore.delete(token); // Single-use consumption!
-
-  await updateUserPassword(targetEmail, newPassword);
   return res.json({ message: 'Password reset successfully. You can now login with your new password.' });
 });
 

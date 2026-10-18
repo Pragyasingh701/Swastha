@@ -1,39 +1,21 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../../context/AuthContext";
 import { authService } from "../../../api/auth";
 import { getFamilyDashboard } from "../../../api/family";
 import { getTimelineReports } from "../../../api/reports";
-import ProfileDropdown from "../../settings/components/ProfileDropdown";
-import SettingsModal from "../../settings/components/SettingsModal";
-import Logo from "../../../components/common/Logo";
-import ResponsiveSidebar from "../../../components/common/ResponsiveSidebar";
-import PatientIdBadge from "../../../components/common/PatientIdBadge";
-import NotificationBell from "../../../components/common/NotificationBell";
 
 import {
-  LayoutGrid,
-  TrendingUp,
-  Folder,
   Users,
   ClipboardList,
-  Settings,
   PlusCircle,
-  AlertTriangle,
+  Pill,
   FileText,
-  Sparkles,
   ChevronRight,
-  LogOut,
 } from "lucide-react";
-
-const navItems = [
-  { label: "Dashboard", icon: LayoutGrid, active: true, route: "/dashboard" },
-  { label: "Health Timeline", icon: TrendingUp, route: "/timeline" },
-  { label: "Medical Vault", icon: Folder, route: "/vault" },
-  { label: "Family Records", icon: Users, route: "/family-vault" },
-  { label: "Lab Insights", icon: TrendingUp, route: "/lab-trends" },
-  { label: "Ask Swastha", icon: Sparkles, route: "/search" },
-];
+import AppHeader from "../../../components/common/AppHeader";
+import PatientSidebar from "../../../components/common/PatientSidebar";
+import { formatDate } from "../../../utils/dateFormat";
 
 function parseMedicationEntries(reports = []) {
   const meds = [];
@@ -65,46 +47,30 @@ function parseMedicationEntries(reports = []) {
       const cleaned = line.replace(/^[•*\-\d.\s]+/, '').trim();
       if (!cleaned) continue;
 
-      const separatorIndex = cleaned.search(/\s*[-–—]\s*/);
-      const name = separatorIndex >= 0 ? cleaned.slice(0, separatorIndex).trim() : cleaned;
-      const schedule = separatorIndex >= 0 ? cleaned.slice(separatorIndex + 1).trim() : 'As prescribed';
-      const finalName = name || cleaned;
-      const cleanedName = finalName.replace(/\s+\d+(?:\.\d+)?\s*(?:mg|mcg|g|ml|iu|%|tablet|tablets|capsule|capsules)\s*$/i, '').trim();
+      // A name and its dosing are split at a dash that stands apart (" - ", an en or
+      // em dash) or a colon. A hyphen inside a name ("Dolo-650") stays in the name.
+      const separator = cleaned.match(/\s+[-–—]\s+|\s*[–—]\s*|\s*:\s+/);
+      const separatorIndex = separator ? separator.index : -1;
+      const nameText = (separatorIndex >= 0 ? cleaned.slice(0, separatorIndex) : cleaned).trim() || cleaned;
+      const dosing = separatorIndex >= 0 ? cleaned.slice(separatorIndex + separator[0].length).trim() : '';
+      // A strength written after the name ("Metformin 500mg") is kept, shown with the dosing.
+      const strengthMatch = nameText.match(/\s+(\d+(?:\.\d+)?\s*(?:mg|mcg|g|ml|iu|%|tablet|tablets|capsule|capsules))\s*$/i);
+      const cleanedName = strengthMatch ? nameText.slice(0, strengthMatch.index).trim() : nameText;
+      const finalName = cleanedName || nameText;
+      const schedule = [strengthMatch ? strengthMatch[1].replace(/\s+/g, '') : '', dosing].filter(Boolean).join(' · ') || 'As prescribed';
       const key = normalizeMedicationKey(cleanedName || finalName);
 
       if (seen.has(key)) continue;
       seen.add(key);
       meds.push({
         name: cleanedName || finalName,
-        schedule: schedule || 'As prescribed',
+        schedule,
         color: meds.length % 2 === 0 ? 'bg-blue-600' : 'bg-orange-500',
       });
     }
   }
 
   return meds;
-}
-
-function Sidebar({ onOpenSettings }) {
-  return (
-    <ResponsiveSidebar
-      navItems={navItems}
-      action={{ label: "Open Family Vault", icon: PlusCircle, route: "/family-vault" }}
-      onOpenSettings={onOpenSettings}
-    />
-  );
-}
-
-function Header({ profile }) {
-  return (
-    <header className="shrink-0 flex items-center justify-end gap-4 px-6 lg:px-8 py-5 border-b border-slate-200 bg-white ">
-      <NotificationBell />
-
-      <PatientIdBadge customProfile={profile} />
-
-      <ProfileDropdown customProfile={profile} />
-    </header>
-  );
 }
 
 function StatCard({ icon: Icon, tag, tagColor, value, label, iconBg }) {
@@ -126,15 +92,6 @@ function StatCard({ icon: Icon, tag, tagColor, value, label, iconBg }) {
       <p className="text-sm text-slate-500 mt-1">{label}</p>
     </div>
   );
-}
-
-function formatReportDate(value) {
-  if (!value) return 'Date not available';
-
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return 'Date not available';
-
-  return date.toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
 function RecentUploads({ reports = [] }) {
@@ -161,7 +118,7 @@ function RecentUploads({ reports = [] }) {
           <p className="text-sm text-slate-500">No documents uploaded yet.</p>
         ) : recentReports.map((report) => {
           const Icon = report.category?.toLowerCase().includes('prescription') ? ClipboardList : FileText;
-          const subtitle = [report.doctor, report.hospital, formatReportDate(report.reportDate || report.createdAt)]
+          const subtitle = [report.doctor, report.hospital, formatDate(report.reportDate || report.createdAt, { fallback: 'Date not available' })]
             .filter(Boolean)
             .join(' • ');
 
@@ -186,7 +143,7 @@ function RecentUploads({ reports = [] }) {
               <p className="text-sm font-semibold text-slate-800 truncate">
                 {report.title || report.category || 'Medical document'}
               </p>
-              <p className="text-xs text-slate-400 mt-0.5">{subtitle || formatReportDate(report.reportDate || report.createdAt)}</p>
+              <p className="text-xs text-slate-400 mt-0.5">{subtitle || formatDate(report.reportDate || report.createdAt, { fallback: 'Date not available' })}</p>
             </div>
             <span className="text-xs font-medium bg-emerald-50 text-emerald-600 px-3 py-1.5 rounded-full whitespace-nowrap">
               {report.analysis ? 'AI Processed' : 'Uploaded'}
@@ -207,9 +164,12 @@ function CurrentMedications({ medications = [] }) {
   return (
     <div className="bg-white border border-slate-200 rounded-xl p-5">
       <div className="flex items-center justify-between mb-4">
-        <h3 className="text-base font-semibold text-slate-900 ">
-          Current Medications
-        </h3>
+        <div>
+          <h3 className="text-base font-semibold text-slate-900 ">
+            Medicines on Record
+          </h3>
+          <p className="text-xs text-slate-400 mt-0.5">From your uploaded prescriptions</p>
+        </div>
         <button
           type="button"
           onClick={() => setIsMedicationModalOpen(true)}
@@ -222,7 +182,7 @@ function CurrentMedications({ medications = [] }) {
 
       <div className="space-y-3">
         {medications.length === 0 ? (
-          <p className="text-sm text-slate-500">No active medications found in your uploaded reports.</p>
+          <p className="text-sm text-slate-500">No medicines found in your uploaded prescriptions.</p>
         ) : (
           visibleMedications.map(({ name, schedule, color }) => (
             <div key={name} className="flex items-center gap-3">
@@ -242,14 +202,14 @@ function CurrentMedications({ medications = [] }) {
             <div className="flex items-start justify-between gap-4">
               <div>
                 <p className="text-xs font-semibold uppercase tracking-wide text-blue-600">Medication list</p>
-                <h2 className="mt-2 text-xl font-semibold text-slate-900">All medications</h2>
+                <h2 className="mt-2 text-xl font-semibold text-slate-900">All medicines on record</h2>
               </div>
               <button type="button" onClick={() => setIsMedicationModalOpen(false)} className="rounded-lg px-2 py-1 text-2xl leading-none text-slate-400 hover:bg-slate-100 hover:text-slate-700" aria-label="Close medication list">&times;</button>
             </div>
 
             <div className="mt-5 max-h-[60vh] space-y-3 overflow-y-auto pr-1">
               {medications.length === 0 ? (
-                <p className="text-sm text-slate-500">No active medications found in your uploaded reports.</p>
+                <p className="text-sm text-slate-500">No medicines found in your uploaded prescriptions.</p>
               ) : (
                 medications.map(({ name, schedule, color }) => (
                   <div key={`${name}-modal`} className="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
@@ -274,7 +234,6 @@ export default function Dashboard() {
   const { token, user: cachedUser, isAuthenticated } = useAuth();
   const [profile, setProfile] = useState(cachedUser);
   const [isProfileLoading, setIsProfileLoading] = useState(false);
-  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [vaultReports, setVaultReports] = useState([]);
   const [familySummary, setFamilySummary] = useState({
     totalMembers: 0,
@@ -395,12 +354,11 @@ export default function Dashboard() {
       iconBg: "bg-blue-50 text-blue-600",
     },
     {
-      icon: AlertTriangle,
-      tag: medications.length > 0 ? "Active meds" : "No alerts",
-      tagColor: "text-orange-600",
+      icon: Pill,
+      tag: medications.length > 0 ? "From your prescriptions" : null,
       value: String(medications.length || 0),
-      label: "Medicine Alerts",
-      iconBg: "bg-orange-50 text-orange-600",
+      label: "Medicines on Record",
+      iconBg: "bg-blue-50 text-blue-600",
     },
     {
       icon: ClipboardList,
@@ -413,10 +371,10 @@ export default function Dashboard() {
 
   return (
     <div className="flex h-screen overflow-hidden bg-slate-50 text-slate-900 ">
-      <Sidebar onOpenSettings={() => setIsSettingsOpen(true)} />
+      <PatientSidebar action={{ label: "Open Family Vault", icon: PlusCircle, route: "/family-vault" }} />
 
       <div className="flex-1 flex flex-col min-w-0 h-screen overflow-hidden">
-        <Header profile={profile} />
+        <AppHeader profile={profile} />
 
         <main className="flex-1 overflow-y-auto px-6 lg:px-8 py-8">
           <div className="flex items-center justify-between mb-6">
@@ -426,10 +384,10 @@ export default function Dashboard() {
               </h2>
               <p className="text-sm text-slate-500 mt-1">
                 {isProfileLoading
-                  ? 'Loading your profile from the database...'
+                  ? 'Loading your profile...'
                   : profile?.role
-                    ? `${profile.role.charAt(0).toUpperCase() + profile.role.slice(1)} profile from the database.`
-                    : 'Your clinical intelligence overview for today.'}
+                    ? `${profile.role.charAt(0).toUpperCase() + profile.role.slice(1)} account`
+                    : 'Your health overview for today.'}
               </p>
             </div>
           </div>
@@ -471,10 +429,6 @@ export default function Dashboard() {
         </main>
       </div>
 
-      <SettingsModal
-        isOpen={isSettingsOpen}
-        onClose={() => setIsSettingsOpen(false)}
-      />
     </div>
   );
 }

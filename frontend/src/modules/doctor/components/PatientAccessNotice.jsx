@@ -1,15 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { Lock, Clock, RefreshCw, ShieldOff, Loader2 } from "lucide-react";
 import { requestAccessAgain } from "../../../api/doctorPatients";
-
-// "23h 10m" / "45m" until `isoTime`; '' once it has passed.
-function formatWaitUntil(isoTime, now) {
-  const ms = new Date(isoTime).getTime() - now;
-  if (!Number.isFinite(ms) || ms <= 0) return "";
-  const minutes = Math.max(1, Math.ceil(ms / 60000));
-  const hours = Math.floor(minutes / 60);
-  return hours > 0 ? `${hours}h ${minutes % 60}m` : `${minutes}m`;
-}
+import { formatWaitUntil } from "../../../utils/dateFormat";
 
 // Shown in place of a patient's data when the doctor has no access to that
 // patient right now: access ended (24 hours, or the patient ended it), a request

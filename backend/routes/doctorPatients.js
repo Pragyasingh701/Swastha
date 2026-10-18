@@ -4,7 +4,6 @@ import {
   getDoctorLifetimeStats,
   linkDoctorToPatient,
   deleteDoctorPatient,
-  getPendingRequestsForPatient,
   acceptDoctorLinkRequest,
   declineDoctorLinkRequest,
   resolveDoctorLinkRequestByToken,
@@ -27,7 +26,7 @@ import {
   getIntakeSessionActionedByDoctor,
   getPatientNamesByIds,
 } from '../db/intakeSessions.js';
-import { verifyAuthToken } from '../config/jwt.js';
+import { getAuthUser } from '../config/jwt.js';
 import { renderMessagePage, renderConfirmPage } from '../utils/emailActionPage.js';
 
 const router = express.Router();
@@ -37,21 +36,6 @@ const router = express.Router();
 // service. RAG_BASE_URL is still overridable for anyone still running it
 // standalone.
 const RAG_BASE_URL = process.env.RAG_BASE_URL || `http://localhost:${process.env.PORT || 5001}/rag/api`;
-
-function getAuthUser(req) {
-  const authHeader = req.headers.authorization || '';
-  const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : '';
-
-  if (!token) {
-    return null;
-  }
-
-  try {
-    return verifyAuthToken(token);
-  } catch {
-    return null;
-  }
-}
 
 
 // Doctor-only routes. Every one of these used to check only that SOME logged-in
@@ -155,15 +139,6 @@ router.get('/notifications', async (req, res) => {
 });
 
 /**
- * GET /api/doctor-patients/pending-requests
- * PATIENT-facing: lists doctor link requests awaiting this patient's
- * response. Scoped to req.user — a patient can only ever see their own
- * pending requests.
- *
- * Declared before any '/:param' route so Express doesn't match
- * "pending-requests" as a :patientId.
- */
-/**
  * GET /api/doctor-patients/my-doctors
  * PATIENT-facing: the doctors who can see this patient's records right now.
  * Declared before any '/:param' route so Express doesn't read "my-doctors" as
@@ -197,22 +172,6 @@ router.post('/access/:linkId/revoke', requirePatient, async (req, res) => {
   } catch (error) {
     console.error('Revoke access error:', error);
     return res.status(500).json({ message: 'Unable to revoke access. Please try again.' });
-  }
-});
-
-router.get('/pending-requests', async (req, res) => {
-  const authUser = getAuthUser(req);
-
-  if (!authUser?.userId) {
-    return res.status(401).json({ message: 'Authentication required.' });
-  }
-
-  try {
-    const requests = await getPendingRequestsForPatient(authUser.userId);
-    return res.json({ requests });
-  } catch (error) {
-    console.error('Pending requests list error:', error);
-    return res.status(500).json({ message: 'Unable to load doctor requests.' });
   }
 });
 

@@ -4,8 +4,8 @@
 import { apiRequest, getAuthHeader } from './client';
 import { decryptPiiFields } from './pii/walk.js';
 import { ensureSession } from './pii/session.js';
+import { RAG_BASE_URL } from './config.js';
 
-const RAG_BASE_URL = import.meta.env.VITE_RAG_BASE_URL || 'http://localhost:5001/rag/api';
 
 function request(path, options = {}) {
   return apiRequest(options.method || 'GET', path, { ...options, baseUrl: RAG_BASE_URL });

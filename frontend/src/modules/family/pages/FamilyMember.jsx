@@ -1,19 +1,9 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { CalendarDays, Edit3, Eye, HeartPulse, Mail, Trash2, Users } from 'lucide-react';
+import { formatDate as formatDateText } from "../../../utils/dateFormat";
 
-function formatDate(value) {
-  if (!value) return 'Not set';
-
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return value;
-
-  return parsed.toLocaleDateString(undefined, {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-  });
-}
+const formatDate = (value) => formatDateText(value, { fallback: 'Not set' });
 
 export function parseMemberNotesAndEmail(rawNotes) {
   if (!rawNotes) return { notes: '', email: '' };
@@ -66,12 +56,13 @@ export default function FamilyMember({ member, onEdit, onDelete }) {
     .some((value) => String(value || '').trim().toLowerCase() === 'self');
   const age = parseAgeFromMember(member);
   const healthOverview = member.healthOverview || member.health_overview || 'No health overview added yet.';
-  const dateOfBirth = age && age !== 'Not set' ? (() => {
-    const dob = new Date();
-    dob.setFullYear(dob.getFullYear() - Number(age));
-    return dob.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
-  })() : 'Not set';
-  
+  // The date of birth as entered; never worked backwards from the age.
+  const storedDob = member.dob || member.date_of_birth || '';
+  const storedDobDate = storedDob ? new Date(storedDob) : null;
+  const dateOfBirth = storedDobDate && !Number.isNaN(storedDobDate.getTime())
+    ? storedDobDate.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric', timeZone: 'UTC' })
+    : 'Not set';
+
   const { notes: cleanedNotes, email } = parseMemberNotesAndEmail(member.notes || '');
   const notesText = cleanedNotes || 'No extra notes stored.';
   

@@ -1,9 +1,9 @@
 import React from "react";
 import { useNavigate } from "react-router-dom";
-import { Sparkles, Bell } from "lucide-react";
-import NotificationBell from "../../../components/common/NotificationBell";
+
 import DoctorSidebar from "../components/DoctorSidebar";
-import ProfileDropdown from "../../settings/components/ProfileDropdown";
+
+import AppHeader from "../../../components/common/AppHeader";
 
 export default function DoctorMessages() {
   const navigate = useNavigate();
@@ -13,10 +13,7 @@ export default function DoctorMessages() {
       <DoctorSidebar />
 
       <div className="flex-1 flex flex-col min-w-0 h-screen overflow-hidden">
-        <header className="shrink-0 flex items-center justify-end gap-4 px-6 lg:px-8 py-5 border-b border-slate-200 bg-white ">
-          <NotificationBell />
-          <ProfileDropdown />
-        </header>
+        <AppHeader />
 
         <main className="flex-1 overflow-y-auto px-6 md:px-10 py-8">
           <div className="bg-white rounded-2xl border border-[#c3c6d7]/20 shadow-sm p-6 md:p-8">

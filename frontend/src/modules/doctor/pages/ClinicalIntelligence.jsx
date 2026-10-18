@@ -1,27 +1,29 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Sparkles, Search, ChevronDown, User, ClipboardList, FlaskConical, ScanLine, Syringe, FileText, RefreshCw, Stethoscope, Pill, TrendingUp, CalendarClock } from "lucide-react";
-import NotificationBell from "../../../components/common/NotificationBell";
+import {
+  Search,
+  ChevronDown,
+  User,
+  RefreshCw,
+  Stethoscope,
+  Pill,
+  TrendingUp,
+  CalendarClock,
+} from "lucide-react";
+
 import DoctorSidebar from "../components/DoctorSidebar";
-import ProfileDropdown from "../../settings/components/ProfileDropdown";
+
 import PatientAccessNotice from "../components/PatientAccessNotice";
 import { getDoctorPatients, getDoctorPatientSummary } from "../../../api/doctorPatients";
 import { getTimelineReports } from "../../../api/reports";
 import { useAuth } from "../../../context/AuthContext";
-
-const CATEGORY_META = {
-  Prescription: { icon: ClipboardList },
-  Prescriptions: { icon: ClipboardList },
-  "Lab Report": { icon: FlaskConical },
-  "Lab Reports": { icon: FlaskConical },
-  Imaging: { icon: ScanLine },
-  "MRI/Scans": { icon: ScanLine },
-  Vaccination: { icon: Syringe },
-  Consultation: { icon: FileText },
-};
+import { AiGeneratedNote } from "../../../components/common/AiNotice";
+import AppHeader from "../../../components/common/AppHeader";
+import { getReportCategory } from "../../../config/reportCategories";
+import { formatDate } from "../../../utils/dateFormat";
 
 function categoryIcon(category) {
-  return (CATEGORY_META[category] || CATEGORY_META.Consultation).icon;
+  return getReportCategory(category).icon;
 }
 
 function formatRelativeDate(dateStr) {
@@ -31,7 +33,7 @@ function formatRelativeDate(dateStr) {
   if (diffDays <= 0) return "Today";
   if (diffDays === 1) return "Yesterday";
   if (diffDays < 7) return `${diffDays} days ago`;
-  return date.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+  return formatDate(date, { fallback: "Unknown date" });
 }
 
 export default function ClinicalIntelligence() {
@@ -53,6 +55,7 @@ export default function ClinicalIntelligence() {
   const [reportsError, setReportsError] = useState(null);
 
   const [summary, setSummary] = useState(null);
+  const [summaryAt, setSummaryAt] = useState(null);
   const [summaryLoading, setSummaryLoading] = useState(false);
   const [summaryError, setSummaryError] = useState(null);
 
@@ -212,7 +215,10 @@ export default function ClinicalIntelligence() {
       setSummaryError(null);
       try {
         const res = await getDoctorPatientSummary(patientUserId);
-        if (!cancelled) setSummary(res.summary || null);
+        if (!cancelled) {
+          setSummary(res.summary || null);
+          setSummaryAt(new Date());
+        }
       } catch (err) {
         if (!cancelled) {
           setSummaryError(err.message || "Could not generate a summary for this patient.");
@@ -248,10 +254,7 @@ export default function ClinicalIntelligence() {
       <DoctorSidebar />
 
       <div className="flex-1 flex flex-col h-screen overflow-hidden min-w-0">
-        <header className="shrink-0 flex items-center justify-end gap-4 px-6 lg:px-8 py-5 border-b border-slate-200 bg-white ">
-          <NotificationBell />
-          <ProfileDropdown />
-        </header>
+        <AppHeader />
 
         <main className="flex-1 overflow-y-auto p-6 md:p-10 space-y-8">
           <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-4">
@@ -418,7 +421,9 @@ export default function ClinicalIntelligence() {
                     )}
                   </div>
                   <span className="text-xs text-[#737686]">
-                    Auto-updates when this patient's records change
+                    {summary && summaryAt
+                      ? `Generated ${summaryAt.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })} from ${reports.length} record${reports.length === 1 ? "" : "s"}`
+                      : "Generated from this patient's records"}
                   </span>
                 </div>
 
@@ -431,7 +436,10 @@ export default function ClinicalIntelligence() {
                 ) : summaryError ? (
                   <p className="text-sm text-red-600">{summaryError}</p>
                 ) : summary ? (
-                  <StructuredSummary summary={summary} />
+                  <>
+                    <StructuredSummary summary={summary} />
+                    <AiGeneratedNote className="mt-4" />
+                  </>
                 ) : (
                   <p className="text-sm text-slate-400">Summary unavailable.</p>
                 )}

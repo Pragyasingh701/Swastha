@@ -1,26 +1,15 @@
 import React, { useEffect, useState } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import {
   AlertCircle,
-  ClipboardList,
-  Folder,
-  HelpCircle,
-  LayoutGrid,
-  Mail,
   PlusCircle,
-  Settings,
   ShieldCheck,
   Sparkles,
-  TrendingUp,
   Users,
-  LogOut,
 } from 'lucide-react';
-import NotificationBell from "../../../components/common/NotificationBell";
+
 import { useAuth } from '../../../context/AuthContext';
-import ProfileDropdown from '../../settings/components/ProfileDropdown';
-import PatientIdBadge from '../../../components/common/PatientIdBadge';
-import SettingsModal from '../../settings/components/SettingsModal';
-import ResponsiveSidebar from '../../../components/common/ResponsiveSidebar';
+
 import {
   createFamilyMember,
   createFamilyVault,
@@ -31,6 +20,8 @@ import {
   updateFamilyMember,
 } from '../../../api/family';
 import FamilyMember, { parseMemberNotesAndEmail } from './FamilyMember';
+import AppHeader from "../../../components/common/AppHeader";
+import PatientSidebar from "../../../components/common/PatientSidebar";
 
 const emptyForm = {
   name: '',
@@ -172,28 +163,7 @@ function validateForm(form, isEditing = false, addMethod = 'manual') {
   return errors;
 }
 
-const navItems = [
-  { label: 'Dashboard', icon: LayoutGrid, route: '/dashboard' },
-  { label: 'Health Timeline', icon: TrendingUp, route: '/timeline' },
-  { label: 'Medical Vault', icon: Folder, route: '/vault' },
-  { label: 'Family Records', icon: Users, route: '/family-vault' },
-  { label: 'Lab Insights', icon: TrendingUp, route: '/lab-trends' },
-  { label: 'Ask Swastha', icon: Sparkles, route: '/search' },
-];
-
 const VAULT_PROMPT_STORAGE_KEY = 'swastha.familyVaultPromptShown';
-
-
-function Sidebar({ onOpenSettings }) {
-  return (
-    <ResponsiveSidebar
-      navItems={navItems}
-      action={{ label: 'Open Family Vault', icon: PlusCircle, route: '/family-vault' }}
-      onOpenSettings={onOpenSettings}
-      className="bg-slate-50"
-    />
-  );
-}
 
 function StatCard({ label, value, detail }) {
   return (
@@ -202,20 +172,6 @@ function StatCard({ label, value, detail }) {
       <p className="mt-2 text-3xl font-bold text-slate-900 ">{value}</p>
       <p className="mt-1 text-sm text-slate-500 ">{detail}</p>
     </div>
-  );
-}
-
-function Header({ userName, userEmail }) {
-  const navigate = useNavigate();
-
-  return (
-    <header className="shrink-0 flex items-center justify-end gap-4 border-b border-slate-200 bg-white px-6 py-5 lg:px-8">
-      <NotificationBell />
-
-      <PatientIdBadge />
-
-      <ProfileDropdown />
-    </header>
   );
 }
 
@@ -245,7 +201,6 @@ export default function FamilyVault() {
   const [familyVault, setFamilyVault] = useState(null);
   const [showVaultModal, setShowVaultModal] = useState(false);
   const [vaultCreating, setVaultCreating] = useState(false);
-  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const hasShownVaultPromptRef = React.useRef(false);
 
   useEffect(() => {
@@ -611,9 +566,9 @@ export default function FamilyVault() {
         </div>
       ) : null}
       <div className="flex h-screen overflow-hidden flex-col lg:flex-row">
-        <Sidebar onOpenSettings={() => setIsSettingsOpen(true)} />
+        <PatientSidebar action={{ label: 'Open Family Vault', icon: PlusCircle, route: '/family-vault' }} />
         <div className="flex-1 flex flex-col min-w-0 h-screen overflow-hidden">
-          <Header userName={user?.name || user?.fullName} userEmail={user?.email} />
+          <AppHeader />
           <section className="shrink-0 border-b border-slate-200 bg-white px-6 py-6 lg:px-8">
             <div className="mx-auto flex max-w-7xl flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
               <div className="space-y-2">
@@ -882,10 +837,6 @@ export default function FamilyVault() {
         </div>
       </div>
 
-      <SettingsModal
-        isOpen={isSettingsOpen}
-        onClose={() => setIsSettingsOpen(false)}
-      />
     </div>
   );
 }

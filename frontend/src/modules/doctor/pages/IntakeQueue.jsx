@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from "react";
 import DoctorSidebar from "../components/DoctorSidebar";
-import ProfileDropdown from "../../settings/components/ProfileDropdown";
-import NotificationBell from "../../../components/common/NotificationBell";
+
 import {
   AlertTriangle,
   ClipboardList,
@@ -20,6 +19,8 @@ import {
   removeIntakeSession,
   getIntakeQueueHistory,
 } from "../../../api/doctorPatients";
+import AppHeader from "../../../components/common/AppHeader";
+import { formatDateTime } from "../../../utils/dateFormat";
 
 // Module A (Conversational History Engine) — DOCTOR-facing priority queue,
 // its own page/sidebar entry (moved out of DoctorDashboard.jsx per request).
@@ -153,13 +154,6 @@ function orderedAnsweredFields(obj, labelPairs, excludeKeys) {
   return out;
 }
 
-function formatIntakeTimestamp(value) {
-  if (!value) return "";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "";
-  return date.toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
-}
-
 function formatFieldValue(value) {
   if (Array.isArray(value)) {
     return value.length > 0 ? value.join(", ") : "None reported";
@@ -168,15 +162,6 @@ function formatFieldValue(value) {
     return "Not captured";
   }
   return String(value);
-}
-
-function TopBar() {
-  return (
-    <header className="shrink-0 flex items-center justify-end gap-4 px-6 lg:px-8 py-5 border-b border-slate-200 bg-white shadow-sm">
-      <NotificationBell />
-      <ProfileDropdown />
-    </header>
-  );
 }
 
 function PageHeader({ count, isLoading, view, onChangeView }) {
@@ -279,7 +264,7 @@ function IntakeQueueRows({ sessions, onSelect, onComplete, onRemove, actioningId
                       >
                         {s.status === "completed" ? "Completed" : "In progress"}
                       </span>
-                      <p className="text-xs text-slate-400 mt-1">{formatIntakeTimestamp(s.created_at)}</p>
+                      <p className="text-xs text-slate-400 mt-1">{formatDateTime(s.created_at, { withYear: false })}</p>
                     </div>
 
                     <div className="flex items-center gap-1.5">
@@ -435,7 +420,7 @@ function IntakeHistoryList({ history, isLoading, error, onSelect }) {
                 >
                   {h.action === "completed" ? "Completed" : "Removed"}
                 </span>
-                <p className="text-xs text-slate-400 mt-1">{formatIntakeTimestamp(h.acted_at)}</p>
+                <p className="text-xs text-slate-400 mt-1">{formatDateTime(h.acted_at, { withYear: false })}</p>
               </div>
             </li>
           ))}
@@ -701,7 +686,7 @@ export default function IntakeQueue() {
       <DoctorSidebar />
 
       <div className="flex-1 flex flex-col h-screen overflow-hidden min-w-0">
-        <TopBar />
+        <AppHeader shadow />
 
         <main className="flex-1 overflow-y-auto px-6 md:px-10 py-8">
           <PageHeader

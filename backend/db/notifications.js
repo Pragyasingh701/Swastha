@@ -1,7 +1,8 @@
 import supabase from '../config/supabase.js';
 
-const NOTIFICATIONS_TABLE = process.env.NOTIFICATIONS_TABLE_NAME || 'notifications';
-const NOTIFICATION_RETENTION_DAYS = 7;
+const NOTIFICATIONS_TABLE = 'notifications';
+// Notifications older than seven days are removed by the hourly cron job
+// (delete-expired-notifications, see supabase/schema/00000000000000_baseline_schema.sql).
 const VALID_EVENT_TYPES = [
   'login',
   'family_update',
@@ -45,23 +46,11 @@ function isValidActorRole(value) {
   return VALID_ACTOR_ROLES.includes(value);
 }
 
-async function deleteExpiredNotifications() {
-  const cutoff = new Date(Date.now() - NOTIFICATION_RETENTION_DAYS * 24 * 60 * 60 * 1000).toISOString();
-  const { error } = await supabase
-    .from(NOTIFICATIONS_TABLE)
-    .delete()
-    .lt('created_at', cutoff);
-
-  if (error) throw error;
-}
-
 export const getNotificationsForUser = async (userId, options = {}) => {
   if (!userId || !supabase) return [];
 
   try {
     const { limit = 25, unreadOnly = false } = options;
-    await deleteExpiredNotifications();
-
     let query = supabase
       .from(NOTIFICATIONS_TABLE)
       .select('*')
@@ -93,8 +82,6 @@ export const getUnreadNotificationCount = async (userId) => {
   if (!userId || !supabase) return 0;
 
   try {
-    await deleteExpiredNotifications();
-
     const { count, error } = await supabase
       .from(NOTIFICATIONS_TABLE)
       .select('*', { count: 'exact', head: true })
@@ -193,29 +180,5 @@ export const markNotificationAsRead = async (notificationId, userId) => {
   } catch (error) {
     console.warn('Notification mark read warning:', error?.message || error);
     return null;
-  }
-};
-
-export const markAllNotificationsAsRead = async (userId) => {
-  if (!supabase || !userId) {
-    return [];
-  }
-
-  try {
-    const { data, error } = await supabase
-      .from(NOTIFICATIONS_TABLE)
-      .update({ read_at: new Date().toISOString() })
-      .eq('recipient_id', userId)
-      .is('read_at', null)
-      .select();
-
-    if (error) {
-      throw error;
-    }
-
-    return (data || []).map(normalizeNotification);
-  } catch (error) {
-    console.warn('Mark all notifications read warning:', error?.message || error);
-    return [];
   }
 };

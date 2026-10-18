@@ -7,7 +7,7 @@ import { validateTimelineReportPayload } from '../utils/timelineValidation.js';
 import { uploadMemory, uploadFileToSupabase, createSignedFileUrl, removeStoredFiles } from '../config/supabaseStorage.js';
 import { createNotification } from '../db/notifications.js';
 import { decryptMultipartFields } from '../middleware/wireCrypto.js';
-import { verifyAuthToken } from '../config/jwt.js';
+import { getAuthUser } from '../config/jwt.js';
 
 const router = express.Router();
 // RAG used to be a separate service/process (RAG_BASE_URL pointed at its
@@ -65,20 +65,6 @@ async function generateSummaryResult(authHeader, report) {
 
 async function generateSummary(authHeader, report) {
   return (await generateSummaryResult(authHeader, report)).summary;
-}
-
-function getAuthUser(req) {
-  const authHeader = req.headers.authorization || '';
-  const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : '';
-  if (!token) {
-    return null;
-  }
-
-  try {
-    return verifyAuthToken(token);
-  } catch {
-    return null;
-  }
 }
 
 // The single access gate for touching someone else's timeline — shared by

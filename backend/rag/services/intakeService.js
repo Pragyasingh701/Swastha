@@ -13,6 +13,7 @@
 import { UNTRUSTED_DATA_RULES, wrapUntrusted } from '../utils/untrustedData.js';
 import { supabase } from '../config/supabase.js';
 import { runAI } from '../config/aiClient.js';
+import { extractJson } from '../utils/extractJson.js';
 import {
   DETAIL_QUESTIONS,
   detailKeyFor,
@@ -822,21 +823,6 @@ function capturedFieldKeys(history) {
 
 // The single, fixed section flow every intake session follows.
 const SECTIONS = ['chief_complaint', 'hpi', 'drug_allergy', 'finalize'];
-
-// Strips ```json fences etc. that free-tier chat models routinely wrap
-// around JSON output despite being asked not to (same defensive parsing as
-// searchService.js / labInsightsService.js).
-function extractJson(text) {
-  const trimmed = text.trim();
-  const fenced = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/i);
-  const candidate = fenced ? fenced[1].trim() : trimmed;
-  const start = candidate.indexOf('{');
-  const end = candidate.lastIndexOf('}');
-  if (start === -1 || end === -1 || end < start) {
-    throw new Error('No JSON object found in model output');
-  }
-  return JSON.parse(candidate.slice(start, end + 1));
-}
 
 function emptyStructuredHistory() {
   return {

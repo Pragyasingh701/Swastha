@@ -4,18 +4,9 @@ import { useAuth } from "../../../context/AuthContext";
 import { searchReports, submitAnswerFeedback } from "../../../api/search";
 import { openReportFile } from "../../../api/reports";
 import { getNoticeAckStatus, acknowledgeNotice } from "../../../api/notices";
-import ResponsiveSidebar from "../../../components/common/ResponsiveSidebar";
-import ProfileDropdown from "../../settings/components/ProfileDropdown";
-import PatientIdBadge from "../../../components/common/PatientIdBadge";
-import SettingsModal from "../../settings/components/SettingsModal";
-import { AiNoticeInfoLink, AiNoticeAckModal } from "../../../components/common/AiNotice";
+
+import { AiNoticeInfoLink, AiNoticeAckModal, AiGeneratedNote } from "../../../components/common/AiNotice";
 import {
-  LayoutGrid,
-  TrendingUp,
-  Folder,
-  Users,
-  ClipboardList,
-  Settings,
   UploadCloud,
   Sparkles,
   Send,
@@ -28,18 +19,12 @@ import {
   ThumbsUp,
   ThumbsDown,
 } from "lucide-react";
-import NotificationBell from "../../../components/common/NotificationBell";
+
+import AppHeader from "../../../components/common/AppHeader";
+import PatientSidebar from "../../../components/common/PatientSidebar";
+import { formatDate as formatDateText } from "../../../utils/dateFormat";
 
 // Same nav list as Dashboard.jsx / Timeline.jsx / etc.
-const navItems = [
-  { label: "Dashboard", icon: LayoutGrid, route: "/dashboard" },
-  { label: "Health Timeline", icon: TrendingUp, route: "/timeline" },
-  { label: "Medical Vault", icon: Folder, route: "/vault" },
-  { label: "Family Records", icon: Users, route: "/family-vault" },
-  { label: "Lab Insights", icon: TrendingUp, route: "/lab-trends" },
-  { label: "Ask Swastha", icon: Sparkles, route: "/search" },
-];
-
 // Each example question now carries its own icon + color, matching the
 // reference design (a small colored badge next to each suggestion).
 const EXAMPLE_QUESTIONS = [
@@ -62,23 +47,7 @@ const EXAMPLE_QUESTIONS = [
 
 const MAX_QUERY_LENGTH = 250;
 
-function Sidebar({ onOpenSettings }) {
-  return (
-    <ResponsiveSidebar
-      navItems={navItems}
-      action={{ label: "Upload New Report", icon: UploadCloud, route: "/timeline?upload=true" }}
-      onOpenSettings={onOpenSettings}
-      className="bg-slate-50"
-    />
-  );
-}
-
-function formatDate(value) {
-  if (!value) return null;
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return null;
-  return date.toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" });
-}
+const formatDate = (value) => formatDateText(value, { fallback: null });
 
 export default function AISearch() {
   const navigate = useNavigate();
@@ -87,7 +56,6 @@ export default function AISearch() {
   const [messages, setMessages] = useState([]); // { role: 'user'|'assistant', text, sources?, noResultsFound? }
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
   // Server-side enforcement (requireNoticeAck on POST /rag/api/search) is
   // the real gate; this is only so a patient sees the notice up front
@@ -186,18 +154,12 @@ export default function AISearch() {
 
   return (
     <div className="flex h-screen overflow-hidden bg-slate-50 text-slate-900 ">
-      <Sidebar onOpenSettings={() => setIsSettingsOpen(true)} />
+      <PatientSidebar action={{ label: "Upload New Report", icon: UploadCloud, route: "/timeline?upload=true" }} />
 
       <div className="flex-1 flex flex-col min-w-0 h-screen overflow-hidden">
-        <header className="shrink-0 flex items-center justify-end gap-4 px-6 lg:px-8 py-5 border-b border-slate-200 bg-white ">
+        <AppHeader>
           <AiNoticeInfoLink feature="ask_swastha" />
-
-          <NotificationBell />
-
-          <PatientIdBadge />
-
-          <ProfileDropdown />
-        </header>
+        </AppHeader>
 
         {noticeAcknowledged === false && (
           <AiNoticeAckModal feature="ask_swastha" onAccept={handleAcknowledgeNotice} accepting={acknowledging} />
@@ -341,10 +303,6 @@ export default function AISearch() {
       </main>
       </div>
 
-      <SettingsModal
-        isOpen={isSettingsOpen}
-        onClose={() => setIsSettingsOpen(false)}
-      />
     </div>
   );
 }
@@ -435,6 +393,8 @@ function ChatBubble({ message }) {
             ))}
           </div>
         )}
+
+        {!message.isError && <AiGeneratedNote className="mt-3" />}
 
         {/* Omitted for an error bubble — there's no real answer to rate. */}
         {!message.isError && (

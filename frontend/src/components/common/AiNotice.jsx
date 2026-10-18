@@ -107,3 +107,16 @@ export function AiNoticeAckModal({ feature, onAccept, accepting }) {
 }
 
 export default { AiNoticeBanner, AiNoticeInfoLink, AiNoticeAckModal };
+
+/**
+ * One-line reminder under anything the AI wrote: it is a reading of the records,
+ * not a diagnosis. Shown with every AI answer, summary and score.
+ */
+export function AiGeneratedNote({ className = "" }) {
+  return (
+    <p className={`flex items-center gap-1.5 text-[11px] text-slate-400 ${className}`}>
+      <Sparkles size={11} className="shrink-0" />
+      AI-generated from the records. Not medical advice.
+    </p>
+  );
+}

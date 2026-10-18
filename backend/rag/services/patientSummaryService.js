@@ -1,27 +1,13 @@
 // Routed through the shared failover client: Gemini (4 keys) -> OpenRouter.
 import { runAI } from '../config/aiClient.js';
 import { UNTRUSTED_DATA_RULES, wrapUntrusted, sanitizeModelText, sanitizeModelList } from '../utils/untrustedData.js';
+import { extractJson } from '../utils/extractJson.js';
 
 // Doctor-facing patient summary: unlike summaryService.js (one report) or
 // labInsightsService.js (lab reports only, chart-shaped output), this
 // covers a patient's FULL timeline across every category and produces a
 // structured, scannable summary (sections, not a single paragraph) a
 // doctor can read before a visit.
-
-// Strips ```json fences etc. that free-tier chat models routinely wrap
-// around JSON output despite being asked not to — same helper as
-// labInsightsService.js.
-function extractJson(text) {
-  const trimmed = text.trim();
-  const fenced = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/i);
-  const candidate = fenced ? fenced[1].trim() : trimmed;
-  const start = candidate.indexOf('{');
-  const end = candidate.lastIndexOf('}');
-  if (start === -1 || end === -1 || end < start) {
-    throw new Error('No JSON object found in model output');
-  }
-  return JSON.parse(candidate.slice(start, end + 1));
-}
 
 function buildReportBlock(report, index) {
   const { title, category, doctor, hospital, reportDate, diagnosis, medicines, notes, analysis } = report;

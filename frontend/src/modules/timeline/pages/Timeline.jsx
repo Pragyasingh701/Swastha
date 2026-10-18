@@ -6,83 +6,28 @@ import { useAuth } from "../../../context/AuthContext";
 import * as reportService from "../../../api/reports";
 import * as familyService from "../../../api/family";
 import { indexReport } from "../../../api/search";
-import ResponsiveSidebar from "../../../components/common/ResponsiveSidebar";
-import SettingsModal from "../../settings/components/SettingsModal";
-import ProfileDropdown from "../../settings/components/ProfileDropdown";
-import PatientIdBadge from "../../../components/common/PatientIdBadge";
+
 import {
-  LayoutGrid,
-  TrendingUp,
-  Folder,
-  Users,
-  ClipboardList,
-  Settings,
   UploadCloud,
   ChevronDown,
   ChevronRight,
   X,
-  ExternalLink,
   Sparkles,
-  FlaskConical,
-  ScanLine,
-  Syringe,
   FileText,
   AlertTriangle,
 } from "lucide-react";
-import NotificationBell from "../../../components/common/NotificationBell";
+
 import ReportFilePreview from "../../../components/common/ReportFilePreview";
+import AppHeader from "../../../components/common/AppHeader";
+import PatientSidebar from "../../../components/common/PatientSidebar";
+import { categoryFieldLabels, getReportCategory } from "../../../config/reportCategories";
+import { formatDate, formatDateTime } from '../../../utils/dateFormat';
 
 /* -----------------------------------------------------------
    Nav + category config.
 ------------------------------------------------------------ */
 
 // Same nav list as Dashboard.jsx / LabTrends.jsx, with Health Timeline active
-const navItems = [
-  { label: "Dashboard", icon: LayoutGrid, route: "/dashboard" },
-  { label: "Health Timeline", icon: TrendingUp, active: true, route: "/timeline" },
-  { label: "Medical Vault", icon: Folder, route: "/vault" },
-  { label: "Family Records", icon: Users, route: "/family-vault" },
-  { label: "Lab Insights", icon: TrendingUp, route: "/lab-trends" },
-  { label: "Ask Swastha", icon: Sparkles, route: "/search" },
-];
-
-// Categories a user can pick when uploading a new report manually.
-const UPLOAD_CATEGORIES = [
-  { value: "Lab Reports", icon: FlaskConical, kind: "upload" },
-  { value: "Prescriptions", icon: ClipboardList, kind: "medication" },
-  { value: "MRI/Scans", icon: ScanLine, kind: "imaging" },
-  { value: "Immunizations", icon: Syringe, kind: "upload" },
-];
-
-const CATEGORY_META = {
-  Prescription: { kind: "medication", icon: ClipboardList },
-  Prescriptions: { kind: "medication", icon: ClipboardList },
-  "Lab Report": { kind: "lab", icon: FlaskConical },
-  "Lab Reports": { kind: "lab", icon: FlaskConical },
-  Imaging: { kind: "imaging", icon: ScanLine },
-  "MRI/Scans": { kind: "imaging", icon: ScanLine },
-  Vaccination: { kind: "immunization", icon: Syringe },
-  Immunizations: { kind: "immunization", icon: Syringe },
-  Consultation: { kind: "consultation", icon: FileText },
-};
-
-// Diagnosis/Medicines are stored under the same column names for every
-// category, but what they actually MEAN differs by category — mirrors
-// UploadReports.jsx's CATEGORY_FIELD_CONFIG so a saved report's detail
-// view uses the same labels the manual entry form showed when saving it
-// (e.g. a Lab Report shows "Test / Panel Name", not "Diagnosis").
-const CATEGORY_FIELD_LABELS = {
-  Prescription: { diagnosis: "Diagnosis", medicines: "Medicines" },
-  "Lab Report": { diagnosis: "Test / Panel Name", medicines: "Key Results / Values" },
-  Imaging: { diagnosis: "Findings", medicines: "Body Part / Scan Type" },
-  Vaccination: { diagnosis: "Vaccine Name", medicines: "Dose / Batch Info" },
-  Consultation: { diagnosis: "Reason for Visit", medicines: "Medicines" },
-};
-
-function categoryFieldLabels(category) {
-  return CATEGORY_FIELD_LABELS[category] || CATEGORY_FIELD_LABELS.Prescription;
-}
-
 // Dot ring color per event kind — lab reports get their own orange tone
 // as a permanent category color (matches Dashboard's SafetyAlert palette),
 // independent of whether anything on the report actually needs attention.
@@ -127,7 +72,6 @@ export default function Timeline() {
   const [editingEvent, setEditingEvent] = useState(null);
   const [selectedEvent, setSelectedEvent] = useState(null);
   const [loading, setLoading] = useState(false);
-  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
   const [categoryFilter, setCategoryFilter] = useState("All Categories");
   const [dateFrom, setDateFrom] = useState("");
@@ -168,7 +112,7 @@ export default function Timeline() {
     }) : 'Undated';
 
     const category = report.category || 'Consultation';
-    const meta = CATEGORY_META[category] || CATEGORY_META.Consultation;
+    const meta = getReportCategory(category);
 
     return {
       id: report.id || `${report.userId}-${normalizedDate}-${Math.random()}`,
@@ -350,16 +294,10 @@ export default function Timeline() {
 
   return (
     <div className="flex h-screen overflow-hidden bg-slate-50 text-slate-900 ">
-      <Sidebar onUploadClick={() => setShowUploadModal(true)} onOpenSettings={() => setIsSettingsOpen(true)} />
+      <PatientSidebar action={{ label: "Upload New Report", icon: UploadCloud, onClick: () => setShowUploadModal(true) }} />
 
       <div className="flex-1 flex flex-col min-w-0 h-screen overflow-hidden">
-        <header className="shrink-0 flex items-center justify-end gap-4 px-6 lg:px-8 py-5 border-b border-slate-200 bg-white ">
-          <NotificationBell />
-
-          <PatientIdBadge />
-
-          <ProfileDropdown />
-        </header>
+        <AppHeader />
 
       <main className="flex-1 overflow-y-auto px-6 sm:px-10 py-8">
         <div className="flex flex-wrap items-start justify-between gap-4 mb-6">
@@ -506,28 +444,12 @@ export default function Timeline() {
         />
       )}
 
-      <SettingsModal
-        isOpen={isSettingsOpen}
-        onClose={() => setIsSettingsOpen(false)}
-      />
     </div>
   );
 }
 
 /* ---------------------------- Sidebar ---------------------------- */
 /* Copied from Dashboard.jsx / LabTrends.jsx so all pages share identical behavior. */
-
-
-function Sidebar({ onUploadClick, onOpenSettings }) {
-  return (
-    <ResponsiveSidebar
-      navItems={navItems}
-      action={{ label: "Upload New Report", icon: UploadCloud, onClick: onUploadClick }}
-      onOpenSettings={onOpenSettings}
-      className="bg-slate-50"
-    />
-  );
-}
 
 /* --------------------------- Filter bar --------------------------- */
 
@@ -825,13 +747,7 @@ function EventCard({ event, notable }) {
 }
 
 function EventDetails({ event, onClose, onEdit, onDelete }) {
-  const formattedDate = event.reportDate
-    ? new Date(event.reportDate).toLocaleDateString('en-US', {
-        year: 'numeric',
-        month: 'short',
-        day: 'numeric',
-      })
-    : 'Unknown date';
+  const formattedDate = formatDate(event.reportDate, { fallback: 'Unknown date' });
 
   // Both createdAt and updatedAt get set on creation too, so only show
   // "Last edited" once updatedAt is meaningfully after createdAt — i.e.
@@ -841,15 +757,7 @@ function EventDetails({ event, onClose, onEdit, onDelete }) {
     event.createdAt &&
     new Date(event.updatedAt).getTime() - new Date(event.createdAt).getTime() > 1000;
 
-  const formattedEditedAt = wasEdited
-    ? new Date(event.updatedAt).toLocaleString('en-US', {
-        year: 'numeric',
-        month: 'short',
-        day: 'numeric',
-        hour: 'numeric',
-        minute: '2-digit',
-      })
-    : null;
+  const formattedEditedAt = wasEdited ? formatDateTime(event.updatedAt) : null;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 px-4 py-6">
@@ -981,14 +889,14 @@ function EventDetails({ event, onClose, onEdit, onDelete }) {
             onClick={onEdit}
             className="inline-flex items-center justify-center rounded-2xl bg-blue-700 px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-blue-800"
           >
-            Edit Event
+            Edit Report
           </button>
           <button
             type="button"
             onClick={onDelete}
             className="inline-flex items-center justify-center rounded-2xl bg-rose-600 px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-rose-700"
           >
-            Delete Event
+            Delete Report
           </button>
           <button
             type="button"

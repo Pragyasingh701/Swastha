@@ -1,32 +1,15 @@
 import crypto from 'crypto';
 import supabase from '../config/supabase.js';
 import { findUserById } from './users.js';
+import { ageFromDob } from '../utils/age.js';
 
-const FAMILY_VAULT_TABLE = process.env.FAMILY_VAULT_TABLE_NAME || 'vault_table';
-const FAMILY_MEMBERS_TABLE = process.env.FAMILY_MEMBERS_TABLE_NAME || 'family_members';
-// M5 (DB reorg, decision D8): both vault_table.user_id and
-// family_members.user_id were renamed to patient_id — they point at
-// `patients` now, not the removed shared `users` table. Every read/write
-// in this file already goes through this constant.
-const FAMILY_USER_ID_COLUMN = process.env.FAMILY_USER_ID_COLUMN || 'patient_id';
+const FAMILY_VAULT_TABLE = 'vault_table';
+const FAMILY_MEMBERS_TABLE = 'family_members';
+// vault_table.patient_id and family_members.patient_id point at `patients`.
+const FAMILY_USER_ID_COLUMN = 'patient_id';
 
 function escapeRegExp(value) {
   return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
-
-function calculateAgeFromDob(dobValue) {
-  if (!dobValue) return null;
-  const dateValue = new Date(dobValue);
-  if (Number.isNaN(dateValue.getTime())) return null;
-
-  const today = new Date();
-  let age = today.getFullYear() - dateValue.getFullYear();
-  const monthDiff = today.getMonth() - dateValue.getMonth();
-  if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < dateValue.getDate())) {
-    age -= 1;
-  }
-
-  return age >= 0 && age <= 150 ? age : null;
 }
 
 function isPendingAuthorizationMember(member) {
@@ -129,7 +112,7 @@ function applyUserScope(query, { userId }) {
 function buildMemberPayload(memberData = {}) {
   const now = new Date().toISOString();
   const normalizedDob = memberData.dob || memberData.date_of_birth || null;
-  const computedAge = calculateAgeFromDob(normalizedDob);
+  const computedAge = ageFromDob(normalizedDob);
 
   return {
     name: memberData.name?.trim() || null,
@@ -167,7 +150,7 @@ function buildMemberUpdatePayload(memberData = {}) {
   if (has('name')) payload.name = memberData.name?.trim() || null;
   if (has('dob') || has('date_of_birth')) {
     payload.dob = memberData.dob || memberData.date_of_birth || null;
-    const computedAge = calculateAgeFromDob(payload.dob);
+    const computedAge = ageFromDob(payload.dob);
     if (computedAge !== null) {
       payload.age = computedAge;
     }
@@ -301,8 +284,10 @@ export const createOrGetFamilyVaultForUser = async (userId) => {
 
     return normalizeVault(data);
   } catch (err) {
-    console.warn('Supabase family vault ensure warning:', err.message);
-    return null;
+    // Not swallowed: the caller must know the vault was NOT created, rather than be
+    // handed null and report success.
+    console.error('Supabase family vault ensure failed:', err.message);
+    throw err;
   }
 };
 
@@ -560,11 +545,24 @@ export const deleteFamilyVaultForUser = async (userId) => {
   }
 };
 
+// Checkups due from today up to 30 days ahead. A date in the past is overdue, not
+// upcoming, and one further out is not due yet. Dates are stored as YYYY-MM-DD.
+export const UPCOMING_CHECKUP_DAYS = 30;
+
+export const countUpcomingCheckups = (members = [], now = new Date()) => {
+  const today = now.toISOString().slice(0, 10);
+  const limit = new Date(now.getTime() + UPCOMING_CHECKUP_DAYS * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  return members.filter((member) => {
+    const due = String(member.nextCheckupDate || '').slice(0, 10);
+    return due >= today && due <= limit;
+  }).length;
+};
+
 export const getFamilyVaultSummary = async ({ userId } = {}) => {
   const members = await listFamilyMembers({ userId, includeDeleted: false });
 
   const relationshipTags = [...new Set(members.map((member) => member.relationshipTag).filter(Boolean))].sort();
-  const upcomingCheckups = members.filter((member) => member.nextCheckupDate).length;
+  const upcomingCheckups = countUpcomingCheckups(members);
   const membersWithHealthNotes = members.filter((member) => member.healthOverview || member.notes).length;
   const recentVisits = members.filter((member) => member.lastVisitDate).length;
 

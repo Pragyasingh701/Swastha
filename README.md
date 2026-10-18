@@ -22,12 +22,16 @@ the **Frontend SPA** (Vite/React, `:5173`).
 ## 🌟 Key Features
 
 - **🛡️ Secure Multi-Role Authentication**: Patient and Doctor onboarding with redirect-based Google OAuth 2.0 (full-page redirect to Google + `/auth/google/callback`, with account deduplication — avoids ad-blockers breaking popup-based auth), 6-digit email OTP verification via **Brevo HTTPS REST API**, password resets, and JWT session tokens.
-- **🔬 Doctor Certificate AI Verification**: Automated parsing and credential validation of medical registration certificates using **Google Gemini 2.0 Flash AI** vision capabilities upon doctor signup.
+- **🔬 Doctor Certificate AI Verification**: Automated parsing and credential validation of medical registration certificates using **Google Gemini** vision capabilities upon doctor signup. (Official register verification and a `verified` badge are not built yet; see the project notes.)
 - **📜 Smart Medical Timeline & OCR Ingestion**: Chronological visual record of consultations, prescriptions, lab reports, and diagnoses. Automatically flags **unclear fields** (e.g. illegible doctor handwriting) to alert clinicians.
 - **🔍 Grounded RAG Semantic Search**: The RAG sub-app (mounted inside the backend at `/rag`) performs `pgvector` similarity search over patient records and synthesizes natural-language answers via **Google Gemini**, with OpenRouter as a last-resort fallback (on by default, see `ALLOW_OPENROUTER_FALLBACK`).
 - **👨‍👩‍👧‍👦 Family Vault & Authorization Network**: Centralized health management for families. Manage dependants (children/elders) and send email-authorized consent requests for adult family members. Once a family member is linked (their own separate Swastha account, approved via that consent flow), a family admin can also ask **Ask Swastha** about that member's own records via `patient_user_id` — same mechanism as the doctor↔patient case below, gated by `isPatientLinkedToFamilyMember` (`backend/db/family.js`) rather than `doctor_patient`. Backend API only today — no family-member picker in the Ask Swastha UI yet (see `frontend/src/modules/search/`).
 - **📊 AI Lab Trends Visualizer**: Interactive trend analysis powered by **Recharts**, tracking blood work, lab parameters, and vital metrics over time.
-- **👨‍⚕️ Doctor Clinical Dashboard**: Dedicated portal allowing verified healthcare professionals to link patients by their unique 6-digit **patient code** (or user ID), then search records, view past diagnoses, active medications, and medical history. Access is patient-approved and **time-limited to 24 hours** per approval — after that, the link goes inactive and the doctor must send a fresh request rather than retaining standing access.
+- **👨‍⚕️ Doctor Clinical Dashboard**: Dedicated portal allowing healthcare professionals to link patients by their unique 6-digit **patient code** (or user ID), then search records, view past diagnoses, active medications, and medical history. Access is patient-approved and **time-limited to 24 hours** per approval — after that, the link goes inactive and the doctor must send a fresh request rather than retaining standing access.
+- **🎙️ Voice & Text Patient Intake**: A conversational AI intake (Hindi or English, speech or typing) that collects a structured history (symptoms, medications, allergies) before the visit. Doctors see it in a priority-sorted **Intake Queue** with red-flag highlighting, can mark sessions Completed or Removed, and keep a personal **History** of what they handled.
+- **🏥 Clinic Check-In**: Each doctor gets a code that rotates daily. A patient at the clinic enters the code, verifies by email, and completes the intake, which lands in that doctor's queue.
+- **🔐 Patient-Controlled Access**: A doctor's access to a patient lasts 24 hours and the patient can end it sooner. Declined requests follow retry and cool-down rules, and unanswered requests lapse after 24 hours.
+- **🤖 AI Consent & Transparency**: An AI notice must be accepted before records or documents go to an AI provider, every AI request records which provider handled it, and AI output is labelled as AI-generated.
 
 ---
 
@@ -36,322 +40,97 @@ the **Frontend SPA** (Vite/React, `:5173`).
 ```
 Swastha/
 ├── backend/                        # Node.js & Express API Server (:5001)
+│   ├── app.js / server.js          # Express app (CORS, helmet, rate limits, routes) / entry point; mounts backend/rag/app.js at /rag
 │   ├── config/
-│   │   └── supabase.js             # Supabase Client SDK initialization
-│   ├── db/
-│   │   ├── users.js                # Identity dispatcher across patients/doctors/pending_registrations
-│   │   ├── reports.js              # Medical timeline reports persistence layer
-│   │   ├── family.js               # Family vault & members database operations
-│   │   ├── doctorPatients.js       # Doctor↔patient link requests (accept/decline, patient_code lookup)
-│   │   └── notifications.js        # In-app notification bell persistence layer
-│   ├── rag/                        # RAG sub-app — was standalone rag/, merged in and mounted at /rag
-│   │   ├── config/                 # Gemini, OpenRouter, and Supabase config
-│   │   ├── routes/                 # Search, indexing, extraction, lab insights, patient summaries
-│   │   ├── services/                # Vector embedding generator & pgvector match engine
-│   │   ├── langchain/               # Conversational search session store & retriever
-│   │   └── app.js                   # Express sub-app, dynamically imported + mounted by server.js
-│   ├── routes/
-│   │   ├── auth.js                 # Auth, Google OAuth, Brevo OTPs, Doctor License Verification
-│   │   ├── family.js               # Family Vault CRUD & Authorization routes
-│   │   ├── reports.js              # Timeline & Report Management API endpoints
-│   │   └── doctorPatients.js       # Doctor↔patient linking & notification endpoints
-│   ├── services/
-│   │   └── certificateParserService.js # Gemini 2.0 Flash AI Medical License Parser
-│   ├── utils/
-│   │   ├── mailer.js               # Brevo REST API transactional email sender (OTPs & Invites)
-│   │   └── timelineValidation.js   # Input sanitization & validation rules
+│   │   ├── jwt.js                  # Session and purpose-token signing/verification
+│   │   ├── sensitiveFields.js      # Which fields are encrypted on the wire (mirrors frontend/src/api/pii/fields.js)
+│   │   ├── supabase.js             # Supabase client (service-role key)
+│   │   └── supabaseStorage.js      # Private `reports` bucket: upload, signed URLs, file-type checks
+│   ├── middleware/                 # CORS allow-list, rate limiters, wire-format encryption
+│   ├── crypto/                     # ECDH handshake + AES-GCM for the wire encryption
+│   ├── db/                         # Persistence layer, one file per area
+│   │   ├── users.js, reports.js, family.js, notifications.js
+│   │   ├── doctorPatients.js       # Doctor↔patient links: requests, accept/decline, 24 h access, revoke
+│   │   ├── intakeSessions.js, clinicCheckin.js
+│   │   ├── aiNoticeAcknowledgements.js, askSwasthaAccessLog.js, askSwasthaFeedback.js
+│   │   └── accountErasure.js       # Removes what outlives a deleted account
+│   ├── routes/                     # auth, family, reports, doctorPatients, clinic, notifications, crypto, intakeAdmin
+│   ├── services/                   # certificateParserService.js (Gemini vision licence parser)
+│   ├── utils/                      # mailer (Brevo), password policy, validation, async error wrapper, email-action page
+│   ├── rag/                        # RAG sub-app, mounted at /rag
+│   │   ├── config/                 # Gemini, OpenRouter, AI failover client
+│   │   ├── routes/                 # Search/chat, extraction, summaries, lab insights, intake, notices, feedback
+│   │   ├── services/               # Embeddings, search, summaries, intake dialogue, voice (ASR/TTS)
+│   │   ├── middleware/             # Auth and AI-notice consent checks
+│   │   ├── utils/                  # Untrusted-data prompt wrapping, request logging
+│   │   ├── langchain/, evals/      # Conversational search store; eval harness
+│   │   └── app.js
 │   ├── test/                       # node:test suites, run from the repo root with `npm test`
-│   │                                # (many hit the real configured Supabase project — see wire-encryption.test.js)
-│   ├── uploads/                    # Local storage for uploaded certificates & reports
-│   ├── .env.example                # Backend environment template — also covers the RAG sub-app now
-│   └── server.js                   # Express entry point; mounts backend/rag/app.js at /rag
+│   │                               # (many hit the real configured Supabase project — see wire-encryption.test.js)
+│   ├── uploads/                    # Doctor certificates (never served publicly); report files live in the private Supabase bucket
+│   ├── .env.example                # Backend environment template, also covers the RAG sub-app
+│   └── server.js
 ├── frontend/                       # React 18 + Vite + Tailwind CSS Frontend SPA (:5173)
-│   ├── src/                        # Frontend test: `npm run test:frontend` from the repo root (vitest)
-│   │   ├── api/                    # Backend call wrappers (auth, reports, family, intake, search, ...) + PII wire encryption
-│   │   ├── components/common/      # Shared UI (Logo, NotificationBell, ResponsiveSidebar, AiNotice, ...)
-│   │   ├── context/
-│   │   │   └── AuthContext.jsx     # Global Auth Provider & Route Guard state
-│   │   ├── modules/
-│   │   │   ├── authentication/     # Login, Register, RoleSelection, VerifyOTP, ResetPassword
-│   │   │   ├── dashboard/          # Patient & Doctor Main Dashboards
-│   │   │   ├── doctor/             # Doctor Portal & Patient Inspector components
-│   │   │   ├── family/             # Family Health Vault interface
-│   │   │   ├── landing/            # Dynamic Landing Page
-│   │   │   ├── reports/            # Report Uploader & Lab Trends visualizer
-│   │   │   ├── search/             # Universal AI Medical Search module
-│   │   │   ├── settings/           # Profile Settings
-│   │   │   ├── timeline/           # Interactive Timeline UI
-│   │   │   └── vault/              # Document Storage Manager
-│   │   ├── App.jsx                 # Route declarations & Navigation Guards
-│   │   └── main.jsx                # React DOM entry point wrapped with Providers
-│   └── vite.config.js              # Vite build configuration
+│   └── src/                        # Frontend tests: `npm run test:frontend` from the repo root (vitest)
+│       ├── api/                    # Backend call wrappers + PII wire encryption
+│       ├── components/common/      # Shared UI (Logo, NotificationBell, ResponsiveSidebar, AiNotice, ReportFilePreview, ...)
+│       ├── context/AuthContext.jsx # Global auth provider and route guard state
+│       ├── config/, hooks/, utils/ # AI notice text, polling hook, form validation
+│       ├── modules/
+│       │   ├── authentication/     # Login, registration (patient/doctor), OTP, password reset, Google callback
+│       │   ├── dashboard/          # Patient dashboard
+│       │   ├── doctor/             # Doctor dashboard, patients, AI insights, Ask Swastha, intake queue
+│       │   ├── family/             # Family vault
+│       │   ├── intake/             # Voice/text intake chat
+│       │   ├── landing/            # Landing page
+│       │   ├── reports/            # Report upload and lab trends
+│       │   ├── search/             # Ask Swastha (patient)
+│       │   ├── settings/           # Profile, password, doctor access, account deletion
+│       │   ├── timeline/           # Health timeline
+│       │   └── vault/              # Medical vault (documents)
+│       ├── App.jsx                 # Routes and navigation guards
+│       └── main.jsx
+├── supabase/
+│   ├── schema/                     # 00000000000000_baseline_schema.sql: the whole database schema, kept up to date
+│   └── migrations_archive/         # Every migration script, kept as history (run in the Supabase SQL editor)
+├── scripts/                        # purge-audit-log.js (scheduled)
+├── vercel.json                     # Frontend hosting: SPA rewrite, security headers, Content-Security-Policy
 ├── package.json                    # Monorepo root script & dependency manifest
-└── README.md                       # Main project documentation
+└── README.md
 ```
 
 ---
 
-## 🗄️ Supabase Database Architecture (9 Tables)
+## 🗄️ Supabase Database (16 tables)
 
-**Patients and doctors are separate tables**, not a shared `users` table with a role column — that
-split (`patients` / `doctors` / `pending_registrations`, replacing the old single `users` table)
-landed in a dedicated DB reorg; see `supabase/migrations_archive/` at the repo root for the migration
-history if you need it.
+The whole schema lives in one file, **`supabase/schema/00000000000000_baseline_schema.sql`**. It rebuilds
+an empty database: open **Supabase Dashboard > SQL Editor**, paste it, and run it. It is not meant to be run
+against a database that already has the tables.
 
-`reports`, `report_embeddings`, `vault_table`, and `family_members` all reference `patients.id` via
-a **`patient_id`** column (renamed from `user_id` in the same reorg) — grep the codebase for
-`user_id` in a table-column context and you're looking at stale code, not the current schema.
+**How changes are made:** every database change is a script stored in `supabase/migrations_archive/` (you run
+it in the SQL editor) and is folded into the baseline in the same commit, so the baseline always describes the
+current schema.
 
-⚠️ **`doctor_patient`, `vault_table`, `family_members`, and `notifications` have no `CREATE TABLE`
-migration in this repo** — they were created by hand in the Supabase dashboard before migrations
-were adopted, so the definitions below are reconstructed from a verified `pg_dump` capture and the
-application code (`backend/db/*.js`), not copied from a migration file. Cross-check against
-**Supabase Dashboard → Table Editor** before relying on this to bootstrap a fresh project.
-(`patients`, `doctors`, `pending_registrations`, `reports`' FKs/indexes, and `report_embeddings`
-*do* have real migrations — those blocks below are copied verbatim.)
+| Area | Tables |
+| :--- | :--- |
+| Identity | `patients`, `doctors`, `pending_registrations` (patients and doctors are separate tables, not one `users` table) |
+| Records | `reports`, `report_embeddings` (pgvector, 768 dimensions), `vault_table`, `family_members` |
+| Doctor ↔ patient | `doctor_patient` (request, accept/decline, 24 h access window, cool-downs), `clinic_checkin_codes` |
+| Intake | `intake_sessions`, `intake_session_actions` |
+| In-app | `notifications` (removed after seven days by the hourly `delete-expired-notifications` cron job) |
+| AI privacy | `ai_notice_acknowledgements`, `ask_swastha_access_log`, `ask_swastha_feedback`, `ai_request_log` |
 
-Run the following in your **Supabase Dashboard > SQL Editor** to construct the schema:
+`reports`, `report_embeddings`, `vault_table`, and `family_members` reference `patients.id` through a
+**`patient_id`** column. The similarity search runs in the `match_report_embeddings` function.
 
-```sql
--- 1. Patients (from supabase/migrations_archive/20260819171220_create_patients_doctors_pending_tables.sql)
-CREATE TABLE public.patients (
-  id                   VARCHAR PRIMARY KEY,
-  email                VARCHAR NOT NULL UNIQUE,
-  name                 VARCHAR,
-  picture              TEXT,
-  password_hash        VARCHAR,
-  auth_provider        VARCHAR,
-  phone                TEXT,
-  dob                  TEXT,
-  gender               TEXT,
-  blood_group          TEXT,
-  patient_code         TEXT UNIQUE, -- doctors link a patient by this 6-digit code
-  verification_status  TEXT DEFAULT 'verified',
-  created_at           TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  updated_at           TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
+**Report files** are stored in a **private** Supabase Storage bucket named `reports`, under random per-patient
+paths, and are opened through short-lived signed links (`GET /api/reports/:id/file-url`).
 
--- 2. Doctors
-CREATE TABLE public.doctors (
-  id                   VARCHAR PRIMARY KEY,
-  email                VARCHAR NOT NULL UNIQUE,
-  name                 VARCHAR,
-  picture              TEXT,
-  password_hash        VARCHAR,
-  auth_provider        VARCHAR,
-  phone                TEXT,
-  dob                  TEXT,
-  gender               TEXT,
-  specialty            VARCHAR,
-  license_number       VARCHAR,
-  council              TEXT,
-  degree               TEXT,
-  experience           TEXT,
-  hospital_name        TEXT,
-  address              TEXT,
-  reg_certificate_url  TEXT,
-  cert_extracted_data  JSONB,      -- reserved for a future HPR certificate flow, unpopulated today
-  license_expiry_date  DATE,       -- same
-  verification_status  TEXT DEFAULT 'pending',
-  created_at           TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  updated_at           TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-
--- 3. Pending Registrations (signed up, hasn't picked patient/doctor yet)
-CREATE TABLE public.pending_registrations (
-  id                   VARCHAR PRIMARY KEY,
-  email                VARCHAR NOT NULL UNIQUE,
-  name                 VARCHAR,
-  picture              TEXT,
-  password_hash        VARCHAR,
-  auth_provider        VARCHAR,
-  verification_status  TEXT,
-  created_at           TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  updated_at           TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-
--- 4. Medical Reports & Timeline Table
--- NOTE: id is BIGINT (verified via pg_dump), not UUID, despite this table
--- predating migrations — report_embeddings.report_id below has always
--- referenced it as bigint, so declaring it UUID here would be inconsistent.
-CREATE TABLE public.reports (
-  id BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
-  patient_id VARCHAR REFERENCES public.patients(id) ON DELETE CASCADE,
-  title VARCHAR(255) NOT NULL,
-  doctor VARCHAR(255),
-  hospital VARCHAR(255),
-  category VARCHAR(100) DEFAULT 'General',
-  report_date DATE NOT NULL,
-  diagnosis TEXT,
-  medicines TEXT,
-  notes TEXT,
-  file_url TEXT,
-  unclear_fields TEXT[] DEFAULT '{}',
-  source VARCHAR(50) DEFAULT 'manual',
-  created_at TIMESTAMPTZ DEFAULT NOW(),
-  updated_at TIMESTAMPTZ DEFAULT NOW()
-);
-CREATE INDEX IF NOT EXISTS reports_patient_id_idx ON public.reports(patient_id);
-
--- 5. Report Vector Embeddings Table (pgvector)
-CREATE EXTENSION IF NOT EXISTS vector;
-
-CREATE TABLE IF NOT EXISTS public.report_embeddings (
-  id BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
-  report_id BIGINT NOT NULL REFERENCES public.reports(id) ON DELETE CASCADE,
-  patient_id VARCHAR NOT NULL REFERENCES public.patients(id) ON DELETE CASCADE,
-  chunk_text TEXT NOT NULL,
-  embedding VECTOR(768) NOT NULL,
-  chunk_index INT NOT NULL,
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-  CONSTRAINT report_embeddings_report_chunk_unique UNIQUE (report_id, chunk_index)
-);
-
-CREATE INDEX IF NOT EXISTS report_embeddings_user_id_idx ON public.report_embeddings (patient_id);
--- No HNSW/ANN index on `embedding`: every retrieval query
--- (match_report_embeddings) filters `WHERE patient_id = p_user_id` before
--- ordering by vector distance — the candidate set is always one patient's
--- own chunks, narrowed by the btree index above, never a cross-patient ANN
--- search over the whole table. An exact scan over that already-small,
--- already-scoped set is not meaningfully slower than an ANN lookup would
--- be, and it's exact rather than approximate. See
--- supabase/migrations_archive/20260930051136_drop_report_embeddings_hnsw_idx.sql.
-
--- 6. Family Vault Table (⚠️ hand-created, see note above)
-CREATE TABLE public.vault_table (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  vault_id TEXT,   -- family_members.vault_id links here BY VALUE, not by FK
-  patient_id VARCHAR REFERENCES public.patients(id) ON DELETE CASCADE,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  updated_at TIMESTAMPTZ DEFAULT NOW(),
-  deleted_at TIMESTAMPTZ
-);
-CREATE INDEX IF NOT EXISTS vault_table_patient_id_idx ON public.vault_table(patient_id);
-
--- 7. Family Members Table (⚠️ hand-created, see note above)
-CREATE TABLE public.family_members (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  vault_id TEXT NOT NULL DEFAULT '',
-  patient_id VARCHAR REFERENCES public.patients(id) ON DELETE CASCADE,
-  parent_member_id TEXT,          -- self-referential-by-value, for nested family trees
-  name VARCHAR(255) NOT NULL,
-  age INT,
-  dob DATE,
-  relationship VARCHAR(100) NOT NULL,
-  relationship_tag VARCHAR(100),
-  health_overview TEXT,
-  notes TEXT,
-  conditions JSONB,
-  last_visit_date DATE,
-  next_checkup_date DATE,
-  authorization_status VARCHAR(50) DEFAULT 'approved',
-  authorization_token TEXT,
-  authorization_requested_at TIMESTAMPTZ,
-  authorization_approved_at TIMESTAMPTZ,
-  consent_given_at TIMESTAMPTZ,
-  requested_by_email VARCHAR(255),
-  authorized_by_email VARCHAR(255),
-  created_at TIMESTAMPTZ DEFAULT NOW(),
-  updated_at TIMESTAMPTZ DEFAULT NOW(),
-  deleted_at TIMESTAMPTZ
-);
-CREATE INDEX IF NOT EXISTS family_members_patient_id_idx ON public.family_members(patient_id);
-CREATE INDEX IF NOT EXISTS idx_family_members_parent_member_id ON public.family_members(parent_member_id);
-
--- 8. Doctor ↔ Patient Link Table (⚠️ hand-created, see note above — except
--- access_expires_at, which DOES have a real migration:
--- supabase/migrations_archive/20260830010000_add_access_expires_at_to_doctor_patient.sql)
--- A doctor sends a link request (status='pending'); the patient accepts or
--- declines, in-app or via a one-shot emailed token (email_action_token).
--- Acceptance is NOT permanent: access_expires_at is stamped to 24h from the
--- moment of acceptance, and every health-data read (isDoctorLinkedToPatient
--- in backend/db/doctorPatients.js, the single shared gate) checks it in
--- addition to status='accepted'. Once it lapses, the doctor's patient-list
--- card shows the link as inactive (no patient data included in that card)
--- until they send a fresh request — see requestAccessAgain, which re-opens
--- this same row (status back to 'pending', access_expires_at cleared)
--- rather than inserting a second one for the pair.
-CREATE TABLE public.doctor_patient (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  doctor_id VARCHAR NOT NULL REFERENCES public.doctors(id) ON DELETE CASCADE,
-  patient_id VARCHAR REFERENCES public.patients(id) ON DELETE CASCADE,
-  -- Denormalized snapshot of the patient's info at link time (can drift from patients.*):
-  patient_code TEXT,
-  patient_email TEXT,
-  patient_name TEXT,
-  patient_phone TEXT,
-  patient_gender TEXT,
-  patient_dob TEXT,
-  patient_blood_group TEXT,
-  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'accepted', 'declined')),
-  responded_at TIMESTAMPTZ,       -- when the patient accepted/declined; NULL = no response yet
-  access_expires_at TIMESTAMPTZ,  -- set to responded_at + 24h on acceptance; NULL = not accepted (yet)
-  email_action_token TEXT,        -- one-shot accept/decline token sent by email
-  created_at TIMESTAMPTZ DEFAULT NOW(),
-  CONSTRAINT doctor_patient_unique UNIQUE (doctor_id, patient_id)
-);
-CREATE INDEX IF NOT EXISTS doctor_patient_doctor_id_idx ON public.doctor_patient(doctor_id);
-CREATE INDEX IF NOT EXISTS doctor_patient_patient_id_idx ON public.doctor_patient(patient_id);
-CREATE INDEX IF NOT EXISTS doctor_patient_status_idx ON public.doctor_patient(status);
-CREATE UNIQUE INDEX IF NOT EXISTS doctor_patient_email_action_token_idx
-  ON public.doctor_patient(email_action_token) WHERE email_action_token IS NOT NULL;
-
--- 9. Notifications Table (⚠️ hand-created, see note above)
--- Powers the in-app notification bell for logins, family/vault changes, and
--- the doctor<->patient link workflow. recipient_id/actor_id are TEXT (not
--- UUID) because Swastha's application-generated IDs (e.g. usr_g_...) aren't
--- UUIDs. See backend/db/notifications.js for the full event_type list.
-CREATE TABLE public.notifications (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  recipient_id TEXT NOT NULL,
-  actor_id TEXT,
-  actor_role TEXT DEFAULT 'system', -- 'patient' | 'doctor' | 'family_admin' | 'system'
-  event_type TEXT NOT NULL,
-  title TEXT NOT NULL,
-  message TEXT NOT NULL,
-  metadata JSONB DEFAULT '{}',
-  read_at TIMESTAMPTZ,
-  created_at TIMESTAMPTZ DEFAULT NOW()
-);
-CREATE INDEX IF NOT EXISTS notifications_recipient_created_at_idx
-  ON public.notifications (recipient_id, created_at DESC);
-
--- Similarity Search RPC Function for RAG Service
--- p_user_id is kept as the parameter name deliberately (external API surface
--- called from rag/) even though the column it filters on is now patient_id.
-CREATE OR REPLACE FUNCTION public.match_report_embeddings(
-  p_user_id VARCHAR,
-  p_query_embedding VECTOR(768),
-  p_match_count INT DEFAULT 5
-)
-RETURNS TABLE (
-  id BIGINT,
-  report_id BIGINT,
-  chunk_text TEXT,
-  chunk_index INT,
-  similarity FLOAT
-)
-LANGUAGE SQL STABLE AS $$
-  SELECT
-    re.id,
-    re.report_id,
-    re.chunk_text,
-    re.chunk_index,
-    1 - (re.embedding <=> p_query_embedding) AS similarity
-  FROM public.report_embeddings re
-  WHERE re.patient_id = p_user_id
-  ORDER BY re.embedding <=> p_query_embedding
-  LIMIT p_match_count;
-$$;
-```
-
-⚠️ **RLS note**: every table above gets Row Level Security auto-enabled with **zero policies** the
-moment it's created (an `ensure_rls` event trigger in this Supabase project does this automatically).
-That means **deny-all** to the `anon`/`authenticated` keys; the app
-only works because both the main backend code and the RAG sub-app connect with `SUPABASE_SERVICE_ROLE_KEY`, which
-bypasses RLS. There is no database-level scoping — every query in the codebase must manually filter
-by `patient_id`/`recipient_id`/etc. If you ever add a direct browser→Supabase call, it will silently
-return nothing until real RLS policies are written.
+⚠️ **RLS note**: every table has Row Level Security enabled with **zero policies**, which means deny-all to the
+`anon`/`authenticated` keys. The app works because the backend (and the RAG sub-app) connect with
+`SUPABASE_SERVICE_ROLE_KEY`, which bypasses RLS. There is no database-level scoping, so every query in the
+code must filter by `patient_id`/`recipient_id`/etc. itself. If you ever add a direct browser→Supabase call, it
+will return nothing until real RLS policies are written.
 
 ---
 
@@ -593,6 +372,18 @@ node backend/rag/evals/run-evals.js --file=path/to/other-questions.json
 Each question is one row in the summary table: overall pass/fail (a question with followups only passes if every turn in its chain does), the parent turn's mode (`retrieval` | `aggregate` | `full_context`), total latency across all turns, a followup count, and — on failure — which turn(s) failed and why (missing report ids/keywords, or an error). Exits non-zero if anything failed (suitable for a CI gate once you have a question set worth gating on).
 
 **Never run this against production data** as part of routine development — point `backend/.env` at a dev/staging Supabase project, not the live database, unless you specifically intend to eval against real patient records with proper authorization.
+
+## 🚀 Deployment
+
+- **Frontend (Vercel):** `vercel.json` rewrites every path to `index.html` and sends the security headers,
+  including an enforced `Content-Security-Policy`. If a new external script, font, image host or API origin is
+  added, allow it there or the browser will block it. Set `VITE_API_BASE_URL`, `VITE_RAG_BASE_URL` and
+  `VITE_GOOGLE_CLIENT_ID` in the Vercel project.
+- **Backend (e.g. Render):** set the variables from `backend/.env.example`. `JWT_SECRET` is required (there is no
+  fallback), and `FRONTEND_URL` / `BACKEND_URL` must be set (without `FRONTEND_URL` CORS stays open).
+- **Database:** run `supabase/schema/00000000000000_baseline_schema.sql` on a new project, then keep the
+  `reports` storage bucket private.
+- **Scheduled:** `scripts/purge-audit-log.js` (see the audit log section) is not automatic.
 
 ## 🏃 Running the Application
 

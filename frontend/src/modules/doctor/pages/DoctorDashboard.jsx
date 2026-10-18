@@ -1,19 +1,20 @@
 import React, { useEffect, useMemo, useState } from "react";
 import DoctorSidebar from "../components/DoctorSidebar";
-import ProfileDropdown from "../../settings/components/ProfileDropdown";
+
 import {
   Users,
-  Video,
+  ClipboardCheck,
   Activity,
   UserPlus,
   FileCheck2,
   Trophy,
 } from "lucide-react";
-import NotificationBell from "../../../components/common/NotificationBell";
+
 import { useAuth } from "../../../context/AuthContext";
 import { getDoctorPatients, getDoctorLifetimeStats } from "../../../api/doctorPatients";
 import { getTimelineReports } from "../../../api/reports";
 import CheckInCodeCard from "../components/CheckInCodeCard";
+import AppHeader from "../../../components/common/AppHeader";
 
 /* -----------------------------------------------------------
    Sidebar nav — Appointments, Consultations, and Schedule
@@ -107,10 +108,10 @@ export default function DoctorDashboard() {
 
   return (
     <div className="h-screen overflow-hidden bg-slate-50 flex">
-      <Sidebar />
+      <DoctorSidebar />
 
       <div className="flex-1 flex flex-col h-screen overflow-hidden min-w-0">
-        <TopBar />
+        <AppHeader shadow />
 
         <main className="flex-1 overflow-y-auto px-6 md:px-10 py-8">
           <PageHeader doctorName={doctorName} />
@@ -154,15 +155,8 @@ function computeStats(patients, reports, lifetime) {
   const now = new Date();
   const today = startOfDay(now);
   const sevenDaysAgo = new Date(today.getTime() - 7 * MS_PER_DAY);
-  const fourteenDaysAgo = new Date(today.getTime() - 14 * MS_PER_DAY);
 
   const reportDate = (r) => new Date(r.createdAt || r.reportDate || 0);
-
-  const reportsThisWeek = reports.filter((r) => reportDate(r) >= sevenDaysAgo).length;
-  const reportsPrevWeek = reports.filter((r) => {
-    const d = reportDate(r);
-    return d >= fourteenDaysAgo && d < sevenDaysAgo;
-  }).length;
 
   const newPatientsThisWeek = patients.filter((p) => {
     if (!p.linkedAt) return false;
@@ -179,29 +173,14 @@ function computeStats(patients, reports, lifetime) {
   // only the fallback when that request fails.
   return {
     totalPatients: lifetime?.totalPatients ?? patients.length,
-    totalReports: lifetime?.totalReports ?? reports.length,
-    reportsThisWeek: lifetime?.reportsThisWeek ?? reportsThisWeek,
-    reportsPrevWeek: lifetime?.reportsPrevWeek ?? reportsPrevWeek,
+    // Sessions the doctor completed or removed. Uploaded reports are a different
+    // thing, so there is no fallback to them when the server figures are missing.
+    totalReports: lifetime?.totalReports ?? 0,
+    reportsThisWeek: lifetime?.reportsThisWeek ?? 0,
+    reportsPrevWeek: lifetime?.reportsPrevWeek ?? 0,
     newPatientsThisWeek: lifetime?.newPatientsThisWeek ?? newPatientsThisWeek,
     prescriptionsThisWeek: lifetime?.prescriptionsThisWeek ?? prescriptionsThisWeek,
   };
-}
-
-/* ---------------------------- Sidebar ---------------------------- */
-
-function Sidebar() {
-  return <DoctorSidebar />;
-}
-
-/* ----------------------------- Top bar ----------------------------- */
-
-function TopBar() {
-  return (
-    <header className="shrink-0 flex items-center justify-end gap-4 px-6 lg:px-8 py-5 border-b border-slate-200 bg-white shadow-sm">
-      <NotificationBell />
-      <ProfileDropdown />
-    </header>
-  );
 }
 
 /* --------------------------- Page header --------------------------- */
@@ -237,14 +216,14 @@ function StatGrid({ stats, isLoading }) {
       value: isLoading ? "—" : String(stats.totalPatients),
     },
     {
-      icon: Video,
-      label: "Reports Logged",
+      icon: ClipboardCheck,
+      label: "Intake Sessions Handled",
       value: isLoading ? "—" : String(stats.totalReports),
       accent: true,
     },
     {
       icon: Activity,
-      label: "Reports This Week",
+      label: "Handled This Week",
       value: isLoading ? "—" : String(stats.reportsThisWeek),
     },
   ];
@@ -299,7 +278,7 @@ function WeeklyActivitySummary({ stats, isLoading }) {
     {
       icon: FileCheck2,
       value: stats.reportsThisWeek,
-      label: "Reports logged",
+      label: "Intake sessions handled",
     },
     {
       icon: UserPlus,

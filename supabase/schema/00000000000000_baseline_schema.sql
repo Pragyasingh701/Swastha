@@ -13,7 +13,7 @@
 -- is made to the database, the migration script that applies it to the live
 -- database is stored in supabase/migrations_archive/, and the same change is folded
 -- into this baseline in the same commit, so this file always describes the current
--- schema. Last folded in: 20261018120000_database_integrity.sql.
+-- schema. Last folded in: 20261018130000_drop_redundant_indexes.sql.
 --
 -- Part 1 is a schema-only dump (`supabase db dump`): tables, indexes, constraints,
 -- functions, row level security and grants, no data. Part 2 adds what a dump of
@@ -519,8 +519,6 @@ ALTER TABLE ONLY "public"."family_members"
 ALTER TABLE ONLY "public"."family_members"
     ADD CONSTRAINT "family_members_authorization_status_check" CHECK ((("authorization_status" IS NULL) OR ("authorization_status" = ANY (ARRAY['pending'::"text", 'approved'::"text"]))));
 
-CREATE INDEX "ai_notice_acknowledgements_user_feature_idx" ON "public"."ai_notice_acknowledgements" USING "btree" ("user_id", "feature");
-
 CREATE INDEX "ai_request_log_created_at_idx" ON "public"."ai_request_log" USING "btree" ("created_at");
 
 CREATE INDEX "ai_request_log_fallback_idx" ON "public"."ai_request_log" USING "btree" ("created_at") WHERE "fallback";
@@ -531,8 +529,6 @@ CREATE INDEX "ask_swastha_access_log_target_created_idx" ON "public"."ask_swasth
 
 CREATE INDEX "ask_swastha_feedback_user_created_idx" ON "public"."ask_swastha_feedback" USING "btree" ("user_id", "created_at");
 
-CREATE INDEX "doctor_patient_doctor_id_idx" ON "public"."doctor_patient" USING "btree" ("doctor_id");
-
 CREATE UNIQUE INDEX "doctor_patient_email_action_token_idx" ON "public"."doctor_patient" USING "btree" ("email_action_token") WHERE ("email_action_token" IS NOT NULL);
 
 CREATE INDEX "doctor_patient_patient_id_idx" ON "public"."doctor_patient" USING "btree" ("patient_id");
@@ -540,8 +536,6 @@ CREATE INDEX "doctor_patient_patient_id_idx" ON "public"."doctor_patient" USING 
 CREATE INDEX "doctor_patient_status_idx" ON "public"."doctor_patient" USING "btree" ("status");
 
 CREATE INDEX "family_members_patient_id_idx" ON "public"."family_members" USING "btree" ("patient_id");
-
-CREATE INDEX "idx_clinic_checkin_codes_code_date" ON "public"."clinic_checkin_codes" USING "btree" ("code", "valid_date");
 
 CREATE INDEX "idx_family_members_parent_member_id" ON "public"."family_members" USING "btree" ("parent_member_id");
 
@@ -561,13 +555,9 @@ CREATE INDEX "notifications_created_at_idx" ON "public"."notifications" USING "b
 
 CREATE INDEX "notifications_recipient_created_at_idx" ON "public"."notifications" USING "btree" ("recipient_id", "created_at" DESC);
 
-CREATE INDEX "report_embeddings_report_id_idx" ON "public"."report_embeddings" USING "btree" ("report_id");
-
 CREATE INDEX "report_embeddings_user_id_idx" ON "public"."report_embeddings" USING "btree" ("patient_id");
 
 CREATE INDEX "reports_patient_id_idx" ON "public"."reports" USING "btree" ("patient_id");
-
-CREATE INDEX "vault_table_patient_id_idx" ON "public"."vault_table" USING "btree" ("patient_id");
 
 ALTER TABLE ONLY "public"."clinic_checkin_codes"
     ADD CONSTRAINT "clinic_checkin_codes_doctor_id_fkey" FOREIGN KEY ("doctor_id") REFERENCES "public"."doctors"("id") ON DELETE CASCADE;

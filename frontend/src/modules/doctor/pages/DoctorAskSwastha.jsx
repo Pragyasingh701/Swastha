@@ -1,12 +1,12 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import DoctorSidebar from "../components/DoctorSidebar";
-import ProfileDropdown from "../../settings/components/ProfileDropdown";
+
 import PatientAccessNotice from "../components/PatientAccessNotice";
 import { getDoctorPatients } from "../../../api/doctorPatients";
 import { searchReportsConversational, clearConversation, submitAnswerFeedback } from "../../../api/search";
 import { openReportFile } from "../../../api/reports";
 import { getNoticeAckStatus, acknowledgeNotice } from "../../../api/notices";
-import { AiNoticeInfoLink, AiNoticeAckModal } from "../../../components/common/AiNotice";
+import { AiNoticeInfoLink, AiNoticeAckModal, AiGeneratedNote } from "../../../components/common/AiNotice";
 import {
   Sparkles,
   Send,
@@ -22,7 +22,9 @@ import {
   ThumbsUp,
   ThumbsDown,
 } from "lucide-react";
-import NotificationBell from "../../../components/common/NotificationBell";
+
+import AppHeader from "../../../components/common/AppHeader";
+import { formatDate as formatDateText } from "../../../utils/dateFormat";
 
 const EXAMPLE_QUESTIONS = [
   "Has this patient had any drug allergies or reactions?",
@@ -35,8 +37,8 @@ const EXAMPLE_QUESTIONS = [
 const FEATURE_HIGHLIGHTS = [
   {
     icon: ShieldCheck,
-    title: "100% Private & Secure",
-    description: "Your data is safe and always protected.",
+    title: "Protected by Design",
+    description: "Records are encrypted in transit, and nothing goes to the AI until you accept the AI notice.",
   },
   {
     icon: FileText,
@@ -50,12 +52,7 @@ const FEATURE_HIGHLIGHTS = [
   },
 ];
 
-function formatDate(value) {
-  if (!value) return null;
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return null;
-  return date.toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" });
-}
+const formatDate = (value) => formatDateText(value, { fallback: null });
 
 // One conversation thread per patient the doctor has open in this browser
 // tab. Switching the dropdown swaps to (or starts) that patient's own
@@ -340,11 +337,9 @@ export default function DoctorAskSwastha() {
       <DoctorSidebar />
 
       <div className="flex-1 flex flex-col min-w-0 h-screen overflow-hidden">
-        <header className="shrink-0 flex items-center justify-end gap-4 px-6 lg:px-8 py-5 border-b border-slate-200 bg-white">
+        <AppHeader>
           <AiNoticeInfoLink feature="ask_swastha" />
-          <NotificationBell />
-          <ProfileDropdown />
-        </header>
+        </AppHeader>
 
         {noticeAcknowledged === false && (
           <AiNoticeAckModal feature="ask_swastha" onAccept={handleAcknowledgeNotice} accepting={acknowledging} />
@@ -666,6 +661,8 @@ function ChatBubble({ message, onRetry, disabled }) {
             ))}
           </div>
         )}
+
+        {!isErrorLike && <AiGeneratedNote className="mt-3" />}
 
         {/* Omitted for degraded/error bubbles — there's no real answer to
             rate, just a fallback sentence or a retry prompt. */}

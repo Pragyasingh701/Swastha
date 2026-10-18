@@ -1,32 +1,34 @@
 import React, { useEffect, useState, useMemo, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import { Sparkles, Bell, X, CalendarDays, Stethoscope, XCircle, ChevronDown, ChevronRight, AlertTriangle, FlaskConical, ClipboardList, ScanLine, Syringe, FileText } from "lucide-react";
-import NotificationBell from "../../../components/common/NotificationBell";
+import {
+  Sparkles,
+  X,
+  XCircle,
+  ChevronDown,
+  ChevronRight,
+} from "lucide-react";
+
 import DoctorSidebar from "../components/DoctorSidebar";
-import ProfileDropdown from "../../settings/components/ProfileDropdown";
+
 import { getDoctorPatients, linkPatientToDoctor, deletePatientFromDoctor, requestAccessAgain } from "../../../api/doctorPatients";
 import { getTimelineReports } from "../../../api/reports";
 import { useAuth } from "../../../context/AuthContext";
 import { usePolling } from "../../../hooks/usePolling";
 import ReportFilePreview from "../../../components/common/ReportFilePreview";
+import AppHeader from "../../../components/common/AppHeader";
+import {
+  VAULT_CATEGORY_CARDS,
+  categoryFieldLabels,
+  getReportCategory,
+  vaultCardIndex,
+} from "../../../config/reportCategories";
+import { formatDate, formatWaitUntil } from '../../../utils/dateFormat';
 
 // Diagnosis/Medicines are stored under the same column names for every
 // category, but what they actually MEAN differs by category — mirrors
 // UploadReports.jsx's CATEGORY_FIELD_CONFIG so a patient event popup here
 // uses the same labels the manual entry form showed when the report was
 // saved (e.g. a Lab Report shows "Test / Panel Name", not "Diagnosis").
-const CATEGORY_FIELD_LABELS = {
-  Prescription: { diagnosis: "Diagnosis", medicines: "Medicines" },
-  "Lab Report": { diagnosis: "Test / Panel Name", medicines: "Key Results / Values" },
-  Imaging: { diagnosis: "Findings", medicines: "Body Part / Scan Type" },
-  Vaccination: { diagnosis: "Vaccine Name", medicines: "Dose / Batch Info" },
-  Consultation: { diagnosis: "Reason for Visit", medicines: "Medicines" },
-};
-
-function categoryFieldLabels(category) {
-  return CATEGORY_FIELD_LABELS[category] || CATEGORY_FIELD_LABELS.Prescription;
-}
-
 export default function DoctorPatients() {
   const navigate = useNavigate();
   const { token } = useAuth();
@@ -251,19 +253,7 @@ export default function DoctorPatients() {
   };
 
   const mapEventToDisplay = (report) => {
-    const categoryMeta = {
-      'Prescription': { icon: ClipboardList, kind: 'medication' },
-      'Prescriptions': { icon: ClipboardList, kind: 'medication' },
-      'Lab Report': { icon: FlaskConical, kind: 'lab' },
-      'Lab Reports': { icon: FlaskConical, kind: 'lab' },
-      'Imaging': { icon: ScanLine, kind: 'imaging' },
-      'MRI/Scans': { icon: ScanLine, kind: 'imaging' },
-      'Vaccination': { icon: Syringe, kind: 'immunization' },
-      'Immunizations': { icon: Syringe, kind: 'immunization' },
-      'Consultation': { icon: FileText, kind: 'consultation' },
-    };
-
-    const meta = categoryMeta[report.category] || { icon: FileText, kind: 'consultation' };
+    const meta = getReportCategory(report.category);
 
     return {
       id: report.id,
@@ -275,7 +265,7 @@ export default function DoctorPatients() {
       notes: report.notes || '',
       medicines: report.medicines || '',
       reportDate: report.reportDate,
-      displayDate: report.reportDate ? new Date(report.reportDate).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' }) : 'Unknown date',
+      displayDate: formatDate(report.reportDate, { fallback: 'Unknown date' }),
       icon: meta.icon,
       kind: meta.kind,
       unclearFields: report.unclearFields || [],
@@ -318,18 +308,10 @@ export default function DoctorPatients() {
     return events.sort((a, b) => new Date(b.reportDate) - new Date(a.reportDate));
   }, [patientTimeline, categoryFilter, dateFrom, dateTo]);
 
-  // Vault category cards (Prescriptions, Lab Reports, Scans & Imaging, Other Records)
-  const VAULT_CATEGORY_CARDS = [
-    { title: 'Prescriptions', match: ['Prescription', 'Prescriptions'], icon: ClipboardList },
-    { title: 'Lab Reports', match: ['Lab Report', 'Lab Reports'], icon: FlaskConical },
-    { title: 'Scans & Imaging', match: ['Imaging', 'MRI/Scans'], icon: ScanLine },
-    { title: 'Other Records', match: ['Vaccination', 'Consultation'], icon: FileText },
-  ];
-
   const vaultCategoryCounts = useMemo(() => {
     const counts = VAULT_CATEGORY_CARDS.map(() => 0);
     for (const report of patientVault) {
-      const idx = VAULT_CATEGORY_CARDS.findIndex((c) => c.match.includes(report.category));
+      const idx = vaultCardIndex(report.category);
       if (idx !== -1) counts[idx] += 1;
     }
     return counts;
@@ -340,7 +322,7 @@ export default function DoctorPatients() {
 
     if (vaultCategoryFilter) {
       const card = VAULT_CATEGORY_CARDS.find((c) => c.title === vaultCategoryFilter);
-      if (card) list = list.filter((r) => card.match.includes(r.category));
+      if (card) list = list.filter((r) => VAULT_CATEGORY_CARDS[vaultCardIndex(r.category)] === card);
     }
 
     const q = vaultSearchQuery.trim().toLowerCase();
@@ -371,10 +353,7 @@ export default function DoctorPatients() {
       <DoctorSidebar />
 
       <div className="flex-1 flex flex-col h-screen overflow-hidden min-w-0">
-        <header className="shrink-0 flex items-center justify-end gap-4 px-6 lg:px-8 py-5 border-b border-slate-200 bg-white ">
-          <NotificationBell />
-          <ProfileDropdown />
-        </header>
+        <AppHeader />
 
         <main className="flex-1 overflow-y-auto p-4 md:p-10 lg:px-12 py-8 space-y-8 overflow-x-hidden bg-[#f5f6f8]">
           <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
@@ -451,7 +430,7 @@ export default function DoctorPatients() {
                   )}
 
                   <div className="rounded-xl bg-blue-50 border border-blue-100 px-3 py-2.5 text-xs text-blue-700 ">
-                  Use the patient’s existing patient code from the database to link the record.
+                  Ask the patient for the patient code shown in their profile, then enter it here to request access.
                   </div>
                 </div>
 
@@ -547,7 +526,7 @@ export default function DoctorPatients() {
                         <p className="text-[9px] uppercase tracking-[0.1em] font-semibold text-slate-500">DOB</p>
                       </div>
                       <p className="text-[1rem] font-semibold text-slate-900 ml-6">
-                        {selectedPatient.dob || selectedPatient.patient_dob ? new Date(selectedPatient.dob || selectedPatient.patient_dob).toLocaleDateString() : '—'}
+                        {formatDate(selectedPatient.dob || selectedPatient.patient_dob, { fallback: '—' })}
                       </p>
                     </div>
                     {(selectedPatient.email) && (
@@ -744,7 +723,7 @@ export default function DoctorPatients() {
                     <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 ">
                       <p className="text-[11px] uppercase tracking-[0.12em] text-slate-500 ">Latest Visit</p>
                       <p className="mt-3 text-base font-semibold text-slate-900 ">
-                        {patientVault[0]?.reportDate ? new Date(patientVault[0].reportDate).toLocaleDateString() : 'N/A'}
+                        {formatDate(patientVault[0]?.reportDate, { fallback: 'N/A' })}
                       </p>
                     </div>
                     <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 ">
@@ -830,17 +809,7 @@ export default function DoctorPatients() {
                   ) : (
                     <div className="space-y-4">
                       {filteredVaultReports.map((report) => {
-                        const categoryMeta = {
-                          'Prescription': { icon: ClipboardList, tone: 'bg-blue-50 text-blue-600 ' },
-                          'Prescriptions': { icon: ClipboardList, tone: 'bg-blue-50 text-blue-600 ' },
-                          'Lab Report': { icon: FlaskConical, tone: 'bg-orange-50 text-orange-600 ' },
-                          'Lab Reports': { icon: FlaskConical, tone: 'bg-orange-50 text-orange-600 ' },
-                          'Imaging': { icon: ScanLine, tone: 'bg-slate-100 text-slate-600 ' },
-                          'MRI/Scans': { icon: ScanLine, tone: 'bg-slate-100 text-slate-600 ' },
-                          'Vaccination': { icon: Syringe, tone: 'bg-slate-100 text-slate-600 ' },
-                          'Consultation': { icon: FileText, tone: 'bg-slate-100 text-slate-600 ' },
-                        };
-                        const meta = categoryMeta[report.category] || categoryMeta.Consultation;
+                        const meta = getReportCategory(report.category);
                         const Icon = meta.icon;
 
                         return (
@@ -865,7 +834,7 @@ export default function DoctorPatients() {
                                     )}
                                     {report.reportDate && (
                                       <p className="text-slate-600 ">
-                                        <span className="font-medium">Date:</span> {new Date(report.reportDate).toLocaleDateString()}
+                                        <span className="font-medium">Date:</span> {formatDate(report.reportDate, { fallback: 'Unknown date' })}
                                       </p>
                                     )}
                                   </div>
@@ -942,15 +911,24 @@ export default function DoctorPatients() {
                   >
                     <div className="flex justify-between items-start mb-4">
                       <div className="flex items-center gap-4">
-                        <img
-                          alt="Patient Photo"
-                          className="w-14 h-14 rounded-full object-cover border border-[#c3c6d7]/30 "
-                          src={patient.avatar}
-                        />
+                        {patient.avatar ? (
+                          <img
+                            alt={`${patient.name}'s photo`}
+                            className="w-14 h-14 rounded-full object-cover border border-[#c3c6d7]/30 "
+                            src={patient.avatar}
+                          />
+                        ) : (
+                          <div
+                            aria-hidden="true"
+                            className="w-14 h-14 rounded-full bg-[#dbe1ff] text-[#004ac6] border border-[#c3c6d7]/30 flex items-center justify-center text-lg font-semibold shrink-0"
+                          >
+                            {String(patient.name || "?").trim().split(/\s+/).slice(0, 2).map((part) => part[0]?.toUpperCase()).join("") || "?"}
+                          </div>
+                        )}
                         <div>
                           <h3 className="font-semibold text-lg text-[#191b23] ">{patient.name}</h3>
                           <p className="text-sm text-[#434655] ">
-                            ID: {patient.id} • {patient.age} Y • {patient.gender}
+                            ID: {patient.id}{patient.age != null ? ` • ${patient.age} Y` : ""} • {patient.gender}
                           </p>
                         </div>
                       </div>
@@ -992,8 +970,8 @@ export default function DoctorPatients() {
                         </span>
                       </div>
                       <div className="flex items-center justify-between">
-                        <span className="text-sm text-[#434655] ">Last Visit</span>
-                        <span className="text-sm font-medium text-[#191b23] ">{patient.lastVisit}</span>
+                        <span className="text-sm text-[#434655] ">Access granted</span>
+                        <span className="text-sm font-medium text-[#191b23] ">{patient.accessGrantedAgo}</span>
                       </div>
                       <div className="flex items-center justify-between">
                         <span className="text-sm text-[#434655] ">Status</span>
@@ -1045,15 +1023,6 @@ export default function DoctorPatients() {
 // passed (see backend/db/doctorPatients.js's isAccessExpired) — shown as
 // an inactive/red card with a "Request Access Again" button in place of
 // the pending/declined status message.
-// "23h 10m" / "45m" until `isoTime`; '' once it has passed.
-function formatWaitUntil(isoTime, now) {
-  const ms = new Date(isoTime).getTime() - now;
-  if (!Number.isFinite(ms) || ms <= 0) return '';
-  const minutes = Math.max(1, Math.ceil(ms / 60000));
-  const hours = Math.floor(minutes / 60);
-  return hours > 0 ? `${hours}h ${minutes % 60}m` : `${minutes}m`;
-}
-
 function LockedPatientCard({ patient, linkStatus, openMenuId, setOpenMenuId, deletingPatientId, onDelete, onRequestAgain, isRequestingAgain }) {
   const isPending = linkStatus === 'pending';
   const isExpired = linkStatus === 'expired';
@@ -1409,14 +1378,7 @@ function EventCard({ event }) {
 }
 
 function EventDetails({ event, onClose }) {
-  const formattedDate = event.reportDate
-    ? new Date(event.reportDate).toLocaleDateString('en-US', {
-        year: 'numeric',
-        month: 'short',
-        day: 'numeric',
-      })
-    : 'Unknown date';
-
+  const formattedDate = formatDate(event.reportDate, { fallback: 'Unknown date' });
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 px-4 py-6">

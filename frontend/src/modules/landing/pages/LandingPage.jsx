@@ -177,7 +177,7 @@ export default function LandingPage() {
               </div>
               <div className="flex items-center gap-2">
                 <span className="material-symbols-outlined text-primary" style={{ fontVariationSettings: "'FILL' 1" }}>groups</span>
-                <span className="font-label-md font-bold">Family Records</span>
+                <span className="font-label-md font-bold">Family Vault</span>
               </div>
               <div className="flex items-center gap-2">
                 <span className="material-symbols-outlined text-primary" style={{ fontVariationSettings: "'FILL' 1" }}>record_voice_over</span>
@@ -218,7 +218,7 @@ export default function LandingPage() {
               {/* Solution Card */}
               <div className="p-8 rounded-3xl bg-white border border-primary/20 shadow-2xl shadow-primary/5 relative overflow-hidden group">
                 <div className="absolute top-0 right-0 p-4">
-                  <div className="bg-primary/10 text-primary px-3 py-1 rounded-full text-xs font-bold animate-pulse">AI ACTIVE</div>
+                  <div className="bg-primary/10 text-primary px-3 py-1 rounded-full text-xs font-bold ">EXAMPLE</div>
                 </div>
                 <div className="mb-6 inline-flex p-3 rounded-2xl bg-primary/10 text-primary">
                   <span className="material-symbols-outlined">check_circle</span>
@@ -232,7 +232,7 @@ export default function LandingPage() {
                     </div>
                     <div className="flex-1">
                       <p className="text-sm font-bold">Lab Trend: HbA1c</p>
-                      <p className="text-xs text-on-surface-variant ">Improving trend over 12 months</p>
+                      <p className="text-xs text-on-surface-variant ">Example: improving trend over 12 months</p>
                     </div>
                     <span className="text-primary font-bold">5.8%</span>
                   </div>
@@ -242,7 +242,7 @@ export default function LandingPage() {
                     </div>
                     <div className="flex-1">
                       <p className="text-sm font-bold">Active Medication</p>
-                      <p className="text-xs text-on-surface-variant ">Metformin 500mg • Daily</p>
+                      <p className="text-xs text-on-surface-variant ">Example: Metformin 500mg • Daily</p>
                     </div>
                     <span className="material-symbols-outlined text-primary">info</span>
                   </div>
@@ -427,13 +427,13 @@ export default function LandingPage() {
                   <span className="text-sm font-bold tracking-widest uppercase">Never Guesses</span>
                 </div>
               </div>
-              {/* Drug Interactions */}
+              {/* Medicines list */}
               <div className="p-8 rounded-3xl bg-white border border-outline-variant/50 shadow-sm hover:shadow-md transition-shadow">
-                <div className="w-12 h-12 rounded-xl bg-error/10 flex items-center justify-center mb-6">
-                  <span className="material-symbols-outlined text-error">pill_off</span>
+                <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center mb-6">
+                  <span className="material-symbols-outlined text-primary">medication</span>
                 </div>
-                <h3 className="font-headline-md text-headline-md mb-4">Safety First</h3>
-                <p className="text-on-surface-variant ">Automatic drug-to-drug interaction checks when you upload new prescriptions.</p>
+                <h3 className="font-headline-md text-headline-md mb-4">Medicines in One Place</h3>
+                <p className="text-on-surface-variant ">Every medicine from the prescriptions you upload, gathered into one clear list you can show your doctor.</p>
               </div>
               {/* Lab Trends */}
               <div className="p-8 rounded-3xl bg-white border border-outline-variant/50 shadow-sm hover:shadow-md transition-shadow">
