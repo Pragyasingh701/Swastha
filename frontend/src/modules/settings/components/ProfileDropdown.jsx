@@ -29,7 +29,7 @@ export default function ProfileDropdown({ customProfile }) {
   const profile = customProfile || authUser;
 
   const displayName = profile?.name || profile?.fullName || 'User Profile';
-  const displayEmail = profile?.email || 'user@swastha.ai';
+  const displayEmail = profile?.email || '';
   const displayRole = (profile?.role || 'patient').toLowerCase();
 
   // Close dropdown on click outside
@@ -86,9 +86,11 @@ export default function ProfileDropdown({ customProfile }) {
             <p className="text-sm font-bold text-slate-800 group-hover:text-blue-600 transition-colors leading-tight">
               {displayName}
             </p>
-            <p className="text-xs text-slate-400 font-normal leading-tight mt-0.5 max-w-[170px] truncate">
-              {displayEmail}
-            </p>
+            {displayEmail && (
+              <p className="text-xs text-slate-400 font-normal leading-tight mt-0.5 max-w-[170px] truncate">
+                {displayEmail}
+              </p>
+            )}
           </div>
 
           <div className="relative">
@@ -136,9 +138,11 @@ export default function ProfileDropdown({ customProfile }) {
                 <h4 className="text-sm font-extrabold text-slate-900 truncate leading-tight">
                   {displayName}
                 </h4>
-                <p className="text-xs text-slate-500 font-medium truncate mt-0.5">
-                  {displayEmail}
-                </p>
+                {displayEmail && (
+                  <p className="text-xs text-slate-500 font-medium truncate mt-0.5">
+                    {displayEmail}
+                  </p>
+                )}
               </div>
 
               {/* Role Badge */}

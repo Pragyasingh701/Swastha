@@ -43,7 +43,7 @@ export default function DoctorRegister() {
     council: "",
     degree: "",
     specialization: "",
-    experience: 5,
+    experience: "",
     hospitalName: "",
     address: "",
   });
@@ -151,7 +151,7 @@ export default function DoctorRegister() {
           degree: form.degree,
           specialization: form.specialization,
           specialty: form.specialization,
-          experience: form.experience,
+          experience: form.experience === "" ? null : form.experience,
           hospitalName: form.hospitalName,
           address: form.address,
           regCertificateUrl,
@@ -465,11 +465,11 @@ export default function DoctorRegister() {
                         max="50"
                         step="1"
                         name="experience"
-                        value={form.experience}
+                        value={form.experience === "" ? 0 : form.experience}
                         onChange={handleChange}
                       />
                       <div className="min-w-[80px] text-center bg-primary-container/20 text-primary font-bold px-3 py-1.5 rounded-lg border border-primary/10">
-                        <span>{form.experience}</span> yrs
+                        <span>{form.experience === "" ? "—" : form.experience}</span> yrs
                       </div>
                     </div>
                   </div>

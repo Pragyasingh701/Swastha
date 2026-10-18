@@ -46,14 +46,14 @@ export default function SettingsModal({ isOpen, onClose }) {
     role: 'patient',
     dob: '',
     bloodGroup: '',
-    gender: 'Male',
+    gender: '',
     emergencyContact: '',
     // Doctor Registration Credentials
     regNumber: '',
     council: '',
     degree: '',
     specialization: '',
-    experience: 5,
+    experience: '',
     hospitalName: '',
     address: '',
     regCertificateUrl: '',
@@ -68,13 +68,13 @@ export default function SettingsModal({ isOpen, onClose }) {
         role: user.role || 'patient',
         dob: user.dob || user.dateOfBirth || user.date_of_birth || '',
         bloodGroup: user.bloodGroup || user.blood_group || user.blood_type || '',
-        gender: user.gender || 'Male',
+        gender: user.gender || '',
         emergencyContact: user.emergencyContact || user.emergency_contact || '',
         regNumber: user.regNumber || user.licenseNumber || user.license_number || '',
-        council: user.council || 'National Medical Commission (NMC)',
-        degree: user.degree || 'MBBS',
+        council: user.council || '',
+        degree: user.degree || '',
         specialization: user.specialization || user.specialty || '',
-        experience: user.experience !== undefined ? user.experience : 5,
+        experience: user.experience !== undefined && user.experience !== null ? user.experience : '',
         hospitalName: user.hospitalName || user.hospital_name || '',
         address: user.address || user.hospital_address || '',
         regCertificateUrl: user.regCertificateUrl || user.reg_certificate_url || user.certificateUrl || '',
@@ -215,7 +215,7 @@ export default function SettingsModal({ isOpen, onClose }) {
         specialty: formData.specialization,
         council: formData.council,
         degree: formData.degree,
-        experience: formData.experience,
+        experience: formData.experience === '' ? null : formData.experience,
         hospitalName: formData.hospitalName,
         address: formData.address,
         regCertificateUrl: uploadedCertUrl,
@@ -468,6 +468,7 @@ export default function SettingsModal({ isOpen, onClose }) {
                       onChange={(e) => setFormData({ ...formData, gender: e.target.value })}
                       className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs font-semibold text-slate-900 focus:ring-2 focus:ring-blue-600 focus:outline-none transition-all bg-white "
                     >
+                      <option value="" disabled>Select gender</option>
                       <option value="Male">Male</option>
                       <option value="Female">Female</option>
                       <option value="Other">Other</option>
@@ -513,6 +514,7 @@ export default function SettingsModal({ isOpen, onClose }) {
                     onChange={(e) => setFormData({ ...formData, council: e.target.value })}
                     className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs font-semibold text-slate-900 focus:ring-2 focus:ring-indigo-600 focus:outline-none bg-white "
                   >
+                    <option value="" disabled>Select council</option>
                     <option value="National Medical Commission (NMC)">National Medical Commission (NMC)</option>
                     <option value="State Medical Council">State Medical Council</option>
                     <option value="Dental Council of India">Dental Council of India</option>
@@ -549,14 +551,14 @@ export default function SettingsModal({ isOpen, onClose }) {
 
                 <div className="sm:col-span-2">
                   <label className="block text-[11px] font-extrabold uppercase tracking-wider text-slate-600 mb-1">
-                    Years of Clinical Experience: <span className="text-indigo-600 font-bold">{formData.experience} yrs</span>
+                    Years of Clinical Experience: <span className="text-indigo-600 font-bold">{formData.experience === "" ? "Not set" : `${formData.experience} yrs`}</span>
                   </label>
                   <input
                     type="range"
                     min="0"
                     max="50"
                     step="1"
-                    value={formData.experience}
+                    value={formData.experience === "" ? 0 : formData.experience}
                     onChange={(e) => setFormData({ ...formData, experience: e.target.value })}
                     className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-indigo-600"
                   />

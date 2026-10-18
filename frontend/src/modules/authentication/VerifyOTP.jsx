@@ -8,12 +8,18 @@ export default function VerifyOTP() {
   const location = useLocation();
   const { user, verifyOTP, sendOTP } = useAuth();
 
-  const email = location.state?.email || "user@example.com";
+  // The address the code was sent to. With none (a direct visit to this page) there is
+  // nothing to verify, so the page sends the visitor back to log in.
+  const email = location.state?.email || user?.email || "";
 
   const [otp, setOtp] = useState(["", "", "", "", "", ""]);
   const [timer, setTimer] = useState(60);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
+
+  useEffect(() => {
+    if (!email) navigate("/login", { replace: true });
+  }, [email, navigate]);
 
   useEffect(() => {
     // Only redirect if no active email state in navigation AND user is already fully authenticated with a selected role
@@ -65,6 +71,8 @@ export default function VerifyOTP() {
       setError(err.message || "Failed to resend verification code.");
     }
   };
+
+  if (!email) return null;
 
   return (
     <main className="min-h-screen w-full flex flex-col justify-center items-center p-6 bg-surface font-body-md text-on-surface selection:bg-primary-fixed">
