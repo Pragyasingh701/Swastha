@@ -6,11 +6,6 @@ import {
   XCircle,
   ChevronDown,
   ChevronRight,
-  FlaskConical,
-  ClipboardList,
-  ScanLine,
-  Syringe,
-  FileText,
 } from "lucide-react";
 
 import DoctorSidebar from "../components/DoctorSidebar";
@@ -21,24 +16,18 @@ import { useAuth } from "../../../context/AuthContext";
 import { usePolling } from "../../../hooks/usePolling";
 import ReportFilePreview from "../../../components/common/ReportFilePreview";
 import AppHeader from "../../../components/common/AppHeader";
+import {
+  VAULT_CATEGORY_CARDS,
+  categoryFieldLabels,
+  getReportCategory,
+  vaultCardIndex,
+} from "../../../config/reportCategories";
 
 // Diagnosis/Medicines are stored under the same column names for every
 // category, but what they actually MEAN differs by category — mirrors
 // UploadReports.jsx's CATEGORY_FIELD_CONFIG so a patient event popup here
 // uses the same labels the manual entry form showed when the report was
 // saved (e.g. a Lab Report shows "Test / Panel Name", not "Diagnosis").
-const CATEGORY_FIELD_LABELS = {
-  Prescription: { diagnosis: "Diagnosis", medicines: "Medicines" },
-  "Lab Report": { diagnosis: "Test / Panel Name", medicines: "Key Results / Values" },
-  Imaging: { diagnosis: "Findings", medicines: "Body Part / Scan Type" },
-  Vaccination: { diagnosis: "Vaccine Name", medicines: "Dose / Batch Info" },
-  Consultation: { diagnosis: "Reason for Visit", medicines: "Medicines" },
-};
-
-function categoryFieldLabels(category) {
-  return CATEGORY_FIELD_LABELS[category] || CATEGORY_FIELD_LABELS.Prescription;
-}
-
 export default function DoctorPatients() {
   const navigate = useNavigate();
   const { token } = useAuth();
@@ -263,19 +252,7 @@ export default function DoctorPatients() {
   };
 
   const mapEventToDisplay = (report) => {
-    const categoryMeta = {
-      'Prescription': { icon: ClipboardList, kind: 'medication' },
-      'Prescriptions': { icon: ClipboardList, kind: 'medication' },
-      'Lab Report': { icon: FlaskConical, kind: 'lab' },
-      'Lab Reports': { icon: FlaskConical, kind: 'lab' },
-      'Imaging': { icon: ScanLine, kind: 'imaging' },
-      'MRI/Scans': { icon: ScanLine, kind: 'imaging' },
-      'Vaccination': { icon: Syringe, kind: 'immunization' },
-      'Immunizations': { icon: Syringe, kind: 'immunization' },
-      'Consultation': { icon: FileText, kind: 'consultation' },
-    };
-
-    const meta = categoryMeta[report.category] || { icon: FileText, kind: 'consultation' };
+    const meta = getReportCategory(report.category);
 
     return {
       id: report.id,
@@ -330,18 +307,10 @@ export default function DoctorPatients() {
     return events.sort((a, b) => new Date(b.reportDate) - new Date(a.reportDate));
   }, [patientTimeline, categoryFilter, dateFrom, dateTo]);
 
-  // Vault category cards (Prescriptions, Lab Reports, Scans & Imaging, Other Records)
-  const VAULT_CATEGORY_CARDS = [
-    { title: 'Prescriptions', match: ['Prescription', 'Prescriptions'], icon: ClipboardList },
-    { title: 'Lab Reports', match: ['Lab Report', 'Lab Reports'], icon: FlaskConical },
-    { title: 'Scans & Imaging', match: ['Imaging', 'MRI/Scans'], icon: ScanLine },
-    { title: 'Other Records', match: ['Vaccination', 'Consultation'], icon: FileText },
-  ];
-
   const vaultCategoryCounts = useMemo(() => {
     const counts = VAULT_CATEGORY_CARDS.map(() => 0);
     for (const report of patientVault) {
-      const idx = VAULT_CATEGORY_CARDS.findIndex((c) => c.match.includes(report.category));
+      const idx = vaultCardIndex(report.category);
       if (idx !== -1) counts[idx] += 1;
     }
     return counts;
@@ -352,7 +321,7 @@ export default function DoctorPatients() {
 
     if (vaultCategoryFilter) {
       const card = VAULT_CATEGORY_CARDS.find((c) => c.title === vaultCategoryFilter);
-      if (card) list = list.filter((r) => card.match.includes(r.category));
+      if (card) list = list.filter((r) => VAULT_CATEGORY_CARDS[vaultCardIndex(r.category)] === card);
     }
 
     const q = vaultSearchQuery.trim().toLowerCase();
@@ -839,17 +808,7 @@ export default function DoctorPatients() {
                   ) : (
                     <div className="space-y-4">
                       {filteredVaultReports.map((report) => {
-                        const categoryMeta = {
-                          'Prescription': { icon: ClipboardList, tone: 'bg-blue-50 text-blue-600 ' },
-                          'Prescriptions': { icon: ClipboardList, tone: 'bg-blue-50 text-blue-600 ' },
-                          'Lab Report': { icon: FlaskConical, tone: 'bg-orange-50 text-orange-600 ' },
-                          'Lab Reports': { icon: FlaskConical, tone: 'bg-orange-50 text-orange-600 ' },
-                          'Imaging': { icon: ScanLine, tone: 'bg-slate-100 text-slate-600 ' },
-                          'MRI/Scans': { icon: ScanLine, tone: 'bg-slate-100 text-slate-600 ' },
-                          'Vaccination': { icon: Syringe, tone: 'bg-slate-100 text-slate-600 ' },
-                          'Consultation': { icon: FileText, tone: 'bg-slate-100 text-slate-600 ' },
-                        };
-                        const meta = categoryMeta[report.category] || categoryMeta.Consultation;
+                        const meta = getReportCategory(report.category);
                         const Icon = meta.icon;
 
                         return (

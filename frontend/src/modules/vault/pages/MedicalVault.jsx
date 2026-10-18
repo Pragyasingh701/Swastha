@@ -6,15 +6,11 @@ import ReportFilePreview from "../../../components/common/ReportFilePreview";
 import { AI_NOTICE_ACCEPTED_EVENT } from "../../../components/common/AiNoticeGate";
 
 import {
-  ClipboardList,
   PlusCircle,
   Search,
   ShieldCheck,
   FileText,
   Sparkles,
-  FlaskConical,
-  ScanLine,
-  Syringe,
   X,
   Loader2,
   RefreshCw,
@@ -23,53 +19,28 @@ import {
 import { AiGeneratedNote } from "../../../components/common/AiNotice";
 import AppHeader from "../../../components/common/AppHeader";
 import PatientSidebar from "../../../components/common/PatientSidebar";
+import {
+  VAULT_CATEGORY_CARDS as CATEGORY_CARDS,
+  getReportCategory,
+  vaultCardIndex,
+} from "../../../config/reportCategories";
 
 /* -----------------------------------------------------------
    Nav + category config — same shape as Timeline.jsx so a report's
    category always maps to the same icon everywhere in the app.
 ------------------------------------------------------------ */
 
-const CATEGORY_META = {
-  Prescription: { icon: ClipboardList, tone: "bg-blue-50 text-blue-600 " },
-  Prescriptions: { icon: ClipboardList, tone: "bg-blue-50 text-blue-600 " },
-  "Lab Report": { icon: FlaskConical, tone: "bg-orange-50 text-orange-600 " },
-  "Lab Reports": { icon: FlaskConical, tone: "bg-orange-50 text-orange-600 " },
-  Imaging: { icon: ScanLine, tone: "bg-slate-100 text-slate-600 " },
-  Vaccination: { icon: Syringe, tone: "bg-slate-100 text-slate-600 " },
-  Consultation: { icon: FileText, tone: "bg-slate-100 text-slate-600 " },
-};
-
-// Category cards shown in "AI Smart Categorization" — fixed set of labels
-// the four common report categories map into (Consultation/Vaccination
-// reports fall under a general "Other Records" bucket rather than being
-// hidden).
-const CATEGORY_CARDS = [
-  { title: "Prescriptions", match: ["Prescription", "Prescriptions"], icon: ClipboardList },
-  { title: "Lab Reports", match: ["Lab Report", "Lab Reports"], icon: FlaskConical },
-  { title: "Scans & Imaging", match: ["Imaging"], icon: ScanLine },
-  { title: "Other Records", match: ["Vaccination", "Consultation"], icon: FileText },
-];
-
 function categoryMeta(category) {
-  return CATEGORY_META[category] || CATEGORY_META.Consultation;
+  return getReportCategory(category);
 }
 
 // What the "diagnosis" and "medicines" fields actually mean depends on
 // category (matches UploadReports.jsx's CATEGORY_FIELD_CONFIG) — used to
 // label the highlight chips in the AI Summary view correctly, e.g. a Lab
 // Report's diagnosis slot is really the test/panel name, not a diagnosis.
-const SUMMARY_FIELD_LABELS = {
-  Prescription: { diagnosis: "Diagnosis", medicines: "Medicines" },
-  Prescriptions: { diagnosis: "Diagnosis", medicines: "Medicines" },
-  "Lab Report": { diagnosis: "Test / Panel", medicines: "Key Results" },
-  "Lab Reports": { diagnosis: "Test / Panel", medicines: "Key Results" },
-  Imaging: { diagnosis: "Findings", medicines: "Scan Type" },
-  Vaccination: { diagnosis: "Vaccine", medicines: "Dose / Batch" },
-  Consultation: { diagnosis: "Reason for Visit", medicines: null },
-};
-
 function summaryFieldLabels(category) {
-  return SUMMARY_FIELD_LABELS[category] || SUMMARY_FIELD_LABELS.Consultation;
+  const { fields } = getReportCategory(category);
+  return { diagnosis: fields.diagnosis.short, medicines: fields.medicines ? fields.medicines.short : null };
 }
 
 function formatDate(value) {
@@ -235,7 +206,7 @@ export default function MedicalVault() {
   const categoryCounts = useMemo(() => {
     const counts = CATEGORY_CARDS.map(() => 0);
     for (const report of reports) {
-      const idx = CATEGORY_CARDS.findIndex((c) => c.match.includes(report.category));
+      const idx = vaultCardIndex(report.category);
       if (idx !== -1) counts[idx] += 1;
     }
     return counts;
@@ -246,7 +217,7 @@ export default function MedicalVault() {
 
     if (categoryFilter) {
       const card = CATEGORY_CARDS.find((c) => c.title === categoryFilter);
-      if (card) list = list.filter((r) => card.match.includes(r.category));
+      if (card) list = list.filter((r) => CATEGORY_CARDS[vaultCardIndex(r.category)] === card);
     }
 
     if (searchQuery.trim()) {

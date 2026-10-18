@@ -8,15 +8,11 @@ import * as familyService from "../../../api/family";
 import { indexReport } from "../../../api/search";
 
 import {
-  ClipboardList,
   UploadCloud,
   ChevronDown,
   ChevronRight,
   X,
   Sparkles,
-  FlaskConical,
-  ScanLine,
-  Syringe,
   FileText,
   AlertTriangle,
 } from "lucide-react";
@@ -24,49 +20,13 @@ import {
 import ReportFilePreview from "../../../components/common/ReportFilePreview";
 import AppHeader from "../../../components/common/AppHeader";
 import PatientSidebar from "../../../components/common/PatientSidebar";
+import { categoryFieldLabels, getReportCategory } from "../../../config/reportCategories";
 
 /* -----------------------------------------------------------
    Nav + category config.
 ------------------------------------------------------------ */
 
 // Same nav list as Dashboard.jsx / LabTrends.jsx, with Health Timeline active
-// Categories a user can pick when uploading a new report manually.
-const UPLOAD_CATEGORIES = [
-  { value: "Lab Reports", icon: FlaskConical, kind: "upload" },
-  { value: "Prescriptions", icon: ClipboardList, kind: "medication" },
-  { value: "MRI/Scans", icon: ScanLine, kind: "imaging" },
-  { value: "Immunizations", icon: Syringe, kind: "upload" },
-];
-
-const CATEGORY_META = {
-  Prescription: { kind: "medication", icon: ClipboardList },
-  Prescriptions: { kind: "medication", icon: ClipboardList },
-  "Lab Report": { kind: "lab", icon: FlaskConical },
-  "Lab Reports": { kind: "lab", icon: FlaskConical },
-  Imaging: { kind: "imaging", icon: ScanLine },
-  "MRI/Scans": { kind: "imaging", icon: ScanLine },
-  Vaccination: { kind: "immunization", icon: Syringe },
-  Immunizations: { kind: "immunization", icon: Syringe },
-  Consultation: { kind: "consultation", icon: FileText },
-};
-
-// Diagnosis/Medicines are stored under the same column names for every
-// category, but what they actually MEAN differs by category — mirrors
-// UploadReports.jsx's CATEGORY_FIELD_CONFIG so a saved report's detail
-// view uses the same labels the manual entry form showed when saving it
-// (e.g. a Lab Report shows "Test / Panel Name", not "Diagnosis").
-const CATEGORY_FIELD_LABELS = {
-  Prescription: { diagnosis: "Diagnosis", medicines: "Medicines" },
-  "Lab Report": { diagnosis: "Test / Panel Name", medicines: "Key Results / Values" },
-  Imaging: { diagnosis: "Findings", medicines: "Body Part / Scan Type" },
-  Vaccination: { diagnosis: "Vaccine Name", medicines: "Dose / Batch Info" },
-  Consultation: { diagnosis: "Reason for Visit", medicines: "Medicines" },
-};
-
-function categoryFieldLabels(category) {
-  return CATEGORY_FIELD_LABELS[category] || CATEGORY_FIELD_LABELS.Prescription;
-}
-
 // Dot ring color per event kind — lab reports get their own orange tone
 // as a permanent category color (matches Dashboard's SafetyAlert palette),
 // independent of whether anything on the report actually needs attention.
@@ -151,7 +111,7 @@ export default function Timeline() {
     }) : 'Undated';
 
     const category = report.category || 'Consultation';
-    const meta = CATEGORY_META[category] || CATEGORY_META.Consultation;
+    const meta = getReportCategory(category);
 
     return {
       id: report.id || `${report.userId}-${normalizedDate}-${Math.random()}`,

@@ -4,11 +4,6 @@ import {
   Search,
   ChevronDown,
   User,
-  ClipboardList,
-  FlaskConical,
-  ScanLine,
-  Syringe,
-  FileText,
   RefreshCw,
   Stethoscope,
   Pill,
@@ -24,20 +19,10 @@ import { getTimelineReports } from "../../../api/reports";
 import { useAuth } from "../../../context/AuthContext";
 import { AiGeneratedNote } from "../../../components/common/AiNotice";
 import AppHeader from "../../../components/common/AppHeader";
-
-const CATEGORY_META = {
-  Prescription: { icon: ClipboardList },
-  Prescriptions: { icon: ClipboardList },
-  "Lab Report": { icon: FlaskConical },
-  "Lab Reports": { icon: FlaskConical },
-  Imaging: { icon: ScanLine },
-  "MRI/Scans": { icon: ScanLine },
-  Vaccination: { icon: Syringe },
-  Consultation: { icon: FileText },
-};
+import { getReportCategory } from "../../../config/reportCategories";
 
 function categoryIcon(category) {
-  return (CATEGORY_META[category] || CATEGORY_META.Consultation).icon;
+  return getReportCategory(category).icon;
 }
 
 function formatRelativeDate(dateStr) {

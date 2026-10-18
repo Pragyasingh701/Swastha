@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import { extractReportFromFile } from "../../../api/search";
 import { AiNoticeBanner } from "../../../components/common/AiNotice";
+import { REPORT_CATEGORY_CHOICES, getReportCategory } from "../../../config/reportCategories";
 
 // PDFs and common image formats can be sent to the RAG extraction endpoint.
 const EXTRACTABLE_TYPES = ["image/jpeg", "image/png", "image/webp", "application/pdf"];
@@ -37,31 +38,8 @@ function toDateInputValue(value) {
 // a vaccination's "medicines" is really a dose/batch number, etc. This
 // only changes the label/placeholder/visibility shown to the user; the
 // underlying formData keys and backend columns stay diagnosis/medicines.
-const CATEGORY_FIELD_CONFIG = {
-  Prescription: {
-    diagnosis: { label: "Diagnosis", placeholder: "e.g. Type 2 Diabetes Mellitus" },
-    medicines: { label: "Medicines", placeholder: "e.g.\nTab. Metformin 500mg — 1 tablet twice daily, 30 days, after food\nTab. Amlodipine 5mg — 1 tablet once daily, 30 days" },
-  },
-  "Lab Report": {
-    diagnosis: { label: "Test / Panel Name", placeholder: "e.g. Complete Blood Count (CBC)" },
-    medicines: { label: "Key Results / Values", placeholder: "e.g. Hemoglobin 13.2 g/dL, WBC 7,200/µL" },
-  },
-  Imaging: {
-    diagnosis: { label: "Findings", placeholder: "e.g. No acute abnormality, mild disc bulge at L4-L5" },
-    medicines: { label: "Body Part / Scan Type", placeholder: "e.g. MRI Lumbar Spine" },
-  },
-  Vaccination: {
-    diagnosis: { label: "Vaccine Name", placeholder: "e.g. Influenza (Flu) Vaccine" },
-    medicines: { label: "Dose / Batch Info", placeholder: "e.g. Dose 2 of 2, Batch #A1234" },
-  },
-  Consultation: {
-    diagnosis: { label: "Reason for Visit", placeholder: "e.g. Routine check-up, follow-up on BP" },
-    medicines: null, // often not applicable for a plain consultation — field is hidden
-  },
-};
-
 function getCategoryFieldConfig(category) {
-  return CATEGORY_FIELD_CONFIG[category] || CATEGORY_FIELD_CONFIG.Prescription;
+  return getReportCategory(category, "prescription").fields;
 }
 
 function emptyFormData() {
@@ -476,11 +454,9 @@ export default function UploadReports({ onClose, onSubmit, token, initialEvent }
                   onChange={handleChange}
                   className="w-full border rounded-lg p-3 mt-1"
                 >
-                  <option>Prescription</option>
-                  <option>Lab Report</option>
-                  <option>Imaging</option>
-                  <option>Vaccination</option>
-                  <option>Consultation</option>
+                  {REPORT_CATEGORY_CHOICES.map((name) => (
+                    <option key={name}>{name}</option>
+                  ))}
                 </select>
 
               </div>
