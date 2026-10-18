@@ -22,6 +22,7 @@ import {
   getReportCategory,
   vaultCardIndex,
 } from "../../../config/reportCategories";
+import { formatWaitUntil } from '../../../utils/dateFormat';
 
 // Diagnosis/Medicines are stored under the same column names for every
 // category, but what they actually MEAN differs by category — mirrors
@@ -1022,15 +1023,6 @@ export default function DoctorPatients() {
 // passed (see backend/db/doctorPatients.js's isAccessExpired) — shown as
 // an inactive/red card with a "Request Access Again" button in place of
 // the pending/declined status message.
-// "23h 10m" / "45m" until `isoTime`; '' once it has passed.
-function formatWaitUntil(isoTime, now) {
-  const ms = new Date(isoTime).getTime() - now;
-  if (!Number.isFinite(ms) || ms <= 0) return '';
-  const minutes = Math.max(1, Math.ceil(ms / 60000));
-  const hours = Math.floor(minutes / 60);
-  return hours > 0 ? `${hours}h ${minutes % 60}m` : `${minutes}m`;
-}
-
 function LockedPatientCard({ patient, linkStatus, openMenuId, setOpenMenuId, deletingPatientId, onDelete, onRequestAgain, isRequestingAgain }) {
   const isPending = linkStatus === 'pending';
   const isExpired = linkStatus === 'expired';

@@ -24,6 +24,7 @@ import {
   getReportCategory,
   vaultCardIndex,
 } from "../../../config/reportCategories";
+import { formatDate as formatDateText } from "../../../utils/dateFormat";
 
 /* -----------------------------------------------------------
    Nav + category config — same shape as Timeline.jsx so a report's
@@ -43,12 +44,7 @@ function summaryFieldLabels(category) {
   return { diagnosis: fields.diagnosis.short, medicines: fields.medicines ? fields.medicines.short : null };
 }
 
-function formatDate(value) {
-  if (!value) return "Unknown date";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "Unknown date";
-  return date.toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" });
-}
+const formatDate = (value) => formatDateText(value, { fallback: "Unknown date" });
 
 function flattenSearchableValues(value, values = []) {
   if (value === null || value === undefined) return values;

@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import AppHeader from "../../../components/common/AppHeader";
 import PatientSidebar from "../../../components/common/PatientSidebar";
+import { formatDate } from "../../../utils/dateFormat";
 
 function parseMedicationEntries(reports = []) {
   const meds = [];
@@ -93,15 +94,6 @@ function StatCard({ icon: Icon, tag, tagColor, value, label, iconBg }) {
   );
 }
 
-function formatReportDate(value) {
-  if (!value) return 'Date not available';
-
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return 'Date not available';
-
-  return date.toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' });
-}
-
 function RecentUploads({ reports = [] }) {
   const navigate = useNavigate();
   const recentReports = reports.slice(0, 5);
@@ -126,7 +118,7 @@ function RecentUploads({ reports = [] }) {
           <p className="text-sm text-slate-500">No documents uploaded yet.</p>
         ) : recentReports.map((report) => {
           const Icon = report.category?.toLowerCase().includes('prescription') ? ClipboardList : FileText;
-          const subtitle = [report.doctor, report.hospital, formatReportDate(report.reportDate || report.createdAt)]
+          const subtitle = [report.doctor, report.hospital, formatDate(report.reportDate || report.createdAt, { fallback: 'Date not available' })]
             .filter(Boolean)
             .join(' • ');
 
@@ -151,7 +143,7 @@ function RecentUploads({ reports = [] }) {
               <p className="text-sm font-semibold text-slate-800 truncate">
                 {report.title || report.category || 'Medical document'}
               </p>
-              <p className="text-xs text-slate-400 mt-0.5">{subtitle || formatReportDate(report.reportDate || report.createdAt)}</p>
+              <p className="text-xs text-slate-400 mt-0.5">{subtitle || formatDate(report.reportDate || report.createdAt, { fallback: 'Date not available' })}</p>
             </div>
             <span className="text-xs font-medium bg-emerald-50 text-emerald-600 px-3 py-1.5 rounded-full whitespace-nowrap">
               {report.analysis ? 'AI Processed' : 'Uploaded'}

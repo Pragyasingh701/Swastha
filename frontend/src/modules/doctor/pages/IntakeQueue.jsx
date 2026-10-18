@@ -20,6 +20,7 @@ import {
   getIntakeQueueHistory,
 } from "../../../api/doctorPatients";
 import AppHeader from "../../../components/common/AppHeader";
+import { formatDateTime } from "../../../utils/dateFormat";
 
 // Module A (Conversational History Engine) — DOCTOR-facing priority queue,
 // its own page/sidebar entry (moved out of DoctorDashboard.jsx per request).
@@ -153,13 +154,6 @@ function orderedAnsweredFields(obj, labelPairs, excludeKeys) {
   return out;
 }
 
-function formatIntakeTimestamp(value) {
-  if (!value) return "";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "";
-  return date.toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
-}
-
 function formatFieldValue(value) {
   if (Array.isArray(value)) {
     return value.length > 0 ? value.join(", ") : "None reported";
@@ -270,7 +264,7 @@ function IntakeQueueRows({ sessions, onSelect, onComplete, onRemove, actioningId
                       >
                         {s.status === "completed" ? "Completed" : "In progress"}
                       </span>
-                      <p className="text-xs text-slate-400 mt-1">{formatIntakeTimestamp(s.created_at)}</p>
+                      <p className="text-xs text-slate-400 mt-1">{formatDateTime(s.created_at, { withYear: false })}</p>
                     </div>
 
                     <div className="flex items-center gap-1.5">
@@ -426,7 +420,7 @@ function IntakeHistoryList({ history, isLoading, error, onSelect }) {
                 >
                   {h.action === "completed" ? "Completed" : "Removed"}
                 </span>
-                <p className="text-xs text-slate-400 mt-1">{formatIntakeTimestamp(h.acted_at)}</p>
+                <p className="text-xs text-slate-400 mt-1">{formatDateTime(h.acted_at, { withYear: false })}</p>
               </div>
             </li>
           ))}

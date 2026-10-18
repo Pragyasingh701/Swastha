@@ -1,19 +1,9 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { CalendarDays, Edit3, Eye, HeartPulse, Mail, Trash2, Users } from 'lucide-react';
+import { formatDate as formatDateText } from "../../../utils/dateFormat";
 
-function formatDate(value) {
-  if (!value) return 'Not set';
-
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return value;
-
-  return parsed.toLocaleDateString(undefined, {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-  });
-}
+const formatDate = (value) => formatDateText(value, { fallback: 'Not set' });
 
 export function parseMemberNotesAndEmail(rawNotes) {
   if (!rawNotes) return { notes: '', email: '' };

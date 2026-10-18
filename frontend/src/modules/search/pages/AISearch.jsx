@@ -22,6 +22,7 @@ import {
 
 import AppHeader from "../../../components/common/AppHeader";
 import PatientSidebar from "../../../components/common/PatientSidebar";
+import { formatDate as formatDateText } from "../../../utils/dateFormat";
 
 // Same nav list as Dashboard.jsx / Timeline.jsx / etc.
 // Each example question now carries its own icon + color, matching the
@@ -46,12 +47,7 @@ const EXAMPLE_QUESTIONS = [
 
 const MAX_QUERY_LENGTH = 250;
 
-function formatDate(value) {
-  if (!value) return null;
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return null;
-  return date.toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" });
-}
+const formatDate = (value) => formatDateText(value, { fallback: null });
 
 export default function AISearch() {
   const navigate = useNavigate();

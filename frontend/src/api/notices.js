@@ -2,8 +2,8 @@
 // backend/rag/routes/notices.js) — same base URL as api/search.js and
 // api/intake.js, since this is mounted inside the same /rag sub-app.
 import { apiRequest } from './client';
+import { RAG_BASE_URL } from './config.js';
 
-const RAG_BASE_URL = import.meta.env.VITE_RAG_BASE_URL || 'http://localhost:5001/rag/api';
 
 function request(path, options = {}) {
   return apiRequest(options.method || 'GET', path, { ...options, baseUrl: RAG_BASE_URL });

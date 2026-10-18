@@ -24,6 +24,7 @@ import {
 } from "lucide-react";
 
 import AppHeader from "../../../components/common/AppHeader";
+import { formatDate as formatDateText } from "../../../utils/dateFormat";
 
 const EXAMPLE_QUESTIONS = [
   "Has this patient had any drug allergies or reactions?",
@@ -51,12 +52,7 @@ const FEATURE_HIGHLIGHTS = [
   },
 ];
 
-function formatDate(value) {
-  if (!value) return null;
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return null;
-  return date.toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" });
-}
+const formatDate = (value) => formatDateText(value, { fallback: null });
 
 // One conversation thread per patient the doctor has open in this browser
 // tab. Switching the dropdown swaps to (or starts) that patient's own

@@ -6,6 +6,7 @@ import {
   declineDoctorRequest,
 } from "../../api/doctorPatients";
 import { usePolling } from "../../hooks/usePolling";
+import { formatDateTime } from "../../utils/dateFormat";
 
 /**
  * Shared bell icon + dropdown for BOTH doctor and patient headers.
@@ -161,19 +162,6 @@ export default function NotificationBell() {
       )}
     </div>
   );
-}
-
-function formatDateTime(value) {
-  if (!value) return "";
-  const d = new Date(value);
-  if (Number.isNaN(d.getTime())) return "";
-  return d.toLocaleString(undefined, {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  });
 }
 
 const TYPE_META = {
