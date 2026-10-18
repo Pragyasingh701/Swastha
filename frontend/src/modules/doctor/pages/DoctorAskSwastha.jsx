@@ -35,8 +35,8 @@ const EXAMPLE_QUESTIONS = [
 const FEATURE_HIGHLIGHTS = [
   {
     icon: ShieldCheck,
-    title: "100% Private & Secure",
-    description: "Your data is safe and always protected.",
+    title: "Protected by Design",
+    description: "Records are encrypted in transit, and nothing goes to the AI until you accept the AI notice.",
   },
   {
     icon: FileText,

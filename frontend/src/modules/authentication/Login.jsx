@@ -92,7 +92,7 @@ export default function Login() {
             </div>
             <div className="flex items-center gap-2 px-4 py-2 bg-white/50 border border-outline-variant/30 rounded-xl">
               <span className="material-symbols-outlined text-primary text-[20px]" style={{ fontVariationSettings: "'FILL' 1" }}>mail</span>
-              <span className="font-label-md text-label-md text-on-surface-variant ">OTP-Verified Signup</span>
+              <span className="font-label-md text-label-md text-on-surface-variant ">Email-Verified Signup</span>
             </div>
             <div className="flex items-center gap-2 px-4 py-2 bg-white/50 border border-outline-variant/30 rounded-xl">
               <span className="material-symbols-outlined text-primary text-[20px]" style={{ fontVariationSettings: "'FILL' 1" }}>auto_awesome</span>

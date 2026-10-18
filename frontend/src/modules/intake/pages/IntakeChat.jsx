@@ -37,8 +37,8 @@ const navItems = [
   { label: "Dashboard", icon: LayoutGrid, route: "/dashboard" },
   { label: "Health Timeline", icon: TrendingUp, route: "/timeline" },
   { label: "Medical Vault", icon: Folder, route: "/vault" },
-  { label: "Family Records", icon: Users, route: "/family-vault" },
-  { label: "Lab Insights", icon: TrendingUp, route: "/lab-trends" },
+  { label: "Family Vault", icon: Users, route: "/family-vault" },
+  { label: "Lab Trends", icon: TrendingUp, route: "/lab-trends" },
   { label: "Ask Swastha", icon: Sparkles, route: "/search" },
 ];
 

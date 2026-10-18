@@ -40,8 +40,8 @@ const navItems = [
   { label: "Dashboard", icon: LayoutGrid, route: "/dashboard" },
   { label: "Health Timeline", icon: TrendingUp, route: "/timeline" },
   { label: "Medical Vault", icon: Folder, active: true, route: "/vault" },
-  { label: "Family Records", icon: Users, route: "/family-vault" },
-  { label: "Lab Insights", icon: TrendingUp, route: "/lab-trends" },
+  { label: "Family Vault", icon: Users, route: "/family-vault" },
+  { label: "Lab Trends", icon: TrendingUp, route: "/lab-trends" },
   { label: "Ask Swastha", icon: Sparkles, route: "/search" },
 ];
 
@@ -288,9 +288,12 @@ export default function MedicalVault() {
                 All your clinical documents, securely stored in one place.
               </p>
             </div>
-            <span className="flex items-center gap-1.5 bg-blue-50 text-blue-700 text-xs font-semibold px-3 py-2 rounded-full whitespace-nowrap transition-transform duration-200 hover:scale-105 shrink-0">
+            <span
+              title="Files are stored privately and opened only through short-lived links that your account requests."
+              className="flex items-center gap-1.5 bg-blue-50 text-blue-700 text-xs font-semibold px-3 py-2 rounded-full whitespace-nowrap transition-transform duration-200 hover:scale-105 shrink-0"
+            >
               <ShieldCheck size={14} />
-              PRIVATE
+              Private storage
             </span>
           </div>
 

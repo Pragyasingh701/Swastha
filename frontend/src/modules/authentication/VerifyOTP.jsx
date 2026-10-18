@@ -57,7 +57,7 @@ export default function VerifyOTP() {
       }
     } catch (err) {
       setIsLoading(false);
-      setError(err.message || "Invalid OTP code. Please try again.");
+      setError(err.message || "Invalid verification code. Please try again.");
     }
   };
 

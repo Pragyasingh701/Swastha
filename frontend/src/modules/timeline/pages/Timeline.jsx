@@ -41,8 +41,8 @@ const navItems = [
   { label: "Dashboard", icon: LayoutGrid, route: "/dashboard" },
   { label: "Health Timeline", icon: TrendingUp, active: true, route: "/timeline" },
   { label: "Medical Vault", icon: Folder, route: "/vault" },
-  { label: "Family Records", icon: Users, route: "/family-vault" },
-  { label: "Lab Insights", icon: TrendingUp, route: "/lab-trends" },
+  { label: "Family Vault", icon: Users, route: "/family-vault" },
+  { label: "Lab Trends", icon: TrendingUp, route: "/lab-trends" },
   { label: "Ask Swastha", icon: Sparkles, route: "/search" },
 ];
 
@@ -981,14 +981,14 @@ function EventDetails({ event, onClose, onEdit, onDelete }) {
             onClick={onEdit}
             className="inline-flex items-center justify-center rounded-2xl bg-blue-700 px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-blue-800"
           >
-            Edit Event
+            Edit Report
           </button>
           <button
             type="button"
             onClick={onDelete}
             className="inline-flex items-center justify-center rounded-2xl bg-rose-600 px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-rose-700"
           >
-            Delete Event
+            Delete Report
           </button>
           <button
             type="button"

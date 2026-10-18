@@ -604,7 +604,7 @@ router.post('/google/exchange', async (req, res) => {
 router.post('/verify-otp', async (req, res) => {
   const { email, otpCode } = req.body || {};
   if (typeof otpCode !== 'string' || !/^\d{6}$/.test(otpCode)) {
-    return res.status(400).json({ message: 'Valid 6-digit OTP code is required' });
+    return res.status(400).json({ message: 'A valid 6-digit verification code is required.' });
   }
   if (typeof email !== 'string' || !email.trim()) {
     return res.status(400).json({ message: 'Email address is required' });
@@ -615,7 +615,7 @@ router.post('/verify-otp', async (req, res) => {
   // address never contains it, and the public endpoint must not be able to
   // reach those.
   if (key.includes(':')) {
-    return res.status(400).json({ message: 'Invalid or expired OTP verification code.' });
+    return res.status(400).json({ message: 'Invalid or expired verification code.' });
   }
 
   // Checks ANY still-active code for this email (not just the newest), so a
@@ -626,7 +626,7 @@ router.post('/verify-otp', async (req, res) => {
     if (result.reason === 'locked') {
       return res.status(429).json({ message: OTP_LOCKED_MESSAGE });
     }
-    return res.status(400).json({ message: 'Invalid or expired OTP verification code.' });
+    return res.status(400).json({ message: 'Invalid or expired verification code.' });
   }
 
   let user = await findUserByEmail(key);
@@ -1037,7 +1037,7 @@ router.post('/change-password/send-otp', authenticateToken, async (req, res) => 
 router.post('/change-password/verify-otp', authenticateToken, async (req, res) => {
   const { otpCode } = req.body || {};
   if (typeof otpCode !== 'string' || !/^\d{6}$/.test(otpCode)) {
-    return res.status(400).json({ message: 'Valid 6-digit OTP code is required' });
+    return res.status(400).json({ message: 'A valid 6-digit verification code is required.' });
   }
 
   const email = (req.user.email || '').toLowerCase().trim();
@@ -1072,11 +1072,11 @@ router.post('/change-password/confirm', authenticateToken, async (req, res) => {
   const data = changeToken ? passwordChangeTokenStore.get(changeToken) : null;
 
   if (!data || data.email !== email) {
-    return res.status(400).json({ message: 'This verification session is invalid. Please verify the OTP again.' });
+    return res.status(400).json({ message: 'This verification session is invalid. Please verify your code again.' });
   }
   if (data.expiresAt <= Date.now()) {
     passwordChangeTokenStore.delete(changeToken);
-    return res.status(400).json({ message: 'This verification session has expired. Please verify the OTP again.' });
+    return res.status(400).json({ message: 'This verification session has expired. Please verify your code again.' });
   }
 
   const existingUser = await findUserByEmail(email);

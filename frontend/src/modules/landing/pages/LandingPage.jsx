@@ -177,7 +177,7 @@ export default function LandingPage() {
               </div>
               <div className="flex items-center gap-2">
                 <span className="material-symbols-outlined text-primary" style={{ fontVariationSettings: "'FILL' 1" }}>groups</span>
-                <span className="font-label-md font-bold">Family Records</span>
+                <span className="font-label-md font-bold">Family Vault</span>
               </div>
               <div className="flex items-center gap-2">
                 <span className="material-symbols-outlined text-primary" style={{ fontVariationSettings: "'FILL' 1" }}>record_voice_over</span>

@@ -305,7 +305,7 @@ export default function UploadReports({ onClose, onSubmit, token, initialEvent }
                 : "text-gray-600"
         }`}
     >
-        📄 Upload Prescription
+        📄 Upload Report
     </button>
 
     <button
@@ -332,7 +332,7 @@ export default function UploadReports({ onClose, onSubmit, token, initialEvent }
               <div className="border-2 border-dashed rounded-xl p-8 text-center">
                 <UploadCloud className="mx-auto w-12 h-12 text-blue-600 mb-3" />
 
-                <h3 className="font-semibold text-lg">Upload Prescription</h3>
+                <h3 className="font-semibold text-lg">Upload Report</h3>
 
                 <p className="text-gray-500 text-sm mb-4">Upload PDF / JPG / PNG</p>
 

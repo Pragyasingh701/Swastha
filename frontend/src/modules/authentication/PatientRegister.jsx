@@ -326,7 +326,7 @@ export default function PatientRegister() {
           <div className="mt-8 flex justify-center gap-8 opacity-40 grayscale pointer-events-none">
             <div className="flex items-center gap-1">
               <span className="material-symbols-outlined text-[16px]">mail</span>
-              <span className="text-[10px] font-bold uppercase tracking-widest">OTP-Verified Signup</span>
+              <span className="text-[10px] font-bold uppercase tracking-widest">Email-Verified Signup</span>
             </div>
             <div className="flex items-center gap-1">
               <span className="material-symbols-outlined text-[16px]">verified_user</span>

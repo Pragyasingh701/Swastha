@@ -36,13 +36,13 @@ import ProfileDropdown from "../../settings/components/ProfileDropdown";
 import PatientIdBadge from "../../../components/common/PatientIdBadge";
 import { AiGeneratedNote } from "../../../components/common/AiNotice";
 
-// Same nav list as Dashboard.jsx, with Lab Insights marked active
+// Same nav list as Dashboard.jsx, with Lab Trends marked active
 const navItems = [
   { label: "Dashboard", icon: LayoutGrid, route: "/dashboard" },
   { label: "Health Timeline", icon: TrendingUp, route: "/timeline" },
   { label: "Medical Vault", icon: Folder, route: "/vault" },
-  { label: "Family Records", icon: Users, route: "/family-vault" },
-  { label: "Lab Insights", icon: TrendingUp, active: true, route: "/lab-trends" },
+  { label: "Family Vault", icon: Users, route: "/family-vault" },
+  { label: "Lab Trends", icon: TrendingUp, active: true, route: "/lab-trends" },
   { label: "Ask Swastha", icon: Sparkles, route: "/search" },
 ];
 
@@ -230,7 +230,7 @@ function PageHeader() {
     <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 mb-8">
       <div>
         <h1 className="text-2xl sm:text-3xl font-semibold text-slate-900 leading-snug">
-          Lab Insights
+          Lab Trends
         </h1>
         <p className="text-sm text-slate-500 mt-1">
           AI-powered trend analysis across your lab reports.
