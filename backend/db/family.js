@@ -285,6 +285,17 @@ export const createOrGetFamilyVaultForUser = async (userId) => {
       .single();
 
     if (error) {
+      // Two requests creating the first vault at the same moment: the unique key
+      // on vault_table.patient_id lets one win. Use the winner's row.
+      if (error.code === '23505') {
+        const { data: winner, error: winnerError } = await supabase
+          .from(FAMILY_VAULT_TABLE)
+          .select('*')
+          .eq(FAMILY_USER_ID_COLUMN, userId)
+          .maybeSingle();
+        if (winnerError) throw winnerError;
+        return normalizeVault(winner || null);
+      }
       throw error;
     }
 
