@@ -34,6 +34,7 @@ import { getLabInsights } from "../../../api/reports";
 import SettingsModal from "../../settings/components/SettingsModal";
 import ProfileDropdown from "../../settings/components/ProfileDropdown";
 import PatientIdBadge from "../../../components/common/PatientIdBadge";
+import { AiGeneratedNote } from "../../../components/common/AiNotice";
 
 // Same nav list as Dashboard.jsx, with Lab Insights marked active
 const navItems = [
@@ -477,9 +478,14 @@ function AiInsightCard({ healthScore, note }) {
         )}
       </div>
 
-      <p className="relative z-10 text-sm text-blue-50 leading-relaxed">
-        {note || "Upload more Lab Reports to get a personalized health score."}
-      </p>
+      <div className="relative z-10">
+        <p className="text-sm text-blue-50 leading-relaxed">
+          {note || "Upload more Lab Reports to get a personalized health score."}
+        </p>
+        <p className="mt-2 text-[11px] text-blue-100/90">
+          An AI estimate from your lab reports, not a medical assessment.
+        </p>
+      </div>
     </div>
   );
 }
@@ -491,9 +497,10 @@ function FollowUpCard({ followUps }) {
 
   return (
     <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5 transition-shadow duration-300 hover:shadow-lg">
-      <h3 className="font-semibold text-slate-900 mb-4">
-        Recommended Follow-up
+      <h3 className="font-semibold text-slate-900">
+        Suggested Follow-up
       </h3>
+      <AiGeneratedNote className="mt-1 mb-4" />
 
       {items.length === 0 ? (
         <p className="text-sm text-slate-400 ">
@@ -531,9 +538,10 @@ function PhysicianSummary({ items }) {
   return (
     <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6 sm:p-8 mt-6 transition-shadow duration-300 hover:shadow-lg">
       <div>
-        <h2 className="text-2xl font-semibold text-slate-900 mb-6">
-          AI Physician's Summary
+        <h2 className="text-2xl font-semibold text-slate-900">
+          AI Summary of Your Lab Results
         </h2>
+        <AiGeneratedNote className="mt-1 mb-6" />
 
         <div className="flex flex-col gap-6">
           {items.map((item) => (

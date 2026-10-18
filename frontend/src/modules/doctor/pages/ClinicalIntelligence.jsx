@@ -8,6 +8,7 @@ import PatientAccessNotice from "../components/PatientAccessNotice";
 import { getDoctorPatients, getDoctorPatientSummary } from "../../../api/doctorPatients";
 import { getTimelineReports } from "../../../api/reports";
 import { useAuth } from "../../../context/AuthContext";
+import { AiGeneratedNote } from "../../../components/common/AiNotice";
 
 const CATEGORY_META = {
   Prescription: { icon: ClipboardList },
@@ -53,6 +54,7 @@ export default function ClinicalIntelligence() {
   const [reportsError, setReportsError] = useState(null);
 
   const [summary, setSummary] = useState(null);
+  const [summaryAt, setSummaryAt] = useState(null);
   const [summaryLoading, setSummaryLoading] = useState(false);
   const [summaryError, setSummaryError] = useState(null);
 
@@ -212,7 +214,10 @@ export default function ClinicalIntelligence() {
       setSummaryError(null);
       try {
         const res = await getDoctorPatientSummary(patientUserId);
-        if (!cancelled) setSummary(res.summary || null);
+        if (!cancelled) {
+          setSummary(res.summary || null);
+          setSummaryAt(new Date());
+        }
       } catch (err) {
         if (!cancelled) {
           setSummaryError(err.message || "Could not generate a summary for this patient.");
@@ -418,7 +423,9 @@ export default function ClinicalIntelligence() {
                     )}
                   </div>
                   <span className="text-xs text-[#737686]">
-                    Auto-updates when this patient's records change
+                    {summary && summaryAt
+                      ? `Generated ${summaryAt.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })} from ${reports.length} record${reports.length === 1 ? "" : "s"}`
+                      : "Generated from this patient's records"}
                   </span>
                 </div>
 
@@ -431,7 +438,10 @@ export default function ClinicalIntelligence() {
                 ) : summaryError ? (
                   <p className="text-sm text-red-600">{summaryError}</p>
                 ) : summary ? (
-                  <StructuredSummary summary={summary} />
+                  <>
+                    <StructuredSummary summary={summary} />
+                    <AiGeneratedNote className="mt-4" />
+                  </>
                 ) : (
                   <p className="text-sm text-slate-400">Summary unavailable.</p>
                 )}

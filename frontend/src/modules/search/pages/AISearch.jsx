@@ -8,7 +8,7 @@ import ResponsiveSidebar from "../../../components/common/ResponsiveSidebar";
 import ProfileDropdown from "../../settings/components/ProfileDropdown";
 import PatientIdBadge from "../../../components/common/PatientIdBadge";
 import SettingsModal from "../../settings/components/SettingsModal";
-import { AiNoticeInfoLink, AiNoticeAckModal } from "../../../components/common/AiNotice";
+import { AiNoticeInfoLink, AiNoticeAckModal, AiGeneratedNote } from "../../../components/common/AiNotice";
 import {
   LayoutGrid,
   TrendingUp,
@@ -435,6 +435,8 @@ function ChatBubble({ message }) {
             ))}
           </div>
         )}
+
+        {!message.isError && <AiGeneratedNote className="mt-3" />}
 
         {/* Omitted for an error bubble — there's no real answer to rate. */}
         {!message.isError && (

@@ -6,7 +6,7 @@ import { getDoctorPatients } from "../../../api/doctorPatients";
 import { searchReportsConversational, clearConversation, submitAnswerFeedback } from "../../../api/search";
 import { openReportFile } from "../../../api/reports";
 import { getNoticeAckStatus, acknowledgeNotice } from "../../../api/notices";
-import { AiNoticeInfoLink, AiNoticeAckModal } from "../../../components/common/AiNotice";
+import { AiNoticeInfoLink, AiNoticeAckModal, AiGeneratedNote } from "../../../components/common/AiNotice";
 import {
   Sparkles,
   Send,
@@ -666,6 +666,8 @@ function ChatBubble({ message, onRetry, disabled }) {
             ))}
           </div>
         )}
+
+        {!isErrorLike && <AiGeneratedNote className="mt-3" />}
 
         {/* Omitted for degraded/error bubbles — there's no real answer to
             rate, just a fallback sentence or a retry prompt. */}

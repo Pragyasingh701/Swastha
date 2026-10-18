@@ -29,6 +29,7 @@ import {
   RefreshCw,
 } from "lucide-react";
 import NotificationBell from "../../../components/common/NotificationBell";
+import { AiGeneratedNote } from "../../../components/common/AiNotice";
 
 /* -----------------------------------------------------------
    Nav + category config — same shape as Timeline.jsx so a report's
@@ -744,6 +745,7 @@ function ReportPreview({ report, token, onSummaryGenerated, onClose }) {
               ) : (
                 <>
                   <p className="mt-2 text-sm text-slate-800 leading-relaxed whitespace-pre-line">{report.analysis}</p>
+                  <AiGeneratedNote className="mt-2" />
                   <button
                     type="button"
                     onClick={runGenerate}
