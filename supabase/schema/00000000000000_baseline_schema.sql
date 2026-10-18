@@ -1,4 +1,4 @@
--- Baseline: the whole database as it stood on 2026-10-18.
+-- Baseline: the whole database schema, kept up to date.
 --
 -- Replaces the 29 earlier migrations (kept for reference in
 -- supabase/migrations_archive/, which the Supabase CLI does not run). Those could
@@ -7,8 +7,13 @@
 -- shared one version number.
 --
 -- This file rebuilds an empty database. It is NOT meant to be run against the
--- live database, which already has all of this. Every migration after this one
--- is written on top of it, as before.
+-- live database, which already has all of this.
+--
+-- HOW WE KEEP IT: this is the only file in supabase/schema/. Whenever a change
+-- is made to the database, the migration script that applies it to the live
+-- database is stored in supabase/migrations_archive/, and the same change is folded
+-- into this baseline in the same commit, so this file always describes the current
+-- schema. Last folded in: 20261018120000_database_integrity.sql.
 --
 -- Part 1 is a schema-only dump (`supabase db dump`): tables, indexes, constraints,
 -- functions, row level security and grants, no data. Part 2 adds what a dump of
@@ -200,7 +205,7 @@ ALTER TABLE "public"."clinic_checkin_codes" OWNER TO "postgres";
 CREATE TABLE IF NOT EXISTS "public"."doctor_patient" (
     "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
     "doctor_id" character varying NOT NULL,
-    "patient_id" character varying,
+    "patient_id" character varying NOT NULL,
     "patient_code" character varying,
     "patient_email" character varying,
     "patient_name" character varying,
@@ -252,7 +257,7 @@ ALTER TABLE "public"."doctors" OWNER TO "postgres";
 CREATE TABLE IF NOT EXISTS "public"."family_members" (
     "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
     "vault_id" "text" DEFAULT ''::"text" NOT NULL,
-    "patient_id" character varying,
+    "patient_id" character varying NOT NULL,
     "name" "text",
     "age" integer,
     "relationship" "text",
@@ -398,7 +403,7 @@ CREATE TABLE IF NOT EXISTS "public"."reports" (
     "source" "text",
     "created_at" timestamp with time zone,
     "updated_at" timestamp with time zone,
-    "patient_id" character varying,
+    "patient_id" character varying NOT NULL,
     "unclear_fields" "text"[] DEFAULT '{}'::"text"[] NOT NULL
 );
 
@@ -417,7 +422,7 @@ CREATE TABLE IF NOT EXISTS "public"."vault_table" (
     "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
     "created_at" timestamp with time zone NOT NULL,
     "vault_id" "text",
-    "patient_id" character varying,
+    "patient_id" character varying NOT NULL,
     "updated_at" timestamp with time zone,
     "deleted_at" timestamp with time zone
 );
@@ -498,6 +503,21 @@ ALTER TABLE ONLY "public"."reports"
 
 ALTER TABLE ONLY "public"."vault_table"
     ADD CONSTRAINT "vault_table_pkey" PRIMARY KEY ("id");
+
+ALTER TABLE ONLY "public"."vault_table"
+    ADD CONSTRAINT "vault_table_patient_id_key" UNIQUE ("patient_id");
+
+ALTER TABLE ONLY "public"."doctor_patient"
+    ADD CONSTRAINT "doctor_patient_accepted_has_expiry" CHECK ((("status" <> 'accepted'::"text") OR ("access_expires_at" IS NOT NULL)));
+
+ALTER TABLE ONLY "public"."doctor_patient"
+    ADD CONSTRAINT "doctor_patient_decline_count_check" CHECK (("decline_count" >= 0));
+
+ALTER TABLE ONLY "public"."family_members"
+    ADD CONSTRAINT "family_members_age_check" CHECK ((("age" IS NULL) OR (("age" >= 0) AND ("age" <= 150))));
+
+ALTER TABLE ONLY "public"."family_members"
+    ADD CONSTRAINT "family_members_authorization_status_check" CHECK ((("authorization_status" IS NULL) OR ("authorization_status" = ANY (ARRAY['pending'::"text", 'approved'::"text"]))));
 
 CREATE INDEX "ai_notice_acknowledgements_user_feature_idx" ON "public"."ai_notice_acknowledgements" USING "btree" ("user_id", "feature");
 
