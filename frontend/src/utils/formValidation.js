@@ -73,3 +73,29 @@ export function getPasswordError(password) {
   if (COMMON_PASSWORDS.has(password.toLowerCase())) return 'That password is too common. Please choose a less predictable one.';
   return '';
 }
+
+/**
+ * The checks every doctor profile goes through, at sign-up and again when it is edited in
+ * Settings. Returns the message for the first problem, or '' when the profile is fine.
+ */
+export function getDoctorProfileError({ dob, regNumber, degree, specialization, hospitalName, address }) {
+  if (!isValidPastDate(dob, { minAge: 21, maxAge: 100 })) {
+    return 'Please enter a valid date of birth (doctors must be at least 21 years old).';
+  }
+  if (!isValidRegistrationNumber(regNumber)) {
+    return 'Please enter a valid Medical Registration Number (must include at least one digit, e.g. MCI-12345).';
+  }
+  if (!isValidWordsField(degree)) {
+    return 'Please enter a valid Primary Degree (e.g. MBBS, MD).';
+  }
+  if (!isValidWordsField(specialization)) {
+    return 'Please enter a valid Specialization (e.g. Cardiology).';
+  }
+  if (!isValidFreeTextField(hospitalName, { minLength: 3, maxLength: 150 })) {
+    return 'Please enter a valid Hospital or Clinic Name.';
+  }
+  if (!isValidFreeTextField(address, { minLength: 8, maxLength: 300 })) {
+    return 'Please enter a valid, complete practice address.';
+  }
+  return '';
+}

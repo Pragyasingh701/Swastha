@@ -5,10 +5,8 @@ import {
   sanitizePhoneInput,
   isValidIndianPhone,
   isValidFullName,
+  getDoctorProfileError,
   isValidPastDate,
-  isValidRegistrationNumber,
-  isValidWordsField,
-  isValidFreeTextField,
 } from '../../../utils/formValidation';
 import {
   X,
@@ -138,32 +136,9 @@ export default function SettingsModal({ isOpen, onClose }) {
         return;
       }
 
-      if (!isValidPastDate(formData.dob, { minAge: 21, maxAge: 100 })) {
-        setMessage({ type: 'error', text: 'Please enter a valid date of birth (doctors must be at least 21 years old).' });
-        setIsSaving(false);
-        return;
-      }
-
-      if (!isValidRegistrationNumber(formData.regNumber)) {
-        setMessage({ type: 'error', text: 'Please enter a valid Medical Registration Number (must include at least one digit).' });
-        setIsSaving(false);
-        return;
-      }
-
-      if (!isValidWordsField(formData.degree) || !isValidWordsField(formData.specialization)) {
-        setMessage({ type: 'error', text: 'Please enter a valid Degree and Specialization (letters only).' });
-        setIsSaving(false);
-        return;
-      }
-
-      if (!isValidFreeTextField(formData.hospitalName, { minLength: 3, maxLength: 150 })) {
-        setMessage({ type: 'error', text: 'Please enter a valid Hospital or Clinic Name.' });
-        setIsSaving(false);
-        return;
-      }
-
-      if (!isValidFreeTextField(formData.address, { minLength: 8, maxLength: 300 })) {
-        setMessage({ type: 'error', text: 'Please enter a valid, complete practice address.' });
+      const profileError = getDoctorProfileError(formData);
+      if (profileError) {
+        setMessage({ type: 'error', text: profileError });
         setIsSaving(false);
         return;
       }

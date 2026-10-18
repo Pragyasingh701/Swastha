@@ -1,15 +1,7 @@
 import React, { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
-import {
-  sanitizePhoneInput,
-  isValidIndianPhone,
-  isValidPastDate,
-  isValidRegistrationNumber,
-  isValidWordsField,
-  isValidFreeTextField,
-  isValidFullName,
-} from "../../utils/formValidation";
+import { sanitizePhoneInput, isValidIndianPhone, isValidFullName, getDoctorProfileError } from "../../utils/formValidation";
 
 export default function DoctorRegister() {
   const navigate = useNavigate();
@@ -82,38 +74,14 @@ export default function DoctorRegister() {
       return;
     }
 
-    if (!isValidPastDate(form.dob, { minAge: 21, maxAge: 100 })) {
-      setErrorMessage("Please enter a valid date of birth (doctors must be at least 21 years old).");
-      return;
-    }
-
     if (!form.gender) {
       setErrorMessage("Please select your gender before completing registration.");
       return;
     }
 
-    if (!isValidRegistrationNumber(form.regNumber)) {
-      setErrorMessage("Please enter a valid Medical Registration Number (must include at least one digit, e.g. MCI-12345).");
-      return;
-    }
-
-    if (!isValidWordsField(form.degree)) {
-      setErrorMessage("Please enter a valid Primary Degree (e.g. MBBS, MD).");
-      return;
-    }
-
-    if (!isValidWordsField(form.specialization)) {
-      setErrorMessage("Please enter a valid Specialization (e.g. Cardiology).");
-      return;
-    }
-
-    if (!isValidFreeTextField(form.hospitalName, { minLength: 3, maxLength: 150 })) {
-      setErrorMessage("Please enter a valid Hospital or Clinic Name.");
-      return;
-    }
-
-    if (!isValidFreeTextField(form.address, { minLength: 8, maxLength: 300 })) {
-      setErrorMessage("Please enter a valid, complete practice address.");
+    const profileError = getDoctorProfileError(form);
+    if (profileError) {
+      setErrorMessage(profileError);
       return;
     }
 

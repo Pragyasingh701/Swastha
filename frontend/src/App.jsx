@@ -11,7 +11,6 @@ import Register from "./modules/authentication/Register";
 import RoleSelection from "./modules/authentication/RoleSelection";
 import DoctorRegister from "./modules/authentication/DoctorRegister";
 import PatientRegister from "./modules/authentication/PatientRegister";
-import DoctorLogin from "./modules/authentication/DoctorLogin";
 import VerifyOTP from "./modules/authentication/VerifyOTP";
 import GoogleCallback from "./modules/authentication/GoogleCallback";
 import ForgotPassword from "./modules/authentication/ForgotPassword";
@@ -224,7 +223,7 @@ export default function App() {
         <Route path="/" element={<GuestRoute><LandingPage /></GuestRoute>} />
         <Route path="/login" element={<GuestRoute><Login /></GuestRoute>} />
         <Route path="/register" element={<GuestRoute><Register /></GuestRoute>} />
-        <Route path="/doctor-login" element={<GuestRoute><DoctorLogin /></GuestRoute>} />
+        <Route path="/doctor-login" element={<Navigate to="/login" replace />} />
         <Route path="/forgot-password" element={<GuestRoute><ForgotPassword /></GuestRoute>} />
         <Route path="/reset-password" element={<GuestRoute><ResetPassword /></GuestRoute>} />
 
