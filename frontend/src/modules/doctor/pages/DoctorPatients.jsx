@@ -22,7 +22,7 @@ import {
   getReportCategory,
   vaultCardIndex,
 } from "../../../config/reportCategories";
-import { formatWaitUntil } from '../../../utils/dateFormat';
+import { formatDate, formatWaitUntil } from '../../../utils/dateFormat';
 
 // Diagnosis/Medicines are stored under the same column names for every
 // category, but what they actually MEAN differs by category — mirrors
@@ -265,7 +265,7 @@ export default function DoctorPatients() {
       notes: report.notes || '',
       medicines: report.medicines || '',
       reportDate: report.reportDate,
-      displayDate: report.reportDate ? new Date(report.reportDate).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' }) : 'Unknown date',
+      displayDate: formatDate(report.reportDate, { fallback: 'Unknown date' }),
       icon: meta.icon,
       kind: meta.kind,
       unclearFields: report.unclearFields || [],
@@ -526,7 +526,7 @@ export default function DoctorPatients() {
                         <p className="text-[9px] uppercase tracking-[0.1em] font-semibold text-slate-500">DOB</p>
                       </div>
                       <p className="text-[1rem] font-semibold text-slate-900 ml-6">
-                        {selectedPatient.dob || selectedPatient.patient_dob ? new Date(selectedPatient.dob || selectedPatient.patient_dob).toLocaleDateString() : '—'}
+                        {formatDate(selectedPatient.dob || selectedPatient.patient_dob, { fallback: '—' })}
                       </p>
                     </div>
                     {(selectedPatient.email) && (
@@ -723,7 +723,7 @@ export default function DoctorPatients() {
                     <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 ">
                       <p className="text-[11px] uppercase tracking-[0.12em] text-slate-500 ">Latest Visit</p>
                       <p className="mt-3 text-base font-semibold text-slate-900 ">
-                        {patientVault[0]?.reportDate ? new Date(patientVault[0].reportDate).toLocaleDateString() : 'N/A'}
+                        {formatDate(patientVault[0]?.reportDate, { fallback: 'N/A' })}
                       </p>
                     </div>
                     <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 ">
@@ -834,7 +834,7 @@ export default function DoctorPatients() {
                                     )}
                                     {report.reportDate && (
                                       <p className="text-slate-600 ">
-                                        <span className="font-medium">Date:</span> {new Date(report.reportDate).toLocaleDateString()}
+                                        <span className="font-medium">Date:</span> {formatDate(report.reportDate, { fallback: 'Unknown date' })}
                                       </p>
                                     )}
                                   </div>
@@ -1378,13 +1378,7 @@ function EventCard({ event }) {
 }
 
 function EventDetails({ event, onClose }) {
-  const formattedDate = event.reportDate
-    ? new Date(event.reportDate).toLocaleDateString('en-US', {
-        year: 'numeric',
-        month: 'short',
-        day: 'numeric',
-      })
-    : 'Unknown date';
+  const formattedDate = formatDate(event.reportDate, { fallback: 'Unknown date' });
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 px-4 py-6">

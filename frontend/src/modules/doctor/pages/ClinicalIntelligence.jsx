@@ -20,6 +20,7 @@ import { useAuth } from "../../../context/AuthContext";
 import { AiGeneratedNote } from "../../../components/common/AiNotice";
 import AppHeader from "../../../components/common/AppHeader";
 import { getReportCategory } from "../../../config/reportCategories";
+import { formatDate } from "../../../utils/dateFormat";
 
 function categoryIcon(category) {
   return getReportCategory(category).icon;
@@ -32,7 +33,7 @@ function formatRelativeDate(dateStr) {
   if (diffDays <= 0) return "Today";
   if (diffDays === 1) return "Yesterday";
   if (diffDays < 7) return `${diffDays} days ago`;
-  return date.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+  return formatDate(date, { fallback: "Unknown date" });
 }
 
 export default function ClinicalIntelligence() {

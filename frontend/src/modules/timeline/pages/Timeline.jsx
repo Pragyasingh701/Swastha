@@ -21,6 +21,7 @@ import ReportFilePreview from "../../../components/common/ReportFilePreview";
 import AppHeader from "../../../components/common/AppHeader";
 import PatientSidebar from "../../../components/common/PatientSidebar";
 import { categoryFieldLabels, getReportCategory } from "../../../config/reportCategories";
+import { formatDate, formatDateTime } from '../../../utils/dateFormat';
 
 /* -----------------------------------------------------------
    Nav + category config.
@@ -746,13 +747,7 @@ function EventCard({ event, notable }) {
 }
 
 function EventDetails({ event, onClose, onEdit, onDelete }) {
-  const formattedDate = event.reportDate
-    ? new Date(event.reportDate).toLocaleDateString('en-US', {
-        year: 'numeric',
-        month: 'short',
-        day: 'numeric',
-      })
-    : 'Unknown date';
+  const formattedDate = formatDate(event.reportDate, { fallback: 'Unknown date' });
 
   // Both createdAt and updatedAt get set on creation too, so only show
   // "Last edited" once updatedAt is meaningfully after createdAt — i.e.
@@ -762,15 +757,7 @@ function EventDetails({ event, onClose, onEdit, onDelete }) {
     event.createdAt &&
     new Date(event.updatedAt).getTime() - new Date(event.createdAt).getTime() > 1000;
 
-  const formattedEditedAt = wasEdited
-    ? new Date(event.updatedAt).toLocaleString('en-US', {
-        year: 'numeric',
-        month: 'short',
-        day: 'numeric',
-        hour: 'numeric',
-        minute: '2-digit',
-      })
-    : null;
+  const formattedEditedAt = wasEdited ? formatDateTime(event.updatedAt) : null;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 px-4 py-6">
