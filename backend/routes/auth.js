@@ -1084,9 +1084,14 @@ router.post('/change-password/confirm', authenticateToken, async (req, res) => {
     return res.status(400).json({ message: 'This password is already being used. Please use a different password.' });
   }
 
+  // Update first, then spend the one-time token: if the database write fails the
+  // user gets an error and can try again with the same verification.
+  try {
+    await updateUserPassword(email, newPassword);
+  } catch (updateError) {
+    return res.status(500).json({ message: 'Could not update your password. Please try again.' });
+  }
   passwordChangeTokenStore.delete(changeToken); // Single-use consumption!
-
-  await updateUserPassword(email, newPassword);
   return res.json({ message: 'Password updated successfully.' });
 });
 
@@ -1179,9 +1184,14 @@ router.post('/reset-password', async (req, res) => {
     return res.status(400).json({ message: 'This password is already being used. Please use a different password.' });
   }
 
+  // Reset first, then spend the one-time link: if the database write fails the user
+  // gets an error and the same link still works for another try.
+  try {
+    await updateUserPassword(targetEmail, newPassword);
+  } catch (updateError) {
+    return res.status(500).json({ message: 'Could not reset your password. Please try again.' });
+  }
   resetTokenStore.delete(token); // Single-use consumption!
-
-  await updateUserPassword(targetEmail, newPassword);
   return res.json({ message: 'Password reset successfully. You can now login with your new password.' });
 });
 

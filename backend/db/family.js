@@ -301,8 +301,10 @@ export const createOrGetFamilyVaultForUser = async (userId) => {
 
     return normalizeVault(data);
   } catch (err) {
-    console.warn('Supabase family vault ensure warning:', err.message);
-    return null;
+    // Not swallowed: the caller must know the vault was NOT created, rather than be
+    // handed null and report success.
+    console.error('Supabase family vault ensure failed:', err.message);
+    throw err;
   }
 };
 

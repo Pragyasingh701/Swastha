@@ -413,11 +413,15 @@ export const createOrUpdateUser = async (userData) => {
           patient_code: userRow.patient_code || patientCode,
           hasSelectedRole: !!(role && role !== 'none'),
         };
-      } else if (error) {
-        console.error('❌ [Supabase] Error updating user in database:', error.message);
+      } else {
+        // The row was not written (a database error, or no row matched). Reporting
+        // the account as saved here would let the caller carry on with data that
+        // does not exist, so fail instead.
+        throw new Error(error ? error.message : 'No row was written');
       }
     } catch (err) {
-      console.error('❌ [Supabase] Exception during user save:', err.message);
+      console.error('❌ [Supabase] User save failed:', err.message);
+      throw new Error('Could not save the account. Please try again.');
     }
   }
 
@@ -463,10 +467,15 @@ export const updateUserPassword = async (email, newPassword) => {
 
   try {
     const passwordHash = await bcrypt.hash(newPassword, PASSWORD_HASH_ROUNDS);
-    await supabase.from(targetTable)
+    const { data, error } = await supabase.from(targetTable)
       .update({ password_hash: passwordHash, updated_at: new Date().toISOString() })
-      .eq('id', existingUser.id);
+      .eq('id', existingUser.id)
+      .select('id');
+    if (error) throw error;
+    if (!data || data.length === 0) throw new Error('No row was updated');
+    return true;
   } catch (e) {
-    console.warn('Supabase updateUserPassword warning:', e.message);
+    console.error('Supabase updateUserPassword failed:', e.message);
+    throw new Error('Could not update the password. Please try again.');
   }
 };
