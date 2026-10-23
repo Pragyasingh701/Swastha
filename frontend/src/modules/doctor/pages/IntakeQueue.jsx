@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import DoctorSidebar from "../components/DoctorSidebar";
 
 import {
@@ -20,6 +20,7 @@ import {
   getIntakeQueueHistory,
 } from "../../../api/doctorPatients";
 import AppHeader from "../../../components/common/AppHeader";
+import { usePolling } from "../../../hooks/usePolling";
 import { formatDateTime } from "../../../utils/dateFormat";
 
 // Module A (Conversational History Engine) — DOCTOR-facing priority queue,
@@ -599,26 +600,48 @@ export default function IntakeQueue() {
   const [selectedSessionId, setSelectedSessionId] = useState(null);
   const [actioningId, setActioningId] = useState(null);
   const [actionError, setActionError] = useState(null);
+  // Red-flag patients that showed up since the doctor opened the page, shown in a banner
+  // until dismissed so a new emergency is not missed while the doctor is looking elsewhere.
+  const [newFlagged, setNewFlagged] = useState([]);
+  const [refreshError, setRefreshError] = useState(false);
+  const [lastUpdated, setLastUpdated] = useState(null);
+  // Every session id seen so far (null until the first load) and the ones this doctor has
+  // just completed or removed, so a slow refresh cannot bring a finished session back.
+  const knownIdsRef = useRef(null);
+  const removedIdsRef = useRef(new Set());
+  const actioningRef = useRef(false);
 
   const [history, setHistory] = useState([]);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [historyError, setHistoryError] = useState(null);
   const [historyLoaded, setHistoryLoaded] = useState(false);
 
+  // Takes a fresh copy of the queue from the server and works out which red-flag sessions
+  // are new since the last look.
+  function applyQueue(result) {
+    const visible = result.filter((s) => !removedIdsRef.current.has(s.session_id));
+    if (knownIdsRef.current) {
+      const fresh = visible.filter((s) => s.priority === "flagged" && !knownIdsRef.current.has(s.session_id));
+      if (fresh.length > 0) {
+        setNewFlagged((prev) => [
+          ...prev,
+          ...fresh.filter((f) => !prev.some((p) => p.session_id === f.session_id)),
+        ]);
+      }
+    }
+    knownIdsRef.current = new Set(visible.map((s) => s.session_id));
+    setSessions(visible);
+    setLastUpdated(new Date());
+  }
+
   async function loadQueue() {
     setIsLoading(true);
     setError(null);
     try {
-      const result = await getIntakeQueue();
-      // The backend already scopes this to doctor_action IS NULL (every
-      // session still on this doctor's active queue, in_progress or
-      // completed) — no further filtering here. It used to be filtered to
-      // status === "completed" only, which hid every in_progress session
-      // (including flagged ones) until the patient finished the whole
-      // intake (Issue #1 — confirmed live: 78% of active-eligible sessions
-      // were in_progress and invisible). IntakeQueueList now renders both
-      // groups, so this just needs to pass everything through.
-      setSessions(result);
+      // The backend already scopes this to doctor_action IS NULL (every session still on
+      // this doctor's active queue, in_progress or completed), so nothing is filtered here:
+      // IntakeQueueList renders both groups.
+      applyQueue(await getIntakeQueue());
     } catch (err) {
       setError(err.message || "Failed to load intake queue.");
       setSessions([]);
@@ -627,9 +650,35 @@ export default function IntakeQueue() {
     }
   }
 
+  // The background refresh: no spinner, and a failed refresh keeps the list on screen and
+  // says so, instead of replacing a real queue with an error or an empty list.
+  async function refreshQueue() {
+    if (actioningRef.current) return;
+    try {
+      applyQueue(await getIntakeQueue());
+      setRefreshError(false);
+    } catch {
+      setRefreshError(true);
+    }
+  }
+
   useEffect(() => {
     loadQueue();
   }, []);
+
+  // New patients and red flags have to appear without anyone reloading the page.
+  usePolling(refreshQueue, { intervalMs: 120000, enabled: view === "queue" && !isLoading && !error });
+
+  // The tab title shows the waiting count (and a flag when there is a red-flag patient), so
+  // it is visible from another tab.
+  const flaggedCount = sessions.filter((s) => s.priority === "flagged").length;
+  useEffect(() => {
+    const previous = document.title;
+    document.title = `${flaggedCount > 0 ? "🚩 " : ""}(${sessions.length}) Intake Queue`;
+    return () => {
+      document.title = previous;
+    };
+  }, [sessions.length, flaggedCount]);
 
   // History is fetched lazily on first switch to that tab, not on mount —
   // most doctors will spend most of their time on the active queue.
@@ -662,6 +711,7 @@ export default function IntakeQueue() {
     if (actioningId) return; // one action in flight at a time
     setActionError(null);
     setActioningId(sessionId);
+    actioningRef.current = true;
     try {
       if (action === "completed") {
         await completeIntakeSession(sessionId);
@@ -672,11 +722,14 @@ export default function IntakeQueue() {
       // server-side (doctor_action is set), no need to re-fetch the whole
       // list. Invalidate the cached history so the next visit to that tab
       // picks up this action rather than showing stale data.
+      removedIdsRef.current.add(sessionId);
       setSessions((prev) => prev.filter((s) => s.session_id !== sessionId));
+      setNewFlagged((prev) => prev.filter((f) => f.session_id !== sessionId));
       setHistoryLoaded(false);
     } catch (err) {
       setActionError(err.message || `Failed to mark this session as ${action}.`);
     } finally {
+      actioningRef.current = false;
       setActioningId(null);
     }
   }
@@ -696,10 +749,56 @@ export default function IntakeQueue() {
           />
           <ViewTabs view={view} onChangeView={setView} />
 
+          {view === "queue" && newFlagged.length > 0 && (
+            <div role="alert" className="mb-4 rounded-xl border border-red-300 bg-red-50 px-4 py-3">
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex items-start gap-2 min-w-0">
+                  <AlertTriangle size={18} className="mt-0.5 shrink-0 text-red-600" />
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold text-red-800">
+                      {newFlagged.length === 1 ? "New red-flag patient" : `${newFlagged.length} new red-flag patients`}
+                    </p>
+                    <ul className="mt-1 space-y-1">
+                      {newFlagged.map((f) => (
+                        <li key={f.session_id} className="text-sm text-red-700">
+                          <button
+                            type="button"
+                            onClick={() => setSelectedSessionId(f.session_id)}
+                            className="font-medium underline underline-offset-2"
+                          >
+                            {f.patient_name}
+                          </button>
+                          {f.red_flag_reason ? `: ${f.red_flag_reason}` : ""}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setNewFlagged([])}
+                  className="shrink-0 text-xs font-semibold text-red-700 hover:text-red-900"
+                >
+                  Dismiss
+                </button>
+              </div>
+            </div>
+          )}
+
           {actionError && (
             <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
               {actionError}
             </div>
+          )}
+
+          {view === "queue" && !isLoading && !error && (
+            <p className={`mb-3 text-xs ${refreshError ? "text-amber-700" : "text-slate-400"}`}>
+              {refreshError
+                ? "Couldn't refresh just now. Showing the last list and trying again."
+                : lastUpdated
+                  ? `Updates automatically. Last checked ${lastUpdated.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}.`
+                  : ""}
+            </p>
           )}
 
           {view === "queue" ? (

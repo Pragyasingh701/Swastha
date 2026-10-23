@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useLocation, useNavigate } from "react-router-dom";
 import UploadReports from "../../reports/pages/UploadReports";
 import { parseMemberNotesAndEmail } from "../../family/pages/FamilyMember";
@@ -72,6 +72,11 @@ export default function Timeline() {
   const [editingEvent, setEditingEvent] = useState(null);
   const [selectedEvent, setSelectedEvent] = useState(null);
   const [loading, setLoading] = useState(false);
+  // Why the timeline could not be loaded, shown instead of an empty list. A person with no
+  // account, or one you have no access to, must not look the same as "no reports yet".
+  const [loadError, setLoadError] = useState(null);
+  // Counts loads, so a slow answer for the member you just left is ignored.
+  const loadCounterRef = useRef(0);
 
   const [categoryFilter, setCategoryFilter] = useState("All Categories");
   const [dateFrom, setDateFrom] = useState("");
@@ -146,16 +151,22 @@ export default function Timeline() {
       return;
     }
 
+    const thisLoad = ++loadCounterRef.current;
     setLoading(true);
+    setLoadError(null);
+    setEvents([]); // never leave the previous person's entries on screen while loading
     try {
       const response = await reportService.getTimelineReports(token, targetEmail, targetUserId);
+      if (thisLoad !== loadCounterRef.current) return;
       const mapped = (response.reports || []).map(mapReportToEvent);
       setEvents(sortEvents(mapped));
     } catch (err) {
+      if (thisLoad !== loadCounterRef.current) return;
       console.error('Failed to load timeline reports:', err);
       setEvents([]);
+      setLoadError(err.message || 'Could not load this timeline.');
     } finally {
-      setLoading(false);
+      if (thisLoad === loadCounterRef.current) setLoading(false);
     }
   };
 
@@ -357,14 +368,19 @@ export default function Timeline() {
                       key={member.id || `member-${index}`}
                       type="button"
                       onClick={() => {
+                        // Without an email there is no account to show a timeline for. This
+                        // used to open the logged-in user's own timeline under the member's name.
                         if (memberEmail) {
                           navigate(`/timeline?email=${encodeURIComponent(memberEmail)}`);
-                        } else {
-                          navigate('/timeline');
                         }
                       }}
-                      className="group"
-                      title={member.name || 'Family member'}
+                      disabled={!memberEmail}
+                      className={`group ${memberEmail ? "" : "cursor-not-allowed opacity-50"}`}
+                      title={
+                        memberEmail
+                          ? member.name || 'Family member'
+                          : `${member.name || 'This family member'} has no account yet, so there is no timeline to show`
+                      }
                     >
                       <div
                         className={`flex h-9 min-w-[36px] items-center justify-center overflow-hidden rounded-full px-0 text-center text-xs font-medium text-white ring-2 ring-white transition-all duration-200 group-hover:min-w-[140px] group-hover:px-4 ${
@@ -406,13 +422,27 @@ export default function Timeline() {
           setDateTo={setDateTo}
         />
 
-        <TimelineInfographic
-          events={filteredEvents}
-          loading={loading}
-          onSelectEvent={setSelectedEvent}
-          collapsedYears={collapsedYears}
-          onToggleYear={toggleYearCollapsed}
-        />
+        {loadError ? (
+          <div role="alert" className="mt-6 rounded-2xl border border-red-200 bg-red-50 p-6 text-sm text-red-700">
+            <p className="font-semibold">Couldn't load this timeline.</p>
+            <p className="mt-1">{loadError}</p>
+            <button
+              type="button"
+              onClick={loadTimelineEvents}
+              className="mt-3 rounded-lg bg-red-600 px-4 py-2 text-xs font-semibold text-white hover:bg-red-700"
+            >
+              Try again
+            </button>
+          </div>
+        ) : (
+          <TimelineInfographic
+            events={filteredEvents}
+            loading={loading}
+            onSelectEvent={setSelectedEvent}
+            collapsedYears={collapsedYears}
+            onToggleYear={toggleYearCollapsed}
+          />
+        )}
       </main>
       </div>
 
