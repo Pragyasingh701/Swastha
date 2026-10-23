@@ -14,7 +14,6 @@ import {
   getActiveDoctorAccessForPatient,
   revokeDoctorAccess,
 } from '../db/doctorPatients.js';
-import { createNotification } from '../db/notifications.js';
 import { findUserById } from '../db/users.js';
 import { sendDoctorRequestEmail } from '../utils/mailer.js';
 import { listTimelineReports } from '../db/reports.js';
@@ -611,27 +610,6 @@ router.post('/link', requireDoctor, async (req, res) => {
         // Best-effort — the request itself already succeeded and is
         // visible in the notification bell regardless of email delivery.
         console.warn('Doctor request email warning:', emailError?.message || emailError);
-      }
-    }
-
-    const recipientId = result.isNewRequest ? (result?.patient?.patientUserId || result?.patient?.patientId || null) : null;
-    if (recipientId) {
-      try {
-        await createNotification({
-          recipientId,
-          actorId: authUser.userId,
-          actorRole: 'doctor',
-          eventType: 'doctor_profile_view',
-          title: 'Doctor viewed your profile',
-          message: 'A doctor accessed your profile using the patient code.',
-          metadata: {
-            source: 'doctor_patient_link',
-            doctorId: authUser.userId,
-            patientCode,
-          },
-        });
-      } catch (notificationError) {
-        console.warn('Doctor profile notification warning:', notificationError?.message || notificationError);
       }
     }
 

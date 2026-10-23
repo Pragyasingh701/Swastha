@@ -1,20 +1,7 @@
 import crypto from 'crypto';
 import supabase from '../config/supabase.js';
-import { createNotification } from './notifications.js';
 import { listReportActivityForPatients } from './reports.js';
 import { ageFromDob } from '../utils/age.js';
-
-// Pushing a notification is best-effort from a linking action's point of
-// view — a doctor's request/patient's response must NOT fail just because
-// the notifications table had a hiccup. Every call site below awaits this
-// but swallows its own error (logged, not thrown) for exactly that reason.
-async function notifySafely(args) {
-  try {
-    await createNotification(args);
-  } catch (error) {
-    console.warn('doctorPatients notification warning:', error?.message || error);
-  }
-}
 
 // Doctor -> patient linking is now request-based (status column, added in
 // supabase/migrations_archive/20260820051121_add_status_to_doctor_patient.sql):
@@ -585,7 +572,6 @@ export const linkDoctorToPatient = async ({ doctorId, patientCode }) => {
     throw error;
   }
 
-  await notifyPatientOfNewRequest({ doctorId, patient, link: data });
 
   return {
     isNewRequest: true,
@@ -634,7 +620,6 @@ async function reopenExpiredLink({ doctorId, patient, existingLink }) {
 
   if (reopenError) throw reopenError;
 
-  await notifyPatientOfNewRequest({ doctorId, patient, link: reopened });
 
   return {
     isNewRequest: true,
@@ -691,30 +676,6 @@ export const requestAccessAgain = async ({ doctorId, patientUserId }) => {
 
   return reopenExpiredLink({ doctorId, patient, existingLink });
 };
-
-// Shared by both the brand-new-request path and the re-open-after-expiry
-// path above — this is the ONLY place a doctor's access request becomes
-// visible to the patient (there is no separate "Doctor Requests" page
-// anymore; it lives entirely in the notification bell). metadata.linkId is
-// what lets the bell render Accept/Decline buttons directly on this
-// notification and call the right endpoint.
-async function notifyPatientOfNewRequest({ doctorId, patient, link }) {
-  const { data: doctor } = await supabase
-    .from('doctors')
-    .select('name')
-    .eq('id', doctorId)
-    .maybeSingle();
-  const doctorName = doctor?.name || 'A doctor';
-  await notifySafely({
-    recipientId: patient.id,
-    actorId: doctorId,
-    actorRole: 'doctor',
-    eventType: 'doctor_request',
-    title: 'New doctor access request',
-    message: `Dr. ${doctorName} requested access to your health records.`,
-    metadata: { linkId: link.id, doctorName },
-  });
-}
 
 /**
  * Notification feed for a PATIENT's bell icon: one event per doctor_patient
@@ -878,22 +839,6 @@ async function resolveDoctorLinkRequest({ link, newStatus, resolvedByRole, resol
     throw error;
   }
 
-  const eventType = newStatus === 'accepted' ? 'doctor_request_accepted' : 'doctor_request_declined';
-  const verb = newStatus === 'accepted' ? 'accepted' : 'declined';
-  const message =
-    newStatus === 'accepted'
-      ? `${data.patient_name || 'A patient'} accepted your access request. You have access to their records for the next 24 hours.`
-      : `${data.patient_name || 'A patient'} declined your access request.`;
-  await notifySafely({
-    recipientId: data.doctor_id,
-    actorId: resolvedByUserId,
-    actorRole: resolvedByRole,
-    eventType,
-    title: `Request ${verb}`,
-    message,
-    metadata: { linkId: data.id },
-  });
-
   return data;
 }
 
@@ -978,37 +923,6 @@ export const resolveDoctorLinkRequestByToken = async (emailActionToken, newStatu
   if (link.status !== 'pending') throw new Error(`This request is already ${link.status}.`);
 
   return resolveDoctorLinkRequest({ link, newStatus, resolvedByRole: 'patient', resolvedByUserId: link.patient_id });
-};
-
-/**
- * Cross-channel sync for the notification bell: a 'doctor_request'
- * notification row never changes after it's created (accept/decline
- * creates a SEPARATE notification for the doctor, see
- * resolveDoctorLinkRequest above) — so on its own, the bell has no way to
- * know a request shown as "pending" was actually already resolved via the
- * OTHER channel (the email Accept/Decline link). This looks up the real,
- * current status for a batch of linkIds in one query, so the caller
- * (backend/routes/notifications.js) can stamp live status onto each
- * notification's metadata before sending it to the frontend — the bell
- * then hides Accept/Decline the moment status stops being 'pending',
- * regardless of which channel resolved it.
- */
-export const getDoctorLinkStatuses = async (linkIds) => {
-  const ids = [...new Set((linkIds || []).filter(Boolean))];
-  if (ids.length === 0 || !supabase) return {};
-
-  try {
-    const { data, error } = await supabase
-      .from('doctor_patient')
-      .select('id, status')
-      .in('id', ids);
-
-    if (error) throw error;
-    return Object.fromEntries((data || []).map((row) => [row.id, row.status]));
-  } catch (error) {
-    console.warn('Doctor link status lookup warning:', error?.message || error);
-    return {};
-  }
 };
 
 export const deleteDoctorPatient = async ({ doctorId, patientUserId, linkId }) => {

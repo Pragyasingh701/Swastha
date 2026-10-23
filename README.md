@@ -106,7 +106,7 @@ the same commit.
 | Records | `reports`, `report_embeddings`, `vault_table`, `family_members` |
 | Doctor ↔ patient | `doctor_patient`, `clinic_checkin_codes` |
 | Intake | `intake_sessions`, `intake_session_actions` |
-| In-app | `notifications` (an hourly cron job removes ones older than seven days) |
+| In-app | `notifications` (no longer written to; the bell is built from the doctor-link rows, and an hourly cron job still clears old rows) |
 | AI privacy | `ai_notice_acknowledgements`, `ask_swastha_access_log`, `ask_swastha_feedback`, `ai_request_log` |
 
 Row Level Security is on for every table with **no policies** (deny-all to the public keys). The backend uses the

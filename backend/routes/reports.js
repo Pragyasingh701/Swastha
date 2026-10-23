@@ -5,7 +5,6 @@ import { isDoctorLinkedToPatient } from '../db/doctorPatients.js';
 import { isPatientLinkedToFamilyMember } from '../db/family.js';
 import { validateTimelineReportPayload } from '../utils/timelineValidation.js';
 import { uploadMemory, uploadFileToSupabase, createSignedFileUrl, removeStoredFiles } from '../config/supabaseStorage.js';
-import { createNotification } from '../db/notifications.js';
 import { decryptMultipartFields } from '../middleware/wireCrypto.js';
 import { getAuthUser } from '../config/jwt.js';
 
@@ -360,28 +359,6 @@ router.post('/', handleReportFileUpload, async (req, res) => {
       if (updated) report = updated;
     }
 
-    const targetPatientId = targetUserId;
-    const isFamilyAdminChange = user.role === 'patient' && targetPatientId !== user.userId;
-    if ((user.role === 'doctor' || isFamilyAdminChange) && targetPatientId) {
-      try {
-        await createNotification({
-          recipientId: targetPatientId,
-          actorId: user.userId,
-          actorRole: isFamilyAdminChange ? 'family_admin' : 'doctor',
-          eventType: isFamilyAdminChange ? 'family_member_updated' : 'doctor_timeline_update',
-          title: 'Medical timeline updated',
-          message: isFamilyAdminChange
-            ? 'A family admin updated a medical timeline entry associated with your profile.'
-            : 'A doctor updated a medical timeline entry associated with your profile.',
-          metadata: {
-            source: 'timeline_create',
-            reportId: report.id,
-          },
-        });
-      } catch (notificationError) {
-        console.warn('Timeline create notification warning:', notificationError?.message || notificationError);
-      }
-    }
 
     return res.status(201).json({ report });
   } catch (error) {
@@ -468,28 +445,6 @@ router.put('/:id', handleReportFileUpload, async (req, res) => {
       if (updated) report = updated;
     }
 
-    const targetPatientId = targetUserId;
-    const isFamilyAdminChange = user.role === 'patient' && targetPatientId !== user.userId;
-    if ((user.role === 'doctor' || isFamilyAdminChange) && targetPatientId) {
-      try {
-        await createNotification({
-          recipientId: targetPatientId,
-          actorId: user.userId,
-          actorRole: isFamilyAdminChange ? 'family_admin' : 'doctor',
-          eventType: isFamilyAdminChange ? 'family_member_updated' : 'doctor_timeline_update',
-          title: 'Medical timeline updated',
-          message: isFamilyAdminChange
-            ? 'A family admin updated a medical timeline entry associated with your profile.'
-            : 'A doctor updated a medical timeline entry associated with your profile.',
-          metadata: {
-            source: 'timeline_update',
-            reportId: report.id,
-          },
-        });
-      } catch (notificationError) {
-        console.warn('Timeline update notification warning:', notificationError?.message || notificationError);
-      }
-    }
 
     return res.json({ report });
   } catch (error) {
@@ -579,28 +534,6 @@ router.delete('/:id', async (req, res) => {
       removeStoredFiles([deletedReport.fileUrl]);
     }
 
-    const targetPatientId = targetUserId;
-    const isFamilyAdminChange = user.role === 'patient' && targetPatientId !== user.userId;
-    if ((user.role === 'doctor' || isFamilyAdminChange) && targetPatientId) {
-      try {
-        await createNotification({
-          recipientId: targetPatientId,
-          actorId: user.userId,
-          actorRole: isFamilyAdminChange ? 'family_admin' : 'doctor',
-          eventType: isFamilyAdminChange ? 'family_member_updated' : 'doctor_timeline_update',
-          title: 'Medical timeline updated',
-          message: isFamilyAdminChange
-            ? 'A family admin updated a medical timeline entry associated with your profile.'
-            : 'A doctor updated a medical timeline entry associated with your profile.',
-          metadata: {
-            source: 'timeline_delete',
-            reportId,
-          },
-        });
-      } catch (notificationError) {
-        console.warn('Timeline delete notification warning:', notificationError?.message || notificationError);
-      }
-    }
 
     return res.json({ report: deletedReport });
   } catch (error) {

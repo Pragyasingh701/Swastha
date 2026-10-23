@@ -8,7 +8,6 @@ import authRoutes from './routes/auth.js';
 import familyRoutes from './routes/family.js';
 import reportsRoutes from './routes/reports.js';
 import doctorPatientsRoutes from './routes/doctorPatients.js';
-import notificationsRoutes from './routes/notifications.js';
 import clinicRoutes from './routes/clinic.js';
 import intakeAdminRoutes from './routes/intakeAdmin.js';
 import cryptoRoutes from './routes/crypto.js';
@@ -85,7 +84,6 @@ app.use('/api/auth', authRoutes);
 app.use('/api/family', familyRoutes);
 app.use('/api/reports', reportsRoutes);
 app.use('/api/doctor-patients', doctorPatientsRoutes);
-app.use('/api/notifications', notificationsRoutes);
 app.use('/api/clinic', clinicRoutes);
 // Machine-to-machine only (shared-secret protected, not JWT) — see
 // routes/intakeAdmin.js's own comment for why this lives outside the
