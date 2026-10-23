@@ -55,7 +55,7 @@ export default function ResponsiveSidebar({
         </div>
 
         <nav className="flex-1 space-y-1 overflow-y-auto">
-          {navItems.map(({ label, icon: Icon, active, route, onClick }) => {
+          {navItems.map(({ label, icon: Icon, active, route, onClick, badge }) => {
             const isActive = Boolean(active) || Boolean(route && (
               location.pathname === route || location.pathname.startsWith(`${route}/`)
             ));
@@ -73,7 +73,17 @@ export default function ResponsiveSidebar({
                 ) : (
                   <Icon size={18} />
                 )}
-                {label}
+                <span className="flex-1 text-left">{label}</span>
+                {badge && badge.count > 0 && (
+                  <span
+                    className={`ml-auto min-w-[1.5rem] rounded-full px-2 py-0.5 text-center text-xs font-semibold ${
+                      badge.urgent ? "bg-red-600 text-white" : "bg-blue-600 text-white"
+                    }`}
+                    aria-label={`${badge.count} waiting${badge.urgent ? ", including a red flag" : ""}`}
+                  >
+                    {badge.count}
+                  </span>
+                )}
               </button>
             );
           })}
