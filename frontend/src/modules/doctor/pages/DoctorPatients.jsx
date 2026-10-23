@@ -29,15 +29,21 @@ import { formatDate, formatWaitUntil } from '../../../utils/dateFormat';
 // UploadReports.jsx's CATEGORY_FIELD_CONFIG so a patient event popup here
 // uses the same labels the manual entry form showed when the report was
 // saved (e.g. a Lab Report shows "Test / Panel Name", not "Diagnosis").
+// One shared empty array, so "no records yet" does not look like a change on every render.
+const EMPTY_LIST = [];
+
 export default function DoctorPatients() {
   const navigate = useNavigate();
   const { token } = useAuth();
   const [patients, setPatients] = useState([]);
   const [selectedPatient, setSelectedPatient] = useState(null);
   const [selectedTab, setSelectedTab] = useState('timeline');
-  const [patientTimeline, setPatientTimeline] = useState([]);
-  const [patientVault, setPatientVault] = useState([]);
-  const [timelineLoading, setTimelineLoading] = useState(false);
+  // The records that were loaded, tagged with the patient they belong to. What the page
+  // shows is only ever the records of the patient currently open: records fetched for
+  // someone else (a slow answer for the patient you just left) are never displayed.
+  const [loadedData, setLoadedData] = useState({ patientKey: null, timeline: [], vault: [] });
+  const [loadError, setLoadError] = useState(null);
+  const [reloadCount, setReloadCount] = useState(0);
   const [isAddPatientOpen, setIsAddPatientOpen] = useState(false);
   const [patientCode, setPatientCode] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
@@ -124,44 +130,62 @@ export default function DoctorPatients() {
     }
   }, [patients]);
 
+  const selectedPatientKey = selectedPatient
+    ? selectedPatient.patientUserId || selectedPatient.patientId || selectedPatient.id
+    : null;
+  const selectedHasAccess =
+    Boolean(selectedPatient) && (!selectedPatient.linkStatus || selectedPatient.linkStatus === 'accepted');
+  const dataReady = loadedData.patientKey === selectedPatientKey;
+  const patientTimeline = dataReady ? loadedData.timeline : EMPTY_LIST;
+  const patientVault = dataReady ? loadedData.vault : EMPTY_LIST;
+  const showLoading = selectedHasAccess && !dataReady && !loadError;
+
+  // Defense in depth: LockedPatientCard never opens a profile, so a pending, declined or
+  // expired patient should not get here, but never fetch records for one regardless.
+  const selectedEmail = selectedPatient?.email || '';
   useEffect(() => {
-    // Defense in depth: LockedPatientCard never calls setSelectedPatient
-    // (no such prop is wired to it), so this branch should be unreachable
-    // for a pending/declined patient — but guard it explicitly anyway so a
-    // future code path can't accidentally trigger a detail fetch for one.
-    if (!selectedPatient || (selectedPatient.linkStatus && selectedPatient.linkStatus !== 'accepted')) {
-      setPatientTimeline([]);
-      setPatientVault([]);
-      return;
-    }
+    if (!selectedHasAccess || !token) return undefined;
 
-    const loadPatientData = async () => {
-      if (!token) {
-        setPatientTimeline([]);
-        setPatientVault([]);
-        return;
-      }
+    let cancelled = false; // set when the doctor opens someone else, so a late answer is dropped
+    setLoadError(null);
 
-      setTimelineLoading(true);
+    (async () => {
       try {
-        const patientUserId = selectedPatient.patientUserId || selectedPatient.patientId || selectedPatient.id;
         const [timelineResponse, vaultResponse] = await Promise.all([
-          getTimelineReports(token, selectedPatient.email || '', patientUserId),
-          getTimelineReports(token, '', patientUserId),
+          getTimelineReports(token, selectedEmail, selectedPatientKey),
+          getTimelineReports(token, '', selectedPatientKey),
         ]);
-
-        setPatientTimeline(timelineResponse.reports || []);
-        setPatientVault(vaultResponse.reports || []);
+        if (cancelled) return;
+        setLoadedData({
+          patientKey: selectedPatientKey,
+          timeline: timelineResponse.reports || [],
+          vault: vaultResponse.reports || [],
+        });
       } catch (err) {
-        setPatientTimeline([]);
-        setPatientVault([]);
-      } finally {
-        setTimelineLoading(false);
+        // A failed load is an error, not "this patient has no records".
+        if (!cancelled) setLoadError(err.message || 'Could not load this patient\'s records.');
       }
-    };
+    })();
 
-    loadPatientData();
-  }, [selectedPatient, token]);
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedPatientKey, selectedHasAccess, selectedEmail, token, reloadCount]);
+
+  // Opening a patient starts from a clean profile: the first tab, with no filters left over
+  // from the previous patient.
+  const openPatient = (patient) => {
+    setSelectedPatient(patient);
+    setSelectedTab('timeline');
+    setCategoryFilter('');
+    setDateFrom('');
+    setDateTo('');
+    setShowDateRange(false);
+    setShowFilterPanel(false);
+    setVaultCategoryFilter(null);
+    setVaultSearchQuery('');
+    setLoadError(null);
+  };
 
   const handleAddPatient = async () => {
     const trimmedId = patientCode.trim();
@@ -585,9 +609,21 @@ export default function DoctorPatients() {
               {/* Content Area - Scrollable */}
               <div className="flex-1 overflow-y-auto p-6">
 
-              {timelineLoading ? (
+              {showLoading ? (
                 <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-500 ">
                   Loading patient data...
+                </div>
+              ) : loadError ? (
+                <div role="alert" className="rounded-2xl border border-red-200 bg-red-50 p-6 text-sm text-red-700">
+                  <p className="font-semibold">Couldn't load this patient's records.</p>
+                  <p className="mt-1">{loadError}</p>
+                  <button
+                    type="button"
+                    onClick={() => setReloadCount((n) => n + 1)}
+                    className="mt-3 rounded-lg bg-red-600 px-4 py-2 text-xs font-semibold text-white hover:bg-red-700"
+                  >
+                    Try again
+                  </button>
                 </div>
               ) : selectedTab === 'timeline' ? (
                 <div className="space-y-6">
@@ -983,7 +1019,7 @@ export default function DoctorPatients() {
 
                     <button
                       type="button"
-                      onClick={() => setSelectedPatient(patient)}
+                      onClick={() => openPatient(patient)}
                       className="mt-auto w-full py-2.5 rounded-lg border border-[#c3c6d7]/60 text-[#434655] hover:bg-[#f3f3fe] hover:text-[#004ac6] hover:border-[#004ac6]/30 transition-all flex justify-center items-center gap-1"
                     >
                       View Profile
