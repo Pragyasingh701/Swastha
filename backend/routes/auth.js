@@ -966,7 +966,7 @@ router.delete('/user', async (req, res) => {
       return res.status(500).json({ message: 'Failed to delete user account.' });
     }
 
-    // What has no foreign key to the user (notifications, consent records,
+    // What has no foreign key to the user (consent records,
     // feedback, the audit/provider logs' user ids, the certificate file): see
     // db/accountErasure.js. Failures are logged there and don't undo the
     // deletion the user asked for.

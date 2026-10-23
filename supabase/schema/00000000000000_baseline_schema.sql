@@ -13,12 +13,11 @@
 -- is made to the database, the migration script that applies it to the live
 -- database is stored in supabase/migrations_archive/, and the same change is folded
 -- into this baseline in the same commit, so this file always describes the current
--- schema. Last folded in: 20261018130000_drop_redundant_indexes.sql.
+-- schema. Last folded in: 20261023100000_drop_notifications_table.sql.
 --
 -- Part 1 is a schema-only dump (`supabase db dump`): tables, indexes, constraints,
 -- functions, row level security and grants, no data. Part 2 adds what a dump of
--- the public schema does not carry: the private reports bucket and the hourly
--- cleanup of old notifications.
+-- the public schema does not carry: the private reports bucket.
 
 -- Part 1: public schema
 
@@ -320,21 +319,6 @@ CREATE TABLE IF NOT EXISTS "public"."intake_sessions" (
 
 ALTER TABLE "public"."intake_sessions" OWNER TO "postgres";
 
-CREATE TABLE IF NOT EXISTS "public"."notifications" (
-    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
-    "recipient_id" "text" DEFAULT "gen_random_uuid"() NOT NULL,
-    "actor_id" "text" DEFAULT "gen_random_uuid"(),
-    "actor_role" "text",
-    "event_type" "text",
-    "title" "text",
-    "message" "text",
-    "metadata" "jsonb",
-    "read_at" timestamp with time zone,
-    "created_at" timestamp with time zone
-);
-
-ALTER TABLE "public"."notifications" OWNER TO "postgres";
-
 CREATE TABLE IF NOT EXISTS "public"."patients" (
     "id" character varying NOT NULL,
     "email" character varying NOT NULL,
@@ -474,9 +458,6 @@ ALTER TABLE ONLY "public"."intake_session_actions"
 ALTER TABLE ONLY "public"."intake_sessions"
     ADD CONSTRAINT "intake_sessions_pkey" PRIMARY KEY ("id");
 
-ALTER TABLE ONLY "public"."notifications"
-    ADD CONSTRAINT "notifications_pkey" PRIMARY KEY ("id");
-
 ALTER TABLE ONLY "public"."patients"
     ADD CONSTRAINT "patients_email_key" UNIQUE ("email");
 
@@ -551,10 +532,6 @@ CREATE INDEX "idx_intake_sessions_priority_created" ON "public"."intake_sessions
 
 CREATE INDEX "idx_intake_sessions_status_created" ON "public"."intake_sessions" USING "btree" ("status", "created_at");
 
-CREATE INDEX "notifications_created_at_idx" ON "public"."notifications" USING "btree" ("created_at");
-
-CREATE INDEX "notifications_recipient_created_at_idx" ON "public"."notifications" USING "btree" ("recipient_id", "created_at" DESC);
-
 CREATE INDEX "report_embeddings_user_id_idx" ON "public"."report_embeddings" USING "btree" ("patient_id");
 
 CREATE INDEX "reports_patient_id_idx" ON "public"."reports" USING "btree" ("patient_id");
@@ -617,8 +594,6 @@ ALTER TABLE "public"."family_members" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "public"."intake_session_actions" ENABLE ROW LEVEL SECURITY;
 
 ALTER TABLE "public"."intake_sessions" ENABLE ROW LEVEL SECURITY;
-
-ALTER TABLE "public"."notifications" ENABLE ROW LEVEL SECURITY;
 
 ALTER TABLE "public"."patients" ENABLE ROW LEVEL SECURITY;
 
@@ -1289,10 +1264,6 @@ GRANT ALL ON TABLE "public"."intake_sessions" TO "anon";
 GRANT ALL ON TABLE "public"."intake_sessions" TO "authenticated";
 GRANT ALL ON TABLE "public"."intake_sessions" TO "service_role";
 
-GRANT ALL ON TABLE "public"."notifications" TO "anon";
-GRANT ALL ON TABLE "public"."notifications" TO "authenticated";
-GRANT ALL ON TABLE "public"."notifications" TO "service_role";
-
 GRANT ALL ON TABLE "public"."patients" TO "anon";
 GRANT ALL ON TABLE "public"."patients" TO "authenticated";
 GRANT ALL ON TABLE "public"."patients" TO "service_role";
@@ -1345,16 +1316,3 @@ ALTER DEFAULT PRIVILEGES FOR ROLE "postgres" IN SCHEMA "public" GRANT ALL ON TAB
 INSERT INTO storage.buckets (id, name, public)
 VALUES ('reports', 'reports', false)
 ON CONFLICT (id) DO UPDATE SET public = false;
-
--- In-app notifications are kept for seven days, then removed every hour.
-SELECT cron.schedule(
-  'delete-expired-notifications',
-  '0 * * * *',
-  $$DELETE FROM public.notifications
-    WHERE created_at < NOW() - INTERVAL '7 days'$$
-)
-WHERE NOT EXISTS (
-  SELECT 1
-  FROM cron.job
-  WHERE jobname = 'delete-expired-notifications'
-);
