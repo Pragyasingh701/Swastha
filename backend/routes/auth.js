@@ -18,7 +18,6 @@ import {
 import { getFamilyVaultForUser, deleteFamilyVaultForUser } from '../db/family.js';
 import { deleteAllReportsForUser } from '../db/reports.js';
 import { processMedicalCertificate } from '../services/certificateParserService.js';
-import { createNotification } from '../db/notifications.js';
 import { sniffFileType } from '../config/supabaseStorage.js';
 import { publicUser } from '../utils/publicUser.js';
 import { passwordPolicyError } from '../utils/passwordPolicy.js';
@@ -675,21 +674,6 @@ router.post('/verify-otp', async (req, res) => {
     },
   };
 
-  if (user?.role === 'patient') {
-    try {
-      await createNotification({
-        recipientId: user.id,
-        actorId: user.id,
-        actorRole: 'system',
-        eventType: 'login',
-        title: 'Welcome back',
-        message: 'You signed in successfully and your dashboard is ready.',
-        metadata: { source: 'login' },
-      });
-    } catch (notificationError) {
-      console.warn('Login notification persist warning:', notificationError?.message || notificationError);
-    }
-  }
 
   return res.json(response);
 });
@@ -982,7 +966,7 @@ router.delete('/user', async (req, res) => {
       return res.status(500).json({ message: 'Failed to delete user account.' });
     }
 
-    // What has no foreign key to the user (notifications, consent records,
+    // What has no foreign key to the user (consent records,
     // feedback, the audit/provider logs' user ids, the certificate file): see
     // db/accountErasure.js. Failures are logged there and don't undo the
     // deletion the user asked for.

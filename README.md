@@ -77,7 +77,7 @@ backend/
   app.js, server.js     Express app (CORS, helmet, rate limits) and entry point
   config/               JWT, Supabase, storage, wire-encryption field list
   db/                   One persistence file per area (users, reports, family, doctorPatients, intake, ...)
-  routes/               auth, family, reports, doctorPatients, clinic, notifications, crypto
+  routes/               auth, family, reports, doctorPatients, clinic, crypto
   middleware/, utils/   CORS, rate limits, wire encryption; mailer, password policy, validation
   rag/                  AI sub-app: search, extraction, summaries, intake dialogue, voice, evals
   test/                 node:test suites
@@ -95,7 +95,7 @@ vercel.json             Frontend hosting and security headers
 
 ## 🗄️ Database
 
-All 16 tables are defined in **`supabase/schema/00000000000000_baseline_schema.sql`**, which rebuilds an empty
+All 15 tables are defined in **`supabase/schema/00000000000000_baseline_schema.sql`**, which rebuilds an empty
 database (do not run it on one that already has tables). Every change is a script in
 `supabase/migrations_archive/` that you run in the SQL editor, and the same change is folded into the baseline in
 the same commit.
@@ -106,7 +106,6 @@ the same commit.
 | Records | `reports`, `report_embeddings`, `vault_table`, `family_members` |
 | Doctor ↔ patient | `doctor_patient`, `clinic_checkin_codes` |
 | Intake | `intake_sessions`, `intake_session_actions` |
-| In-app | `notifications` (an hourly cron job removes ones older than seven days) |
 | AI privacy | `ai_notice_acknowledgements`, `ask_swastha_access_log`, `ask_swastha_feedback`, `ai_request_log` |
 
 Row Level Security is on for every table with **no policies** (deny-all to the public keys). The backend uses the

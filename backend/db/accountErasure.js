@@ -5,7 +5,6 @@
 // behind with "all associated records deleted" already shown to the user.
 //
 // What happens to each:
-//   notifications              deleted (as recipient, and as the actor)
 //   ai_notice_acknowledgements deleted
 //   ask_swastha_feedback       deleted
 //   ask_swastha_access_log     kept as a security audit trail, but the id is replaced
@@ -69,8 +68,6 @@ export async function eraseAccountResidue(userId, { certificateUrl } = {}) {
   if (!id || !supabase) return { ok: false };
 
   const results = await Promise.all([
-    step('notifications (recipient)', () => supabase.from('notifications').delete().eq('recipient_id', id)),
-    step('notifications (actor)', () => supabase.from('notifications').delete().eq('actor_id', id)),
     step('ai_notice_acknowledgements', () => supabase.from('ai_notice_acknowledgements').delete().eq('user_id', id)),
     step('ask_swastha_feedback', () => supabase.from('ask_swastha_feedback').delete().eq('user_id', id)),
     step('ask_swastha_access_log (caller)', () =>

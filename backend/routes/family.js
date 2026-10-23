@@ -15,7 +15,6 @@ import {
 } from '../db/family.js';
 import { sendFamilyMemberAuthorizationEmail } from '../utils/mailer.js';
 import { findUserByEmail, findUserById } from '../db/users.js';
-import { createNotification } from '../db/notifications.js';
 import { getAuthUser } from '../config/jwt.js';
 import { renderMessagePage, renderConfirmPage } from '../utils/emailActionPage.js';
 import { ageFromDob } from '../utils/age.js';
@@ -44,51 +43,6 @@ function isValidDateValue(value) {
 
 function normalizeText(value) {
   return typeof value === 'string' ? value.trim() : '';
-}
-
-function getEmailFromMemberData(member = {}) {
-  const directEmail = normalizeText(member.email);
-  if (directEmail) return directEmail;
-
-  const notes = normalizeText(member.notes);
-  const emailMatch = notes.match(/\[Email:\s*([^\]]+)\]/i);
-  return normalizeText(emailMatch?.[1]);
-}
-
-async function createFamilyChangeNotifications({ ownerId, actorId, member, eventType, message, metadata }) {
-  const recipientIds = new Set([ownerId]);
-  const memberEmail = getEmailFromMemberData(member);
-
-  if (memberEmail) {
-    const memberUser = await findUserByEmail(memberEmail);
-    if (memberUser?.id) {
-      recipientIds.add(memberUser.id);
-    }
-  }
-
-  const results = [];
-  for (const recipientId of recipientIds) {
-    try {
-      const notification = await createNotification({
-        recipientId,
-        actorId,
-        actorRole: 'family_admin',
-        eventType,
-        title: 'Family record updated',
-        message,
-        metadata,
-      });
-      results.push(notification);
-    } catch (notificationError) {
-      console.error('Family notification persist error:', {
-        recipientId,
-        eventType,
-        message: notificationError?.message || notificationError,
-      });
-    }
-  }
-
-  return results;
 }
 
 function validateFamilyMemberPayload(payload = {}, options = {}) {
@@ -336,19 +290,6 @@ async function createMemberHandler(req, res) {
       userId: user.userId,
     });
 
-    await createFamilyChangeNotifications({
-      ownerId: user.userId,
-      actorId: user.userId,
-      member: { ...payload, ...member },
-      eventType: 'family_member_added',
-      message: 'A family admin made a change to a family member record.',
-      metadata: {
-        source: 'family_member_create',
-        memberName: payload.name,
-        relationship: payload.relationship,
-      },
-    });
-
     return res.status(201).json(member);
   } catch (error) {
     console.error('Add family member error:', error);
@@ -565,18 +506,6 @@ async function updateMemberHandler(req, res) {
 
     const member = await updateFamilyMember(req.params.id, payload);
 
-    await createFamilyChangeNotifications({
-      ownerId: user.userId,
-      actorId: user.userId,
-      member: { ...payload, ...member },
-      eventType: 'family_member_updated',
-      message: 'A family admin made a change to a family member record.',
-      metadata: {
-        source: 'family_member_update',
-        memberId: req.params.id,
-      },
-    });
-
     return res.json(member);
   } catch (error) {
     console.error('Edit family member error:', error);
@@ -600,18 +529,6 @@ async function deleteMemberHandler(req, res) {
 
     const member = await deleteFamilyMember(req.params.id, {
       userId: user.userId,
-    });
-
-    await createFamilyChangeNotifications({
-      ownerId: user.userId,
-      actorId: user.userId,
-      member,
-      eventType: 'family_member_deleted',
-      message: 'A family admin removed a family member record.',
-      metadata: {
-        source: 'family_member_delete',
-        memberId: req.params.id,
-      },
     });
 
     return res.json({ message: 'Family member removed successfully', member });
