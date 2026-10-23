@@ -117,6 +117,16 @@ async function resolveTargetUser(req, authUser) {
     targetUser = await findUserByEmail(requestedEmail);
   }
 
+  // Someone else was asked for but cannot be found (for example a family member who has
+  // no account yet). Answer exactly as GET does, never fall back to the caller's own
+  // timeline: that quietly saved, changed or deleted the family member's report on the
+  // admin's own account.
+  if ((requestedUserId || requestedEmail) && !targetUser?.id) {
+    const notFound = new Error('You do not have permission to access this timeline.');
+    notFound.status = 403;
+    throw notFound;
+  }
+
   const targetUserId = targetUser?.id || authUser.userId;
   await assertCanAccessTarget(authUser, targetUserId);
   return targetUserId;
