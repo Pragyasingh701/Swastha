@@ -200,6 +200,8 @@ function getSpeechRecognition() {
 // generation wait. A patient's explicit choice (unmute "0" / mute "1") is
 // remembered across turns and page refreshes.
 
+const MUTE_STORAGE_KEY = "swastha_intake_muted";
+
 function readStoredMute() {
   try {
     return localStorage.getItem(MUTE_STORAGE_KEY) !== "0";
@@ -261,7 +263,13 @@ export default function IntakeChat() {
   // Gate: skip straight to "chat" when a session was already handed off;
   // otherwise start on the clinic-code entry screen every time /intake is
   // opened directly.
-  const [gateStep, setGateStep] = useState(preStarted ? GATE_STEPS.CHAT : GATE_STEPS.CODE);
+  // An unfinished session left in storage (a refresh or closed tab mid-intake) skips the
+  // gate: the patient already went through it, and asking for the clinic code again made them
+  // start a second session instead of continuing the first.
+  const [resumingStored] = useState(() => !preStarted && Boolean(readStoredSessionId()));
+  const [gateStep, setGateStep] = useState(preStarted || resumingStored ? GATE_STEPS.CHAT : GATE_STEPS.CODE);
+  // True once an earlier, unfinished intake has been picked up again.
+  const [resumed, setResumed] = useState(false);
   const [clinicCode, setClinicCode] = useState("");
   const [clinicDoctor, setClinicDoctor] = useState(null); // { doctorId, doctorName, clinicName }
   const [gateLoading, setGateLoading] = useState(false);
@@ -440,12 +448,21 @@ export default function IntakeChat() {
           setQuickReplies(normalizeQuickReplies(res.quick_reply_options));
           if (res.language) setLanguage(res.language);
           if (res.red_flag) setPriorityAlert(true);
+          setResumed(true);
           setStarting(false);
           return; // resumed — skip the fresh /start below entirely
         } catch {
           // Stale/finished/gone — clear it so this doesn't keep being tried
-          // on every future mount, then fall through to starting fresh.
+          // on every future mount.
           writeStoredSessionId(null);
+          if (resumingStored) {
+            // The gate was skipped to get here, so the patient has not picked a language
+            // or accepted the voice notice for a new session: send them through it.
+            startedRef.current = false;
+            setStarting(false);
+            setGateStep(GATE_STEPS.CODE);
+            return;
+          }
         }
       }
 
@@ -1021,6 +1038,22 @@ export default function IntakeChat() {
                 : "Enter the check-in code shown at your doctor's clinic to begin."}
             </p>
           </div>
+
+          {resumed && (
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-800">
+              <span>You're continuing the intake you started earlier.</span>
+              <button
+                type="button"
+                onClick={() => {
+                  writeStoredSessionId(null);
+                  window.location.reload();
+                }}
+                className="font-semibold underline underline-offset-2 hover:text-blue-950"
+              >
+                Start a new one
+              </button>
+            </div>
+          )}
 
           {gateStep !== GATE_STEPS.CHAT ? (
             <div className="flex-1 flex items-start justify-center pt-6">
