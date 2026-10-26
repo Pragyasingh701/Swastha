@@ -23,12 +23,36 @@ function generateCode() {
   return code;
 }
 
-// Today's date as a plain 'YYYY-MM-DD' string (matches the `date` column
-// type in clinic_checkin_codes.valid_date) — deliberately server-local
-// calendar date, same granularity the PRD's "refreshed daily" / "auto-
-// refresh at local midnight" language assumes throughout §3 and §5.
-function todayDateString() {
-  return new Date().toISOString().slice(0, 10);
+// The clinic's day is a calendar day in ONE time zone, so the code changes at the same moment
+// for the doctor's wall display and for the patient entering it. It used to be the server's UTC
+// date while the display refreshed at the browser's local midnight, so in India a displayed code
+// went stale for 5.5 hours every day. Set CLINIC_TIMEZONE for another country; the default is IST.
+const CLINIC_TIMEZONE = process.env.CLINIC_TIMEZONE || 'Asia/Kolkata';
+
+// Today's date in the clinic's time zone as a plain 'YYYY-MM-DD' string (matches the `date` column
+// type in clinic_checkin_codes.valid_date).
+export function todayDateString(now = new Date()) {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: CLINIC_TIMEZONE,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(now);
+}
+
+// The moment today's code stops being valid: the next midnight in the clinic's time zone, as an ISO
+// string, so a screen can refresh exactly then instead of guessing from its own clock.
+export function codeValidUntil(now = new Date()) {
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    timeZone: CLINIC_TIMEZONE,
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hourCycle: 'h23',
+  }).formatToParts(now);
+  const get = (type) => Number(parts.find((p) => p.type === type)?.value || 0);
+  const msSinceMidnight = ((get('hour') * 60 + get('minute')) * 60 + get('second')) * 1000 + now.getMilliseconds();
+  return new Date(now.getTime() + (24 * 60 * 60 * 1000 - msSinceMidnight)).toISOString();
 }
 
 /**
