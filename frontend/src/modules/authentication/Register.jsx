@@ -4,6 +4,7 @@ import { useAuth } from "../../context/AuthContext";
 import { startGoogleAuth } from "../../utils/googleAuth";
 import { sanitizePhoneInput, isValidIndianPhone, isValidEmail, isValidFullName, getPasswordError } from "../../utils/formValidation";
 import swasthaLogo from "../../assets/swastha-logo.png"; // adjust this path to wherever you keep the logo asset
+import { getIntendedRole } from "../../utils/intendedRole";
 
 export default function Register() {
   const navigate = useNavigate();
@@ -145,7 +146,9 @@ export default function Register() {
                 Create your account
               </h2>
               <p className="font-body-md text-body-md text-on-surface-variant ">
-                Start your journey to better health management today.
+                {getIntendedRole() === "doctor"
+                  ? "Create your login first. Next you will add your doctor details."
+                  : "Start your journey to better health management today."}
               </p>
             </div>
 

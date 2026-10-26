@@ -2,6 +2,7 @@ import React, { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 import swasthaLogo from "../../assets/swastha-logo.png";
+import { getIntendedRole, clearIntendedRole } from "../../utils/intendedRole";
 
 export default function RoleSelection({ onSelectRole }) {
   const navigate = useNavigate();
@@ -15,7 +16,15 @@ export default function RoleSelection({ onSelectRole }) {
 
     // Only redirect to dashboard if user has completely finished role-specific registration
     if (user?.hasSelectedRole) {
+      clearIntendedRole();
       navigate(user?.role === 'doctor' ? '/doctor-dashboard' : '/dashboard', { replace: true });
+      return;
+    }
+
+    // They came in through "For Doctors": no need to ask what kind of account this is.
+    if (getIntendedRole() === 'doctor') {
+      clearIntendedRole();
+      navigate('/doctor-register', { replace: true });
     }
   }, [user, isAuthenticated, navigate]);
 
