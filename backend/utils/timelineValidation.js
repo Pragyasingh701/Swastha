@@ -1,3 +1,4 @@
+import { isFutureDate } from './dates.js';
 const ALLOWED_CATEGORIES = ['Prescription', 'Lab Report', 'Imaging', 'Vaccination', 'Consultation'];
 const MAX_LENGTHS = {
   title: 200,
@@ -22,11 +23,9 @@ function isValidDateValue(value) {
     return false;
   }
 
-  const normalized = new Date(date.getFullYear(), date.getMonth(), date.getDate());
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-
-  return normalized <= today;
+  // Valid unless it is a day nobody could be on yet (see utils/dates.js for why this is not
+  // simply compared with the server's own "today").
+  return !isFutureDate(value);
 }
 
 function normalizeText(value) {

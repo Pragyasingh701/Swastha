@@ -12,12 +12,14 @@ import {
   stripEmailTags,
   withEmailTag,
   getMemberEmail,
+  listPendingFamilyInvites,
 } from '../db/family.js';
 import { sendFamilyMemberAuthorizationEmail } from '../utils/mailer.js';
 import { findUserByEmail, findUserById } from '../db/users.js';
 import { getAuthUser } from '../config/jwt.js';
 import { renderMessagePage, renderConfirmPage } from '../utils/emailActionPage.js';
 import { ageFromDob } from '../utils/age.js';
+import { isFutureDate } from '../utils/dates.js';
 
 const router = express.Router();
 
@@ -87,7 +89,7 @@ function validateFamilyMemberPayload(payload = {}, options = {}) {
   if (payload.lastVisitDate) {
     if (!isValidDateValue(payload.lastVisitDate)) {
       errors.lastVisitDate = 'Last visit date must be a valid date.';
-    } else if (new Date(payload.lastVisitDate) > new Date()) {
+    } else if (isFutureDate(payload.lastVisitDate)) {
       errors.lastVisitDate = 'Last visit date cannot be in the future.';
     }
   }
@@ -228,9 +230,11 @@ router.get('/summary', async (req, res) => {
 
     const summary = await getFamilyVaultSummary({ userId: user.userId });
     const members = await listFamilyMembers({ userId: user.userId });
+    const pendingInvites = await listPendingFamilyInvites({ userId: user.userId });
 
     return res.json({
       members,
+      pendingInvites,
       summary: {
         ...summary,
         relationshipTags: summary.relationshipTags,

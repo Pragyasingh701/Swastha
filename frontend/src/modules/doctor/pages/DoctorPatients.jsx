@@ -880,6 +880,8 @@ export default function DoctorPatients() {
                                       <span className="font-medium">Key Finding:</span> {report.diagnosis}
                                     </p>
                                   )}
+
+                                  <UnclearFieldsNote fields={report.unclearFields} />
                                 </div>
                               </div>
 
@@ -1384,6 +1386,37 @@ function DayGroup({ events, onSelectEvent }) {
   );
 }
 
+// Fields the AI could not read from the uploaded document (usually illegible handwriting) and that
+// nobody filled in by hand. A doctor must know a value is missing, not that it was "none".
+function UnclearFieldsNote({ fields, detailed = false, hasFile = false }) {
+  if (!Array.isArray(fields) || fields.length === 0) return null;
+  const count = fields.length === 1 ? '1 field' : `${fields.length} fields`;
+
+  if (!detailed) {
+    return (
+      <p className="flex items-center gap-1.5 text-xs font-medium text-amber-700 mt-2">
+        <span className="leading-none">⚠</span>
+        {count} could not be read: check the original document
+      </p>
+    );
+  }
+
+  return (
+    <div role="note" className="rounded-2xl border border-amber-200 bg-amber-50 p-4 flex items-start gap-3">
+      <span className="text-amber-600 text-lg leading-none mt-0.5">⚠</span>
+      <div>
+        <p className="font-semibold text-amber-800">{count} could not be read</p>
+        <p className="text-sm text-slate-700 mt-1">
+          The AI could not confidently read <span className="font-medium">{fields.join(', ')}</span> from the
+          uploaded document (usually illegible handwriting), and they were not filled in by hand. Treat them as
+          missing, not as "none".
+          {hasFile ? ' Check the original document below.' : ' No original document is attached to check against.'}
+        </p>
+      </div>
+    </div>
+  );
+}
+
 function EventCard({ event }) {
   return (
     <div className="group relative flex-1 bg-white rounded-2xl border border-slate-100 shadow-sm p-6 transition-all duration-300 ease-out hover:shadow-lg hover:-translate-y-1 hover:border-blue-100 ">
@@ -1403,6 +1436,8 @@ function EventCard({ event }) {
               <span className="line-clamp-1">{event.diagnosis}</span>
             </p>
           ) : null}
+
+          <UnclearFieldsNote fields={event.unclearFields} />
         </div>
 
         <span className="inline-flex items-center rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-slate-600 shrink-0">
@@ -1442,6 +1477,8 @@ function EventDetails({ event, onClose }) {
 
         <div className="mt-6 grid gap-6 md:grid-cols-2">
           <div className="space-y-4">
+            <UnclearFieldsNote fields={event.unclearFields} detailed hasFile={Boolean(event.fileUrl)} />
+
             <div className="grid gap-4 sm:grid-cols-2">
               {event.doctor && (
                 <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4">

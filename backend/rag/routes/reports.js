@@ -6,6 +6,7 @@ import { supabase } from '../config/supabase.js';
 import { getTimelineReport } from '../../db/reports.js';
 import { isDoctorLinkedToPatient } from '../../db/doctorPatients.js';
 import { isPatientLinkedToFamilyMember } from '../../db/family.js';
+import { backfillReportIndex } from '../services/indexBackfillService.js';
 
 const router = express.Router();
 
@@ -86,14 +87,26 @@ router.post('/index', requireAuth, requireNoticeAck('ask_swastha'), async (req, 
     return res.status(200).json({ embeddings: result });
   } catch (err) {
     // The report itself already saved fine via backend/ — embedding failing
-    // here just means it won't be searchable yet. Surface clearly rather
-    // than pretending it worked.
+    // here just means it won't be searchable yet. Answer with an error status (not a
+    // success-with-a-warning), so the caller sees the failure and can retry it.
     console.error(`[POST /api/reports/index] failed for report ${id}:`, err);
-    return res.status(207).json({
+    return res.status(502).json({
+      error: 'Report saved, but indexing for search failed. It may not appear in search yet.',
       embeddings: null,
-      warning: 'Report saved, but indexing for search failed. It may not appear in search yet.',
     });
   }
+});
+
+/**
+ * POST /api/reports/index-missing
+ * Indexes any of the caller's OWN reports that have no search chunks yet (an earlier
+ * indexing attempt failed, or the report was saved before the AI notice was accepted).
+ * The app calls this when Ask Swastha opens, so a failed indexing is caught up later
+ * instead of staying missing from answers for good.
+ */
+router.post('/index-missing', requireAuth, requireNoticeAck('ask_swastha'), async (req, res) => {
+  const result = await backfillReportIndex(req.user.userId);
+  return res.json(result);
 });
 
 // There is deliberately no DELETE /index/:id: report_embeddings.report_id is

@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import swasthaLogo from "../../../assets/swastha-logo.png";
+import { setIntendedRole } from "../../../utils/intendedRole";
 
 const FAQS = [
   {
@@ -70,6 +71,13 @@ function FAQItem({ question, answer }) {
 
 export default function LandingPage() {
   const navigate = useNavigate();
+
+  // "For Doctors": sign up first (the doctor details page needs a login), then go straight
+  // to the doctor details instead of asking which kind of account this is.
+  const startDoctorSignup = () => {
+    setIntendedRole("doctor");
+    navigate("/register");
+  };
   const { hash } = useLocation();
 
   useEffect(() => {
@@ -101,7 +109,7 @@ export default function LandingPage() {
             <a className="text-on-surface-variant hover:text-primary transition-colors font-body-md" href="#faq">FAQ</a>
             <button
               type="button"
-              onClick={() => navigate("/doctor-register")}
+              onClick={startDoctorSignup}
               className="text-primary font-bold hover:text-primary/80 transition-colors font-body-md"
             >
               For Doctors &amp; Clinics
@@ -352,7 +360,7 @@ export default function LandingPage() {
                 </div>
 
                 <button
-                  onClick={() => navigate("/doctor-register")}
+                  onClick={startDoctorSignup}
                   className="mt-10 inline-flex items-center gap-2 bg-secondary text-on-secondary px-6 py-3.5 rounded-xl font-label-md font-bold hover:bg-secondary/90 transition-all"
                 >
                   For Doctors &amp; Clinics

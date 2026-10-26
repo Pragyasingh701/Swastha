@@ -5,7 +5,7 @@ import { parseMemberNotesAndEmail } from "../../family/pages/FamilyMember";
 import { useAuth } from "../../../context/AuthContext";
 import * as reportService from "../../../api/reports";
 import * as familyService from "../../../api/family";
-import { indexReport } from "../../../api/search";
+import { indexReportWithRetry } from "../../../api/search";
 
 import {
   UploadCloud,
@@ -75,6 +75,8 @@ export default function Timeline() {
   // Why the timeline could not be loaded, shown instead of an empty list. A person with no
   // account, or one you have no access to, must not look the same as "no reports yet".
   const [loadError, setLoadError] = useState(null);
+  // Set when a saved report could not be added to Ask Swastha's search after retrying.
+  const [indexingNotice, setIndexingNotice] = useState(false);
   // Counts loads, so a slow answer for the member you just left is ignored.
   const loadCounterRef = useRef(0);
 
@@ -229,8 +231,9 @@ export default function Timeline() {
 
         // Best-effort: make the report searchable. The report itself is
         // already saved above regardless of whether this succeeds.
-        indexReport(response.report).catch((err) => {
+        indexReportWithRetry(response.report).catch((err) => {
           console.error('Failed to index report for AI search:', err);
+          setIndexingNotice(true);
         });
 
         return event;
@@ -262,8 +265,9 @@ export default function Timeline() {
       setSelectedEvent((prev) => (prev && String(prev.id) === String(eventId) ? event : prev));
 
       // Best-effort: re-index so search reflects the edited content.
-      indexReport(response.report).catch((err) => {
+      indexReportWithRetry(response.report).catch((err) => {
         console.error('Failed to re-index edited report for AI search:', err);
+        setIndexingNotice(true);
       });
 
       return event;
@@ -273,16 +277,14 @@ export default function Timeline() {
     }
   }
 
+  // Throws when the delete fails, so the details window can show the reason instead of
+  // looking as if the report had been removed.
   async function handleDeleteEvent(reportId) {
-    try {
-      await reportService.deleteTimelineReport(reportId, token, targetUserId, targetEmail);
-      setEvents((prev) => prev.filter((event) => String(event.id) !== String(reportId)));
-      setSelectedEvent(null);
+    await reportService.deleteTimelineReport(reportId, token, targetUserId, targetEmail);
+    setEvents((prev) => prev.filter((event) => String(event.id) !== String(reportId)));
+    setSelectedEvent(null);
 
-      // No separate index cleanup: the search index rows cascade-delete with the report.
-    } catch (error) {
-      console.error('Failed to delete timeline report:', error);
-    }
+    // No separate index cleanup: the search index rows cascade-delete with the report.
   }
 
   function toggleYearCollapsed(year) {
@@ -421,6 +423,18 @@ export default function Timeline() {
           setDateFrom={setDateFrom}
           setDateTo={setDateTo}
         />
+
+        {indexingNotice && (
+          <div role="status" className="mb-4 flex items-start justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+            <span>
+              Your report was saved, but it isn't searchable in Ask Swastha yet. It will be added the next
+              time you open Ask Swastha.
+            </span>
+            <button type="button" onClick={() => setIndexingNotice(false)} className="shrink-0 font-semibold hover:text-amber-950">
+              Dismiss
+            </button>
+          </div>
+        )}
 
         {loadError ? (
           <div role="alert" className="mt-6 rounded-2xl border border-red-200 bg-red-50 p-6 text-sm text-red-700">
@@ -779,6 +793,23 @@ function EventCard({ event, notable }) {
 function EventDetails({ event, onClose, onEdit, onDelete }) {
   const formattedDate = formatDate(event.reportDate, { fallback: 'Unknown date' });
 
+  // Deleting takes two steps (a confirmation), and says so when it fails.
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState(null);
+
+  async function confirmDelete() {
+    setDeleting(true);
+    setDeleteError(null);
+    try {
+      await onDelete();
+    } catch (err) {
+      console.error('Failed to delete timeline report:', err);
+      setDeleteError(err?.message || 'Could not delete this report. Please try again.');
+      setDeleting(false);
+    }
+  }
+
   // Both createdAt and updatedAt get set on creation too, so only show
   // "Last edited" once updatedAt is meaningfully after createdAt — i.e.
   // the report was actually edited at least once, not just saved.
@@ -913,6 +944,37 @@ function EventDetails({ event, onClose, onEdit, onDelete }) {
           </div>
         </div>
 
+        {confirmingDelete && (
+          <div role="alertdialog" aria-label="Confirm delete" className="mt-8 rounded-2xl border border-rose-200 bg-rose-50 p-4">
+            <p className="text-sm font-semibold text-rose-800">Delete this report?</p>
+            <p className="mt-1 text-sm text-rose-700">
+              It will be removed from the timeline, the vault and Ask Swastha, along with its uploaded file. This can't be undone.
+            </p>
+            {deleteError && <p className="mt-2 text-sm font-medium text-rose-900">{deleteError}</p>}
+            <div className="mt-3 flex gap-3">
+              <button
+                type="button"
+                onClick={confirmDelete}
+                disabled={deleting}
+                className="inline-flex items-center justify-center rounded-xl bg-rose-600 px-4 py-2 text-sm font-semibold text-white hover:bg-rose-700 disabled:opacity-60"
+              >
+                {deleting ? 'Deleting...' : 'Yes, delete'}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setConfirmingDelete(false);
+                  setDeleteError(null);
+                }}
+                disabled={deleting}
+                className="inline-flex items-center justify-center rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
+
         <div className="mt-8 flex flex-wrap gap-3">
           <button
             type="button"
@@ -923,8 +985,9 @@ function EventDetails({ event, onClose, onEdit, onDelete }) {
           </button>
           <button
             type="button"
-            onClick={onDelete}
-            className="inline-flex items-center justify-center rounded-2xl bg-rose-600 px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-rose-700"
+            onClick={() => setConfirmingDelete(true)}
+            disabled={confirmingDelete}
+            className="inline-flex items-center justify-center rounded-2xl bg-rose-600 px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-rose-700 disabled:opacity-50"
           >
             Delete Report
           </button>

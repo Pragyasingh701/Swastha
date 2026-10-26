@@ -21,11 +21,13 @@ import {
 } from '../../../api/family';
 import FamilyMember, { parseMemberNotesAndEmail } from './FamilyMember';
 import AppHeader from "../../../components/common/AppHeader";
+import { formatDate } from "../../../utils/dateFormat";
 import PatientSidebar from "../../../components/common/PatientSidebar";
 
 const emptyForm = {
   name: '',
   dob: '',
+  age: '',
   relationship: '',
   relationshipTag: '',
   parentMemberId: '',
@@ -63,17 +65,6 @@ const relationshipTagOptions = [
   'Other',
 ];
 
-function calculateDateOfBirthFromAge(age) {
-  const ageNumber = Number(age);
-  if (!Number.isInteger(ageNumber) || ageNumber < 0 || ageNumber > 150) {
-    return '';
-  }
-
-  const dob = new Date();
-  dob.setFullYear(dob.getFullYear() - ageNumber);
-  return dob.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
-}
-
 function calculateAgeFromDob(dobValue) {
   const dateValue = new Date(dobValue);
   if (!dobValue || Number.isNaN(dateValue.getTime())) {
@@ -90,7 +81,9 @@ function calculateAgeFromDob(dobValue) {
   return age >= 0 && age <= 150 ? age : null;
 }
 
-function validateForm(form, isEditing = false, addMethod = 'manual') {
+// Only a name and the relationship are needed to add someone. Everything else is optional, so
+// nobody has to invent a date of birth, a last visit or a checkup date just to get past the form.
+function validateForm(form) {
   const errors = {};
   const name = form.name.trim();
   const email = form.email ? form.email.trim() : '';
@@ -107,18 +100,18 @@ function validateForm(form, isEditing = false, addMethod = 'manual') {
     errors.name = 'Name must be 80 characters or less';
   }
 
-  if (!email && !isEditing) {
-    errors.email = 'Email address is required';
-  } else if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+  if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
     errors.email = 'Please enter a valid email address';
   }
 
-  if (!form.dob) {
-    errors.dob = 'Date of birth is required';
-  } else {
-    const age = calculateAgeFromDob(form.dob);
-    if (age === null) {
-      errors.dob = 'Please enter a valid date of birth';
+  if (form.dob && calculateAgeFromDob(form.dob) === null) {
+    errors.dob = 'Please enter a valid date of birth';
+  }
+
+  if (!form.dob && form.age !== '' && form.age != null) {
+    const age = Number(form.age);
+    if (!Number.isInteger(age) || age < 0 || age > 150) {
+      errors.age = 'Age must be a whole number between 0 and 150';
     }
   }
 
@@ -128,36 +121,24 @@ function validateForm(form, isEditing = false, addMethod = 'manual') {
     errors.relationship = 'Relationship must be 2 to 50 characters';
   }
 
-  if (!relationshipTag) {
-    errors.relationshipTag = 'Relationship tag is required';
-  } else if (relationshipTag.length < 2 || relationshipTag.length > 50) {
+  if (relationshipTag && (relationshipTag.length < 2 || relationshipTag.length > 50)) {
     errors.relationshipTag = 'Relationship tag must be 2 to 50 characters';
   }
 
-  if (!healthOverview) {
-    errors.healthOverview = 'Health overview is required';
-  } else if (healthOverview.length > 500) {
+  if (healthOverview.length > 500) {
     errors.healthOverview = 'Health overview must be 500 characters or less';
   }
 
-  if (notes && notes.length > 1000) {
+  if (notes.length > 1000) {
     errors.notes = 'Notes must be 1000 characters or less';
   }
 
-  if (!form.lastVisitDate) {
-    errors.lastVisitDate = 'Last visit date is required';
-  } else if (Number.isNaN(new Date(form.lastVisitDate).getTime())) {
+  if (form.lastVisitDate && Number.isNaN(new Date(form.lastVisitDate).getTime())) {
     errors.lastVisitDate = 'Last visit date must be valid';
   }
 
-  if (!form.nextCheckupDate) {
-    errors.nextCheckupDate = 'Next checkup date is required';
-  } else if (Number.isNaN(new Date(form.nextCheckupDate).getTime())) {
+  if (form.nextCheckupDate && Number.isNaN(new Date(form.nextCheckupDate).getTime())) {
     errors.nextCheckupDate = 'Next checkup date must be valid';
-  }
-
-  if (isEditing && Object.keys(errors).length === 0 && !name && !relationship && !relationshipTag && !healthOverview && !notes && !form.dob && !form.lastVisitDate && !form.nextCheckupDate && !email) {
-    errors.form = 'At least one field is required to update a member';
   }
 
   return errors;
@@ -186,11 +167,9 @@ export default function FamilyVault() {
     membersWithHealthNotes: 0,
     recentVisits: 0,
   });
-  const [relationshipTags, setRelationshipTags] = useState([]);
-  const [healthOverview, setHealthOverview] = useState([]);
+  const [pendingInvites, setPendingInvites] = useState([]);
   const [form, setForm] = useState(emptyForm);
   const [conditionDraft, setConditionDraft] = useState({ name: '', ageOfOnset: '' });
-  const [addMethod, setAddMethod] = useState('email');
   const [editingMemberId, setEditingMemberId] = useState(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -224,8 +203,7 @@ export default function FamilyVault() {
       const data = await getFamilyDashboard(token);
       setMembers(data.members || []);
       setSummary(data.summary || {});
-      setRelationshipTags(data.relationshipTags || []);
-      setHealthOverview(data.healthOverview || []);
+      setPendingInvites(data.pendingInvites || []);
     } catch (loadError) {
       setError(loadError.message || 'Failed to load family vault');
     } finally {
@@ -310,7 +288,6 @@ export default function FamilyVault() {
     setForm(emptyForm);
     setConditionDraft({ name: '', ageOfOnset: '' });
     setEditingMemberId(null);
-    setAddMethod('email');
     setFieldErrors({});
     setServerErrorMeta(null);
   }
@@ -350,18 +327,15 @@ export default function FamilyVault() {
     const { notes: cleanedNotes, email } = parseMemberNotesAndEmail(member.notes || '');
 
     setEditingMemberId(member.id);
-    setAddMethod('email');
     setFieldErrors({});
     setError('');
     setNotice('');
     setServerErrorMeta(null);
     setForm({
       name: member.name || '',
-      dob: member.dob || member.date_of_birth || (member.age != null ? (() => {
-        const dob = new Date();
-        dob.setFullYear(dob.getFullYear() - Number(member.age));
-        return dob.toISOString().slice(0, 10);
-      })() : ''),
+      // The date of birth only if one was stored; an age alone stays an age.
+      dob: member.dob || member.date_of_birth || '',
+      age: !(member.dob || member.date_of_birth) && member.age != null ? String(member.age) : '',
       relationship: member.relationship || '',
       relationshipTag: member.relationshipTag || member.relationship_tag || '',
       parentMemberId: member.parentMemberId || member.parent_member_id || '',
@@ -397,7 +371,7 @@ export default function FamilyVault() {
       return;
     }
 
-    const nextFieldErrors = validateForm(form, Boolean(editingMemberId), addMethod);
+    const nextFieldErrors = validateForm(form);
     if (Object.keys(nextFieldErrors).length > 0) {
       setFieldErrors(nextFieldErrors);
       return;
@@ -413,17 +387,17 @@ export default function FamilyVault() {
 
     const payload = {
       name: form.name.trim(),
-      dob: form.dob,
-      age: calculateAgeFromDob(form.dob),
+      dob: form.dob || undefined,
+      // The age follows the date of birth when there is one; otherwise the age that was typed in.
+      age: form.dob ? calculateAgeFromDob(form.dob) : (form.age !== '' ? Number(form.age) : null),
       relationship: form.relationship.trim(),
       relationshipTag: form.relationshipTag.trim(),
       parentMemberId: form.parentMemberId || null,
       healthOverview: form.healthOverview.trim(),
       notes: finalNotes,
       conditions: form.conditions || [],
-      lastVisitDate: form.lastVisitDate,
-      nextCheckupDate: form.nextCheckupDate,
-      authorizationMethod: 'mail',
+      lastVisitDate: form.lastVisitDate || undefined,
+      nextCheckupDate: form.nextCheckupDate || undefined,
     };
 
     try {
@@ -504,30 +478,6 @@ export default function FamilyVault() {
 
   const isEditing = Boolean(editingMemberId);
   const canManageMembers = Boolean(familyVault);
-  const healthOverviewCards = (healthOverview || [])
-    .filter((item) => item.relationshipTag || item.relationship || item.healthOverview || item.notes)
-    .map((item) => {
-      const { notes: cleanedNotes } = parseMemberNotesAndEmail(item.notes || '');
-      return {
-        label: item.name || 'Family member',
-        tag: item.relationshipTag || 'No tag added',
-        relationship: item.relationship || 'Relationship not set',
-        detail: item.healthOverview || cleanedNotes || 'No health overview added yet.',
-      };
-    });
-  const relationshipTagChips = (relationshipTags || []).map((tag, index) => {
-    if (typeof tag === 'string') {
-      return { key: tag || `tag-${index}`, label: tag };
-    }
-
-    return { key: tag?.label || `tag-${index}`, label: tag?.label || 'Tag', count: tag?.count };
-  });
-
-  const parentMemberOptions = (members || []).filter((member) => {
-    const normalizedRelationship = String(member?.relationship || '').trim().toLowerCase();
-    return member.id !== editingMemberId && member.id !== form.parentMemberId && normalizedRelationship !== 'self';
-  });
-
   return (
     <div className="h-screen overflow-hidden bg-slate-50 text-slate-900 ">
       {showVaultModal ? (
@@ -625,25 +575,11 @@ export default function FamilyVault() {
               <StatCard label="Health Notes" value={summary.membersWithHealthNotes || 0} detail="Members with health summaries" />
             </div>
 
-            <div className="mt-8 grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
-              <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm min-h-[420px]">
-                <div className="flex h-full w-full flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-6 py-10 text-center">
-                  <Users size={28} className="text-slate-300" />
-                  <p className="text-sm font-medium text-slate-600">
-                    {members.length > 0 ? 'No health overview to show yet.' : 'No family members linked yet'}
-                  </p>
-                  <p className="max-w-xs text-sm text-slate-400">
-                    {members.length > 0
-                      ? 'Add a health overview to a family member to see it summarized here.'
-                      : 'Add your first family member using the form to start building your family vault.'}
-                  </p>
-                </div>
-              </section>
-
+            <div className="mt-8 grid gap-6 xl:grid-cols-[1.4fr_0.6fr]">
               <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
                 <div>
                   <h2 className="text-xl font-semibold text-slate-900 ">{isEditing ? 'Edit Family Member' : 'Add Family Member'}</h2>
-                  <p className="mt-1 text-sm text-slate-500 ">Update names, relationships, and health notes from one form.</p>
+                  <p className="mt-1 text-sm text-slate-500 ">Only a name and the relationship are needed. Everything else can be added later.</p>
                 </div>
 
                 {!canManageMembers ? (
@@ -668,18 +604,29 @@ export default function FamilyVault() {
                     </label>
 
                     <label className="space-y-2">
-                      <span className="text-sm font-medium text-slate-700 ">Date of Birth <span className="text-rose-500">*</span></span>
+                      <span className="text-sm font-medium text-slate-700 ">Date of Birth <span className="text-slate-400">(optional)</span></span>
                       <input
                         type="date"
                         value={form.dob}
                         onChange={(event) => setForm({ ...form, dob: event.target.value })}
                         className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900 outline-none transition-colors focus:border-blue-400 focus:bg-white "
-                        required
                       />
                       {form.dob && !fieldErrors.dob ? (
                         <p className="text-xs text-slate-500 ">Calculated age: {calculateAgeFromDob(form.dob)} years</p>
                       ) : null}
                       {fieldErrors.dob ? <p className="text-sm text-rose-600 ">{fieldErrors.dob}</p> : null}
+                      {!form.dob ? (
+                        <input
+                          type="number"
+                          min="0"
+                          max="150"
+                          value={form.age}
+                          onChange={(event) => setForm({ ...form, age: event.target.value })}
+                          className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900 outline-none transition-colors focus:border-blue-400 focus:bg-white "
+                          placeholder="or just their age in years"
+                        />
+                      ) : null}
+                      {fieldErrors.age ? <p className="text-sm text-rose-600 ">{fieldErrors.age}</p> : null}
                     </label>
                   </div>
 
@@ -701,12 +648,11 @@ export default function FamilyVault() {
                     </label>
 
                     <label className="space-y-2">
-                      <span className="text-sm font-medium text-slate-700 ">Relationship Tag <span className="text-rose-500">*</span></span>
+                      <span className="text-sm font-medium text-slate-700 ">Relationship Tag <span className="text-slate-400">(optional)</span></span>
                       <select
                         value={form.relationshipTag}
                         onChange={(event) => setForm({ ...form, relationshipTag: event.target.value })}
                         className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900 outline-none transition-colors focus:border-blue-400 focus:bg-white "
-                        required
                       >
                         <option value="">Select tag</option>
                         {relationshipTagOptions.map((option) => (
@@ -718,20 +664,24 @@ export default function FamilyVault() {
                   </div>
 
                   <label className="space-y-2 block">
-                    <span className="text-sm font-medium text-slate-700 ">Recipient email <span className="text-rose-500">*</span></span>
+                    <span className="text-sm font-medium text-slate-700 ">Their email <span className="text-slate-400">(optional)</span></span>
                     <input
                       type="email"
                       value={form.email}
                       onChange={(event) => setForm({ ...form, email: event.target.value })}
                       className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900 outline-none transition-colors focus:border-blue-400 focus:bg-white "
                       placeholder="person@example.com"
-                      required
                     />
+                    <p className="text-xs text-slate-500 ">
+                      {isEditing
+                        ? 'Their email, if you want it on record.'
+                        : 'If they have their own Swastha account, add their email and we will ask for their permission. For a child or someone without an account, leave it blank and they are added straight away.'}
+                    </p>
                     {fieldErrors.email ? <p className="text-sm text-rose-600 ">{fieldErrors.email}</p> : null}
                   </label>
 
                   <label className="space-y-2 block">
-                    <span className="text-sm font-medium text-slate-700 ">Health Overview <span className="text-rose-500">*</span></span>
+                    <span className="text-sm font-medium text-slate-700 ">Health Overview <span className="text-slate-400">(optional)</span></span>
                     <textarea
                       rows="3"
                       value={form.healthOverview}
@@ -739,13 +689,12 @@ export default function FamilyVault() {
                       maxLength={500}
                       className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900 outline-none transition-colors focus:border-blue-400 focus:bg-white "
                       placeholder="e.g. Hypertension monitoring, stable labs, monthly follow-up"
-                      required
                     />
                     {fieldErrors.healthOverview ? <p className="text-sm text-rose-600 ">{fieldErrors.healthOverview}</p> : null}
                   </label>
 
                   <label className="space-y-2 block">
-                    <span className="text-sm font-medium text-slate-700 ">Notes</span>
+                    <span className="text-sm font-medium text-slate-700 ">Notes <span className="text-slate-400">(optional)</span></span>
                     <textarea
                       rows="3"
                       value={form.notes}
@@ -753,32 +702,29 @@ export default function FamilyVault() {
                       maxLength={1000}
                       className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900 outline-none transition-colors focus:border-blue-400 focus:bg-white "
                       placeholder="Notes for reminders, allergies, doctors, etc."
-                      required
                     />
                     {fieldErrors.notes ? <p className="text-sm text-rose-600 ">{fieldErrors.notes}</p> : null}
                   </label>
 
                   <div className="grid gap-4 sm:grid-cols-2">
                     <label className="space-y-2">
-                      <span className="text-sm font-medium text-slate-700 ">Last Visit Date <span className="text-rose-500">*</span></span>
+                      <span className="text-sm font-medium text-slate-700 ">Last Visit Date <span className="text-slate-400">(optional)</span></span>
                       <input
                         type="date"
                         value={form.lastVisitDate}
                         onChange={(event) => setForm({ ...form, lastVisitDate: event.target.value })}
                         className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900 outline-none transition-colors focus:border-blue-400 focus:bg-white "
-                        required
                       />
                       {fieldErrors.lastVisitDate ? <p className="text-sm text-rose-600 ">{fieldErrors.lastVisitDate}</p> : null}
                     </label>
 
                     <label className="space-y-2">
-                      <span className="text-sm font-medium text-slate-700 ">Next Checkup Date <span className="text-rose-500">*</span></span>
+                      <span className="text-sm font-medium text-slate-700 ">Next Checkup Date <span className="text-slate-400">(optional)</span></span>
                       <input
                         type="date"
                         value={form.nextCheckupDate}
                         onChange={(event) => setForm({ ...form, nextCheckupDate: event.target.value })}
                         className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900 outline-none transition-colors focus:border-blue-400 focus:bg-white "
-                        required
                       />
                       {fieldErrors.nextCheckupDate ? <p className="text-sm text-rose-600 ">{fieldErrors.nextCheckupDate}</p> : null}
                     </label>
@@ -792,7 +738,7 @@ export default function FamilyVault() {
                       disabled={saving || !canManageMembers}
                       className="inline-flex items-center justify-center rounded-2xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white transition-colors hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-70"
                     >
-                      {saving ? 'Sending...' : isEditing ? 'Update Member' : 'Ask for Permission'}
+                      {saving ? 'Saving...' : isEditing ? 'Update Member' : form.email.trim() ? 'Ask for Permission' : 'Add Member'}
                     </button>
 
                     {isEditing ? (
@@ -807,6 +753,41 @@ export default function FamilyVault() {
                   </div>
                 </form>
               </section>
+
+              <div className="space-y-6">
+                <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+                  <h2 className="text-lg font-semibold text-slate-900 ">Waiting for approval</h2>
+                  <p className="mt-1 text-sm text-slate-500 ">
+                    Permission requests you have sent. A person is added to your vault once they approve.
+                  </p>
+                  {pendingInvites.length > 0 ? (
+                    <ul className="mt-4 space-y-3">
+                      {pendingInvites.map((invite) => (
+                        <li key={invite.id} className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3">
+                          <p className="text-sm font-semibold text-slate-900 ">{invite.name || 'Family member'}</p>
+                          <p className="text-xs text-slate-600 break-all">{invite.email || 'No email on record'}</p>
+                          <p className="mt-1 text-xs text-amber-800">
+                            Waiting for them to approve
+                            {invite.requestedAt ? ` · sent ${formatDate(invite.requestedAt, { fallback: '' })}` : ''}
+                          </p>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="mt-4 rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-center text-sm text-slate-400">
+                      No requests waiting.
+                    </p>
+                  )}
+                </section>
+
+                <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+                  <h2 className="text-lg font-semibold text-slate-900 ">How adding works</h2>
+                  <ul className="mt-3 space-y-2 text-sm text-slate-600 ">
+                    <li><span className="font-medium text-slate-800">With their own account:</span> add their email. They get a request and appear here once they approve.</li>
+                    <li><span className="font-medium text-slate-800">Without an account</span> (a child, a grandparent): leave the email blank. They are added right away and you keep their records.</li>
+                  </ul>
+                </section>
+              </div>
             </div>
 
             <section className="mt-8 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">

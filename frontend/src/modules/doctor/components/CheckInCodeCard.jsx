@@ -1,6 +1,7 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { KeyRound, Printer, Loader2 } from "lucide-react";
 import { getTodayCheckinCode } from "../../../api/clinic";
+import { usePolling } from "../../../hooks/usePolling";
 
 // Doctor dashboard — today's clinic check-in code (PRD §3.2/§5). Fetches
 // once on mount, then re-fetches automatically at local midnight so the
@@ -16,12 +17,6 @@ import { getTodayCheckinCode } from "../../../api/clinic";
 // code + date + one-line instruction) in a hidden iframe and prints only
 // that — the standard reliable way to print "just this" regardless of
 // what else is on the page.
-
-function msUntilNextLocalMidnight() {
-  const now = new Date();
-  const nextMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 0, 0, 5); // +5s slack past midnight
-  return nextMidnight.getTime() - now.getTime();
-}
 
 function printCodeOnly({ code, dateLabel }) {
   const iframe = document.createElement("iframe");
@@ -108,40 +103,49 @@ function printCodeOnly({ code, dateLabel }) {
 
 export default function CheckInCodeCard() {
   const [code, setCode] = useState(null);
+  const [validDate, setValidDate] = useState(null); // the clinic's day, as the server sees it (YYYY-MM-DD)
+  const [validUntil, setValidUntil] = useState(null); // when the server changes the code
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
-  const timeoutRef = useRef(null);
 
-  async function load() {
-    setIsLoading(true);
-    setError(null);
+  // `silent` refreshes in the background: no spinner, and a failed refresh keeps the code on screen.
+  async function load({ silent = false } = {}) {
+    if (!silent) {
+      setIsLoading(true);
+      setError(null);
+    }
     try {
       const result = await getTodayCheckinCode();
       setCode(result.code);
+      setValidDate(result.validDate || null);
+      setValidUntil(result.validUntil || null);
+      setError(null);
     } catch (err) {
-      setError(err.message || "Unable to load check-in code.");
+      if (!silent) setError(err.message || "Unable to load check-in code.");
     } finally {
-      setIsLoading(false);
+      if (!silent) setIsLoading(false);
     }
   }
 
   useEffect(() => {
     load();
-
-    function scheduleMidnightRefresh() {
-      timeoutRef.current = setTimeout(() => {
-        load();
-        scheduleMidnightRefresh(); // re-arm for the following midnight
-      }, msUntilNextLocalMidnight());
-    }
-    scheduleMidnightRefresh();
-
-    return () => {
-      if (timeoutRef.current) clearTimeout(timeoutRef.current);
-    };
   }, []);
 
-  const todayLabel = new Date().toLocaleDateString("en-US", {
+  // Refresh at the moment the server says the code changes (not at this browser's own midnight,
+  // which is a different moment in another time zone), a few seconds past it.
+  useEffect(() => {
+    if (!validUntil) return undefined;
+    const delay = Math.min(Math.max(new Date(validUntil).getTime() - Date.now() + 5000, 1000), 2 ** 31 - 1);
+    const timer = setTimeout(() => load({ silent: true }), delay);
+    return () => clearTimeout(timer);
+  }, [validUntil]);
+
+  // A sleeping laptop or a throttled background tab can miss a timer, so check again every five
+  // minutes and whenever the tab comes back into view.
+  usePolling(() => load({ silent: true }), { intervalMs: 5 * 60 * 1000 });
+
+  // The label shows the day the server's code is for. (Noon avoids the date shifting by time zone.)
+  const todayLabel = (validDate ? new Date(`${validDate}T12:00:00`) : new Date()).toLocaleDateString("en-US", {
     weekday: "long",
     month: "long",
     day: "numeric",

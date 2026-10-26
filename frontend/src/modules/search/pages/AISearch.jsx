@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "../../../context/AuthContext";
-import { searchReports, submitAnswerFeedback } from "../../../api/search";
+import { searchReports, submitAnswerFeedback, indexMissingReports } from "../../../api/search";
 import { openReportFile } from "../../../api/reports";
 import { getNoticeAckStatus, acknowledgeNotice } from "../../../api/notices";
 
@@ -83,6 +83,17 @@ export default function AISearch() {
       cancelled = true;
     };
   }, [isAuthenticated]);
+
+  // Once Ask Swastha is usable, add any report that never made it into the search index
+  // (a failed attempt, or one saved before the notice was accepted).
+  const caughtUpRef = useRef(false);
+  useEffect(() => {
+    if (noticeAcknowledged !== true || caughtUpRef.current) return;
+    caughtUpRef.current = true;
+    indexMissingReports().catch(() => {
+      // Best-effort: the next visit tries again.
+    });
+  }, [noticeAcknowledged]);
 
   async function handleAcknowledgeNotice() {
     setAcknowledging(true);

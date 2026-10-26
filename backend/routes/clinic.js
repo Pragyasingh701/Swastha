@@ -1,6 +1,6 @@
 import express from 'express';
 import supabase from '../config/supabase.js';
-import { resolveCheckinCode, getOrCreateTodayCode } from '../db/clinicCheckin.js';
+import { resolveCheckinCode, getOrCreateTodayCode, codeValidUntil } from '../db/clinicCheckin.js';
 import { findUserById } from '../db/users.js';
 import { accessExpiryFromNow } from '../db/doctorPatients.js';
 import { startIntakeSession } from '../rag/services/intakeService.js';
@@ -287,7 +287,8 @@ async function requireDoctorAuth(req, res, next) {
 router.get('/today-code', requireDoctorAuth, async (req, res) => {
   try {
     const { code, valid_date: validDate } = await getOrCreateTodayCode(req.user.userId);
-    return res.json({ code, validDate });
+    // validUntil: when the code changes, so a wall display can refresh at that moment.
+    return res.json({ code, validDate, validUntil: codeValidUntil() });
   } catch (error) {
     console.error('Clinic today-code error:', error);
     return res.status(500).json({ message: 'Unable to load today’s check-in code.' });

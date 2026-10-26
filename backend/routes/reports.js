@@ -488,8 +488,11 @@ router.post('/:id/summarize', async (req, res) => {
       return res.status(404).json({ message: 'Report not found, or you do not have permission to view it.' });
     }
 
-    if (existing.analysis) {
-      // Already has one — nothing to regenerate, just hand it back.
+    // `force` is the Regenerate button: write a fresh summary even though one exists. Without it
+    // an existing summary is simply handed back. A forced attempt that fails keeps the old
+    // summary (the update below only runs once a new one exists).
+    const force = req.body?.force === true;
+    if (existing.analysis && !force) {
       return res.json({ report: existing });
     }
 

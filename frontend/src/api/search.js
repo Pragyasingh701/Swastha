@@ -25,6 +25,29 @@ export async function indexReport(report) {
   });
 }
 
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+// Indexing can fail for a moment (the embedding provider is busy, a network blip). Try again
+// a couple of times before giving up; a refusal (no consent, no access) will not improve.
+export async function indexReportWithRetry(report, { delaysMs = [3000, 10000] } = {}) {
+  let lastError;
+  for (let attempt = 0; attempt <= delaysMs.length; attempt += 1) {
+    try {
+      return await indexReport(report);
+    } catch (err) {
+      lastError = err;
+      if (err?.status >= 400 && err?.status < 500) break;
+      if (attempt < delaysMs.length) await sleep(delaysMs[attempt]);
+    }
+  }
+  throw lastError;
+}
+
+// Catches up any of the user's own reports that never got indexed.
+export async function indexMissingReports() {
+  return request('/reports/index-missing', { method: 'POST', body: {} });
+}
+
 export async function searchReportsConversational(query, sessionId, patientUserId) {
   return request('/search/chat', {
     method: 'POST',
@@ -59,31 +82,18 @@ export async function submitAnswerFeedback({ rating, mode, sourceReportIds, degr
   });
 }
 
-// Not routed through request() above: this is a multipart upload (no PII
-// field of its own — just the file), so it only needs the response side
-// of the wire-crypto boundary, applied manually here.
+// A multipart upload with no PII field of its own (just the file), so the form body does not
+// depend on the wire-encryption key and can be replayed as it is.
 export async function extractReportFromFile(file) {
   const form = new FormData();
   form.append('file', file);
-
-  const { sessionId } = await ensureSession(RAG_BASE_URL);
-  const response = await fetch(`${RAG_BASE_URL}/extract`, {
-    method: 'POST',
-    headers: { ...getAuthHeader(), 'X-Enc-Session-Id': sessionId },
-    body: form, // no Content-Type header — browser sets the multipart boundary itself
-  });
-  let data = await response.json();
-  data = await decryptPiiFields(data, RAG_BASE_URL);
-  if (!response.ok) {
-    if (response.status === 403 && data?.code === 'AI_NOTICE_ACK_REQUIRED') {
-      notifyAiNoticeRequired(data.feature);
-    }
-    const error = new Error(data.error || data.message || 'Extraction request failed');
-    error.status = response.status;
-    error.details = data;
+  try {
+    return await request('/extract', { method: 'POST', body: form });
+  } catch (error) {
+    // Callers read the server's full answer from `details`.
+    if (error.data !== undefined) error.details = error.data;
     throw error;
   }
-  return data;
 }
 
 export default {
