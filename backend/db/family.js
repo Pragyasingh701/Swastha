@@ -558,6 +558,43 @@ export const countUpcomingCheckups = (members = [], now = new Date()) => {
   }).length;
 };
 
+// The permission requests this admin has sent that are still waiting for the other person to
+// approve. listFamilyMembers leaves them out on purpose (they are not members yet), so without
+// this they were invisible. Only what the admin needs to recognise the request is returned:
+// never the approval token.
+export const listPendingFamilyInvites = async ({ userId } = {}) => {
+  if (!supabase) throw new Error('Supabase client is not configured');
+  if (!userId) throw new Error('userId is required');
+
+  const { data, error } = await applyUserScope(
+    supabase.from(FAMILY_MEMBERS_TABLE).select('*'),
+    { userId }
+  )
+    .is('deleted_at', null)
+    .order('created_at', { ascending: false });
+
+  if (error) {
+    if (error.code === 'PGRST205' || error.code === '42P01' || error.message?.includes('Could not find the table')) {
+      return [];
+    }
+    throw error;
+  }
+
+  return (data || [])
+    .map(normalizeMember)
+    .filter(isPendingAuthorizationMember)
+    .map((member) => {
+      const emailInNotes = String(member.notes || '').match(/\[Email:\s*([^\]]+)\]/i)?.[1]?.trim();
+      return {
+        id: member.id,
+        name: member.name,
+        email: emailInNotes || member.authorizedByEmail || null,
+        relationship: member.relationship || null,
+        requestedAt: member.authorizationRequestedAt || member.createdAt || null,
+      };
+    });
+};
+
 export const getFamilyVaultSummary = async ({ userId } = {}) => {
   const members = await listFamilyMembers({ userId, includeDeleted: false });
 

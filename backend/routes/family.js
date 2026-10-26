@@ -12,6 +12,7 @@ import {
   stripEmailTags,
   withEmailTag,
   getMemberEmail,
+  listPendingFamilyInvites,
 } from '../db/family.js';
 import { sendFamilyMemberAuthorizationEmail } from '../utils/mailer.js';
 import { findUserByEmail, findUserById } from '../db/users.js';
@@ -229,9 +230,11 @@ router.get('/summary', async (req, res) => {
 
     const summary = await getFamilyVaultSummary({ userId: user.userId });
     const members = await listFamilyMembers({ userId: user.userId });
+    const pendingInvites = await listPendingFamilyInvites({ userId: user.userId });
 
     return res.json({
       members,
+      pendingInvites,
       summary: {
         ...summary,
         relationshipTags: summary.relationshipTags,
