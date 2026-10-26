@@ -5,7 +5,7 @@ import { parseMemberNotesAndEmail } from "../../family/pages/FamilyMember";
 import { useAuth } from "../../../context/AuthContext";
 import * as reportService from "../../../api/reports";
 import * as familyService from "../../../api/family";
-import { indexReport } from "../../../api/search";
+import { indexReportWithRetry } from "../../../api/search";
 
 import {
   UploadCloud,
@@ -75,6 +75,8 @@ export default function Timeline() {
   // Why the timeline could not be loaded, shown instead of an empty list. A person with no
   // account, or one you have no access to, must not look the same as "no reports yet".
   const [loadError, setLoadError] = useState(null);
+  // Set when a saved report could not be added to Ask Swastha's search after retrying.
+  const [indexingNotice, setIndexingNotice] = useState(false);
   // Counts loads, so a slow answer for the member you just left is ignored.
   const loadCounterRef = useRef(0);
 
@@ -229,8 +231,9 @@ export default function Timeline() {
 
         // Best-effort: make the report searchable. The report itself is
         // already saved above regardless of whether this succeeds.
-        indexReport(response.report).catch((err) => {
+        indexReportWithRetry(response.report).catch((err) => {
           console.error('Failed to index report for AI search:', err);
+          setIndexingNotice(true);
         });
 
         return event;
@@ -262,8 +265,9 @@ export default function Timeline() {
       setSelectedEvent((prev) => (prev && String(prev.id) === String(eventId) ? event : prev));
 
       // Best-effort: re-index so search reflects the edited content.
-      indexReport(response.report).catch((err) => {
+      indexReportWithRetry(response.report).catch((err) => {
         console.error('Failed to re-index edited report for AI search:', err);
+        setIndexingNotice(true);
       });
 
       return event;
@@ -419,6 +423,18 @@ export default function Timeline() {
           setDateFrom={setDateFrom}
           setDateTo={setDateTo}
         />
+
+        {indexingNotice && (
+          <div role="status" className="mb-4 flex items-start justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+            <span>
+              Your report was saved, but it isn't searchable in Ask Swastha yet. It will be added the next
+              time you open Ask Swastha.
+            </span>
+            <button type="button" onClick={() => setIndexingNotice(false)} className="shrink-0 font-semibold hover:text-amber-950">
+              Dismiss
+            </button>
+          </div>
+        )}
 
         {loadError ? (
           <div role="alert" className="mt-6 rounded-2xl border border-red-200 bg-red-50 p-6 text-sm text-red-700">

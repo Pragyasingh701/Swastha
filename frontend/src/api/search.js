@@ -25,6 +25,29 @@ export async function indexReport(report) {
   });
 }
 
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+// Indexing can fail for a moment (the embedding provider is busy, a network blip). Try again
+// a couple of times before giving up; a refusal (no consent, no access) will not improve.
+export async function indexReportWithRetry(report, { delaysMs = [3000, 10000] } = {}) {
+  let lastError;
+  for (let attempt = 0; attempt <= delaysMs.length; attempt += 1) {
+    try {
+      return await indexReport(report);
+    } catch (err) {
+      lastError = err;
+      if (err?.status >= 400 && err?.status < 500) break;
+      if (attempt < delaysMs.length) await sleep(delaysMs[attempt]);
+    }
+  }
+  throw lastError;
+}
+
+// Catches up any of the user's own reports that never got indexed.
+export async function indexMissingReports() {
+  return request('/reports/index-missing', { method: 'POST', body: {} });
+}
+
 export async function searchReportsConversational(query, sessionId, patientUserId) {
   return request('/search/chat', {
     method: 'POST',
