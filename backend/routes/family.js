@@ -18,6 +18,7 @@ import { findUserByEmail, findUserById } from '../db/users.js';
 import { getAuthUser } from '../config/jwt.js';
 import { renderMessagePage, renderConfirmPage } from '../utils/emailActionPage.js';
 import { ageFromDob } from '../utils/age.js';
+import { isFutureDate } from '../utils/dates.js';
 
 const router = express.Router();
 
@@ -87,7 +88,7 @@ function validateFamilyMemberPayload(payload = {}, options = {}) {
   if (payload.lastVisitDate) {
     if (!isValidDateValue(payload.lastVisitDate)) {
       errors.lastVisitDate = 'Last visit date must be a valid date.';
-    } else if (new Date(payload.lastVisitDate) > new Date()) {
+    } else if (isFutureDate(payload.lastVisitDate)) {
       errors.lastVisitDate = 'Last visit date cannot be in the future.';
     }
   }

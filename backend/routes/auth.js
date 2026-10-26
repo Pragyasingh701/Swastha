@@ -25,6 +25,7 @@ import { eraseAccountResidue } from '../db/accountErasure.js';
 import { checkNoticeAck } from '../db/aiNoticeAcknowledgements.js';
 import { verifyAuthToken, signAuthToken, sessionTokenTtl, rememberMeTokenTtl } from '../config/jwt.js';
 import { wholeYears } from '../utils/age.js';
+import { isFutureDate } from '../utils/dates.js';
 
 const router = express.Router();
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || '771272691038-s9h707grr3b4ojkgp48aa5vb9tej2sjh.apps.googleusercontent.com';
@@ -423,11 +424,10 @@ function isValidPastDate(dateStr, { minAge = 0, maxAge = 120 } = {}) {
   const dob = new Date(dateStr);
   if (Number.isNaN(dob.getTime())) return false;
 
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  if (dob > today) return false;
+  if (isFutureDate(dateStr)) return false;
 
-  const age = wholeYears(dob, today);
+  // A date that is still "today" somewhere (see utils/dates.js) can be a day ahead of the server clock.
+  const age = Math.max(0, wholeYears(dob, new Date()));
   return age >= minAge && age <= maxAge;
 }
 
