@@ -273,16 +273,14 @@ export default function Timeline() {
     }
   }
 
+  // Throws when the delete fails, so the details window can show the reason instead of
+  // looking as if the report had been removed.
   async function handleDeleteEvent(reportId) {
-    try {
-      await reportService.deleteTimelineReport(reportId, token, targetUserId, targetEmail);
-      setEvents((prev) => prev.filter((event) => String(event.id) !== String(reportId)));
-      setSelectedEvent(null);
+    await reportService.deleteTimelineReport(reportId, token, targetUserId, targetEmail);
+    setEvents((prev) => prev.filter((event) => String(event.id) !== String(reportId)));
+    setSelectedEvent(null);
 
-      // No separate index cleanup: the search index rows cascade-delete with the report.
-    } catch (error) {
-      console.error('Failed to delete timeline report:', error);
-    }
+    // No separate index cleanup: the search index rows cascade-delete with the report.
   }
 
   function toggleYearCollapsed(year) {
@@ -779,6 +777,23 @@ function EventCard({ event, notable }) {
 function EventDetails({ event, onClose, onEdit, onDelete }) {
   const formattedDate = formatDate(event.reportDate, { fallback: 'Unknown date' });
 
+  // Deleting takes two steps (a confirmation), and says so when it fails.
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState(null);
+
+  async function confirmDelete() {
+    setDeleting(true);
+    setDeleteError(null);
+    try {
+      await onDelete();
+    } catch (err) {
+      console.error('Failed to delete timeline report:', err);
+      setDeleteError(err?.message || 'Could not delete this report. Please try again.');
+      setDeleting(false);
+    }
+  }
+
   // Both createdAt and updatedAt get set on creation too, so only show
   // "Last edited" once updatedAt is meaningfully after createdAt — i.e.
   // the report was actually edited at least once, not just saved.
@@ -913,6 +928,37 @@ function EventDetails({ event, onClose, onEdit, onDelete }) {
           </div>
         </div>
 
+        {confirmingDelete && (
+          <div role="alertdialog" aria-label="Confirm delete" className="mt-8 rounded-2xl border border-rose-200 bg-rose-50 p-4">
+            <p className="text-sm font-semibold text-rose-800">Delete this report?</p>
+            <p className="mt-1 text-sm text-rose-700">
+              It will be removed from the timeline, the vault and Ask Swastha, along with its uploaded file. This can't be undone.
+            </p>
+            {deleteError && <p className="mt-2 text-sm font-medium text-rose-900">{deleteError}</p>}
+            <div className="mt-3 flex gap-3">
+              <button
+                type="button"
+                onClick={confirmDelete}
+                disabled={deleting}
+                className="inline-flex items-center justify-center rounded-xl bg-rose-600 px-4 py-2 text-sm font-semibold text-white hover:bg-rose-700 disabled:opacity-60"
+              >
+                {deleting ? 'Deleting...' : 'Yes, delete'}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setConfirmingDelete(false);
+                  setDeleteError(null);
+                }}
+                disabled={deleting}
+                className="inline-flex items-center justify-center rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
+
         <div className="mt-8 flex flex-wrap gap-3">
           <button
             type="button"
@@ -923,8 +969,9 @@ function EventDetails({ event, onClose, onEdit, onDelete }) {
           </button>
           <button
             type="button"
-            onClick={onDelete}
-            className="inline-flex items-center justify-center rounded-2xl bg-rose-600 px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-rose-700"
+            onClick={() => setConfirmingDelete(true)}
+            disabled={confirmingDelete}
+            className="inline-flex items-center justify-center rounded-2xl bg-rose-600 px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-rose-700 disabled:opacity-50"
           >
             Delete Report
           </button>
