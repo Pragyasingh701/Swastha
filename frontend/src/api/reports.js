@@ -74,9 +74,11 @@ export async function deleteTimelineReport(reportId, token, targetUserId, target
   }, token);
 }
 
-export async function generateReportSummary(reportId, token) {
+// `force` writes a new summary even when the report already has one (the Regenerate button).
+export async function generateReportSummary(reportId, token, { force = false } = {}) {
   return request(`/${encodeURIComponent(reportId)}/summarize`, {
     method: 'POST',
+    body: force ? { force: true } : {},
   }, token);
 }
 

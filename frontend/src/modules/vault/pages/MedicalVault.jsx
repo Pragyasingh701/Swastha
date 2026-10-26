@@ -584,11 +584,12 @@ function ReportPreview({ report, token, onSummaryGenerated, onClose }) {
   const Icon = meta.icon;
   const fieldLabels = summaryFieldLabels(report.category);
 
-  async function runGenerate() {
+  // `force` is the Regenerate button: replace the existing summary with a new one.
+  async function runGenerate(force = false) {
     setGenerating(true);
     setGenError(null);
     try {
-      const { report: updated } = await generateReportSummary(report.id, token);
+      const { report: updated } = await generateReportSummary(report.id, token, { force });
       onSummaryGenerated(report.id, updated.analysis);
     } catch (err) {
       console.error("Failed to generate AI summary:", err);
@@ -609,7 +610,7 @@ function ReportPreview({ report, token, onSummaryGenerated, onClose }) {
   // global notice (AiNoticeGate) is accepted, try again without a manual retry.
   useEffect(() => {
     if (!genError || report.analysis) return undefined;
-    const retry = () => runGenerate();
+    const retry = () => runGenerate(false);
     window.addEventListener(AI_NOTICE_ACCEPTED_EVENT, retry);
     return () => window.removeEventListener(AI_NOTICE_ACCEPTED_EVENT, retry);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -654,12 +655,12 @@ function ReportPreview({ report, token, onSummaryGenerated, onClose }) {
                   <Loader2 className="w-4 h-4 text-blue-600 animate-spin" />
                   Generating AI summary...
                 </div>
-              ) : genError ? (
+              ) : genError && !report.analysis ? (
                 <div className="mt-3">
                   <p className="text-sm text-red-600">{genError}</p>
                   <button
                     type="button"
-                    onClick={runGenerate}
+                    onClick={() => runGenerate(false)}
                     className="mt-2 inline-flex items-center gap-1.5 text-xs font-semibold text-red-600 hover:text-red-700"
                   >
                     <RefreshCw size={12} />
@@ -670,9 +671,14 @@ function ReportPreview({ report, token, onSummaryGenerated, onClose }) {
                 <>
                   <p className="mt-2 text-sm text-slate-800 leading-relaxed whitespace-pre-line">{report.analysis}</p>
                   <AiGeneratedNote className="mt-2" />
+                  {genError && (
+                    <p className="mt-2 text-sm text-red-600">
+                      Couldn't write a new summary, so the earlier one is kept. {genError}
+                    </p>
+                  )}
                   <button
                     type="button"
-                    onClick={runGenerate}
+                    onClick={() => runGenerate(true)}
                     className="mt-3 inline-flex items-center gap-1.5 text-xs font-medium text-blue-600 hover:text-blue-700"
                   >
                     <RefreshCw size={12} />
