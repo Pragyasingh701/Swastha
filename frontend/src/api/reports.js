@@ -25,8 +25,9 @@ async function preparePayload(reportData, file) {
 }
 
 export async function getTimelineReports(token, memberEmail, memberUserId) {
-  const headers = {};
-  if (memberEmail || memberUserId) {
+  // Built per attempt (a function), so a replay after the session key changes re-encrypts it.
+  const headers = async () => {
+    if (!memberEmail && !memberUserId) return {};
     const params = {};
     if (memberEmail) params.email = memberEmail;
     if (memberUserId) params.userId = memberUserId;
@@ -36,13 +37,14 @@ export async function getTimelineReports(token, memberEmail, memberUserId) {
     // instead. backend/routes/reports.js still just reads req.query.email/
     // req.query.userId, unchanged: the wire-crypto middleware decrypts this
     // header and merges it into req.query before the route ever sees it.
-    headers['X-Enc-Params'] = await encryptParamsEnvelope(params, BASE_URL);
-  }
+    return { 'X-Enc-Params': await encryptParamsEnvelope(params, BASE_URL) };
+  };
   return request('/', { headers }, token);
 }
 
 export async function createTimelineReport(reportData, token, file) {
-  const { body } = await preparePayload(reportData, file);
+  // A function, so the multipart fields are encrypted again if the request is replayed.
+  const body = async () => (await preparePayload(reportData, file)).body;
   return request('/', {
     method: 'POST',
     body,
@@ -50,7 +52,7 @@ export async function createTimelineReport(reportData, token, file) {
 }
 
 export async function updateTimelineReport(reportId, reportData, token, file) {
-  const { body } = await preparePayload(reportData, file);
+  const body = async () => (await preparePayload(reportData, file)).body;
   return request(`/${encodeURIComponent(reportId)}`, {
     method: 'PUT',
     body,
@@ -58,13 +60,13 @@ export async function updateTimelineReport(reportId, reportData, token, file) {
 }
 
 export async function deleteTimelineReport(reportId, token, targetUserId, targetEmail) {
-  const headers = {};
-  if (targetUserId || targetEmail) {
+  const headers = async () => {
+    if (!targetUserId && !targetEmail) return {};
     const params = {};
     if (targetUserId) params.userId = targetUserId;
     if (targetEmail) params.email = targetEmail;
-    headers['X-Enc-Params'] = await encryptParamsEnvelope(params, BASE_URL);
-  }
+    return { 'X-Enc-Params': await encryptParamsEnvelope(params, BASE_URL) };
+  };
 
   return request(`/${encodeURIComponent(reportId)}`, {
     method: 'DELETE',

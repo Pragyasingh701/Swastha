@@ -44,11 +44,9 @@ export async function resumeIntake(sessionId) {
  * only the (possibly corrected) text is then sent through sendIntakeTurn
  * exactly as a typed answer would be.
  *
- * Not routed through request() above: that helper JSON-encodes a plain
- * object body, whereas this needs multipart with the browser setting its
- * own boundary — and there's no PII field of its own here (just audio +
- * session_id), so only the response side of the wire-crypto boundary
- * applies, done manually below.
+ * Sent as multipart (a FormData body is passed through untouched). There is no PII field of its
+ * own here (just audio + session_id), so the body does not depend on the wire-encryption key
+ * and can be replayed as it is if that session has to be renewed.
  */
 export async function transcribeIntakeAudio(sessionId, audioBlob) {
   const form = new FormData();
@@ -57,22 +55,13 @@ export async function transcribeIntakeAudio(sessionId, audioBlob) {
   form.append('file', audioBlob, 'answer.webm');
   form.append('session_id', sessionId);
 
-  const { sessionId: encSessionId } = await ensureSession(RAG_BASE_URL);
-  const response = await fetch(`${RAG_BASE_URL}/intake/transcribe`, {
-    method: 'POST',
-    headers: { ...getAuthHeader(), 'X-Enc-Session-Id': encSessionId },
-    body: form,
-  });
-
-  let data = await response.json();
-  data = await decryptPiiFields(data, RAG_BASE_URL);
-  if (!response.ok) {
-    const error = new Error(data.error || 'Could not transcribe audio');
-    error.code = data.error;
-    error.status = response.status;
+  try {
+    return await request('/intake/transcribe', { method: 'POST', body: form });
+  } catch (error) {
+    // Callers read the server's short error name from `code`.
+    if (error.data?.error) error.code = error.data.error;
     throw error;
   }
-  return data;
 }
 
 // skipAudio: the patient has the voice muted, so the server can skip

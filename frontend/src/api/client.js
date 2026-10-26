@@ -26,6 +26,18 @@ export function notifyAiNoticeRequired(feature) {
 }
 
 async function parseResponse(res, baseUrl) {
+  // A web page where data was expected means the request never reached the API: with no
+  // API address configured the browser asks its own host, whose single-page fallback
+  // answers every path with index.html and status 200. Without this check that looked
+  // like a successful request with an empty answer.
+  if (res.ok && /text\/html/i.test(res.headers.get('content-type') || '')) {
+    const err = new Error(
+      'The app could not reach the server (it got a web page instead of data). The API address may not be set up for this site.'
+    )
+    err.code = 'API_UNREACHABLE'
+    throw err
+  }
+
   let data = null
   try {
     data = await res.json()
@@ -54,8 +66,15 @@ async function parseResponse(res, baseUrl) {
 }
 
 async function doRequest(method, path, options, allowRetry) {
-  const { body, query, token, headers = {}, baseUrl } = options
+  const { body: bodyOption, query, token, headers: headersOption = {}, baseUrl } = options
   const resolvedBaseUrl = baseUrl || BASE_URL
+
+  // `body` and `headers` may be functions that build them. A body or header that carries
+  // ciphertext (see pii/multipart.js and encryptParamsEnvelope) is only valid for the session
+  // key it was built with, so after a session expires and the request is replayed it has to
+  // be built again with the new key. A plain value is used as it is.
+  const body = typeof bodyOption === 'function' ? await bodyOption() : bodyOption
+  const headers = typeof headersOption === 'function' ? await headersOption() : headersOption
 
   let url = `${resolvedBaseUrl}${path}`
   if (query && Object.keys(query).length > 0) {

@@ -82,31 +82,18 @@ export async function submitAnswerFeedback({ rating, mode, sourceReportIds, degr
   });
 }
 
-// Not routed through request() above: this is a multipart upload (no PII
-// field of its own — just the file), so it only needs the response side
-// of the wire-crypto boundary, applied manually here.
+// A multipart upload with no PII field of its own (just the file), so the form body does not
+// depend on the wire-encryption key and can be replayed as it is.
 export async function extractReportFromFile(file) {
   const form = new FormData();
   form.append('file', file);
-
-  const { sessionId } = await ensureSession(RAG_BASE_URL);
-  const response = await fetch(`${RAG_BASE_URL}/extract`, {
-    method: 'POST',
-    headers: { ...getAuthHeader(), 'X-Enc-Session-Id': sessionId },
-    body: form, // no Content-Type header — browser sets the multipart boundary itself
-  });
-  let data = await response.json();
-  data = await decryptPiiFields(data, RAG_BASE_URL);
-  if (!response.ok) {
-    if (response.status === 403 && data?.code === 'AI_NOTICE_ACK_REQUIRED') {
-      notifyAiNoticeRequired(data.feature);
-    }
-    const error = new Error(data.error || data.message || 'Extraction request failed');
-    error.status = response.status;
-    error.details = data;
+  try {
+    return await request('/extract', { method: 'POST', body: form });
+  } catch (error) {
+    // Callers read the server's full answer from `details`.
+    if (error.data !== undefined) error.details = error.data;
     throw error;
   }
-  return data;
 }
 
 export default {
