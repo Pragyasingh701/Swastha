@@ -40,10 +40,10 @@ export async function getIntakeQueueForPatients(patientIds, doctorId) {
     // Only this doctor's own claimed sessions, or unclaimed (doctor_id null)
     // ones — see the doctorId-scoping note above.
     .or(`doctor_id.is.null,doctor_id.eq.${doctorId}`)
-    // Doctor-actioned rows (Completed / Removed) drop out of the live
-    // queue — they're not deleted, just no longer shown here. See
-    // getIntakeActionHistoryForDoctor below for where they surface instead.
-    .is('doctor_action', null)
+    // What this doctor has Completed or Removed is taken out of THEIR queue below (from their own
+    // rows in intake_session_actions), not by a flag on the shared session row: a patient seen by
+    // two doctors, or a session nobody has claimed, must not vanish for doctor B because doctor A
+    // dismissed it. See getIntakeActionHistoryForDoctor for where it shows up instead.
     // Issue #10 fix (audit report): 'abandoned' sessions (see
     // abandonStaleIntakeSessions below) are excluded from the live queue —
     // the whole point of the sweep is to stop a patient who genuinely
@@ -63,13 +63,46 @@ export async function getIntakeQueueForPatients(patientIds, doctorId) {
     throw new Error(`getIntakeQueueForPatients: failed to load sessions: ${error.message}`);
   }
 
-  const sessions = data || [];
+  const visible = await withoutSessionsThisDoctorHandled(data || [], doctorId);
   // Explicit priority ordering (flagged first) rather than trusting the
   // string-sort coincidence above — stable sort keeps created_at ascending
   // within each priority group.
-  return sessions.sort((a, b) => {
+  return visible.sort((a, b) => {
     if (a.priority === b.priority) return 0;
     return a.priority === 'flagged' ? -1 : 1;
+  });
+}
+
+const ACTION_LOOKUP_CHUNK = 100; // keeps the id list in the request URL short
+
+// Drops the sessions this doctor has already Completed or Removed. A session that carries the old
+// shared `doctor_action` flag but has no action row at all (written before action rows existed)
+// stays hidden, as it always was; one that other doctors handled is still shown to this one.
+async function withoutSessionsThisDoctorHandled(sessions, doctorId) {
+  if (sessions.length === 0) return sessions;
+
+  const ids = sessions.map((s) => s.id);
+  const actionsBySession = new Map(); // session id -> Set of doctor ids who actioned it
+  for (let i = 0; i < ids.length; i += ACTION_LOOKUP_CHUNK) {
+    const { data, error } = await supabase
+      .from('intake_session_actions')
+      .select('session_id, doctor_id')
+      .in('session_id', ids.slice(i, i + ACTION_LOOKUP_CHUNK));
+    if (error) {
+      throw new Error(`getIntakeQueueForPatients: failed to load doctor actions: ${error.message}`);
+    }
+    for (const row of data || []) {
+      if (!actionsBySession.has(row.session_id)) actionsBySession.set(row.session_id, new Set());
+      actionsBySession.get(row.session_id).add(row.doctor_id);
+    }
+  }
+
+  return sessions.filter((session) => {
+    const handledBy = actionsBySession.get(session.id);
+    if (handledBy?.has(doctorId)) return false;
+    // Old shared flag with nobody on record as having set it: keep it hidden.
+    if (session.doctor_action && !handledBy) return false;
+    return true;
   });
 }
 
@@ -176,35 +209,48 @@ export async function setIntakeSessionDoctorAction({ sessionId, doctorId, patien
     throw new Error(`setIntakeSessionDoctorAction: invalid action "${action}"`);
   }
 
-  const { data: updated, error: updateError } = await supabase
+  // The session must be one of this doctor's accepted patients', and not claimed by a different doctor
+  // (same scoping as the queue and the detail view): a doctor cannot Complete or Remove a session
+  // they could not see, even if they already knew its id.
+  const { data: session, error: lookupError } = await supabase
     .from('intake_sessions')
-    .update({ doctor_action: action })
+    .select('id, patient_id, doctor_id')
     .eq('id', sessionId)
     .in('patient_id', patientIds)
-    // Same doctorId-scoping as getIntakeQueueForPatients/
-    // getIntakeSessionForPatients above — a doctor cannot Complete/Remove a
-    // session claimed by a different doctor, even if they already knew its
-    // sessionId (e.g. from when it briefly leaked into their queue before
-    // this fix).
     .or(`doctor_id.is.null,doctor_id.eq.${doctorId}`)
-    .select('id, patient_id, doctor_action')
     .maybeSingle();
 
-  if (updateError && updateError.code !== 'PGRST116') {
-    throw new Error(`setIntakeSessionDoctorAction: failed to update session: ${updateError.message}`);
+  if (lookupError && lookupError.code !== 'PGRST116') {
+    throw new Error(`setIntakeSessionDoctorAction: failed to load session: ${lookupError.message}`);
   }
-  if (!updated) return null; // not found, or not one of this doctor's accepted-linked patients
+  if (!session) return null; // not found, or not one of this doctor's accepted-linked patients
 
+  // This doctor's own record of what they did. The queue and the History list are built from it,
+  // so it is what makes the action personal to this doctor.
   const { error: auditError } = await supabase.from('intake_session_actions').insert({
-    session_id: updated.id,
+    session_id: session.id,
     doctor_id: doctorId,
-    patient_id: updated.patient_id,
+    patient_id: session.patient_id,
     action,
   });
   if (auditError) {
     throw new Error(`setIntakeSessionDoctorAction: failed to write audit row: ${auditError.message}`);
   }
 
+  // The shared flag on the session row is only for a session that belongs to this doctor alone (one
+  // opened through their clinic code). A shared session is never flagged for everyone because one
+  // doctor dismissed it.
+  if (session.doctor_id === doctorId) {
+    const { error: flagError } = await supabase
+      .from('intake_sessions')
+      .update({ doctor_action: action })
+      .eq('id', session.id);
+    if (flagError) {
+      throw new Error(`setIntakeSessionDoctorAction: failed to update session: ${flagError.message}`);
+    }
+  }
+
+  const updated = { id: session.id, patient_id: session.patient_id, doctor_action: action };
   return updated;
 }
 
