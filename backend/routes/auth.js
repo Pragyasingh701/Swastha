@@ -12,6 +12,7 @@ import {
   findUserById,
   findUserByIdOrPatientCode,
   createOrUpdateUser,
+  generateUserId,
   updateUserPassword,
   deleteUserById,
 } from '../db/users.js';
@@ -526,7 +527,7 @@ async function completeGoogleAuth(res, { email, name, picture, sub }, { role } =
 
   if (!existingUser) {
     await createOrUpdateUser({
-      id: 'usr_g_' + (sub || Date.now()),
+      id: sub ? `usr_g_${sub}` : generateUserId('usr_g_'),
       email: normalizedEmail,
       name: name || normalizedEmail.split('@')[0],
       picture: picture || null,

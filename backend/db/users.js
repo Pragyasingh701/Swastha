@@ -1,7 +1,13 @@
+import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
 import supabase from '../config/supabase.js';
 
 const PASSWORD_HASH_ROUNDS = 12;
+
+// A new account id. Random, because an id built from the clock can repeat when
+// two people sign up in the same millisecond, and the second would then be
+// written over the first.
+export const generateUserId = (prefix = 'usr_') => `${prefix}${crypto.randomUUID().replace(/-/g, '')}`;
 
 // M4 cutover (Phase 3/4 of the DB reorg): `users` has been split into
 // `patients`, `doctors`, and `pending_registrations` (see db-reorg-plan.md).
@@ -165,7 +171,7 @@ export const createOrUpdateUser = async (userData) => {
   const normalizedEmail = userData.email.toLowerCase().trim();
 
   const existingUser = await findUserByEmail(normalizedEmail);
-  const userId = existingUser ? existingUser.id : (userData.id || 'usr_' + Date.now());
+  const userId = existingUser ? existingUser.id : (userData.id || generateUserId());
 
   // Role is immutable once assigned (existingUser.role is 'patient' or
   // 'doctor'). Only a pending_registrations user (role 'none'/undefined) or
@@ -387,9 +393,10 @@ export const createOrUpdateUser = async (userData) => {
           }
         }
       } else {
-        // Brand-new user.
+        // Brand-new user: a plain insert, so an id or email that already exists
+        // is an error instead of silently overwriting that account.
         const newPayload = { id: userId, email: normalizedEmail, ...cleanDbPayload };
-        const res = await supabase.from(targetTable).upsert(newPayload).select();
+        const res = await supabase.from(targetTable).insert(newPayload).select();
         data = res.data;
         error = res.error;
       }
