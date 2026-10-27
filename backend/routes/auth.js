@@ -451,7 +451,10 @@ const REGISTER_REPLY = 'Check your email to continue. If you already have an acc
  * Email & Password Registration -> Creates account, sends 6-digit OTP
  */
 router.post('/register', async (req, res) => {
-  const { fullName, email, password, phone, role = 'none', specialty, licenseNumber } = req.body;
+  // The account type is NOT taken from the request. A new account has no role; the person picks patient
+  // or doctor afterwards, and the doctor details (including the certificate) are checked then.
+  // Taking it from the body let anyone register straight as a doctor and skip all of that.
+  const { fullName, email, password, phone } = req.body;
   if (!fullName || !email || !password || !phone) {
     return res.status(400).json({ message: 'Full Name, Email, Phone Number, and Password are all required.' });
   }
@@ -493,9 +496,7 @@ router.post('/register', async (req, res) => {
     name: fullName || normalizedEmail.split('@')[0],
     email: normalizedEmail,
     password,
-    role,
-    specialty,
-    licenseNumber,
+    role: 'none',
     authProvider: 'email',
   });
 
@@ -529,7 +530,8 @@ async function completeGoogleAuth(res, { email, name, picture, sub }, { role } =
       email: normalizedEmail,
       name: name || normalizedEmail.split('@')[0],
       picture: picture || null,
-      role: role && role !== 'none' ? role : null,
+      // Never taken from the request (see /register): a new account has no role yet.
+      role: null,
       hasSelectedRole: false,
       authProvider: 'google',
     });
@@ -717,21 +719,27 @@ router.post('/profile', authenticateToken, async (req, res) => {
   }
 
   const targetEmail = userToUpdate.email;
-  const targetRole = role || profileDetails.role;
-  if (targetRole !== undefined && targetRole !== 'patient' && targetRole !== 'doctor') {
+  // The account's type comes from the DATABASE, not from the request. It used to come from the body
+  // (and the "this is only an update" flag too), so leaving them out or lying about them skipped
+  // every check below and let a pending account become a patient with any details.
+  const assignedRole = userToUpdate.role === 'patient' || userToUpdate.role === 'doctor' ? userToUpdate.role : null;
+  const requestedRole = role || profileDetails.role;
+  if (requestedRole !== undefined && requestedRole !== 'patient' && requestedRole !== 'doctor') {
     return res.status(400).json({ message: 'Role must be either patient or doctor.' });
   }
+  if (assignedRole && requestedRole && requestedRole !== assignedRole) {
+    return res.status(400).json({ message: 'The account type cannot be changed once it is set.' });
+  }
+  const targetRole = assignedRole || requestedRole;
+  if (!targetRole) {
+    return res.status(400).json({ message: 'Please choose whether this is a patient or a doctor account.' });
+  }
 
-  const isSettingsUpdate = Boolean(profileDetails.isSettingsUpdate || profileDetails.isUpdate);
-  // Role is now immutable once assigned (see backend/db/users.js —
-  // createOrUpdateUser forces role to stay put for any already-assigned
-  // user). So userToUpdate.role !== targetRole can only be true here when
-  // userToUpdate.role is 'none' — i.e. this is FIRST-TIME role selection
-  // out of pending_registrations, never a genuine switch. Kept the name
-  // isRoleSwitch (rather than renaming) to keep this diff minimal — the
-  // validation behaviour below (require full patient/doctor fields) is
-  // unchanged and still correct for that first-time-selection case.
-  const isRoleSwitch = Boolean(profileDetails.isRoleSwitch || (userToUpdate && userToUpdate.role !== targetRole));
+  // First-time setup (the account has no type yet) needs every detail; after that this is an edit of an
+  // existing profile, and whatever is sent is still checked.
+  const isFirstTimeSetup = !assignedRole;
+  const isSettingsUpdate = !isFirstTimeSetup;
+  const isRoleSwitch = isFirstTimeSetup;
 
   // Patient Mandatory Fields Validation (for registration OR first-time role selection to patient)
   if (targetRole === 'patient' && (!isSettingsUpdate || isRoleSwitch)) {
@@ -755,6 +763,22 @@ router.post('/profile', authenticateToken, async (req, res) => {
     }
   }
 
+  // An edit of an existing patient profile: no field is mandatory, but whatever is sent must be valid.
+  if (targetRole === 'patient' && isSettingsUpdate) {
+    const nameVal = profileDetails.fullName || profileDetails.name;
+    const phoneVal = profileDetails.phone || profileDetails.mobile;
+    const dobVal = profileDetails.dob || profileDetails.dateOfBirth || profileDetails.date_of_birth;
+    if (nameVal && !isValidFullName(nameVal)) {
+      return res.status(400).json({ message: 'Please enter a valid full name using letters only.' });
+    }
+    if (phoneVal && !isValidPhone(phoneVal)) {
+      return res.status(400).json({ message: 'Please enter a valid 10-digit mobile number.' });
+    }
+    if (dobVal && !isValidPastDate(dobVal)) {
+      return res.status(400).json({ message: 'Please enter a valid date of birth.' });
+    }
+  }
+
   // Doctor Mandatory Fields & Certificate Extraction Pipeline (for registration OR role switch to doctor)
   let extractedCertMeta = {};
   if (targetRole === 'doctor') {
@@ -766,6 +790,44 @@ router.post('/profile', authenticateToken, async (req, res) => {
     const specVal = specialization || specialty;
 
     const isNewCertProvided = Boolean(certUrl && certUrl !== userToUpdate?.reg_certificate_url);
+
+    // An edit that comes with no new certificate used to skip every check. Whatever is sent is still
+    // validated, and the registration itself (number or council) cannot be changed without
+    // uploading the certificate that backs the new one.
+    if (isSettingsUpdate && !isNewCertProvided) {
+      if (nameVal && !isValidFullName(nameVal)) {
+        return res.status(400).json({ message: 'Please enter a valid full name using letters only.' });
+      }
+      if (phoneVal && !isValidPhone(phoneVal)) {
+        return res.status(400).json({ message: 'Please enter a valid 10-digit mobile number.' });
+      }
+      if (dob && !isValidPastDate(dob, { minAge: 21, maxAge: 100 })) {
+        return res.status(400).json({ message: 'Please enter a valid date of birth (doctors must be at least 21 years old).' });
+      }
+      if (licVal && !isValidRegistrationNumber(licVal)) {
+        return res.status(400).json({ message: 'Please enter a valid Medical Registration Number (must include at least one digit).' });
+      }
+      if (degree && !isValidWordsField(degree)) {
+        return res.status(400).json({ message: 'Please enter a valid Primary Degree.' });
+      }
+      if (specVal && !isValidWordsField(specVal)) {
+        return res.status(400).json({ message: 'Please enter a valid Specialization.' });
+      }
+      if (hospitalName && !isValidFreeTextField(hospitalName, { minLength: 3, maxLength: 150 })) {
+        return res.status(400).json({ message: 'Please enter a valid Hospital or Clinic Name.' });
+      }
+      if (address && !isValidFreeTextField(address, { minLength: 8, maxLength: 300 })) {
+        return res.status(400).json({ message: 'Please enter a valid, complete practice address.' });
+      }
+      const registrationChanged =
+        (licVal && licVal !== userToUpdate.license_number) || (council && council !== userToUpdate.council);
+      if (registrationChanged) {
+        return res.status(400).json({
+          message: 'To change your registration number or council, upload the Medical Registration Certificate that backs it.',
+        });
+      }
+    }
+
     if (!isSettingsUpdate || isRoleSwitch || isNewCertProvided) {
       if (!nameVal || !phoneVal || !dob || !licVal || !council || !degree || !specVal || !hospitalName || !address || !certUrl) {
         return res.status(400).json({
