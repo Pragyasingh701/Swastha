@@ -2,7 +2,7 @@ import express from 'express';
 import supabase from '../config/supabase.js';
 import { resolveCheckinCode, getOrCreateTodayCode, codeValidUntil } from '../db/clinicCheckin.js';
 import { findUserById } from '../db/users.js';
-import { accessExpiryFromNow } from '../db/doctorPatients.js';
+import { accessExpiryFromNow, acceptedLinkFields } from '../db/doctorPatients.js';
 import { startIntakeSession } from '../rag/services/intakeService.js';
 import { synthesizeSpeech } from '../rag/services/ttsService.js';
 import { verifyAuthToken, signPurposeToken, verifyPurposeToken } from '../config/jwt.js';
@@ -315,7 +315,7 @@ router.get('/today-code', requireDoctorAuth, async (req, res) => {
  * data, while an otherwise-identical link created through the remote
  * request/accept flow correctly lapsed after 24h. The two flows now agree.
  */
-async function upsertAcceptedLink({ doctorId, patientId, patient: knownPatient = null }) {
+export async function upsertAcceptedLink({ doctorId, patientId, patient: knownPatient = null }) {
   if (!supabase) throw new Error('Database connection is unavailable.');
 
   // Deliberately NOT short-circuiting on an already-linked pair the way
@@ -339,14 +339,12 @@ async function upsertAcceptedLink({ doctorId, patientId, patient: knownPatient =
     // in-person OTP-verified check-in is a stronger, fresh consent signal
     // than a past remote decline, so it supersedes it here) by moving
     // straight to 'accepted', matching PRD §3.1's "upsert ... to accepted".
+    // acceptedLinkFields() is the same set of fields the patient accepting a request writes: the
+    // time-boxed window from now, and a clean slate (no decline history, cooldown, or "removed by
+    // the doctor" flag, which would otherwise keep the patient's check-in out of the doctor's queue).
     const { error } = await supabase
       .from('doctor_patient')
-      .update({
-        status: 'accepted',
-        responded_at: nowIso,
-        email_action_token: null,
-        access_expires_at: accessExpiryFromNow(),
-      })
+      .update(acceptedLinkFields())
       .eq('id', existingLink.id);
     if (error) throw new Error(`upsertAcceptedLink: failed to accept existing link: ${error.message}`);
     return;
