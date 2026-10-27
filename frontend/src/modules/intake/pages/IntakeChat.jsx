@@ -356,6 +356,9 @@ export default function IntakeChat() {
   // threshold a patient would otherwise worry about.
   const [sendingLongWait, setSendingLongWait] = useState(false);
   const [done, setDone] = useState(false);
+  // All questions were answered but the final "finish" step failed: show a Finish button.
+  const [finalizeFailed, setFinalizeFailed] = useState(false);
+  const [finishing, setFinishing] = useState(false);
   const [error, setError] = useState(null);
   // Set once a turn's red_flag_is_new comes back true (backend: intakeService.js's
   // sticky red_flag, surfaced as a one-time signal) — shown as a persistent
@@ -449,6 +452,8 @@ export default function IntakeChat() {
           if (res.language) setLanguage(res.language);
           if (res.red_flag) setPriorityAlert(true);
           setResumed(true);
+          // Resumed at the very end: the answers are in but it was never finished.
+          if (res.section === "finalize") setFinalizeFailed(true);
           setStarting(false);
           return; // resumed — skip the fresh /start below entirely
         } catch {
@@ -874,6 +879,8 @@ export default function IntakeChat() {
     if (!trimmed || sending || !sessionId || done) return;
 
     setError(null);
+    // Kept so a failed turn can put things back exactly as they were and the same answer can be sent again.
+    const answerBeforeSend = { quickReplies, selectedOptions };
     // Cut the current question's audio the instant the patient answers,
     // rather than waiting for the reply to arrive — otherwise the old
     // question keeps talking over them for the whole LLM round-trip.
@@ -905,12 +912,7 @@ export default function IntakeChat() {
       // The backend's own state machine reaching "finalize" with no more
       // questions is the signal to close out — not a guess on our side.
       if (res.section === "finalize") {
-        await finalizeIntake(sessionId);
-        setDone(true);
-        // Nothing left to resume into once finalized — clear it so a later
-        // "Start Visit Intake" click begins a genuinely new session instead
-        // of trying (and failing) to resume this now-completed one.
-        writeStoredSessionId(null);
+        await finishIntake();
       }
       // Priority Alert: shown once, the turn red_flag first flips true —
       // still also affects the doctor's queue sort/badge (unchanged).
@@ -918,15 +920,48 @@ export default function IntakeChat() {
         setPriorityAlert(true);
       }
     } catch (err) {
+      // The turn was not saved (the server only saves a turn it could answer), so take the
+      // patient's bubble back out and give them their answer back to send again.
+      setMessages((prev) => {
+        const withoutAnswer = prev.length > 0 && prev[prev.length - 1].role === "patient" ? prev.slice(0, -1) : prev;
+        return [
+          ...withoutAnswer,
+          {
+            role: "assistant",
+            text: err.message || "Sorry, that didn't go through. Please send your answer again.",
+            isError: true,
+          },
+        ];
+      });
       setError(err.message || "Something went wrong. Please try again.");
-      setMessages((prev) => [
-        ...prev,
-        { role: "assistant", text: "Sorry, that didn't go through. Please try again.", isError: true },
-      ]);
+      setInput(trimmed);
+      setQuickReplies(answerBeforeSend.quickReplies);
+      setSelectedOptions(answerBeforeSend.selectedOptions);
     } finally {
       clearTimeout(longWaitTimer);
       setSending(false);
       setSendingLongWait(false);
+    }
+  }
+
+  // Closes the intake once the last answer is in. If this one step fails the answers are
+  // already saved, so say so and offer a Finish button rather than leaving the patient stuck at
+  // the end with no way forward.
+  async function finishIntake() {
+    setFinishing(true);
+    try {
+      await finalizeIntake(sessionId);
+      setFinalizeFailed(false);
+      setDone(true);
+      // Nothing left to resume into once finalized — clear it so a later
+      // "Start Visit Intake" click begins a genuinely new session instead
+      // of trying (and failing) to resume this now-completed one.
+      writeStoredSessionId(null);
+    } catch (err) {
+      console.error("Failed to finish the intake:", err);
+      setFinalizeFailed(true);
+    } finally {
+      setFinishing(false);
     }
   }
 
@@ -1301,7 +1336,22 @@ export default function IntakeChat() {
                 </div>
               )}
 
-              {!done && (
+              {!done && finalizeFailed && (
+                <div role="alert" className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-4 text-sm text-amber-800">
+                  <p className="font-semibold">Your answers are saved.</p>
+                  <p className="mt-1">We couldn't finish sending them to the doctor just now. Tap Finish to try again.</p>
+                  <button
+                    type="button"
+                    onClick={finishIntake}
+                    disabled={finishing}
+                    className="mt-3 inline-flex items-center gap-2 rounded-xl bg-amber-600 px-4 py-2 font-semibold text-white hover:bg-amber-700 disabled:opacity-60"
+                  >
+                    {finishing ? "Finishing..." : "Finish"}
+                  </button>
+                </div>
+              )}
+
+              {!done && !finalizeFailed && (
                 <>
                   {quickReplies.options.length > 0 && (
                     <div className="mb-3">

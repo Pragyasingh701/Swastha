@@ -2432,6 +2432,15 @@ export async function advanceIntakeSession({ sessionId, patientId, patientMessag
     language: session.language || 'hi-IN',
   });
 
+  // The AI could not answer (every provider failed). The "next question" is only a
+  // "please try again" apology, so neither it nor the patient's message is saved: saved, the apology
+  // became the "last question" the next turn was answering, and the real question was lost. The
+  // session stays exactly as it was and the caller reports the failure, so the same answer can be
+  // sent again.
+  if (turn.degraded) {
+    return { session, turn };
+  }
+
   const nowIso = new Date().toISOString();
   const updatedTurns = [
     ...(Array.isArray(session.turns) ? session.turns : []),
