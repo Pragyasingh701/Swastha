@@ -37,6 +37,18 @@ const router = express.Router();
 const RAG_BASE_URL = process.env.RAG_BASE_URL || `http://localhost:${process.env.PORT || 5001}/rag/api`;
 
 
+// The name of the doctor asking, for the request email. (It used to be given the PATIENT's own
+// name, so the email said "Dr. <you> has requested access" and the patient could not tell who
+// was asking.)
+async function doctorDisplayName(doctorId) {
+  try {
+    const doctor = await findUserById(doctorId);
+    return doctor?.name || doctor?.fullName || null;
+  } catch {
+    return null; // the email still goes out, saying "A doctor"
+  }
+}
+
 // Doctor-only routes. Every one of these used to check only that SOME logged-in
 // user was calling (a patient could use /link, the intake queue, ...). The role
 // is read from the database, not the token's `role` claim: the token isn't
@@ -47,7 +59,13 @@ async function requireDoctor(req, res, next) {
   if (!authUser?.userId) {
     return res.status(401).json({ message: 'Authentication required.' });
   }
-  const user = await findUserById(authUser.userId);
+  let user;
+  try {
+    user = await findUserById(authUser.userId);
+  } catch {
+    // A failed lookup is not "you are not a doctor".
+    return res.status(500).json({ message: 'Could not verify your account. Please try again.' });
+  }
   if (!user || user.role !== 'doctor') {
     return res.status(403).json({ message: 'This action is only available to doctor accounts.' });
   }
@@ -60,7 +78,12 @@ async function requirePatient(req, res, next) {
   if (!authUser?.userId) {
     return res.status(401).json({ message: 'Authentication required.' });
   }
-  const user = await findUserById(authUser.userId);
+  let user;
+  try {
+    user = await findUserById(authUser.userId);
+  } catch {
+    return res.status(500).json({ message: 'Could not verify your account. Please try again.' });
+  }
   if (!user || user.role !== 'patient') {
     return res.status(403).json({ message: 'This action is only available to patient accounts.' });
   }
@@ -605,7 +628,7 @@ router.post('/link', requireDoctor, async (req, res) => {
         const backendUrl = process.env.BACKEND_URL || 'http://localhost:5001';
         const acceptUrl = `${backendUrl}/api/doctor-patients/email-action/accept?token=${result.link.email_action_token}`;
         const declineUrl = `${backendUrl}/api/doctor-patients/email-action/decline?token=${result.link.email_action_token}`;
-        await sendDoctorRequestEmail(result.link.patient_email, result.link.patient_name, acceptUrl, declineUrl);
+        await sendDoctorRequestEmail(result.link.patient_email, await doctorDisplayName(authUser.userId), acceptUrl, declineUrl);
       } catch (emailError) {
         // Best-effort — the request itself already succeeded and is
         // visible in the notification bell regardless of email delivery.
@@ -795,7 +818,7 @@ router.post('/:patientId/re-request', requireDoctor, async (req, res) => {
         const backendUrl = process.env.BACKEND_URL || 'http://localhost:5001';
         const acceptUrl = `${backendUrl}/api/doctor-patients/email-action/accept?token=${result.link.email_action_token}`;
         const declineUrl = `${backendUrl}/api/doctor-patients/email-action/decline?token=${result.link.email_action_token}`;
-        await sendDoctorRequestEmail(result.link.patient_email, result.link.patient_name, acceptUrl, declineUrl);
+        await sendDoctorRequestEmail(result.link.patient_email, await doctorDisplayName(authUser.userId), acceptUrl, declineUrl);
       } catch (emailError) {
         console.warn('Doctor re-request email warning:', emailError?.message || emailError);
       }

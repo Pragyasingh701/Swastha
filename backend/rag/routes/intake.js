@@ -232,6 +232,13 @@ router.post('/turn', requireAuth, async (req, res) => {
     // someone else's session by guessing a session_id.
     const { session, turn } = await advanceIntakeSession({ sessionId, patientId, patientMessage: message });
 
+    // The AI is unavailable right now. Nothing was saved (see advanceIntakeSession), so tell the
+    // app plainly and let the patient send the same answer again, instead of answering 200 with an
+    // apology that looks like the next question.
+    if (turn.degraded) {
+      return res.status(503).json({ error: turn.next_question, degraded: true });
+    }
+
     // Read back from the session row, not the request — the language is
     // fixed at /start and a client cannot switch voices mid-session.
     const language = normalizeLanguage(session.language || DEFAULT_LANGUAGE);

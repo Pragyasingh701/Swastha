@@ -322,8 +322,11 @@ export const getDoctorPatients = async (doctorId) => {
 
     return patientRecords.filter(Boolean);
   } catch (error) {
-    console.warn('Doctor patient fetch warning:', error?.message || error);
-    return [];
+    // Rethrown, not answered with an empty list: the queue, session details, Complete/Remove
+    // and the patient screens are all built on this, so a database hiccup used to look like
+    // "this doctor has no patients" and flagged patients vanished from the queue.
+    console.error('Doctor patient fetch failed:', error?.message || error);
+    throw error;
   }
 };
 
@@ -794,6 +797,24 @@ export const getDoctorNotifications = async (doctorId) => {
   }
 };
 
+// Everything an accepted link must say, in one place, for BOTH ways a link becomes accepted (the
+// patient accepting a request, and a walk-in checking in at the clinic). Accepting wipes the slate:
+// access runs for the time-boxed window from now (never permanent), and any earlier decline
+// history, cooldown, or the doctor having removed the card is cleared. The check-in path used to set
+// only some of these, so a patient who checked in after the doctor had removed their declined card
+// became accepted but stayed hidden, and their intake never reached the doctor's queue.
+export function acceptedLinkFields() {
+  return {
+    status: 'accepted',
+    responded_at: new Date().toISOString(),
+    email_action_token: null,
+    access_expires_at: accessExpiryFromNow(),
+    decline_count: 0,
+    cooldown_until: null,
+    hidden_by_doctor: false,
+  };
+}
+
 // Shared core for resolving a pending request, regardless of which channel
 // (in-app bell or the email Accept/Decline link) triggered it. Both
 // channels ultimately race to flip the SAME row's status from 'pending' to
@@ -808,13 +829,7 @@ async function resolveDoctorLinkRequest({ link, newStatus, resolvedByRole, resol
   }
   const updatePayload = { status: newStatus, responded_at: new Date().toISOString(), email_action_token: null };
   if (newStatus === 'accepted') {
-    // Access is time-boxed from the moment of acceptance, not permanent —
-    // see the ACCESS EXPIRY note above this file's status-column comment.
-    updatePayload.access_expires_at = accessExpiryFromNow();
-    // Accepting wipes the slate: no decline history, no cooldown.
-    updatePayload.decline_count = 0;
-    updatePayload.cooldown_until = null;
-    updatePayload.hidden_by_doctor = false;
+    Object.assign(updatePayload, acceptedLinkFields());
   } else if (newStatus === 'declined') {
     // Count it. Every second decline starts a cooldown (declineRetryState).
     const declines = Math.max(Number(link.decline_count) || 0, 0) + 1;

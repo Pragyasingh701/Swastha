@@ -2,6 +2,7 @@ import crypto from 'crypto';
 import supabase from '../config/supabase.js';
 import { findUserById } from './users.js';
 import { ageFromDob } from '../utils/age.js';
+import { removeEmailTags } from '../utils/emailFormat.js';
 
 const FAMILY_VAULT_TABLE = 'vault_table';
 const FAMILY_MEMBERS_TABLE = 'family_members';
@@ -31,13 +32,11 @@ export function getMemberEmail(member = {}) {
   return String(emailMatch?.[1] || '').trim().toLowerCase();
 }
 
-const EMAIL_TAG_PATTERN = /\[Email:\s*[^\]]*\]/gi;
-
 // The `[Email: ...]` tag inside notes is what links a member record to a real
 // account, so it must only ever be written by the server (see
 // isPatientLinkedToFamilyMember) — never taken from what a client typed.
 export function stripEmailTags(notes) {
-  return String(notes || '').replace(EMAIL_TAG_PATTERN, '').replace(/\n{3,}/g, '\n\n').trim();
+  return removeEmailTags(notes).replace(/\n{3,}/g, '\n\n').trim();
 }
 
 export function withEmailTag(notes, email) {
@@ -214,8 +213,10 @@ export const getFamilyVaultForUser = async (userId) => {
 
     return normalizeVault(data || null);
   } catch (err) {
-    console.warn('Supabase family vault lookup warning:', err.message);
-    return null;
+    // Not swallowed: "no vault" and "the database failed" must not look the same (a blip used to
+    // show as "you have no vault" and POST /vault would then try to create one).
+    console.error('Supabase family vault lookup failed:', err.message);
+    throw err;
   }
 };
 
@@ -358,7 +359,11 @@ export const createFamilyMember = async ({ userId, ...memberData }) => {
   }
 };
 
-export const createPendingFamilyMemberAuthorizationRequest = async ({ userId, ...memberData }) => {
+// `linkedPatientId` is the id of the account the invite is mailed to. It is
+// written only here, by the server: it is what later makes the access follow the
+// account (see isPatientLinkedToFamilyMember), and it is never taken from a
+// client-supplied field.
+export const createPendingFamilyMemberAuthorizationRequest = async ({ userId, linkedPatientId = null, ...memberData }) => {
   if (!supabase) throw new Error('Supabase client is not configured');
   if (!userId) throw new Error('userId is required');
 
@@ -380,6 +385,7 @@ export const createPendingFamilyMemberAuthorizationRequest = async ({ userId, ..
     authorizationRequestedAt: new Date().toISOString(),
     requestedByEmail: memberData.requestedByEmail || memberData.requested_by_email || null,
   });
+  payload.linked_patient_id = linkedPatientId || null;
 
   try {
     const { data, error } = await supabase
@@ -616,25 +622,27 @@ export const getFamilyVaultSummary = async ({ userId } = {}) => {
 
 /**
  * True if `patientId` (a family admin) may access `targetUserId`'s health
- * data via the family vault — i.e. `targetUserId` has its OWN separate
- * account whose email matches an APPROVED family_members row under
- * `patientId`'s vault. Mirrors isDoctorLinkedToPatient's role as "the single
- * shared source of truth every route/service calls" (see
- * backend/db/doctorPatients.js) so this logic lives in exactly one place
- * rather than being re-derived per route.
+ * data via the family vault: `targetUserId` approved an invite sent from
+ * `patientId`'s vault, and has not revoked it since. Mirrors
+ * isDoctorLinkedToPatient's role as "the single shared source of truth every
+ * route/service calls" (see backend/db/doctorPatients.js) so this logic lives
+ * in exactly one place rather than being re-derived per route.
  *
- * SECURITY: relies on listFamilyMembers' default (includeDeleted: false)
- * call, which already filters out `authorizationStatus === 'pending'`
- * members (see isPendingAuthorizationMember) before this function ever sees
- * them — a member who hasn't yet accepted the family-admin's invite must
- * never grant access just because an email happens to match. Do not pass
- * includeDeleted: true into a lookup feeding this function.
+ * The link is the member's account id (family_members.linked_patient_id), set
+ * by the server when the invite is created. It is not an email address: the
+ * access neither follows an email string to whoever owns it later, nor
+ * survives the member revoking it (revokeFamilyAdminAccess clears the id) or
+ * deleting their account (the foreign key sets it to null).
  *
- * Same-user is NOT handled here (unlike isDoctorLinkedToPatient, which
- * short-circuits true for doctorId === patientUserId in some callers) — a
- * caller checking "is this my own id" should do that check itself before
- * calling this function, since "am I my own family member" isn't a
- * meaningful question for this table.
+ * SECURITY: only a member whose link went through the invite-by-email flow
+ * counts: that flow stamps both authorization_requested_at (invite created,
+ * token mailed to the target's own address) and authorization_approved_at
+ * (the target clicked it). A member created or edited directly never has the
+ * id or both stamps, so nobody can grant themselves access to an account by
+ * typing its email into a member record. A pending invite never counts.
+ *
+ * Same-user is NOT handled here: a caller checking "is this my own id" should
+ * do that check itself before calling this function.
  *
  * @param {string} patientId - the authenticated family admin's own id
  * @param {string} targetUserId - the account whose data access is being requested
@@ -643,21 +651,69 @@ export const getFamilyVaultSummary = async ({ userId } = {}) => {
 export const isPatientLinkedToFamilyMember = async (patientId, targetUserId) => {
   if (!patientId || !targetUserId || !supabase) return false;
 
-  const targetUser = await findUserById(targetUserId);
-  if (!targetUser?.email) return false;
+  const { data, error } = await supabase
+    .from(FAMILY_MEMBERS_TABLE)
+    .select('id')
+    .eq(FAMILY_USER_ID_COLUMN, patientId)
+    .eq('linked_patient_id', targetUserId)
+    .eq('authorization_status', 'approved')
+    .not('authorization_requested_at', 'is', null)
+    .not('authorization_approved_at', 'is', null)
+    .is('deleted_at', null)
+    .limit(1);
 
-  const targetEmail = String(targetUser.email).trim().toLowerCase();
-  const members = await listFamilyMembers({ userId: patientId });
-  // Only a member whose link went through the invite-by-email flow counts:
-  // that flow stamps both authorization_requested_at (invite created, token
-  // mailed to the target's own address) and authorization_approved_at (the
-  // target clicked it). A member created or edited directly never has both,
-  // so nobody can grant themselves access to an account by typing its email
-  // into a member record.
-  return members.some((member) =>
-    member.authorizationStatus === 'approved'
-    && Boolean(member.authorizationRequestedAt)
-    && Boolean(member.authorizationApprovedAt)
-    && getMemberEmail(member) === targetEmail
-  );
+  if (error) throw error;
+  return (data || []).length > 0;
+};
+
+// The family admins who currently have access to `patientId`'s records, so the
+// patient can see who they are. Only what is needed to recognise them.
+export const listFamilyAdminsWithAccessTo = async (patientId) => {
+  if (!supabase) throw new Error('Supabase client is not configured');
+  if (!patientId) throw new Error('patientId is required');
+
+  const { data, error } = await supabase
+    .from(FAMILY_MEMBERS_TABLE)
+    .select('id, patient_id, relationship, authorization_approved_at')
+    .eq('linked_patient_id', patientId)
+    .eq('authorization_status', 'approved')
+    .not('authorization_approved_at', 'is', null)
+    .is('deleted_at', null)
+    .order('authorization_approved_at', { ascending: false });
+
+  if (error) throw error;
+
+  return Promise.all((data || []).map(async (row) => {
+    const admin = await findUserById(row.patient_id);
+    return {
+      id: row.id,
+      adminName: admin?.name || null,
+      adminEmail: admin?.email || null,
+      relationship: row.relationship || null,
+      approvedAt: row.authorization_approved_at,
+    };
+  }));
+};
+
+// Ends a family admin's access to `patientId`'s records. Scoped to the caller's
+// own id, so nobody can revoke access to someone else's account. Returns false
+// when there was nothing to revoke. The admin keeps their own record of the
+// member, only the access is gone.
+export const revokeFamilyAdminAccess = async (memberRowId, patientId) => {
+  if (!supabase) throw new Error('Supabase client is not configured');
+  if (!memberRowId || !patientId) throw new Error('memberRowId and patientId are required');
+
+  const { data, error } = await supabase
+    .from(FAMILY_MEMBERS_TABLE)
+    .update({
+      linked_patient_id: null,
+      authorization_approved_at: null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', memberRowId)
+    .eq('linked_patient_id', patientId)
+    .select('id');
+
+  if (error) throw error;
+  return (data || []).length > 0;
 };

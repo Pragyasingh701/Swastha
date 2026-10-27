@@ -49,6 +49,16 @@ export async function deleteFamilyMember(memberId, token) {
   }, token);
 }
 
+export async function getFamilyAdminsWithAccess(token) {
+  return request('/access', {}, token);
+}
+
+export async function revokeFamilyAdminAccess(accessId, token) {
+  return request(`/access/${encodeURIComponent(accessId)}`, {
+    method: 'DELETE',
+  }, token);
+}
+
 export default {
   getFamilyDashboard,
   getFamilyVault,

@@ -53,6 +53,7 @@ test('isPatientLinkedToFamilyMember returns false for a PENDING (not yet accepte
     // createFamilyMember does; member.id, not createdMember.id directly.
     const { member: createdMember } = await createPendingFamilyMemberAuthorizationRequest({
       userId: admin.id,
+      linkedPatientId: invitee.id,
       name: invitee.name,
       notes: `[Email: ${invitee.email}]`,
       relationship: 'Sibling',

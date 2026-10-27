@@ -1,7 +1,13 @@
+import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
 import supabase from '../config/supabase.js';
 
 const PASSWORD_HASH_ROUNDS = 12;
+
+// A new account id. Random, because an id built from the clock can repeat when
+// two people sign up in the same millisecond, and the second would then be
+// written over the first.
+export const generateUserId = (prefix = 'usr_') => `${prefix}${crypto.randomUUID().replace(/-/g, '')}`;
 
 // M4 cutover (Phase 3/4 of the DB reorg): `users` has been split into
 // `patients`, `doctors`, and `pending_registrations` (see db-reorg-plan.md).
@@ -79,21 +85,23 @@ export const findUserByEmail = async (email) => {
   if (!email || !supabase) return null;
   const normalizedEmail = email.toLowerCase().trim();
 
-  try {
-    const { data: patient, error: pErr } = await supabase
-      .from('patients').select('*').eq('email', normalizedEmail).maybeSingle();
-    if (!pErr && patient) return { ...patient, role: 'patient' };
+  // A failed lookup is thrown, not answered with "no such user": treating a database hiccup as
+  // "this account does not exist" signed real users out (403/401) and, at registration, could
+  // let a second account be created for an address that already has one.
+  const { data: patient, error: pErr } = await supabase
+    .from('patients').select('*').eq('email', normalizedEmail).maybeSingle();
+  if (pErr) throw pErr;
+  if (patient) return { ...patient, role: 'patient' };
 
-    const { data: doctor, error: dErr } = await supabase
-      .from('doctors').select('*').eq('email', normalizedEmail).maybeSingle();
-    if (!dErr && doctor) return { ...doctor, role: 'doctor' };
+  const { data: doctor, error: dErr } = await supabase
+    .from('doctors').select('*').eq('email', normalizedEmail).maybeSingle();
+  if (dErr) throw dErr;
+  if (doctor) return { ...doctor, role: 'doctor' };
 
-    const { data: pending, error: prErr } = await supabase
-      .from('pending_registrations').select('*').eq('email', normalizedEmail).maybeSingle();
-    if (!prErr && pending) return { ...pending, role: 'none' };
-  } catch (err) {
-    console.warn('Supabase query notice:', err.message);
-  }
+  const { data: pending, error: prErr } = await supabase
+    .from('pending_registrations').select('*').eq('email', normalizedEmail).maybeSingle();
+  if (prErr) throw prErr;
+  if (pending) return { ...pending, role: 'none' };
 
   return null;
 };
@@ -105,21 +113,21 @@ export const findUserByEmail = async (email) => {
 export const findUserById = async (id) => {
   if (!id || !supabase) return null;
 
-  try {
-    const { data: patient, error: pErr } = await supabase
-      .from('patients').select('*').eq('id', id).maybeSingle();
-    if (!pErr && patient) return { ...patient, role: 'patient' };
+  // Thrown on a failed lookup, not answered with "no such user" (see findUserByEmail).
+  const { data: patient, error: pErr } = await supabase
+    .from('patients').select('*').eq('id', id).maybeSingle();
+  if (pErr) throw pErr;
+  if (patient) return { ...patient, role: 'patient' };
 
-    const { data: doctor, error: dErr } = await supabase
-      .from('doctors').select('*').eq('id', id).maybeSingle();
-    if (!dErr && doctor) return { ...doctor, role: 'doctor' };
+  const { data: doctor, error: dErr } = await supabase
+    .from('doctors').select('*').eq('id', id).maybeSingle();
+  if (dErr) throw dErr;
+  if (doctor) return { ...doctor, role: 'doctor' };
 
-    const { data: pending, error: prErr } = await supabase
-      .from('pending_registrations').select('*').eq('id', id).maybeSingle();
-    if (!prErr && pending) return { ...pending, role: 'none' };
-  } catch (err) {
-    console.warn('Supabase findUserById notice:', err.message);
-  }
+  const { data: pending, error: prErr } = await supabase
+    .from('pending_registrations').select('*').eq('id', id).maybeSingle();
+  if (prErr) throw prErr;
+  if (pending) return { ...pending, role: 'none' };
 
   return null;
 };
@@ -138,13 +146,10 @@ export const findUserByIdOrPatientCode = async (idOrCode) => {
   const byId = await findUserById(normalized);
   if (byId) return byId;
 
-  try {
-    const { data, error } = await supabase
-      .from('patients').select('*').eq('patient_code', normalized).maybeSingle();
-    if (!error && data) return { ...data, role: 'patient' };
-  } catch (err) {
-    console.warn('Supabase findUserByIdOrPatientCode notice:', err.message);
-  }
+  const { data, error } = await supabase
+    .from('patients').select('*').eq('patient_code', normalized).maybeSingle();
+  if (error) throw error;
+  if (data) return { ...data, role: 'patient' };
 
   return null;
 };
@@ -166,7 +171,7 @@ export const createOrUpdateUser = async (userData) => {
   const normalizedEmail = userData.email.toLowerCase().trim();
 
   const existingUser = await findUserByEmail(normalizedEmail);
-  const userId = existingUser ? existingUser.id : (userData.id || 'usr_' + Date.now());
+  const userId = existingUser ? existingUser.id : (userData.id || generateUserId());
 
   // Role is immutable once assigned (existingUser.role is 'patient' or
   // 'doctor'). Only a pending_registrations user (role 'none'/undefined) or
@@ -388,9 +393,10 @@ export const createOrUpdateUser = async (userData) => {
           }
         }
       } else {
-        // Brand-new user.
+        // Brand-new user: a plain insert, so an id or email that already exists
+        // is an error instead of silently overwriting that account.
         const newPayload = { id: userId, email: normalizedEmail, ...cleanDbPayload };
-        const res = await supabase.from(targetTable).upsert(newPayload).select();
+        const res = await supabase.from(targetTable).insert(newPayload).select();
         data = res.data;
         error = res.error;
       }

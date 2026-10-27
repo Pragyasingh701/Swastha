@@ -13,7 +13,7 @@
 -- is made to the database, the migration script that applies it to the live
 -- database is stored in supabase/migrations_archive/, and the same change is folded
 -- into this baseline in the same commit, so this file always describes the current
--- schema. Last folded in: 20261023100000_drop_notifications_table.sql.
+-- schema. Last folded in: 20261027100000_family_access_link_by_id.sql.
 --
 -- Part 1 is a schema-only dump (`supabase db dump`): tables, indexes, constraints,
 -- functions, row level security and grants, no data. Part 2 adds what a dump of
@@ -277,7 +277,8 @@ CREATE TABLE IF NOT EXISTS "public"."family_members" (
     "dob" "date",
     "conditions" "jsonb" DEFAULT '[]'::"jsonb",
     "parent_member_id" "text",
-    "consent_given_at" timestamp with time zone
+    "consent_given_at" timestamp with time zone,
+    "linked_patient_id" character varying
 );
 
 ALTER TABLE "public"."family_members" OWNER TO "postgres";
@@ -518,6 +519,8 @@ CREATE INDEX "doctor_patient_status_idx" ON "public"."doctor_patient" USING "btr
 
 CREATE INDEX "family_members_patient_id_idx" ON "public"."family_members" USING "btree" ("patient_id");
 
+CREATE INDEX "family_members_linked_patient_id_idx" ON "public"."family_members" USING "btree" ("linked_patient_id") WHERE ("linked_patient_id" IS NOT NULL);
+
 CREATE INDEX "idx_family_members_parent_member_id" ON "public"."family_members" USING "btree" ("parent_member_id");
 
 CREATE INDEX "idx_intake_session_actions_doctor" ON "public"."intake_session_actions" USING "btree" ("doctor_id", "acted_at");
@@ -544,6 +547,9 @@ ALTER TABLE ONLY "public"."doctor_patient"
 
 ALTER TABLE ONLY "public"."doctor_patient"
     ADD CONSTRAINT "doctor_patient_patient_fk" FOREIGN KEY ("patient_id") REFERENCES "public"."patients"("id") ON DELETE CASCADE;
+
+ALTER TABLE ONLY "public"."family_members"
+    ADD CONSTRAINT "family_members_linked_patient_fk" FOREIGN KEY ("linked_patient_id") REFERENCES "public"."patients"("id") ON DELETE SET NULL;
 
 ALTER TABLE ONLY "public"."family_members"
     ADD CONSTRAINT "family_members_patient_fk" FOREIGN KEY ("patient_id") REFERENCES "public"."patients"("id") ON DELETE CASCADE;

@@ -89,15 +89,23 @@ export default function DoctorAskSwastha() {
   const [noticeAcknowledged, setNoticeAcknowledged] = useState(null);
   const [acknowledging, setAcknowledging] = useState(false);
 
+  // Set when the patient list could not be loaded: shown as an error with a retry, never as "no patients".
+  const [patientsError, setPatientsError] = useState(null);
+  const [patientsReload, setPatientsReload] = useState(0);
+
   useEffect(() => {
     let cancelled = false;
     (async () => {
       setIsFetchingPatients(true);
+      setPatientsError(null);
       try {
         const linkedPatients = await getDoctorPatients();
         if (!cancelled) setPatients(linkedPatients);
-      } catch {
-        if (!cancelled) setPatients([]);
+      } catch (err) {
+        if (!cancelled) {
+          setPatients([]);
+          setPatientsError(err?.message || "Could not load your patients.");
+        }
       } finally {
         if (!cancelled) setIsFetchingPatients(false);
       }
@@ -105,7 +113,7 @@ export default function DoctorAskSwastha() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [patientsReload]);
 
   useEffect(() => {
     let cancelled = false;
@@ -402,7 +410,18 @@ export default function DoctorAskSwastha() {
                     <div className="max-h-64 overflow-y-auto">
                       {filteredPatients.length === 0 ? (
                         <p className="px-4 py-3 text-sm text-slate-400">
-                          {patients.length === 0
+                          {patientsError ? (
+                            <>
+                              Couldn't load your patients.{" "}
+                              <button
+                                type="button"
+                                onClick={() => setPatientsReload((n) => n + 1)}
+                                className="font-semibold text-blue-600 underline"
+                              >
+                                Try again
+                              </button>
+                            </>
+                          ) : patients.length === 0
                             ? "No linked patients yet — add one from the Patients page."
                             : "No patients match your search."}
                         </p>
