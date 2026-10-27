@@ -20,16 +20,14 @@ import { getAuthUser } from '../config/jwt.js';
 import { renderMessagePage, renderConfirmPage } from '../utils/emailActionPage.js';
 import { ageFromDob } from '../utils/age.js';
 import { isFutureDate } from '../utils/dates.js';
+import { isValidEmailFormat } from '../utils/emailFormat.js';
 
 const router = express.Router();
 
 const NAME_REGEX = /^[a-zA-Z\s.'-]{1,80}$/;
 
 function isValidEmail(email) {
-  if (!email || typeof email !== 'string') return false;
-  const normalizedEmail = email.trim();
-  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  return emailRegex.test(normalizedEmail) && normalizedEmail.length <= 254;
+  return isValidEmailFormat(email);
 }
 
 function isValidName(value) {

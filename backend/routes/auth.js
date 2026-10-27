@@ -26,6 +26,7 @@ import { checkNoticeAck } from '../db/aiNoticeAcknowledgements.js';
 import { verifyAuthToken, signAuthToken, sessionTokenTtl, rememberMeTokenTtl } from '../config/jwt.js';
 import { wholeYears } from '../utils/age.js';
 import { isFutureDate } from '../utils/dates.js';
+import { isValidEmailFormat } from '../utils/emailFormat.js';
 
 const router = express.Router();
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || '771272691038-s9h707grr3b4ojkgp48aa5vb9tej2sjh.apps.googleusercontent.com';
@@ -383,9 +384,7 @@ router.post('/login', async (req, res) => {
 
 // Validation helpers for email & phone correctness
 function isValidEmail(email) {
-  if (!email || typeof email !== 'string') return false;
-  const regex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
-  return regex.test(email.trim());
+  return isValidEmailFormat(email);
 }
 
 function isValidPhone(phone) {

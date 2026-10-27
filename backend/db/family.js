@@ -2,6 +2,7 @@ import crypto from 'crypto';
 import supabase from '../config/supabase.js';
 import { findUserById } from './users.js';
 import { ageFromDob } from '../utils/age.js';
+import { removeEmailTags } from '../utils/emailFormat.js';
 
 const FAMILY_VAULT_TABLE = 'vault_table';
 const FAMILY_MEMBERS_TABLE = 'family_members';
@@ -31,13 +32,11 @@ export function getMemberEmail(member = {}) {
   return String(emailMatch?.[1] || '').trim().toLowerCase();
 }
 
-const EMAIL_TAG_PATTERN = /\[Email:\s*[^\]]*\]/gi;
-
 // The `[Email: ...]` tag inside notes is what links a member record to a real
 // account, so it must only ever be written by the server (see
 // isPatientLinkedToFamilyMember) — never taken from what a client typed.
 export function stripEmailTags(notes) {
-  return String(notes || '').replace(EMAIL_TAG_PATTERN, '').replace(/\n{3,}/g, '\n\n').trim();
+  return removeEmailTags(notes).replace(/\n{3,}/g, '\n\n').trim();
 }
 
 export function withEmailTag(notes, email) {
