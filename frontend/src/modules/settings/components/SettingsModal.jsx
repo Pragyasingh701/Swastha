@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../../../context/AuthContext';
 import { authService } from '../../../api/auth';
+import FamilyAccessSection from './FamilyAccessSection';
 import {
   sanitizePhoneInput,
   isValidIndianPhone,
@@ -446,6 +447,8 @@ export default function SettingsModal({ isOpen, onClose }) {
               )}
             </div>
           </div>
+
+          {formData.role === 'patient' && <FamilyAccessSection token={token} />}
 
           {/* 3. Doctor Mandatory Registration Credentials */}
           {formData.role === 'doctor' && (

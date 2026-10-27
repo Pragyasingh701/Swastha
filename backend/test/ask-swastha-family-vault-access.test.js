@@ -87,15 +87,15 @@ test('a family admin can search a linked family member\'s records via POST /rag/
   let familyMemberRowId = null;
   try {
     await createOrGetFamilyVaultForUser(admin.id);
-    // There is no `email` column on family_members — the link to the member's
-    // own account is a `[Email: ...]` tag in `notes` (what getMemberEmail
-    // reads back). Access is only honored for a link that went through the
-    // real invite flow: a pending request whose token the member then
-    // confirms, which stamps both authorization_requested_at and
-    // authorization_approved_at. A record created directly with that tag is
-    // NOT enough (see family-vault-self-approval.test.js).
+    // The link to the member's own account is family_members.linked_patient_id,
+    // set by the server when the invite is created. Access is only honored for
+    // a link that went through the real invite flow: a pending request whose
+    // token the member then confirms, which stamps both
+    // authorization_requested_at and authorization_approved_at. A record
+    // created directly is NOT enough (see family-vault-self-approval.test.js).
     const { member: createdMember, authorizationToken } = await createPendingFamilyMemberAuthorizationRequest({
       userId: admin.id,
+      linkedPatientId: member.id,
       name: member.name,
       notes: `[Email: ${member.email}]`,
       relationship: 'Child',

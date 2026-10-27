@@ -13,6 +13,8 @@ import {
   withEmailTag,
   getMemberEmail,
   listPendingFamilyInvites,
+  listFamilyAdminsWithAccessTo,
+  revokeFamilyAdminAccess,
 } from '../db/family.js';
 import { sendFamilyMemberAuthorizationEmail } from '../utils/mailer.js';
 import { findUserByEmail, findUserById } from '../db/users.js';
@@ -366,6 +368,8 @@ router.post('/members/authorize', async (req, res) => {
       // claims to be someone else's.
       notes: withEmailTag(payload.notes, patientAccount.email),
       userId: user.userId,
+      // The access is tied to this account, not to the email string.
+      linkedPatientId: patientAccount.id,
       requestedByEmail: inviterEmail,
     });
 
@@ -433,6 +437,38 @@ router.post('/members/authorize/confirm', express.urlencoded({ extended: false, 
       message: 'This authorization link is invalid or has already been used.',
       isError: true,
     });
+  }
+});
+
+// The other direction: family admins who can open the logged-in patient's own
+// records, and a way to take that access back.
+router.get('/access', async (req, res) => {
+  try {
+    const user = getAuthUser(req);
+    if (!user?.userId) {
+      return res.status(401).json({ message: 'Authentication required for Family Vault requests.' });
+    }
+    return res.json(await listFamilyAdminsWithAccessTo(user.userId));
+  } catch (error) {
+    console.error('List family admins with access error:', error);
+    return res.status(500).json({ message: 'Could not load who has access to your records' });
+  }
+});
+
+router.delete('/access/:id', async (req, res) => {
+  try {
+    const user = getAuthUser(req);
+    if (!user?.userId) {
+      return res.status(401).json({ message: 'Authentication required for Family Vault requests.' });
+    }
+    const revoked = await revokeFamilyAdminAccess(req.params.id, user.userId);
+    if (!revoked) {
+      return res.status(404).json({ message: 'That access no longer exists.' });
+    }
+    return res.json({ message: 'Access removed.' });
+  } catch (error) {
+    console.error('Revoke family admin access error:', error);
+    return res.status(500).json({ message: 'Could not remove that access' });
   }
 });
 
