@@ -322,8 +322,11 @@ export const getDoctorPatients = async (doctorId) => {
 
     return patientRecords.filter(Boolean);
   } catch (error) {
-    console.warn('Doctor patient fetch warning:', error?.message || error);
-    return [];
+    // Rethrown, not answered with an empty list: the queue, session details, Complete/Remove
+    // and the patient screens are all built on this, so a database hiccup used to look like
+    // "this doctor has no patients" and flagged patients vanished from the queue.
+    console.error('Doctor patient fetch failed:', error?.message || error);
+    throw error;
   }
 };
 

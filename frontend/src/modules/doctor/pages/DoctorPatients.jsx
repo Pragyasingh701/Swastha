@@ -48,7 +48,10 @@ export default function DoctorPatients() {
   const [patientCode, setPatientCode] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-  const [isFetchingPatients, setIsFetchingPatients] = useState(false);
+  // Starts true: the first render must say "Loading", not flash "No patients linked yet".
+  const [isFetchingPatients, setIsFetchingPatients] = useState(true);
+  // Set when the patient list could not be loaded, so a failure never reads as "no patients".
+  const [patientsError, setPatientsError] = useState(null);
   const [openMenuId, setOpenMenuId] = useState(null);
   const [deletingPatientId, setDeletingPatientId] = useState(null);
   const [requestingAgainLinkId, setRequestingAgainLinkId] = useState(null);
@@ -95,11 +98,14 @@ export default function DoctorPatients() {
     try {
       const linkedPatients = await getDoctorPatients();
       setPatients(linkedPatients);
+      setPatientsError(null);
     } catch (err) {
-      if (showSpinner) setPatients([]);
-      // Silent on background poll failures — see DoctorRequests.jsx for
-      // the same reasoning: a transient blip shouldn't blank out an
-      // already-rendered list every 20s.
+      // A failed first load is an error to show (with a retry), never an empty list. A failed
+      // background poll stays silent: a blip must not blank out a list that is already showing.
+      if (showSpinner) {
+        setPatients([]);
+        setPatientsError(err?.message || "Could not load your patients.");
+      }
     } finally {
       if (showSpinner) setIsFetchingPatients(false);
     }
@@ -907,6 +913,18 @@ export default function DoctorPatients() {
                 <div className="rounded-2xl border border-slate-200 bg-white p-8 text-sm text-slate-500 ">
                   Loading patient list...
                 </div>
+            ) : patientsError && patients.length === 0 ? (
+              <div role="alert" className="rounded-2xl border border-red-200 bg-red-50 p-8 text-center text-sm text-red-700">
+                <p className="font-semibold">Couldn't load your patients.</p>
+                <p className="mt-1">{patientsError}</p>
+                <button
+                  type="button"
+                  onClick={() => fetchPatients()}
+                  className="mt-3 rounded-lg bg-red-600 px-4 py-2 text-xs font-semibold text-white hover:bg-red-700"
+                >
+                  Try again
+                </button>
+              </div>
             ) : patients.length === 0 ? (
               <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-8 text-center text-slate-500 ">
               No patients linked yet. Add a patient using the patient code.

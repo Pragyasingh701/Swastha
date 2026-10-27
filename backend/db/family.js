@@ -213,8 +213,10 @@ export const getFamilyVaultForUser = async (userId) => {
 
     return normalizeVault(data || null);
   } catch (err) {
-    console.warn('Supabase family vault lookup warning:', err.message);
-    return null;
+    // Not swallowed: "no vault" and "the database failed" must not look the same (a blip used to
+    // show as "you have no vault" and POST /vault would then try to create one).
+    console.error('Supabase family vault lookup failed:', err.message);
+    throw err;
   }
 };
 

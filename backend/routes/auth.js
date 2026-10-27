@@ -651,7 +651,14 @@ router.post('/verify-otp', async (req, res) => {
     });
   }
 
-  const vault = await getFamilyVaultForUser(user.id);
+  // Only used to put the vault id in the session. A failed lookup must not stop a login that
+  // otherwise succeeded, so it counts as "no vault id" here; the vault pages report real errors.
+  let vault = null;
+  try {
+    vault = await getFamilyVaultForUser(user.id);
+  } catch {
+    vault = null;
+  }
   // "Remember me" (ticked on the login screen) gets the longer session; every
   // other sign-in, including register and Google, gets the normal one.
   const token = signAuthToken({

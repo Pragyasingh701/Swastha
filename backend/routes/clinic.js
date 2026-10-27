@@ -44,7 +44,13 @@ async function requirePatientAuth(req, res, next) {
   }
   if (!decoded?.userId) return res.status(401).json({ message: 'Invalid session token.' });
 
-  const user = await findUserById(decoded.userId);
+  let user;
+  try {
+    user = await findUserById(decoded.userId);
+  } catch {
+    // A failed lookup is not an invalid session.
+    return res.status(500).json({ message: 'Could not verify your account. Please try again.' });
+  }
   if (!user) return res.status(401).json({ message: 'Invalid session token.' });
   // Check-in identity verification (OTP) is meaningless for a non-patient
   // account — the whole point is confirming a WALK-IN PATIENT's identity

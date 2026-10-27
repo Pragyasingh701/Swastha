@@ -37,11 +37,6 @@ const router = express.Router();
 const RAG_BASE_URL = process.env.RAG_BASE_URL || `http://localhost:${process.env.PORT || 5001}/rag/api`;
 
 
-// Doctor-only routes. Every one of these used to check only that SOME logged-in
-// user was calling (a patient could use /link, the intake queue, ...). The role
-// is read from the database, not the token's `role` claim: the token isn't
-// reissued when role selection completes, so a freshly registered doctor's
-// token can still say 'none', and a claim is the wrong thing to trust anyway.
 // The name of the doctor asking, for the request email. (It used to be given the PATIENT's own
 // name, so the email said "Dr. <you> has requested access" and the patient could not tell who
 // was asking.)
@@ -54,12 +49,23 @@ async function doctorDisplayName(doctorId) {
   }
 }
 
+// Doctor-only routes. Every one of these used to check only that SOME logged-in
+// user was calling (a patient could use /link, the intake queue, ...). The role
+// is read from the database, not the token's `role` claim: the token isn't
+// reissued when role selection completes, so a freshly registered doctor's
+// token can still say 'none', and a claim is the wrong thing to trust anyway.
 async function requireDoctor(req, res, next) {
   const authUser = getAuthUser(req);
   if (!authUser?.userId) {
     return res.status(401).json({ message: 'Authentication required.' });
   }
-  const user = await findUserById(authUser.userId);
+  let user;
+  try {
+    user = await findUserById(authUser.userId);
+  } catch {
+    // A failed lookup is not "you are not a doctor".
+    return res.status(500).json({ message: 'Could not verify your account. Please try again.' });
+  }
   if (!user || user.role !== 'doctor') {
     return res.status(403).json({ message: 'This action is only available to doctor accounts.' });
   }
@@ -72,7 +78,12 @@ async function requirePatient(req, res, next) {
   if (!authUser?.userId) {
     return res.status(401).json({ message: 'Authentication required.' });
   }
-  const user = await findUserById(authUser.userId);
+  let user;
+  try {
+    user = await findUserById(authUser.userId);
+  } catch {
+    return res.status(500).json({ message: 'Could not verify your account. Please try again.' });
+  }
   if (!user || user.role !== 'patient') {
     return res.status(403).json({ message: 'This action is only available to patient accounts.' });
   }
