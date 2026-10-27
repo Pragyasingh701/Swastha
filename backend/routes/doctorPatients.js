@@ -42,6 +42,18 @@ const RAG_BASE_URL = process.env.RAG_BASE_URL || `http://localhost:${process.env
 // is read from the database, not the token's `role` claim: the token isn't
 // reissued when role selection completes, so a freshly registered doctor's
 // token can still say 'none', and a claim is the wrong thing to trust anyway.
+// The name of the doctor asking, for the request email. (It used to be given the PATIENT's own
+// name, so the email said "Dr. <you> has requested access" and the patient could not tell who
+// was asking.)
+async function doctorDisplayName(doctorId) {
+  try {
+    const doctor = await findUserById(doctorId);
+    return doctor?.name || doctor?.fullName || null;
+  } catch {
+    return null; // the email still goes out, saying "A doctor"
+  }
+}
+
 async function requireDoctor(req, res, next) {
   const authUser = getAuthUser(req);
   if (!authUser?.userId) {
@@ -605,7 +617,7 @@ router.post('/link', requireDoctor, async (req, res) => {
         const backendUrl = process.env.BACKEND_URL || 'http://localhost:5001';
         const acceptUrl = `${backendUrl}/api/doctor-patients/email-action/accept?token=${result.link.email_action_token}`;
         const declineUrl = `${backendUrl}/api/doctor-patients/email-action/decline?token=${result.link.email_action_token}`;
-        await sendDoctorRequestEmail(result.link.patient_email, result.link.patient_name, acceptUrl, declineUrl);
+        await sendDoctorRequestEmail(result.link.patient_email, await doctorDisplayName(authUser.userId), acceptUrl, declineUrl);
       } catch (emailError) {
         // Best-effort — the request itself already succeeded and is
         // visible in the notification bell regardless of email delivery.
@@ -795,7 +807,7 @@ router.post('/:patientId/re-request', requireDoctor, async (req, res) => {
         const backendUrl = process.env.BACKEND_URL || 'http://localhost:5001';
         const acceptUrl = `${backendUrl}/api/doctor-patients/email-action/accept?token=${result.link.email_action_token}`;
         const declineUrl = `${backendUrl}/api/doctor-patients/email-action/decline?token=${result.link.email_action_token}`;
-        await sendDoctorRequestEmail(result.link.patient_email, result.link.patient_name, acceptUrl, declineUrl);
+        await sendDoctorRequestEmail(result.link.patient_email, await doctorDisplayName(authUser.userId), acceptUrl, declineUrl);
       } catch (emailError) {
         console.warn('Doctor re-request email warning:', emailError?.message || emailError);
       }
