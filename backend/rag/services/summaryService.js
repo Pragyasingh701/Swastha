@@ -1,7 +1,5 @@
 // Routed through the shared failover client: Gemini (4 keys) -> OpenRouter.
-// Never throws — on total exhaustion the friendly fallback text becomes the
-// "summary" that gets stored, which is honest (it says try again) rather
-// than leaving the summary column stuck empty with no visible cause.
+// Throws when every provider fails or the reply is empty, so no error text is ever stored as a summary.
 import { runAI } from '../config/aiClient.js';
 import { UNTRUSTED_DATA_RULES, wrapUntrusted, sanitizeModelText } from '../utils/untrustedData.js';
 
@@ -50,6 +48,16 @@ ${wrapUntrusted('record', recordText)}
 Summary:`;
 
   const res = await runAI({ task: 'generation', input: prompt, label: 'summary' });
-  // On total failure `text` is the friendly fallback sentence; cleaning is harmless for it.
-  return sanitizeModelText(res.text, 1500);
+  // When every provider failed, `text` is only a friendly "please try again" sentence. That is
+  // an error, not a summary: it must never be stored as one (it used to be saved on the report,
+  // and a forced Regenerate could overwrite a good summary with it). The caller treats a throw
+  // as "no summary this time" and leaves the report as it was.
+  if (!res.ok) {
+    throw new Error(`summarizeReport: AI summary unavailable (${res.error_code || 'unknown'})`);
+  }
+  const summary = sanitizeModelText(res.text, 1500);
+  if (!summary) {
+    throw new Error('summarizeReport: the model returned no usable summary');
+  }
+  return summary;
 }
