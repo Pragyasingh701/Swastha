@@ -1,4 +1,4 @@
-// Fix: backend/routes/reports.js's resolveTargetUser must return 500 when
+// Fix: backend/routes/reports.js's assertCanAccessTarget must return 500 when
 // isDoctorLinkedToPatient throws a genuine DB/network error, keeping 403
 // only for a doctor who is genuinely unlinked or whose access has expired
 // (isDoctorLinkedToPatient resolving to false, not throwing).
@@ -12,7 +12,7 @@ import { test, mock } from 'node:test';
 import assert from 'node:assert/strict';
 import jwt from 'jsonwebtoken';
 
-test('POST /api/reports returns 500 (not 403) when the doctor-patient link check itself fails', async () => {
+test('GET /api/reports returns 500 (not 403) when the doctor-patient link check itself fails', async () => {
   // Other route files import other exports from this same module (e.g.
   // acceptDoctorLinkRequest), so the mock spreads the real module's
   // exports and overrides only isDoctorLinkedToPatient.
@@ -27,11 +27,11 @@ test('POST /api/reports returns 500 (not 403) when the doctor-patient link check
   });
   // findUserById is called first, to resolve the requested userId into a
   // target user object — must resolve to something with a different id
-  // than the caller so resolveTargetUser's doctor branch (and therefore
+  // than the caller so assertCanAccessTarget's doctor branch (and therefore
   // the mocked isDoctorLinkedToPatient) is actually reached. Other parts
   // of the app import other exports from this same module (e.g.
   // createOrUpdateUser), so the mock spreads the real module's exports
-  // and overrides only the two used by resolveTargetUser.
+  // and overrides only the two used by the reports routes.
   const realUsersModule = await import(new URL('../db/users.js', import.meta.url).href);
   mock.module(new URL('../db/users.js', import.meta.url).href, {
     namedExports: {
@@ -62,15 +62,10 @@ test('POST /api/reports returns 500 (not 403) when the doctor-patient link check
   const baseUrl = `http://localhost:${server.address().port}`;
 
   try {
-    const res = await fetch(`${baseUrl}/api/reports`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-      body: JSON.stringify({
-        userId: targetPatientId,
-        title: 'Test Report',
-        category: 'Consultation',
-        reportDate: '2026-01-01',
-      }),
+    // A read: doctors can no longer write reports at all (those routes answer
+    // 403 before any link check), so the read is where the link check matters.
+    const res = await fetch(`${baseUrl}/api/reports?userId=${encodeURIComponent(targetPatientId)}`, {
+      headers: { Authorization: `Bearer ${token}` },
     });
     const data = await res.json();
 

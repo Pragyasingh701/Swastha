@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import swasthaLogo from "../../../assets/swastha-logo.png";
+import landingHero from "../../../assets/landing-hero.jpg";
 import { setIntendedRole } from "../../../utils/intendedRole";
 
 const FAQS = [
@@ -22,19 +23,19 @@ const FAQS = [
   },
   {
     q: "Who can see my records?",
-    a: "Only you, unless you approve access. A doctor must send a request using your 6-digit patient code, and you accept or decline it. Adult family members authorize access by email.",
+    a: "Only you, unless you give access. A doctor can send a request using your 6-digit patient code, which you accept or decline. If you check in at a clinic with its code for the day, that clinic's doctor can see your records for 24 hours, and you can end that any time from Doctor Access in your profile menu. Adult family members authorize access by email.",
   },
   {
     q: "Can it read handwritten prescriptions?",
-    a: "It extracts details from handwritten prescriptions and flags anything it couldn't read clearly for you to confirm — it won't guess.",
+    a: "It extracts details from handwritten prescriptions and flags anything it couldn't read clearly for you to confirm. AI can still misread, so check the details against your original.",
   },
   {
     q: "Do I need a Swastha account to check in at a clinic?",
-    a: "Yes — check-in verifies your identity with a code sent to your registered email.",
+    a: "Yes. You sign in to your Swastha account, then enter the code the clinic shows for the day. Checking in gives that clinic's doctor access to your records for 24 hours, and you can end it any time from Doctor Access.",
   },
   {
     q: "Which doctors can use Swastha?",
-    a: "Any licensed doctor, verified against their medical registration certificate at signup.",
+    a: "Doctors sign up with their medical registration number and upload their registration certificate. Checking these against an official medical register is not live yet.",
   },
   {
     q: "Is it free?",
@@ -105,7 +106,7 @@ export default function LandingPage() {
           </div>
           <nav className="hidden md:flex items-center gap-8">
             <a className="text-on-surface-variant hover:text-primary transition-colors font-body-md" href="#features">Features</a>
-            <a className="text-on-surface-variant hover:text-primary transition-colors font-body-md" href="#intake">How It Works</a>
+            <a className="text-on-surface-variant hover:text-primary transition-colors font-body-md" href="#how-it-works">How It Works</a>
             <a className="text-on-surface-variant hover:text-primary transition-colors font-body-md" href="#faq">FAQ</a>
             <button
               type="button"
@@ -158,7 +159,7 @@ export default function LandingPage() {
                 <img
                   className="w-full h-auto"
                   alt="A sophisticated 3D isometric illustration showcasing a digital health ecosystem."
-                  src="https://lh3.googleusercontent.com/aida-public/AB6AXuAs_qtznSVAweD7AVjNETDxsGGLUUC0G8pCF1wQXw81veqQGkPoDI2z3S4OzwYeeaFGuoeicdlKsmnRAQDu_TQt_E6_crip__xPUTS8P6VE0vO7AoIm_0dJ7fYcVUAZFkDixZp8CNs728U8puIBCFxkX5WiNPLVRSmNeKOZdCSnjKPbhdQ2EH52sw_oBg0u7Y7XEXvoMswT2S3AmUyG3pEZihjDvTklvYqkGSS8Xyu3wPf-IJu0hnEl"
+                  src={landingHero}
                 />
               </div>
               {/* Decorative Element */}
@@ -261,7 +262,7 @@ export default function LandingPage() {
         </section>
 
         {/* How It Works */}
-        <section className="bg-surface py-20 lg:py-32 px-6">
+        <section className="bg-surface py-20 lg:py-32 px-6" id="how-it-works">
           <div className="max-w-7xl mx-auto">
             <div className="flex flex-col md:flex-row items-end justify-between mb-16 gap-6">
               <div className="max-w-xl">
@@ -299,7 +300,7 @@ export default function LandingPage() {
                   <span className="material-symbols-outlined text-primary text-3xl group-hover:scale-110 transition-transform">account_tree</span>
                 </div>
                 <h4 className="font-bold text-lg mb-2">3. Structuring</h4>
-                <p className="text-sm text-on-surface-variant ">Records are categorized by family member, doctor, and health category.</p>
+                <p className="text-sm text-on-surface-variant ">Records are sorted by date and health category into one searchable timeline.</p>
               </div>
               {/* Step 4 */}
               <div className="relative z-10 flex flex-col items-center md:items-start text-center md:text-left">
@@ -429,10 +430,10 @@ export default function LandingPage() {
                 <div>
                   <span className="material-symbols-outlined text-3xl mb-6">psychology</span>
                   <h3 className="font-headline-md text-headline-md mb-4">AI Document Extraction</h3>
-                  <p className="opacity-90">Reads handwritten prescriptions and complex lab panels. Anything unclear is flagged for you to confirm — never guessed.</p>
+                  <p className="opacity-90">Reads handwritten prescriptions and complex lab panels. Anything unclear is flagged for you to confirm. AI can still misread, so check against your original.</p>
                 </div>
                 <div className="mt-8 pt-6 border-t border-white/20">
-                  <span className="text-sm font-bold tracking-widest uppercase">Never Guesses</span>
+                  <span className="text-sm font-bold tracking-widest uppercase">Flags What's Unclear</span>
                 </div>
               </div>
               {/* Medicines list */}

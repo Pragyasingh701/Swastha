@@ -133,28 +133,6 @@ export const findUserById = async (id) => {
 };
 
 /**
- * Look up a user by id OR patient_code. patient_code only exists on
- * `patients`, so that half of the search is patients-only; the id half
- * still checks all three tables (mirrors findUserById, used as a fallback
- * for GET /api/auth/users/:userId in auth.js, which tries findUserById
- * first and only reaches this for a patient_code-style id).
- */
-export const findUserByIdOrPatientCode = async (idOrCode) => {
-  if (!idOrCode || !supabase) return null;
-  const normalized = String(idOrCode).trim();
-
-  const byId = await findUserById(normalized);
-  if (byId) return byId;
-
-  const { data, error } = await supabase
-    .from('patients').select('*').eq('patient_code', normalized).maybeSingle();
-  if (error) throw error;
-  if (data) return { ...data, role: 'patient' };
-
-  return null;
-};
-
-/**
  * Create or update a user's profile. Single dispatcher across
  * patients / doctors / pending_registrations, selected by `role`.
  *

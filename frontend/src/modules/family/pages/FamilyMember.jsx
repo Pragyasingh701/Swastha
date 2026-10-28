@@ -107,15 +107,19 @@ export default function FamilyMember({ member, onEdit, onDelete }) {
         </div>
 
         <div className="flex flex-wrap gap-2">
+          {/* Reports live on the person's own account. Without an email there is nothing to open, and
+              an empty email would fall through to the signed-in user's own timeline. */}
           <button
             type="button"
+            disabled={!email}
+            title={email ? undefined : 'Add this person\'s email to view their timeline'}
             onClick={() => navigate('/timeline', {
               state: {
-                memberEmail: email || '',
+                memberEmail: email,
                 ...(isSelfRelationship && member.user_id ? { patientUserId: member.user_id } : {}),
               },
             })}
-            className="inline-flex items-center gap-1.5 rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-sm font-medium text-blue-700 transition-colors hover:bg-blue-100"
+            className="inline-flex items-center gap-1.5 rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-sm font-medium text-blue-700 transition-colors hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-blue-50"
           >
             <CalendarDays size={16} />
             Medical Timeline

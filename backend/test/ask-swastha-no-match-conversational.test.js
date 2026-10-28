@@ -76,7 +76,7 @@ test('conversationalSearch gives a question-specific reply on a zero-match turn,
   assert.equal(result.answer, specificReply);
   assert.notEqual(
     result.answer,
-    'No relevant records found in your health history for this question.',
+    "I couldn't find anything about this in your reports. It may still be in one of them, so try rephrasing your question or open the report itself.",
     'must not fall back to the old fixed sentence when the AI call succeeds'
   );
 

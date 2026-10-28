@@ -73,8 +73,8 @@ test('a genuine health question with zero matches gets a specific, topic-named r
   assert.equal(result.answer, "Your records don't contain any information about hypertension medication.");
   assert.notEqual(
     result.answer,
-    'No relevant records found in your health history for this question.',
-    'must not fall back to the old one-size-fits-all sentence when the AI call succeeds'
+    "I couldn't find anything about this in your reports. It may still be in one of them, so try rephrasing your question or open the report itself.",
+    'must not fall back to the one-size-fits-all sentence when the AI call succeeds'
   );
 });
 
@@ -100,5 +100,9 @@ test('if the no-match reply generation itself fails, it falls back to the fixed 
   const result = await freshSearchReports('__SIMULATE_AI_FAILURE__ what were my labs', `usr_${Date.now()}`);
 
   assert.equal(result.noResultsFound, true);
-  assert.equal(result.answer, 'No relevant records found in your health history for this question.');
+  // The fallback only says what was searched; it never claims the records lack the thing.
+  assert.equal(
+    result.answer,
+    "I couldn't find anything about this in your reports. It may still be in one of them, so try rephrasing your question or open the report itself."
+  );
 });

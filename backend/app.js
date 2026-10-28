@@ -36,8 +36,8 @@ const app = express();
 // the real client's.
 app.set('trust proxy', 1);
 
-// Security headers for the API. CSP is off here on purpose: this serves JSON
-// (and the static /uploads files), not pages — the SPA's own CSP is set by the
+// Security headers for the API. CSP is off here on purpose: this serves JSON,
+// not pages — the SPA's own CSP is set by the
 // frontend host (vercel.json). CORP is "cross-origin" because the SPA lives on
 // a different origin and loads files this API serves.
 app.use(helmet({
@@ -74,9 +74,9 @@ app.post('/api/auth/google/exchange', limiters.googleByIp);
 app.post('/api/crypto/handshake', limiters.handshakeByIp);
 app.post('/api/doctor-patients/link', limiters.linkByDoctor);
 
-// Note: uploaded doctor certificates / ID proofs (written to ./uploads by
-// POST /api/auth/upload) are deliberately NOT served — they used to be
-// reachable by anyone with the URL.
+// Note: uploaded doctor certificates / ID proofs (POST /api/auth/upload) go to
+// the private storage bucket, not to this server's disk, and are never served
+// from here.
 
 // Routes
 app.use('/api/crypto', cryptoRoutes);

@@ -205,7 +205,6 @@ CREATE TABLE IF NOT EXISTS "public"."doctor_patient" (
     "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
     "doctor_id" character varying NOT NULL,
     "patient_id" character varying NOT NULL,
-    "patient_code" character varying,
     "patient_email" character varying,
     "patient_name" character varying,
     "patient_phone" "text",

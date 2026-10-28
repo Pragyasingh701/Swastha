@@ -452,9 +452,9 @@ export default function DoctorRegister() {
                     </span>
                   </div>
                   <div>
-                    <h4 className="font-label-md text-label-md text-primary font-bold mb-1">Vision AI Verification Sync</h4>
+                    <h4 className="font-label-md text-label-md text-primary font-bold mb-1">Certificate Upload</h4>
                     <p className="font-body-sm text-body-sm text-on-surface-variant leading-relaxed">
-                      Our Google Gemini Vision AI automatically scans your uploaded Medical Certificate to verify your registration number and validity.
+                      AI reads your uploaded Medical Certificate to help fill in your details. It is not yet checked against an official medical register.
                     </p>
                   </div>
                 </div>
@@ -561,7 +561,7 @@ export default function DoctorRegister() {
                 {isSubmitting ? (
                   <>
                     <span className="material-symbols-outlined animate-spin">progress_activity</span>
-                    Scanning & Verifying Credentials...
+                    Reading your certificate...
                   </>
                 ) : (
                   <>

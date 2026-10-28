@@ -236,7 +236,7 @@ router.post('/turn', requireAuth, async (req, res) => {
     // app plainly and let the patient send the same answer again, instead of answering 200 with an
     // apology that looks like the next question.
     if (turn.degraded) {
-      return res.status(503).json({ error: turn.next_question, degraded: true });
+      return res.status(503).json({ error: turn.next_question, degraded: true, emergency: turn.emergency || null });
     }
 
     // Read back from the session row, not the request — the language is
@@ -253,6 +253,8 @@ router.post('/turn', requireAuth, async (req, res) => {
       red_flag: turn.red_flag,
       red_flag_reason: turn.red_flag_reason,
       red_flag_is_new: turn.red_flag_is_new,
+      // Set when the patient's own words matched an emergency (see emergencyKeywords.js).
+      emergency: turn.emergency || null,
     };
 
     // A muted client never plays the audio, so synthesizing it only adds

@@ -1,6 +1,5 @@
 import dotenv from 'dotenv';
 import fs from 'fs';
-import path from 'path';
 // Was a byte-mirrored local copy (backend/services/aiClient.js) until this
 // import — see backend/rag/config/aiClient.js's own header comment for why
 // one shared module works now: this process already merges backend/ and
@@ -9,6 +8,7 @@ import path from 'path';
 // new startup dependency — rag/config/env.js's validation was already a
 // precondition for this process to boot at all.
 import { runAI } from '../rag/config/aiClient.js';
+import { downloadStoredFile } from '../config/supabaseStorage.js';
 
 if (fs.existsSync('./backend/.env')) {
   dotenv.config({ path: './backend/.env' });
@@ -16,20 +16,6 @@ if (fs.existsSync('./backend/.env')) {
   dotenv.config({ path: '.env' });
 } else {
   dotenv.config();
-}
-
-// Maps a "/uploads/<name>" reference to a real path, only if the result stays
-// inside an uploads directory. Anything else (other absolute paths, "..", URLs)
-// returns null.
-function resolveUploadPath(fileInput) {
-  if (typeof fileInput !== 'string' || !fileInput.startsWith('/uploads/')) return null;
-  const roots = [path.resolve(process.cwd(), 'uploads'), path.resolve(process.cwd(), 'backend', 'uploads')];
-  const relative = fileInput.slice('/uploads/'.length);
-  for (const root of roots) {
-    const candidate = path.resolve(root, relative);
-    if (candidate.startsWith(root + path.sep) && fs.existsSync(candidate)) return candidate;
-  }
-  return null;
 }
 
 /**
@@ -46,25 +32,18 @@ async function fileToBase64Payload(fileInput) {
   }
 
   try {
-    // Only files inside the uploads directory may be read. The path used to be
-    // taken from the request unchecked ("/uploads/../../etc/passwd", or any
-    // absolute path), which let a caller have arbitrary server files read and
-    // sent to the AI provider.
-    const resolved = resolveUploadPath(fileInput);
-    if (!resolved) return null;
-    const filePath = resolved;
-
-    if (fs.existsSync(filePath)) {
-      const fileBuffer = await fs.promises.readFile(filePath);
-      const ext = path.extname(filePath).toLowerCase();
-      const mime = ext === '.png' ? 'image/png' : ext === '.webp' ? 'image/webp' : ext === '.pdf' ? 'application/pdf' : 'image/jpeg';
-      const base64Data = fileBuffer.toString('base64');
-      return {
-        data: base64Data,
-        mime,
-        dataUrl: `data:${mime};base64,${base64Data}`,
-      };
-    }
+    // Only a file in our own storage bucket can be read. The value used to be
+    // a path taken from the request, which let a caller have arbitrary server
+    // files read and sent to the AI provider; the route also checks that the
+    // file belongs to the caller before it gets here.
+    const stored = await downloadStoredFile(fileInput);
+    if (!stored) return null;
+    const base64Data = stored.buffer.toString('base64');
+    return {
+      data: base64Data,
+      mime: stored.mime,
+      dataUrl: `data:${stored.mime};base64,${base64Data}`,
+    };
   } catch (err) {
     console.warn('File to Base64 conversion warning:', err.message);
   }
@@ -181,7 +160,7 @@ function evaluateParsedCertificate(parsed, doctorData = {}) {
 
 /**
  * Main API function to Process Medical Certificate File Upload via Gemini Vision AI
- * @param {string|Buffer} fileInput - Image file path, data URL, or relative upload URL
+ * @param {string|Buffer} fileInput - Stored certificate URL (our storage bucket) or a data URL
  * @param {object} doctorData - Form details entered manually by doctor (e.g. regNumber, fullName, council)
  */
 export async function processMedicalCertificate(fileInput, doctorData = {}) {

@@ -44,11 +44,12 @@ function safeSegment(value) {
   return String(value || '').replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 80) || 'unknown';
 }
 
-// Uploads under reports/<patientId>/<random uuid>.<ext>: not guessable (the
+// Uploads under <folder>/<ownerId>/<random uuid>.<ext> ("reports" by default,
+// "certificates" for a doctor's registration certificate): not guessable (the
 // old "reports/<timestamp>_<original name>" was), the original filename is
 // never used, and the extension comes from the sniffed type. Returns the
 // object's URL, which is stored on the report as before.
-export async function uploadFileToSupabase(file, ownerId) {
+export async function uploadFileToSupabase(file, ownerId, folder = 'reports') {
   if (!file) return null;
   if (!supabase) {
     throw new Error('Supabase client is not initialized.');
@@ -61,7 +62,7 @@ export async function uploadFileToSupabase(file, ownerId) {
     throw err;
   }
 
-  const filePath = `reports/${safeSegment(ownerId)}/${randomUUID()}.${ALLOWED_TYPES[detectedType]}`;
+  const filePath = `${folder}/${safeSegment(ownerId)}/${randomUUID()}.${ALLOWED_TYPES[detectedType]}`;
   const response = await supabase.storage
     .from(REPORTS_BUCKET)
     .upload(filePath, file.buffer, {
@@ -125,6 +126,28 @@ export async function createSignedFileUrl(fileUrl, expiresInSeconds = 300) {
     return null;
   }
   return data?.signedUrl || null;
+}
+
+// True if the stored URL is an object inside `<folder>/<ownerId>/` of our
+// bucket, i.e. a file that this owner uploaded through uploadFileToSupabase.
+export function isOwnedStoredFile(fileUrl, ownerId, folder) {
+  const filePath = storagePathFromUrl(fileUrl);
+  return Boolean(filePath) && filePath.startsWith(`${folder}/${safeSegment(ownerId)}/`);
+}
+
+// The bytes and type of a stored file, or null if the value isn't one of our
+// bucket's objects or can't be read.
+export async function downloadStoredFile(fileUrl) {
+  const filePath = storagePathFromUrl(fileUrl);
+  if (!filePath || !supabase) return null;
+  const { data, error } = await supabase.storage.from(REPORTS_BUCKET).download(filePath);
+  if (error || !data) {
+    console.error('Stored file download error:', error?.message || error);
+    return null;
+  }
+  const buffer = Buffer.from(await data.arrayBuffer());
+  const mime = sniffFileType(buffer);
+  return mime ? { buffer, mime } : null;
 }
 
 // Best-effort removal of the objects behind stored file URLs (report deleted,

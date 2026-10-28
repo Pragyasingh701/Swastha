@@ -127,16 +127,3 @@ export async function processReportEmbeddings(report) {
 
   return { reportId, chunksWritten: chunks.length };
 }
-
-/**
- * Delete all embeddings for a report — call this when a report is deleted
- * so search never surfaces chunks belonging to a report that no longer
- * exists.
- */
-export async function deleteReportEmbeddings(reportId) {
-  if (!reportId) return;
-  const { error } = await supabase.from('report_embeddings').delete().eq('report_id', reportId);
-  if (error) {
-    throw new Error(`deleteReportEmbeddings: failed for report ${reportId}: ${error.message}`);
-  }
-}

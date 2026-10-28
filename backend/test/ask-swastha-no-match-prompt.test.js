@@ -24,7 +24,7 @@ test('buildNoMatchPrompt asks the model to distinguish a real health question fr
 
   assert.match(prompt, /found NOTHING relevant/i, 'must state plainly that retrieval found nothing');
   assert.match(prompt, /genuine question about the user's health/i, 'must instruct handling for a real health question');
-  assert.match(prompt, /name the actual topic/i, 'must require the reply to name the specific topic asked about, not a generic phrase');
+  assert.match(prompt, /naming the actual topic/i, 'must require the reply to name the specific topic asked about, not a generic phrase');
   assert.match(prompt, /NOT a question about health records at all/i, 'must instruct handling for an off-topic message');
   assert.match(prompt, /greeting, small talk/i, 'must cover greetings/small talk as the off-topic case');
   assert.match(prompt, /friendly sentence redirecting/i, 'the off-topic case must redirect, not answer the off-topic question');
@@ -47,4 +47,21 @@ test('buildNoMatchPrompt asks for exactly one plain sentence, not JSON', async (
 
   assert.match(prompt, /no JSON, no markdown/i);
   assert.match(prompt, /exactly one sentence/i);
+});
+
+test('buildNoMatchPrompt never lets the reply claim the records definitely lack the answer, unless there are no reports at all', async () => {
+  const { buildNoMatchPrompt } = await import('../rag/services/searchService.js');
+
+  const withReports = buildNoMatchPrompt('what is my cholesterol', { reportCount: 4 });
+  assert.match(withReports, /may still contain the answer/i);
+  assert.match(withReports, /NEVER say or imply that their records definitely do not contain it/i);
+  assert.ok(!/your records don't contain/i.test(withReports), 'must not suggest the "your records don\'t contain" wording');
+
+  // Count unknown (the lookup failed): same careful wording.
+  assert.match(buildNoMatchPrompt('what is my cholesterol'), /NEVER say or imply/i);
+
+  const noReports = buildNoMatchPrompt('what is my cholesterol', { reportCount: 0 });
+  assert.match(noReports, /has not added any reports yet/i);
+  assert.match(noReports, /nothing to search/i);
+  assert.ok(!/NEVER say or imply/i.test(noReports));
 });

@@ -200,8 +200,8 @@ export default function SettingsModal({ isOpen, onClose }) {
 
       const certExtracted = updateRes?.extractedCertificateData;
       const successText = certExtracted
-        ? 'Account & Medical Council credentials verified via Vision AI and updated in database!'
-        : 'Account credentials and profile data updated successfully in database!';
+        ? 'Profile updated. Your certificate was read to fill in your details.'
+        : 'Profile updated.';
 
       setMessage({ type: 'success', text: successText });
 
@@ -210,7 +210,7 @@ export default function SettingsModal({ isOpen, onClose }) {
         onClose();
       }, 1500);
     } catch (err) {
-      setMessage({ type: 'error', text: err.message || 'Failed to update account credentials in database.' });
+      setMessage({ type: 'error', text: err.message || 'Could not save your changes. Please try again.' });
     } finally {
       setIsSaving(false);
     }
@@ -330,16 +330,16 @@ export default function SettingsModal({ isOpen, onClose }) {
 
               {formData.role === 'patient' && (
                 <div>
-                  <label className="block text-[11px] font-extrabold uppercase tracking-wider text-slate-600 dark:text-slate-300 mb-1">
+                  <label className="block text-[11px] font-extrabold uppercase tracking-wider text-slate-600 mb-1">
                     Patient Code
                   </label>
                   {patientCode === 'Not assigned yet' ? (
-                    <div className="rounded-xl border border-amber-200 dark:border-amber-500/30 bg-amber-50 dark:bg-amber-500/10 p-4">
+                    <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
                       <div className="flex items-start gap-2">
-                        <span className="material-symbols-outlined text-amber-600 dark:text-amber-400 text-[18px] shrink-0">info</span>
+                        <span className="material-symbols-outlined text-amber-600 text-[18px] shrink-0">info</span>
                         <div>
-                          <p className="text-sm font-semibold text-amber-800 dark:text-amber-300">Patient Code Not Generated</p>
-                          <p className="text-xs text-amber-700 dark:text-amber-400 mt-1">
+                          <p className="text-sm font-semibold text-amber-800">Patient Code Not Generated</p>
+                          <p className="text-xs text-amber-700 mt-1">
                             Your patient code will be automatically generated when you log in again.
                           </p>
                         </div>
@@ -351,7 +351,7 @@ export default function SettingsModal({ isOpen, onClose }) {
                         type="text"
                         disabled
                         value={patientCode}
-                        className="flex-1 px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-blue-50 dark:bg-blue-500/10 text-blue-700 dark:text-blue-400 text-sm font-bold cursor-not-allowed tracking-widest"
+                        className="flex-1 px-3.5 py-2.5 rounded-xl border border-slate-200 bg-blue-50 text-blue-700 text-sm font-bold cursor-not-allowed tracking-widest"
                       />
                       <button
                         type="button"
@@ -368,7 +368,7 @@ export default function SettingsModal({ isOpen, onClose }) {
                     </div>
                   )}
                   {patientCode !== 'Not assigned yet' && (
-                    <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-1.5">Your unique identifier for doctors to link your medical records</p>
+                    <p className="text-[10px] text-slate-500 mt-1.5">Your unique identifier for doctors to link your medical records</p>
                   )}
                 </div>
               )}
@@ -600,7 +600,7 @@ export default function SettingsModal({ isOpen, onClose }) {
                           Click to upload your Medical Registration Certificate
                         </p>
                         <p className="text-[10px] text-slate-400 mt-0.5">
-                          Supports PDF, PNG, JPG (Scanned via Gemini Vision AI)
+                          PDF, PNG or JPG
                         </p>
                       </>
                     )}

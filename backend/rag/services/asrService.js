@@ -17,7 +17,7 @@
 // stop, one POST, one transcript back.
 import { recordAiRequest } from '../utils/aiRequestLog.js';
 import { Buffer } from 'node:buffer';
-import { currentKey, retireKey, __resetKeyPool } from '../config/sarvamKeys.js';
+import { currentKey, retireKey, classifySarvam, KEY_EXHAUSTED_CODES, __resetKeyPool } from '../config/sarvamKeys.js';
 
 const SARVAM_STT_URL = 'https://api.sarvam.ai/speech-to-text';
 
@@ -62,35 +62,6 @@ const STT_TIMEOUT_MS = 30000;
 // answer means a stuck recorder, not a talkative patient — reject it before
 // spending API credit (PRD §9: the Sarvam credit is a shared STT+TTS pool).
 const MAX_AUDIO_BYTES = 10 * 1024 * 1024; // 10MB, matches routes/extract.js
-
-/**
- * Same taxonomy as ttsService.js's classifySarvam. Kept as its own copy
- * rather than shared: the two services are independently swappable
- * (a future ASR provider change shouldn't have to reason about TTS), and
- * duplicating ~12 lines is cheaper than a shared abstraction that couples
- * them. Same reasoning aiClient.js documents for being vendored twice.
- *
- * Sarvam answers 403 for BOTH a bad key and an authenticated-but-forbidden
- * request, so the body's error.code is what separates them — a plain 403
- * must not latch the key as dead.
- */
-function classifySarvam(status, bodyText) {
-  const body = (bodyText || '').toLowerCase();
-  if (status === 429) return 'RATE_LIMIT';
-  if (status === 403) {
-    return body.includes('invalid_api_key_error') ? 'KEY_DEAD' : 'FORBIDDEN';
-  }
-  if (status === 401) return 'KEY_DEAD';
-  if (status === 402 || body.includes('insufficient') || body.includes('quota')) return 'QUOTA_EXHAUSTED';
-  if (status === 413) return 'AUDIO_TOO_LARGE';
-  if (status === 0) return 'NETWORK';
-  if (status >= 500) return 'PROVIDER_ERROR';
-  return 'BAD_REQUEST';
-}
-
-// Failures meaning "this key is finished" — retire it and move on. Shared
-// definition with ttsService; anything else leaves the key in the pool.
-const KEY_EXHAUSTED_CODES = new Set(['KEY_DEAD', 'QUOTA_EXHAUSTED', 'RATE_LIMIT']);
 
 /** Test seam — restores the whole key pool. */
 export function __resetSarvamKeyState() {
@@ -186,7 +157,8 @@ async function attemptTranscribe(audioBuffer, mimetype, language, apiKey) {
     const bodyText = await res.text();
 
     if (!res.ok) {
-      const code = classifySarvam(res.status, bodyText);
+      // 413 is the one status that only means something for audio.
+      const code = res.status === 413 ? 'AUDIO_TOO_LARGE' : classifySarvam(res.status, bodyText);
       console.warn(`[asr] sarvam stt failed (${code}, HTTP ${res.status})`);
       return { ok: false, error_code: code };
     }

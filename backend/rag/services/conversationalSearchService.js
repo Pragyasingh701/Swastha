@@ -307,7 +307,7 @@ export async function conversationalSearch({ query, userId, sessionId }) {
     // generateNoMatchAnswer) rather than one fixed sentence for every
     // zero-match case, and do NOT write this turn to memory — recording
     // "I couldn't find that" as context would poison later rewrites.
-    const noMatch = await generateNoMatchAnswer(standaloneQuestion, 'chat-no-match');
+    const noMatch = await generateNoMatchAnswer(standaloneQuestion, 'chat-no-match', { userId });
     return {
       answer: noMatch.headline,
       structured: noMatch,

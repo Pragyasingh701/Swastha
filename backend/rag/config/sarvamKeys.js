@@ -81,6 +81,33 @@ export function retireKey(index, reason) {
   return next !== null;
 }
 
+/**
+ * Classify a Sarvam failure so logs say WHY a call failed, and so callers
+ * know whether the key itself is finished. Shared by TTS and ASR so the two
+ * cannot drift apart.
+ *
+ * Sarvam answers 403 for BOTH a bad key and an authenticated-but-forbidden
+ * request, so the body's error.code is what separates them: treating every
+ * 403 as KEY_DEAD would wrongly retire a live key for the rest of the process.
+ */
+export function classifySarvam(status, bodyText) {
+  const body = (bodyText || '').toLowerCase();
+  if (status === 429) return 'RATE_LIMIT';
+  if (status === 403) {
+    return body.includes('invalid_api_key_error') ? 'KEY_DEAD' : 'FORBIDDEN';
+  }
+  if (status === 401) return 'KEY_DEAD';
+  if (status === 402 || body.includes('insufficient') || body.includes('quota')) return 'QUOTA_EXHAUSTED';
+  if (status === 0) return 'NETWORK';
+  if (status >= 500) return 'PROVIDER_ERROR';
+  return 'BAD_REQUEST';
+}
+
+// Failures meaning "this key is finished": retire it and move to the next
+// one in the pool. Everything else (5xx, timeout, network) says nothing about
+// the key's validity and must not burn it.
+export const KEY_EXHAUSTED_CODES = new Set(['KEY_DEAD', 'QUOTA_EXHAUSTED', 'RATE_LIMIT']);
+
 /** Test seam — restores the pool to its initial state. */
 export function __resetKeyPool() {
   retired.clear();
@@ -88,4 +115,4 @@ export function __resetKeyPool() {
   keys = loadKeys();
 }
 
-export default { currentKey, retireKey };
+export default { currentKey, retireKey, classifySarvam, KEY_EXHAUSTED_CODES };
