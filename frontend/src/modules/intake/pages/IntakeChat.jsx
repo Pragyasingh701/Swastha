@@ -366,6 +366,10 @@ export default function IntakeChat() {
   // with the user: keep collecting the full history in parallel with
   // notifying staff, rather than a hard stop).
   const [priorityAlert, setPriorityAlert] = useState(false);
+  // Set when the patient's own words matched an emergency (the server checks them with a
+  // plain keyword list, whatever the AI does). Holds { message, numbers: [{ number, label }] }
+  // and stays on screen for the rest of the session. Also set when the AI could not answer.
+  const [emergency, setEmergency] = useState(null);
 
   const scrollRef = useRef(null);
   const startedRef = useRef(!!preStarted);
@@ -919,7 +923,13 @@ export default function IntakeChat() {
       if (res.red_flag_is_new) {
         setPriorityAlert(true);
       }
+      if (res.emergency) setEmergency(res.emergency);
     } catch (err) {
+      // Even when the AI could not answer, an emergency in the patient's words is shown.
+      if (err.data?.emergency) {
+        setEmergency(err.data.emergency);
+        setPriorityAlert(true);
+      }
       // The turn was not saved (the server only saves a turn it could answer), so take the
       // patient's bubble back out and give them their answer back to send again.
       setMessages((prev) => {
@@ -1239,14 +1249,28 @@ export default function IntakeChat() {
               of the session but deliberately does not block the chat below
               (confirmed with the user: keep collecting history in parallel
               with notifying staff). */}
-          {priorityAlert && (
-            <div className="mb-4 flex items-start gap-3 rounded-2xl border border-red-200 bg-red-50 px-4 py-3.5 text-red-800">
+          {(priorityAlert || emergency) && (
+            <div className="mb-4 flex items-start gap-3 rounded-2xl border border-red-200 bg-red-50 px-4 py-3.5 text-red-800" role="alert">
               <AlertTriangle size={20} className="shrink-0 mt-0.5 text-red-600" />
               <div className="text-sm">
-                <p className="font-semibold">Priority Alert</p>
+                <p className="font-semibold">{emergency ? "This may be an emergency" : "Priority Alert"}</p>
                 <p className="mt-0.5 text-red-700">
-                  Your response may require immediate medical attention. Please wait while our staff reviews your case — you can continue answering below in the meantime.
+                  {emergency
+                    ? emergency.message
+                    : "Your answers have been marked urgent for the doctor. No one is watching this chat live, so if you feel very unwell, don't wait: call 108 for an ambulance or 112 for emergency help."}
                 </p>
+                <p className="mt-2 flex flex-wrap gap-2">
+                  {(emergency?.numbers || [{ number: "108", label: "Ambulance" }, { number: "112", label: "Emergency" }]).map((n) => (
+                    <a
+                      key={n.number}
+                      href={`tel:${n.number}`}
+                      className="inline-flex items-center rounded-lg bg-red-600 px-3 py-1.5 text-xs font-bold text-white"
+                    >
+                      Call {n.number}
+                    </a>
+                  ))}
+                </p>
+                <p className="mt-2 text-red-700">You can keep answering below.</p>
               </div>
             </div>
           )}

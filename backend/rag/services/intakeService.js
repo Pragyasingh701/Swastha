@@ -20,6 +20,7 @@ import {
   pendingDetailFor,
   resolveDetailValue,
 } from './intakeDetailFollowUp.js';
+import { detectEmergency } from './emergencyKeywords.js';
 
 // First-pass red-flag trigger list (PRD §6.1, confirmed with the user before
 // being hardcoded here). Not exhaustive — a deliberately short starter set
@@ -2418,6 +2419,10 @@ export async function advanceIntakeSession({ sessionId, patientId, patientMessag
     return acc;
   }, []);
 
+  // A plain keyword check on the patient's own words, run whatever the AI does with
+  // them (it can miss a message, fail, or come back degraded). See emergencyKeywords.js.
+  const emergency = detectEmergency(patientMessage);
+
   const turn = await runIntakeTurn({
     section: currentSection,
     structuredHistory: session.structured_history,
@@ -2438,8 +2443,25 @@ export async function advanceIntakeSession({ sessionId, patientId, patientMessag
   // session stays exactly as it was and the caller reports the failure, so the same answer can be
   // sent again.
   if (turn.degraded) {
+    // The answer is not saved, but an emergency in it still is: the session is marked urgent
+    // for the doctor, and the patient is told what to do, even though the AI never answered.
+    if (emergency) {
+      const flagged = await markSessionAsEmergency(session, patientId, emergency);
+      return {
+        session: flagged,
+        turn: {
+          ...turn,
+          emergency,
+          red_flag: true,
+          red_flag_reason: flagged.red_flag_reason,
+          red_flag_is_new: !session.structured_history?.red_flag,
+        },
+      };
+    }
     return { session, turn };
   }
+
+  if (emergency) applyEmergencyToTurn(turn, session, emergency);
 
   const nowIso = new Date().toISOString();
   const updatedTurns = [
@@ -2467,6 +2489,43 @@ export async function advanceIntakeSession({ sessionId, patientId, patientMessag
   }
 
   return { session: updated, turn };
+}
+
+// Adds a keyword-detected emergency to the AI's turn: the session counts as red-flagged even
+// when the AI did not flag it, and the caller gets the fixed emergency message to show.
+function applyEmergencyToTurn(turn, session, emergency) {
+  const alreadyFlagged = !!session.structured_history?.red_flag;
+  if (!turn.red_flag) {
+    turn.red_flag = true;
+    turn.red_flag_reason = emergency.reason;
+    turn.structured_history = { ...turn.structured_history, red_flag: true, red_flag_reason: emergency.reason };
+  }
+  turn.red_flag_is_new = !alreadyFlagged;
+  turn.emergency = emergency;
+}
+
+// Marks a session urgent without saving the turn (used when the AI could not answer).
+async function markSessionAsEmergency(session, patientId, emergency) {
+  if (session.structured_history?.red_flag) return session;
+
+  const { data, error } = await supabase
+    .from('intake_sessions')
+    .update({
+      structured_history: { ...session.structured_history, red_flag: true, red_flag_reason: emergency.reason },
+      priority: 'flagged',
+      red_flag_reason: emergency.reason,
+    })
+    .eq('id', session.id)
+    .eq('patient_id', patientId)
+    .select()
+    .single();
+
+  if (error) {
+    // Not fatal: the patient still gets the emergency message, and the next answer is checked again.
+    console.error(`[intake] could not flag session ${session.id} as an emergency:`, error.message);
+    return { ...session, red_flag_reason: emergency.reason };
+  }
+  return data;
 }
 
 /**
