@@ -63,7 +63,7 @@ Return ONLY a single JSON object (no prose, no markdown fences) with this exact 
     {
       "testName": "<e.g. HbA1c, LDL Cholesterol, Vitamin D>",
       "unit": "<e.g. %, mg/dL, ng/mL — empty string if unclear>",
-      "normalRange": "<e.g. 70-100 — empty string if unknown>",
+      "normalRange": "<the reference range exactly as PRINTED in the records for this test, e.g. 70-100 — empty string if the records do not state one. Never fill it in from your own knowledge>",
       "points": [ { "date": "<YYYY-MM-DD from the report's Date field>", "value": <number> } ]
     }
   ],
@@ -76,6 +76,7 @@ Return ONLY a single JSON object (no prose, no markdown fences) with this exact 
 }
 
 Rules:
+- A test's "normalRange" may only be copied from the records themselves. If no report states a reference range for that test, leave it as an empty string, even if you know the usual range.
 - Only include a test in "series" if it appears with a numeric value in at least one report. Group same test across multiple reports/dates into one series entry, sorted by date ascending.
 - If nothing numeric can be extracted at all, return "series": [].
 - "physicianSummary" should have 1-3 items, only about things actually supported by the records.

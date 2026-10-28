@@ -315,7 +315,7 @@ function StatCard({ series, isActive, onClick }) {
       </div>
 
       <p className="text-xs text-slate-400 ">
-        {series.normalRange ? `Normal range: ${series.normalRange}` : `${series.points.length} recorded value${series.points.length === 1 ? "" : "s"}`}
+        {series.normalRange ? `Reference range (from your report): ${series.normalRange}` : `${series.points.length} recorded value${series.points.length === 1 ? "" : "s"}`}
       </p>
     </button>
   );
@@ -333,7 +333,7 @@ function TrendCard({ activeSeries, chartData, range, setRange }) {
           </h2>
           <p className="text-sm text-slate-400 mt-1">
             Extracted from your uploaded Lab Reports
-            {activeSeries.normalRange ? ` · Normal range: ${activeSeries.normalRange}${activeSeries.unit ? ` ${activeSeries.unit}` : ""}` : ""}
+            {activeSeries.normalRange ? ` · Reference range (from your report): ${activeSeries.normalRange}${activeSeries.unit ? ` ${activeSeries.unit}` : ""}` : ""}
           </p>
         </div>
 
