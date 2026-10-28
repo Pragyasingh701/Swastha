@@ -128,6 +128,18 @@ async function resolveTargetUser(req, authUser) {
   }
 
   const targetUserId = targetUser?.id || authUser.userId;
+
+  // Only used by the routes that save, change or delete a report. A linked doctor
+  // can read a patient's records (see assertCanAccessTarget) but never write to
+  // them: no screen does it, and a doctor must not be able to alter or delete a
+  // patient's medical record by calling the API directly. (Reports belong to a
+  // patient account, so a doctor has no timeline of their own to write to either.)
+  if (authUser.role === 'doctor') {
+    const readOnly = new Error("Doctors can view a linked patient's records but cannot change them.");
+    readOnly.status = 403;
+    throw readOnly;
+  }
+
   await assertCanAccessTarget(authUser, targetUserId);
   return targetUserId;
 }
@@ -325,10 +337,8 @@ router.post('/', handleReportFileUpload, async (req, res) => {
     try {
       targetUserId = await resolveTargetUser(req, user);
     } catch (targetError) {
-      // A tagged 500 (a real DB/network failure in the link check itself,
-      // not "not linked") is distinct from the default 403 for a
-      // genuinely unlinked/expired doctor or unauthorized family member —
-      // see resolveTargetUser's isDoctorLinkedToPatient catch above.
+      // 403 for a doctor (read-only) or an unauthorized family member; a
+      // tagged 500 is a real failure while checking access.
       return res.status(targetError.status || 403).json({ message: targetError.message });
     }
 
@@ -391,10 +401,8 @@ router.put('/:id', handleReportFileUpload, async (req, res) => {
     try {
       targetUserId = await resolveTargetUser(req, user);
     } catch (targetError) {
-      // A tagged 500 (a real DB/network failure in the link check itself,
-      // not "not linked") is distinct from the default 403 for a
-      // genuinely unlinked/expired doctor or unauthorized family member —
-      // see resolveTargetUser's isDoctorLinkedToPatient catch above.
+      // 403 for a doctor (read-only) or an unauthorized family member; a
+      // tagged 500 is a real failure while checking access.
       return res.status(targetError.status || 403).json({ message: targetError.message });
     }
 
@@ -530,10 +538,8 @@ router.delete('/:id', async (req, res) => {
     try {
       targetUserId = await resolveTargetUser(req, user);
     } catch (targetError) {
-      // A tagged 500 (a real DB/network failure in the link check itself,
-      // not "not linked") is distinct from the default 403 for a
-      // genuinely unlinked/expired doctor or unauthorized family member —
-      // see resolveTargetUser's isDoctorLinkedToPatient catch above.
+      // 403 for a doctor (read-only) or an unauthorized family member; a
+      // tagged 500 is a real failure while checking access.
       return res.status(targetError.status || 403).json({ message: targetError.message });
     }
 
