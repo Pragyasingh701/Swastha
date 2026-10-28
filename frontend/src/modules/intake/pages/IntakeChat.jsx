@@ -1156,6 +1156,10 @@ export default function IntakeChat() {
                       )}
                     </div>
 
+                    <p className="mb-6 text-center text-xs text-slate-500">
+                      Checking in lets this doctor see your records for 24 hours. You can end that any time from Doctor Access in your profile menu.
+                    </p>
+
                     {gateError && (
                       <div className="mb-6 p-4 rounded-xl bg-red-50 text-red-700 text-sm">{gateError}</div>
                     )}

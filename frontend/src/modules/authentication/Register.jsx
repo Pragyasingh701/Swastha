@@ -4,6 +4,7 @@ import { useAuth } from "../../context/AuthContext";
 import { startGoogleAuth } from "../../utils/googleAuth";
 import { sanitizePhoneInput, isValidIndianPhone, isValidEmail, isValidFullName, getPasswordError } from "../../utils/formValidation";
 import swasthaLogo from "../../assets/swastha-logo.png"; // adjust this path to wherever you keep the logo asset
+import registerSide from "../../assets/register-side.jpg";
 import { getIntendedRole } from "../../utils/intendedRole";
 
 export default function Register() {
@@ -113,7 +114,7 @@ export default function Register() {
             <img
               className="w-full h-full object-cover opacity-60"
               alt="A futuristic medical laboratory with clean white lines, holographic health data visualizations floating in the air, and a clinical yet inviting atmosphere."
-              src="https://lh3.googleusercontent.com/aida-public/AB6AXuDz5wWv8vfn1PR2dJNowbF5vldudSF8uYZFB0d4ejH30ciczx74st_aCvYvKRppkxH1jyXvjs7bEyKGMnF0y1YKilevmdg_rFjIfZzIwtybiutLa4WMTSgeGGdFYzzUvPKaKo_awe3ko9RNMWRDuwLadQa8ksRlkXLOZdzjpOprlcpfHZjmGEBFs1DeaXq62aFLEFrYr6UlH3lOfStHxEEymssdUHWfFkLaf-N9AqqQQNS9gqTrtFaL"
+              src={registerSide}
             />
           </div>
           <div className="relative z-10 glass-panel p-12 rounded-[2rem] max-w-lg border-white/20 shadow-2xl">
@@ -175,7 +176,7 @@ export default function Register() {
                     required
                     className="w-full h-11 pl-11 bg-surface border border-outline-variant rounded-xl focus:ring-4 focus:ring-primary/10 focus:border-primary outline-none transition-all placeholder:text-outline-variant/60 font-body-md text-body-md text-on-surface "
                     id="fullname"
-                    placeholder="Dr. Sarah Johnson"
+                    placeholder="Your full name"
                     type="text"
                     value={formData.fullname}
                     onChange={handleChange}
@@ -328,7 +329,7 @@ export default function Register() {
                 </div>
                 <div className="flex items-center gap-1.5 text-on-surface ">
                   <span className="material-symbols-outlined !text-[18px]">verified_user</span>
-                  <span className="font-label-sm text-label-sm">Verified Doctors</span>
+                  <span className="font-label-sm text-label-sm">You Control Doctor Access</span>
                 </div>
               </div>
               <div className="flex items-center gap-1.5 px-3 py-1 bg-surface-container rounded-full opacity-70">

@@ -330,7 +330,7 @@ export default function PatientRegister() {
             </div>
             <div className="flex items-center gap-1">
               <span className="material-symbols-outlined text-[16px]">verified_user</span>
-              <span className="text-[10px] font-bold uppercase tracking-widest">Verified Doctors</span>
+              <span className="text-[10px] font-bold uppercase tracking-widest">You Control Doctor Access</span>
             </div>
           </div>
         </div>

@@ -88,7 +88,7 @@ export default function Login() {
           <div className="mt-xl flex flex-wrap justify-center gap-md">
             <div className="flex items-center gap-2 px-4 py-2 bg-white/50 border border-outline-variant/30 rounded-xl">
               <span className="material-symbols-outlined text-primary text-[20px]" style={{ fontVariationSettings: "'FILL' 1" }}>verified_user</span>
-              <span className="font-label-md text-label-md text-on-surface-variant ">Verified Doctors</span>
+              <span className="font-label-md text-label-md text-on-surface-variant ">You Control Doctor Access</span>
             </div>
             <div className="flex items-center gap-2 px-4 py-2 bg-white/50 border border-outline-variant/30 rounded-xl">
               <span className="material-symbols-outlined text-primary text-[20px]" style={{ fontVariationSettings: "'FILL' 1" }}>mail</span>

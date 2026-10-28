@@ -200,8 +200,8 @@ export default function SettingsModal({ isOpen, onClose }) {
 
       const certExtracted = updateRes?.extractedCertificateData;
       const successText = certExtracted
-        ? 'Account & Medical Council credentials verified via Vision AI and updated in database!'
-        : 'Account credentials and profile data updated successfully in database!';
+        ? 'Profile updated. Your certificate was read to fill in your details.'
+        : 'Profile updated.';
 
       setMessage({ type: 'success', text: successText });
 
@@ -210,7 +210,7 @@ export default function SettingsModal({ isOpen, onClose }) {
         onClose();
       }, 1500);
     } catch (err) {
-      setMessage({ type: 'error', text: err.message || 'Failed to update account credentials in database.' });
+      setMessage({ type: 'error', text: err.message || 'Could not save your changes. Please try again.' });
     } finally {
       setIsSaving(false);
     }
@@ -600,7 +600,7 @@ export default function SettingsModal({ isOpen, onClose }) {
                           Click to upload your Medical Registration Certificate
                         </p>
                         <p className="text-[10px] text-slate-400 mt-0.5">
-                          Supports PDF, PNG, JPG (Scanned via Gemini Vision AI)
+                          PDF, PNG or JPG
                         </p>
                       </>
                     )}

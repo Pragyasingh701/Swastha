@@ -190,7 +190,7 @@ router.post('/access/:linkId/revoke', requirePatient, async (req, res) => {
     if (!revoked) {
       return res.status(404).json({ message: 'No active access found to revoke.' });
     }
-    return res.json({ message: 'Access revoked. This doctor can no longer see your records.' });
+    return res.json({ message: 'Access revoked. This doctor can no longer open your records. Intake summaries they already completed stay in their history.' });
   } catch (error) {
     console.error('Revoke access error:', error);
     return res.status(500).json({ message: 'Unable to revoke access. Please try again.' });
