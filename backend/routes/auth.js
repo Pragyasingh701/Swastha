@@ -8,7 +8,6 @@ import { sendOTPEmail, sendPasswordResetEmail, sendAccountExistsEmail } from '..
 import {
   findUserByEmail,
   findUserById,
-  findUserByIdOrPatientCode,
   createOrUpdateUser,
   generateUserId,
   updateUserPassword,
@@ -1216,57 +1215,6 @@ router.post('/reset-password', async (req, res) => {
   }
   resetTokenStore.delete(token); // Single-use consumption!
   return res.json({ message: 'Password reset successfully. You can now login with your new password.' });
-});
-
-/**
- * GET /api/auth/users/:userId
- * Looks up the AUTHENTICATED CALLER's own record by their ID or
- * patient_code. Previously had no auth middleware at all and would return
- * any user's full record (name/dob/phone/gender/blood_group/address, and
- * pre-bcrypt, password_hash) to anyone who could guess an id/patient_code —
- * scoped here to the caller only. A mismatch returns the same 404 as "not
- * found" rather than 403, so the response can't be used to confirm whether
- * a given id/patient_code belongs to someone else.
- */
-router.get('/users/:userId', authenticateToken, async (req, res) => {
-  const { userId } = req.params;
-  if (!userId) {
-    return res.status(400).json({ message: 'User ID is required.' });
-  }
-
-  try {
-    // findUserByIdOrPatientCode checks id across patients/doctors/pending
-    // first (matching the old findUserById), then falls back to patients'
-    // patient_code (the only table that has that column post-split).
-    const user = await findUserByIdOrPatientCode(userId);
-
-    if (!user || user.id !== req.user.userId) {
-      return res.status(404).json({ message: 'No user found with this ID.' });
-    }
-
-    return res.json({
-      user: {
-        ...publicUser(user),
-        patientId: user.patient_code || user.id,
-        fullName: user.name || user.fullName,
-        mobile: user.phone || user.mobile,
-        phone: user.phone || user.mobile,
-        bloodGroup: user.blood_group || user.bloodGroup || user.blood_type,
-        blood_group: user.blood_group || user.bloodGroup || user.blood_type,
-        dob: user.dob || user.date_of_birth || user.dateOfBirth,
-        licenseNumber: user.license_number || user.licenseNumber || user.regNumber,
-        regNumber: user.license_number || user.licenseNumber || user.regNumber,
-        specialization: user.specialty || user.specialization,
-        specialty: user.specialty || user.specialization,
-        hospitalName: user.hospital_name || user.hospitalName,
-        hospital_name: user.hospital_name || user.hospitalName,
-        hasSelectedRole: !!(user.role && user.role !== 'none'),
-      },
-    });
-  } catch (error) {
-    console.error('User lookup error:', error);
-    return res.status(500).json({ message: 'Failed to fetch user details.' });
-  }
 });
 
 /**

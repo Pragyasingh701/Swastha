@@ -59,10 +59,6 @@ export const authService = {
     return apiPost('/auth/user', {}, { token, method: 'DELETE' });
   },
 
-  async getUserById(userId, token) {
-    return apiGet(`/auth/users/${encodeURIComponent(userId)}`, { token });
-  },
-
   // Throws on failure (status attached, per apiGet/parseResponse) rather than
   // swallowing errors — callers need to tell "session is dead" (401/404, the
   // token's user no longer resolves) apart from "backend unreachable" so a

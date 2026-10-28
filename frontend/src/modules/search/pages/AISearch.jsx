@@ -350,12 +350,8 @@ function ChatBubble({ message }) {
         degraded: false, // this branch never renders for an error bubble
       });
       setFeedbackRating(rating);
-    } catch (err) {
-      // TEMPORARY: surfaced to the console while diagnosing why feedback
-      // submissions aren't reaching the table — revert to a silent catch
-      // once resolved (feedback is a nice-to-have, shouldn't show an error
-      // banner over an answer the patient already has and can keep using).
-      console.error('[AISearch] feedback submission failed:', err);
+    } catch {
+      // Feedback is a nice-to-have: no error banner over an answer the patient already has.
     } finally {
       setFeedbackSubmitting(false);
     }

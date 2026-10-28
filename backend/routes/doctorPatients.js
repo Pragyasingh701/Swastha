@@ -655,55 +655,10 @@ router.post('/link', requireDoctor, async (req, res) => {
 });
 
 /**
- * GET /api/doctor-patients/:patientId
- * DOCTOR-facing patient detail. THE security boundary for patient detail:
- * returns 403 unless the doctor_patient link for this pair is 'accepted',
- * even if the doctor hits this directly with a valid patient id. Never
- * relies on the frontend hiding a pending card.
- */
-router.get('/:patientId', requireDoctor, async (req, res) => {
-  const authUser = getAuthUser(req);
-
-  if (!authUser?.userId) {
-    return res.status(401).json({ message: 'Authentication required.' });
-  }
-
-  const patientId = String(req.params?.patientId ?? '').trim();
-  if (!patientId) {
-    return res.status(400).json({ message: 'Patient ID is required.' });
-  }
-
-  try {
-    // isDoctorLinkedToPatient requires status = 'accepted' (see
-    // backend/db/doctorPatients.js) — pending/declined/absent all fail here.
-    const allowed = await isDoctorLinkedToPatient(authUser.userId, patientId);
-    if (!allowed) {
-      return res.status(403).json({
-        message: 'You do not have access to this patient. The patient must accept your request first.',
-      });
-    }
-
-    const patients = await getDoctorPatients(authUser.userId);
-    const patient = patients.find(
-      (p) => p.patientUserId === patientId && p.linkStatus === 'accepted'
-    );
-
-    if (!patient) {
-      return res.status(404).json({ message: 'Patient not found.' });
-    }
-
-    return res.json({ patient });
-  } catch (error) {
-    console.error('Doctor patient detail error:', error);
-    return res.status(500).json({ message: 'Unable to load patient.' });
-  }
-});
-
-/**
  * GET /api/doctor-patients/:patientId/summary
  * DOCTOR-facing AI summary of a patient's full record timeline, for the
- * Clinical Intelligence page. Same 'accepted' link gate as the detail
- * route above — never generated (or even fetched) for a pending/declined
+ * Clinical Intelligence page. Same 'accepted' link gate as the other
+ * :patientId routes — never generated (or even fetched) for a pending/declined
  * pair. Declared before the '/:patientId' DELETE (order doesn't matter
  * for DELETE, but keeping every :patientId route together for clarity).
  *

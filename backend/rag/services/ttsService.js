@@ -21,7 +21,7 @@
 import { recordAiRequest } from '../utils/aiRequestLog.js';
 import { Buffer } from 'node:buffer';
 import { EdgeTTS } from 'edge-tts-universal';
-import { currentKey, retireKey, __resetKeyPool } from '../config/sarvamKeys.js';
+import { currentKey, retireKey, classifySarvam, KEY_EXHAUSTED_CODES, __resetKeyPool } from '../config/sarvamKeys.js';
 import { ALLOW_EDGE_TTS_FALLBACK } from '../config/env.js';
 
 const SARVAM_TTS_URL = 'https://api.sarvam.ai/text-to-speech';
@@ -133,35 +133,6 @@ export function buildOptionsSpeech(options, language) {
 export function normalizeLanguage(language) {
   return SUPPORTED_LANGUAGES.includes(language) ? language : DEFAULT_LANGUAGE;
 }
-
-/**
- * Classify a Sarvam failure so the caller's logs say WHY the fallback
- * kicked in. Mirrors aiClient.js's classify() taxonomy, adapted to
- * Sarvam's error shape.
- *
- * Sarvam returns 403 for BOTH a missing/invalid key AND an authenticated-
- * but-forbidden request, so status alone can't tell a dead key from a
- * permission problem — the body's error.code disambiguates
- * (invalid_api_key_error vs anything else). Treating every 403 as
- * KEY_DEAD would wrongly mark a live key dead for the rest of the process.
- */
-function classifySarvam(status, bodyText) {
-  const body = (bodyText || '').toLowerCase();
-  if (status === 429) return 'RATE_LIMIT';
-  if (status === 403) {
-    return body.includes('invalid_api_key_error') ? 'KEY_DEAD' : 'FORBIDDEN';
-  }
-  if (status === 401) return 'KEY_DEAD';
-  if (status === 402 || body.includes('insufficient') || body.includes('quota')) return 'QUOTA_EXHAUSTED';
-  if (status === 0) return 'NETWORK';
-  if (status >= 500) return 'PROVIDER_ERROR';
-  return 'BAD_REQUEST';
-}
-
-// Failures that mean "this key is finished" — retire it and move to the
-// next one in the pool. Everything else (5xx, timeout, network) says
-// nothing about the key's validity and must not burn it.
-const KEY_EXHAUSTED_CODES = new Set(['KEY_DEAD', 'QUOTA_EXHAUSTED', 'RATE_LIMIT']);
 
 /** Test seam — restores the whole key pool. */
 export function __resetSarvamKeyState() {
