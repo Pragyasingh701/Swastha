@@ -312,7 +312,7 @@ export default function SettingsModal({ isOpen, onClose }) {
                   value={formData.name}
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                   className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 bg-white text-xs font-semibold text-slate-900 focus:ring-2 focus:ring-blue-600 focus:outline-none transition-all"
-                  placeholder="e.g. Dr. Jane Doe"
+                  placeholder="Your full name"
                 />
               </div>
 
@@ -385,7 +385,7 @@ export default function SettingsModal({ isOpen, onClose }) {
                   value={formData.phone}
                   onChange={(e) => setFormData({ ...formData, phone: sanitizePhoneInput(e.target.value) })}
                   className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 bg-white text-xs font-semibold text-slate-900 focus:ring-2 focus:ring-blue-600 focus:outline-none transition-all"
-                  placeholder="98765 43210"
+                  placeholder="Your 10-digit mobile number"
                 />
               </div>
 
@@ -470,7 +470,7 @@ export default function SettingsModal({ isOpen, onClose }) {
                     value={formData.regNumber}
                     onChange={(e) => setFormData({ ...formData, regNumber: e.target.value })}
                     className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 bg-white text-xs font-semibold text-slate-900 focus:ring-2 focus:ring-indigo-600 focus:outline-none"
-                    placeholder="e.g. MCI-12345"
+                    placeholder="Your registration number"
                   />
                 </div>
 

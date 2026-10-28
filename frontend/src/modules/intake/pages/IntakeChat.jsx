@@ -1125,7 +1125,7 @@ export default function IntakeChat() {
                         autoFocus
                         value={clinicCode}
                         onChange={(e) => setClinicCode(e.target.value.toUpperCase().slice(0, 8))}
-                        placeholder="e.g. 7K9M2P"
+                        placeholder="Enter the clinic code"
                         className="w-full h-14 text-center text-2xl font-bold tracking-[0.3em] uppercase bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-200 transition-all"
                       />
                       <button

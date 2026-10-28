@@ -154,7 +154,7 @@ export default function PatientRegister() {
                       <input
                         readOnly
                         className="w-full h-11 pl-10 pr-4 bg-surface-container-low border border-outline-variant/60 rounded-xl font-body-md text-on-surface cursor-not-allowed opacity-90 select-none"
-                        placeholder="Johnathan Doe"
+                        placeholder="Your full name"
                         type="text"
                         name="fullName"
                         value={formData.fullName}
@@ -174,7 +174,7 @@ export default function PatientRegister() {
                       <input
                         readOnly
                         className="w-full h-11 pl-10 pr-4 bg-surface-container-low border border-outline-variant/60 rounded-xl font-body-md text-on-surface cursor-not-allowed opacity-90 select-none"
-                        placeholder="john@healthcare.com"
+                        placeholder="Your email address"
                         type="email"
                         name="email"
                         value={formData.email}
@@ -202,7 +202,7 @@ export default function PatientRegister() {
                             ? "bg-surface-container-low cursor-not-allowed opacity-90 select-none"
                             : "bg-surface focus:border-primary focus:ring-4 focus:ring-primary/10"
                         }`}
-                        placeholder="98765 43210"
+                        placeholder="Your 10-digit mobile number"
                         required
                         type="tel"
                         inputMode="numeric"

@@ -447,7 +447,7 @@ export default function DoctorPatients() {
                           setPatientCode(e.target.value);
                           if (errorMessage) setErrorMessage("");
                         }}
-                        placeholder="Enter patient code (e.g., 012345)"
+                        placeholder="Enter the patient's code"
                         className="w-full pl-10 pr-3.5 py-3 rounded-xl border border-slate-200 bg-white text-sm text-slate-900 placeholder:text-slate-400 focus:ring-2 focus:ring-blue-600 focus:border-blue-500 focus:outline-none transition-all"
                       />
                     </div>

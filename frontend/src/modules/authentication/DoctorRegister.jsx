@@ -206,7 +206,7 @@ export default function DoctorRegister() {
                       </span>
                       <input
                         className="w-full h-11 pl-10 pr-4 bg-surface border border-outline-variant rounded-xl font-body-md text-on-surface focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all"
-                        placeholder="e.g. Dr. Jane Doe"
+                        placeholder="Your full name"
                         type="text"
                         name="fullName"
                         value={form.fullName}
@@ -230,7 +230,7 @@ export default function DoctorRegister() {
                       <input
                         readOnly
                         className="w-full h-11 pl-10 pr-4 bg-surface-container-low border border-outline-variant/60 rounded-xl font-body-md text-on-surface cursor-not-allowed opacity-90 select-none"
-                        placeholder="doctor@example.com"
+                        placeholder="Your email address"
                         type="email"
                         name="email"
                         value={form.email}
@@ -260,7 +260,7 @@ export default function DoctorRegister() {
                             ? "bg-surface-container-low cursor-not-allowed opacity-90 select-none"
                             : "bg-surface focus:border-primary focus:ring-4 focus:ring-primary/10"
                         }`}
-                        placeholder="98765 43210"
+                        placeholder="Your 10-digit mobile number"
                         required
                         type="tel"
                         inputMode="numeric"
@@ -346,7 +346,7 @@ export default function DoctorRegister() {
                       </span>
                       <input
                         className="w-full h-11 pl-10 pr-4 bg-surface rounded-xl border border-outline-variant focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all placeholder:text-outline-variant/60 "
-                        placeholder="e.g. MCI-12345"
+                        placeholder="Your registration number"
                         required
                         type="text"
                         maxLength={30}

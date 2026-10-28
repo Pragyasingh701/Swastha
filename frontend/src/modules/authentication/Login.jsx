@@ -162,7 +162,7 @@ export default function Login() {
                     autoComplete="off"
                     className="w-full pl-11 pr-4 py-3 bg-surface-container-lowest border border-outline-variant rounded-xl font-body-md text-body-md text-on-surface placeholder:text-outline/60 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all duration-200"
                     id="email"
-                    placeholder="name@example.com"
+                    placeholder="Your email address"
                     type="email"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}

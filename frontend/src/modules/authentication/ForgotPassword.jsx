@@ -78,7 +78,7 @@ export default function ForgotPassword() {
                     required
                     id="resetEmail"
                     type="email"
-                    placeholder="name@example.com"
+                    placeholder="Your email address"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     className="w-full pl-11 pr-4 py-3 bg-surface-container-lowest border border-outline-variant rounded-xl font-body-md text-on-surface focus:outline-none focus:border-primary"

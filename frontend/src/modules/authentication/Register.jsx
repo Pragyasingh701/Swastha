@@ -197,7 +197,7 @@ export default function Register() {
                     required
                     className="w-full h-11 pl-11 bg-surface border border-outline-variant rounded-xl focus:ring-4 focus:ring-primary/10 focus:border-primary outline-none transition-all placeholder:text-outline-variant/60 font-body-md text-body-md text-on-surface "
                     id="email"
-                    placeholder="sarah.j@healthcare.com"
+                    placeholder="Your email address"
                     type="email"
                     value={formData.email}
                     onChange={handleChange}
@@ -218,7 +218,7 @@ export default function Register() {
                     required
                     className="w-full h-11 pl-11 bg-surface border border-outline-variant rounded-xl focus:ring-4 focus:ring-primary/10 focus:border-primary outline-none transition-all placeholder:text-outline-variant/60 font-body-md text-body-md text-on-surface "
                     id="phone"
-                    placeholder="98765 43210"
+                    placeholder="Your 10-digit mobile number"
                     type="tel"
                     inputMode="numeric"
                     maxLength={10}

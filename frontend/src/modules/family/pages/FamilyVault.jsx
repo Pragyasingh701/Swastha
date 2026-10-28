@@ -597,7 +597,7 @@ export default function FamilyVault() {
                         onChange={(event) => setForm({ ...form, name: event.target.value })}
                         maxLength={80}
                         className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900 outline-none transition-colors focus:border-blue-400 focus:bg-white "
-                        placeholder="e.g. Ananya Sharma"
+                        placeholder="Their full name"
                         required
                       />
                       {fieldErrors.name ? <p className="text-sm text-rose-600 ">{fieldErrors.name}</p> : null}
@@ -670,7 +670,7 @@ export default function FamilyVault() {
                       value={form.email}
                       onChange={(event) => setForm({ ...form, email: event.target.value })}
                       className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900 outline-none transition-colors focus:border-blue-400 focus:bg-white "
-                      placeholder="person@example.com"
+                      placeholder="Their email address"
                     />
                     <p className="text-xs text-slate-500 ">
                       {isEditing
