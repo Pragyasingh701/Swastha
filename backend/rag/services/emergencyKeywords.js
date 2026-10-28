@@ -26,10 +26,13 @@ const NEGATION_AFTER = /^\s*(?:is\s+|are\s+|was\s+|hai\s+|hain\s+|tha\s+)?(?:nah
 
 // "chest pain two years ago", "my mother had a stroke last year": history, not now. Only
 // clear signs of the long past are used, so a symptom that started days or weeks ago
-// (and may well be ongoing) is still flagged.
+// (and may well be ongoing) is still flagged. It only counts when it sits in the SAME
+// clause as the symptom: "I had chest pain years ago but now I have severe chest pain"
+// is a current symptom, so the "years ago" before the "but" must not hide it.
 const LONG_PAST = /\b(?:years?|yrs?) (?:ago|back)\b|\blast year\b|\bin (?:the )?(?:distant )?past\b|\bsaal pehle\b|\bsaalon pehle\b|\bfamily history\b|\bhistory of\b|साल पहले/;
 
-const MAX_SCANNED_CHARS = 4000;
+// Where one clause ends and the next begins, for the history check above.
+const CLAUSE_BREAK = /[.;!?,\n]|\b(?:but|however|although|though|lekin|magar|parantu|par|abhi|now|currently|today)\b|लेकिन|मगर|अभी|अब/g;
 
 const CATEGORIES = [
   {
@@ -166,16 +169,27 @@ const CATEGORIES = [
 const DEFAULT_MESSAGE =
   "This could be a medical emergency. Call 108 for an ambulance now (or 112). Don't wait for the clinic to reply.";
 
-// True when the match at [start, end) is a symptom the patient is denying.
+// The clause around [start, end): from the nearest break before it to the nearest after.
+function clauseAround(text, start, end) {
+  const before = text.slice(Math.max(0, start - 120), start);
+  let from = Math.max(0, start - 120);
+  for (const m of before.matchAll(CLAUSE_BREAK)) from = Math.max(0, start - 120) + m.index + m[0].length;
+  const after = text.slice(end, end + 120);
+  CLAUSE_BREAK.lastIndex = 0;
+  const next = CLAUSE_BREAK.exec(after);
+  CLAUSE_BREAK.lastIndex = 0;
+  return text.slice(from, next ? end + next.index : end + after.length);
+}
+
+// True when the match at [start, end) is a symptom the patient is denying, or history.
 function isNegated(text, start, end) {
   return NEGATION_BEFORE.test(text.slice(Math.max(0, start - 30), start))
     || NEGATION_AFTER.test(text.slice(end, end + 20))
-    || LONG_PAST.test(text.slice(Math.max(0, start - 40), end + 40));
+    || LONG_PAST.test(clauseAround(text, start, end));
 }
 
 function normalise(text) {
   return String(text || '')
-    .slice(0, MAX_SCANNED_CHARS)
     .toLowerCase()
     .replace(/[‘’]/g, "'")
     .replace(/\s+/g, ' ');

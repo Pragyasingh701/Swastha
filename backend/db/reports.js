@@ -1,5 +1,6 @@
 import supabase from '../config/supabase.js';
 import { removeStoredFiles } from '../config/supabaseStorage.js';
+import { splitStoredNotes } from '../utils/reportNotes.js';
 
 const REPORTS_TABLE = 'reports';
 // reports.patient_id points at `patients`.
@@ -7,25 +8,6 @@ const REPORTS_USER_ID_COLUMN = 'patient_id';
 
 function normalizeText(value) {
   return typeof value === 'string' ? value.trim() : '';
-}
-
-function splitStoredNotes(value) {
-  const raw = normalizeText(value);
-  if (!raw) {
-    return { notes: '', analysis: '' };
-  }
-
-  const marker = '\n\n[AI Analysis]\n';
-  const markerIndex = raw.indexOf(marker);
-
-  if (markerIndex === -1) {
-    return { notes: raw, analysis: '' };
-  }
-
-  return {
-    notes: raw.slice(0, markerIndex).trim(),
-    analysis: raw.slice(markerIndex + marker.length).trim(),
-  };
 }
 
 function buildStoredNotes(notes, analysis) {

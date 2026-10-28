@@ -98,3 +98,25 @@ test('long hostile input is scanned quickly', () => {
   detectEmergency('a '.repeat(300000) + 'pregnant ' + 'x '.repeat(100000));
   assert.ok(Date.now() - started < 1000);
 });
+
+test('a current symptom is not hidden by history earlier in the same message', () => {
+  for (const m of [
+    'I had chest pain years ago but now I have severe chest pain',
+    'my mother had a stroke last year. my chest hurts a lot right now',
+    'chest pain two years ago, abhi phir se chest pain ho raha hai',
+    'I had a heart attack in the past however today I cannot breathe',
+  ]) assert.ok(detectEmergency(m), m);
+});
+
+test('history in the same clause as the symptom still does not flag', () => {
+  for (const m of ['I had chest pain two years ago', 'my mother had a stroke last year', 'family history of heart attack'])
+    assert.equal(detectEmergency(m), null, m);
+});
+
+test('a symptom far into a very long message is still caught', () => {
+  const filler = 'I have been tired and my knee hurts when I climb stairs. ';
+  const long = filler.repeat(200) + 'Now I have severe chest pain and sweating.';
+  assert.ok(long.length > 8000);
+  assert.equal(detectEmergency(long).category, 'chest');
+  assert.ok(detectEmergency(long.slice(0, 8000) + 'x'.repeat(5000) + ' I want to die'));
+});
