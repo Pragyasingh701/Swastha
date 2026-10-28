@@ -2,9 +2,7 @@ import express from 'express';
 import { OAuth2Client } from 'google-auth-library';
 import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
-import multer from 'multer';
 
-import fs from 'fs';
 
 import { sendOTPEmail, sendPasswordResetEmail, sendAccountExistsEmail } from '../utils/mailer.js';
 import {
@@ -19,7 +17,7 @@ import {
 import { getFamilyVaultForUser, deleteFamilyVaultForUser } from '../db/family.js';
 import { deleteAllReportsForUser } from '../db/reports.js';
 import { processMedicalCertificate } from '../services/certificateParserService.js';
-import { sniffFileType } from '../config/supabaseStorage.js';
+import { uploadMemory, uploadFileToSupabase, isOwnedStoredFile, removeStoredFiles } from '../config/supabaseStorage.js';
 import { publicUser } from '../utils/publicUser.js';
 import { passwordPolicyError } from '../utils/passwordPolicy.js';
 import { eraseAccountResidue } from '../db/accountErasure.js';
@@ -214,54 +212,6 @@ if (!global.__storeCleanupInterval) {
   }, 5 * 60 * 1000);
 }
 
-// Multer Storage Setup for uploaded documents (Certificates, ID Proofs).
-// Files are written to a local directory that is NOT served over HTTP (they
-// used to be exposed at /uploads/<name> with no authentication): the doctor
-// certificates and ID proofs in here are identity documents. The stored
-// name is random and its extension comes from the file's real type, never
-// from the client's filename.
-const UPLOAD_DIR = 'uploads/';
-const UPLOAD_EXTENSIONS = { 'application/pdf': '.pdf', 'image/jpeg': '.jpg', 'image/png': '.png', 'image/webp': '.webp' };
-
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    if (!fs.existsSync(UPLOAD_DIR)) {
-      fs.mkdirSync(UPLOAD_DIR, { recursive: true });
-    }
-    cb(null, UPLOAD_DIR);
-  },
-  filename: (req, file, cb) => {
-    const ext = UPLOAD_EXTENSIONS[file.mimetype] || '';
-    cb(null, `file-${Date.now()}-${crypto.randomBytes(8).toString('hex')}${ext}`);
-  },
-});
-
-const upload = multer({
-  storage,
-  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB file size limit
-  fileFilter: (req, file, cb) => {
-    if (UPLOAD_EXTENSIONS[file.mimetype]) {
-      cb(null, true);
-    } else {
-      cb(new Error('Invalid file type. Only PDF, JPEG, PNG, and WEBP files are allowed.'));
-    }
-  },
-});
-
-// The declared Content-Type is client-controlled, so the file's first bytes
-// must also match an allowed type, otherwise it is deleted again.
-function fileMatchesAllowedType(filePath) {
-  try {
-    const fd = fs.openSync(filePath, 'r');
-    const head = Buffer.alloc(12);
-    fs.readSync(fd, head, 0, 12, 0);
-    fs.closeSync(fd);
-    return Boolean(sniffFileType(head));
-  } catch {
-    return false;
-  }
-}
-
 // Middleware to authenticate JWT bearer tokens
 const authenticateToken = (req, res, next) => {
   const authHeader = req.headers.authorization || '';
@@ -280,33 +230,39 @@ const authenticateToken = (req, res, next) => {
   }
 };
 
+// Where a doctor's registration certificate is stored inside the private bucket.
+const CERTIFICATE_FOLDER = 'certificates';
+
 /**
  * POST /api/auth/upload
  * Document Upload Handler (Medical Registration Certificate & Identity Proof)
  */
 router.post('/upload', authenticateToken, (req, res) => {
-  upload.single('file')(req, res, (err) => {
+  // Held in memory and written to the private storage bucket (under
+  // certificates/<your id>/), not to the server's disk, which is wiped on every
+  // deploy. The file's type is checked from its own bytes, not the client's
+  // Content-Type.
+  uploadMemory.single('file')(req, res, async (err) => {
     if (err) {
       return res.status(400).json({ message: err.message || 'File upload failed.' });
     }
     if (!req.file) {
       return res.status(400).json({ message: 'No file uploaded.' });
     }
-    if (!fileMatchesAllowedType(req.file.path)) {
-      fs.unlink(req.file.path, () => {});
-      return res.status(400).json({ message: 'The uploaded file is not a valid PDF, JPEG, PNG or WEBP document.' });
+    try {
+      const url = await uploadFileToSupabase(req.file, req.user.userId, CERTIFICATE_FOLDER);
+      return res.json({
+        message: 'File uploaded successfully',
+        url,
+        originalName: req.file.originalname,
+      });
+    } catch (uploadError) {
+      if (uploadError.status === 400) {
+        return res.status(400).json({ message: uploadError.message });
+      }
+      console.error('Document upload error:', uploadError.message || uploadError);
+      return res.status(500).json({ message: 'Could not save the document. Please try again.' });
     }
-    const protocol = req.protocol || 'http';
-    const host = req.get('host') || 'localhost:5001';
-    const fullFileUrl = `${protocol}://${host}/uploads/${req.file.filename}`;
-    const relativeUrl = `/uploads/${req.file.filename}`;
-    return res.json({
-      message: 'File uploaded successfully',
-      url: fullFileUrl,
-      relativeUrl: relativeUrl,
-      filename: req.file.filename,
-      originalName: req.file.originalname,
-    });
   });
 });
 
@@ -792,6 +748,13 @@ router.post('/profile', authenticateToken, async (req, res) => {
 
     const isNewCertProvided = Boolean(certUrl && certUrl !== userToUpdate?.reg_certificate_url);
 
+    // A certificate has to be a file this account uploaded itself (see /upload).
+    // Without this, a request could point at another account's file, or at any
+    // address, and have it read and saved as its own certificate.
+    if (isNewCertProvided && !isOwnedStoredFile(certUrl, req.user.userId, CERTIFICATE_FOLDER)) {
+      return res.status(400).json({ message: 'Please upload your registration certificate again.' });
+    }
+
     // An edit that comes with no new certificate used to skip every check. Whatever is sent is still
     // validated, and the registration itself (number or council) cannot be changed without
     // uploading the certificate that backs the new one.
@@ -939,6 +902,13 @@ router.post('/profile', authenticateToken, async (req, res) => {
       role: targetRole || userToUpdate?.role || 'patient',
       hasSelectedRole: true,
     });
+
+    // A replaced certificate is removed from storage. Best effort: it never
+    // fails the save.
+    const previousCertificateUrl = userToUpdate?.reg_certificate_url;
+    if (previousCertificateUrl && previousCertificateUrl !== savedUser.reg_certificate_url) {
+      await removeStoredFiles([previousCertificateUrl]);
+    }
 
     // The session token carries the role, and it was minted before role
     // selection (role 'none'). Hand back a fresh one when the role changed, so

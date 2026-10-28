@@ -10,13 +10,12 @@
 //   ask_swastha_access_log     kept as a security audit trail, but the id is replaced
 //                              with a placeholder so it no longer points at a person
 //   ai_request_log             kept for provider accounting, user id cleared
-//   doctor certificate file    removed from disk
+//   doctor certificate file    removed from storage
 //
 // Best-effort per step: one failure is logged and the rest still run, and a table
 // that doesn't exist yet (a migration not applied) is skipped.
-import fs from 'fs';
-import path from 'path';
 import supabase from '../config/supabase.js';
+import { removeStoredFiles, storagePathFromUrl } from '../config/supabaseStorage.js';
 
 export const DELETED_ACCOUNT_PLACEHOLDER = 'deleted-account';
 
@@ -38,31 +37,6 @@ async function step(label, run) {
   }
 }
 
-// Removes an uploaded doctor certificate, but only from inside the uploads
-// directory (the stored value is a URL we generated, but never trust a stored
-// path to be a safe one to unlink).
-export function removeLocalUpload(fileUrl) {
-  if (typeof fileUrl !== 'string') return false;
-  const marker = '/uploads/';
-  const at = fileUrl.indexOf(marker);
-  if (at === -1) return false;
-  const name = path.basename(fileUrl.slice(at + marker.length).split('?')[0]);
-  if (!name || name === '.' || name === '..') return false;
-
-  for (const root of [path.resolve(process.cwd(), 'uploads'), path.resolve(process.cwd(), 'backend', 'uploads')]) {
-    const candidate = path.resolve(root, name);
-    if (candidate.startsWith(root + path.sep) && fs.existsSync(candidate)) {
-      try {
-        fs.unlinkSync(candidate);
-        return true;
-      } catch (err) {
-        console.error('[account-erasure] could not remove uploaded file:', err.message);
-      }
-    }
-  }
-  return false;
-}
-
 export async function eraseAccountResidue(userId, { certificateUrl } = {}) {
   const id = String(userId || '').trim();
   if (!id || !supabase) return { ok: false };
@@ -77,6 +51,7 @@ export async function eraseAccountResidue(userId, { certificateUrl } = {}) {
     step('ai_request_log', () => supabase.from('ai_request_log').update({ user_id: null }).eq('user_id', id)),
   ]);
 
-  const certificateRemoved = certificateUrl ? removeLocalUpload(certificateUrl) : false;
+  const certificateRemoved = Boolean(certificateUrl && storagePathFromUrl(certificateUrl));
+  if (certificateRemoved) await removeStoredFiles([certificateUrl]);
   return { ok: results.every(Boolean), certificateRemoved };
 }
