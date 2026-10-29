@@ -67,6 +67,9 @@ Optional tuning variables are listed in `backend/.env.example` (rate limits, COR
   Content-Security-Policy. Allow any new external script, font, image host or API origin there.
 - **Backend (e.g. Render):** set the variables above.
 - **Database:** run `supabase/schema/00000000000000_baseline_schema.sql` in the Supabase SQL editor on a new project and keep the `reports` bucket private.
+  The baseline also schedules `public.monthly_cleanup()` (pg_cron, midnight India time at the end of every month). It
+  removes check-in codes from earlier days and sign-ups that never chose a role for 30 days, and marks intake sessions
+  nobody finished as abandoned. Run it by hand with `select public.monthly_cleanup();`; past runs are in `cron.job_run_details`.
 
 ---
 

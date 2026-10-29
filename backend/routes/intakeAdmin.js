@@ -27,6 +27,9 @@ function secretsMatch(provided, expected) {
 // feature) hits this endpoint on a schedule, same as the existing
 // /health / /api/health endpoints are hit for keep-alive.
 //
+// The database also runs this same sweep once a month on its own (pg_cron,
+// public.monthly_cleanup), so this endpoint is only needed to run it more often.
+//
 // Protected by a shared secret (not JWT — no doctor/patient session is
 // involved, this is a machine-to-machine trigger) so an unauthenticated
 // caller can't force a sweep or use this as a way to probe intake_sessions
