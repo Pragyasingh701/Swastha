@@ -27,6 +27,7 @@ import {
 } from '../db/intakeSessions.js';
 import { getAuthUser } from '../config/jwt.js';
 import { renderMessagePage, renderConfirmPage } from '../utils/emailActionPage.js';
+import { fetchWithTimeout, TIMEOUTS } from '../utils/fetchWithTimeout.js';
 
 const router = express.Router();
 // RAG used to be a separate service/process (RAG_BASE_URL pointed at its
@@ -700,7 +701,7 @@ router.get('/:patientId/summary', requireDoctor, async (req, res) => {
       return res.json({ summary: null, reportCount: 0 });
     }
 
-    const ragRes = await fetch(`${RAG_BASE_URL}/patient-summary`, {
+    const ragRes = await fetchWithTimeout(`${RAG_BASE_URL}/patient-summary`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -720,7 +721,7 @@ router.get('/:patientId/summary', requireDoctor, async (req, res) => {
           analysis: r.analysis,
         })),
       }),
-    });
+    }, TIMEOUTS.internalAi);
 
     const data = await ragRes.json();
     if (ragRes.status === 403 && data?.code === 'AI_NOTICE_ACK_REQUIRED') {
