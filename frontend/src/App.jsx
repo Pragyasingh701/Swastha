@@ -1,4 +1,5 @@
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
+import ErrorBoundary from "./components/common/ErrorBoundary";
 import AiNoticeGate from "./components/common/AiNoticeGate";
 import { useAuth } from "./context/AuthContext";
 
@@ -212,10 +213,17 @@ function WildcardRedirect() {
   return <Navigate to={hasCompletedRole(user) ? getHomeRoute(user) : "/role-selection"} replace />;
 }
 
+// Recovers from a crashed screen as soon as the route changes.
+function RoutesWithBoundary({ children }) {
+  const location = useLocation();
+  return <ErrorBoundary resetKey={location.pathname}>{children}</ErrorBoundary>;
+}
+
 export default function App() {
   return (
     <BrowserRouter>
       <AiNoticeGate />
+      <RoutesWithBoundary>
       <Routes>
         {/* Landing & Guest-only Auth Routes */}
         <Route path="/" element={<GuestRoute><LandingPage /></GuestRoute>} />
@@ -345,6 +353,7 @@ export default function App() {
         {/* 404 / Wildcard Fallback */}
         <Route path="*" element={<WildcardRedirect />} />
       </Routes>
+      </RoutesWithBoundary>
     </BrowserRouter>
   );
 }
