@@ -22,7 +22,7 @@ import assert from 'node:assert/strict';
 import jwt from 'jsonwebtoken';
 import dotenv from 'dotenv';
 
-dotenv.config({ path: new URL('../.env', import.meta.url).pathname });
+dotenv.config({ path: new URL('../../.env', import.meta.url).pathname });
 
 // clinic.js's requirePatientAuth (unlike the rag sub-app's requireAuth)
 // re-verifies the JWT's userId against a real DB row via findUserById — a
@@ -32,8 +32,8 @@ dotenv.config({ path: new URL('../.env', import.meta.url).pathname });
 // other exports (createOrUpdateUser, etc. — used elsewhere in the app) and
 // overriding only findUserById to recognize this file's test patient ids.
 const TEST_PATIENT_IDS = new Set();
-const realUsersModule = await import(new URL('../db/users.js', import.meta.url).href);
-mock.module(new URL('../db/users.js', import.meta.url).href, {
+const realUsersModule = await import(new URL('../../db/users.js', import.meta.url).href);
+mock.module(new URL('../../db/users.js', import.meta.url).href, {
   namedExports: {
     ...realUsersModule,
     findUserById: async (id) =>
@@ -50,7 +50,7 @@ function middlewareNamesFor(router, path, method) {
 }
 
 test('every intake route is either gated by requireNoticeAck, or cannot be reached without an existing session', async () => {
-  const { default: intakeRouter } = await import('../rag/routes/intake.js');
+  const { default: intakeRouter } = await import('../../rag/routes/intake.js');
 
   // Routes that create a NEW session (or the equivalent, session-creating
   // side effect) — these are exactly the routes that need the gate,
@@ -88,7 +88,7 @@ test('every intake route is either gated by requireNoticeAck, or cannot be reach
 });
 
 test('an unacknowledged patient is blocked on POST /rag/api/intake/start (the primary voice-session entry point)', async () => {
-  const { default: app } = await import('../app.js');
+  const { default: app } = await import('../../app.js');
   const JWT_SECRET = process.env.JWT_SECRET || 'swastha_dev_secret_key_2026';
   const userId = `usr_auditstart_${Date.now()}`;
   const token = jwt.sign({ userId, email: `${userId}@example.com`, role: 'patient' }, JWT_SECRET, { expiresIn: '1h' });
@@ -115,7 +115,7 @@ test('an unacknowledged patient is blocked on POST /rag/api/intake/start (the pr
 });
 
 test('an unacknowledged patient is blocked on POST /api/clinic/verify-otp (the clinic check-in voice-session entry point)', async () => {
-  const { default: app } = await import('../app.js');
+  const { default: app } = await import('../../app.js');
   const JWT_SECRET = process.env.JWT_SECRET || 'swastha_dev_secret_key_2026';
   const userId = `usr_auditverifyotp_${Date.now()}`;
   TEST_PATIENT_IDS.add(userId); // recognized by the mocked findUserById above

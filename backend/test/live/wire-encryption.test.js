@@ -18,10 +18,10 @@ import assert from 'node:assert/strict';
 import { webcrypto } from 'node:crypto';
 import jwt from 'jsonwebtoken';
 
-import app from '../app.js';
-import { createOrUpdateUser, deleteUserById } from '../db/users.js';
-import { deleteFamilyVaultForUser } from '../db/family.js';
-import { deleteAllReportsForUser } from '../db/reports.js';
+import app from '../../app.js';
+import { createOrUpdateUser, deleteUserById } from '../../db/users.js';
+import { deleteFamilyVaultForUser } from '../../db/family.js';
+import { deleteAllReportsForUser } from '../../db/reports.js';
 
 const { subtle } = webcrypto;
 const JWT_SECRET = process.env.JWT_SECRET || 'swastha_dev_secret_key_2026';
