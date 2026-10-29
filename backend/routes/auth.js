@@ -211,6 +211,9 @@ if (!global.__storeCleanupInterval) {
       if (data.expiresAt < now) passwordChangeTokenStore.delete(key);
     }
   }, 5 * 60 * 1000);
+  // Background GC only: it must not keep the process alive (tests that import app.js
+  // should exit when they finish, and a shutdown should not wait for this timer).
+  global.__storeCleanupInterval.unref?.();
 }
 
 // Middleware to authenticate JWT bearer tokens
