@@ -13,11 +13,12 @@
 -- is made to the database, the migration script that applies it to the live
 -- database is stored in supabase/migrations_archive/, and the same change is folded
 -- into this baseline in the same commit, so this file always describes the current
--- schema. Last folded in: 20261027100000_family_access_link_by_id.sql.
+-- schema. Last folded in: 20261030100000_monthly_cleanup.sql.
 --
 -- Part 1 is a schema-only dump (`supabase db dump`): tables, indexes, constraints,
 -- functions, row level security and grants, no data. Part 2 adds what a dump of
--- the public schema does not carry: the private reports bucket.
+-- the public schema does not carry: the private reports bucket and the monthly
+-- cleanup schedule.
 
 -- Part 1: public schema
 
@@ -62,6 +63,39 @@ CREATE OR REPLACE FUNCTION "public"."match_report_embeddings"("p_user_id" charac
 $$;
 
 ALTER FUNCTION "public"."match_report_embeddings"("p_user_id" character varying, "p_query_embedding" "public"."vector", "p_match_count" integer) OWNER TO "postgres";
+
+CREATE OR REPLACE FUNCTION "public"."monthly_cleanup"() RETURNS "jsonb"
+    LANGUAGE "plpgsql"
+    SET "search_path" TO ''
+    AS $$
+declare
+  codes_deleted integer;
+  pending_deleted integer;
+  sessions_abandoned integer;
+begin
+  delete from public.clinic_checkin_codes
+  where valid_date < (now() at time zone 'UTC')::date - 2;
+  get diagnostics codes_deleted = row_count;
+
+  delete from public.pending_registrations
+  where updated_at < now() - interval '30 days';
+  get diagnostics pending_deleted = row_count;
+
+  update public.intake_sessions
+  set status = 'abandoned', abandoned_at = now()
+  where status = 'in_progress'
+    and created_at < now() - interval '48 hours';
+  get diagnostics sessions_abandoned = row_count;
+
+  return jsonb_build_object(
+    'clinic_checkin_codes_deleted', codes_deleted,
+    'pending_registrations_deleted', pending_deleted,
+    'intake_sessions_abandoned', sessions_abandoned
+  );
+end;
+$$;
+
+ALTER FUNCTION "public"."monthly_cleanup"() OWNER TO "postgres";
 
 CREATE OR REPLACE FUNCTION "public"."rls_auto_enable"() RETURNS "event_trigger"
     LANGUAGE "plpgsql" SECURITY DEFINER
@@ -1033,9 +1067,18 @@ GRANT ALL ON FUNCTION "public"."l2_normalize"("public"."vector") TO "authenticat
 GRANT ALL ON FUNCTION "public"."l2_normalize"("public"."vector") TO "service_role";
 
 REVOKE ALL ON FUNCTION "public"."match_report_embeddings"("p_user_id" character varying, "p_query_embedding" "public"."vector", "p_match_count" integer) FROM PUBLIC;
+REVOKE ALL ON FUNCTION "public"."match_report_embeddings"("p_user_id" character varying, "p_query_embedding" "public"."vector", "p_match_count" integer) FROM "anon";
+REVOKE ALL ON FUNCTION "public"."match_report_embeddings"("p_user_id" character varying, "p_query_embedding" "public"."vector", "p_match_count" integer) FROM "authenticated";
 GRANT ALL ON FUNCTION "public"."match_report_embeddings"("p_user_id" character varying, "p_query_embedding" "public"."vector", "p_match_count" integer) TO "service_role";
 
+REVOKE ALL ON FUNCTION "public"."monthly_cleanup"() FROM PUBLIC;
+REVOKE ALL ON FUNCTION "public"."monthly_cleanup"() FROM "anon";
+REVOKE ALL ON FUNCTION "public"."monthly_cleanup"() FROM "authenticated";
+GRANT ALL ON FUNCTION "public"."monthly_cleanup"() TO "service_role";
+
 REVOKE ALL ON FUNCTION "public"."rls_auto_enable"() FROM PUBLIC;
+REVOKE ALL ON FUNCTION "public"."rls_auto_enable"() FROM "anon";
+REVOKE ALL ON FUNCTION "public"."rls_auto_enable"() FROM "authenticated";
 GRANT ALL ON FUNCTION "public"."rls_auto_enable"() TO "service_role";
 
 GRANT ALL ON FUNCTION "public"."sparsevec_cmp"("public"."sparsevec", "public"."sparsevec") TO "postgres";
@@ -1321,3 +1364,17 @@ ALTER DEFAULT PRIVILEGES FOR ROLE "postgres" IN SCHEMA "public" GRANT ALL ON TAB
 INSERT INTO storage.buckets (id, name, public)
 VALUES ('reports', 'reports', false)
 ON CONFLICT (id) DO UPDATE SET public = false;
+
+-- Monthly housekeeping (public.monthly_cleanup, above): midnight India time at the
+-- end of every month = 18:30 UTC on the last day. pg_cron cannot say "last day of
+-- the month", so it wakes on days 28 to 31 and runs only when it is already the 1st
+-- in India.
+SELECT cron.unschedule(jobid) FROM cron.job WHERE jobname = 'monthly-cleanup';
+
+SELECT cron.schedule(
+  'monthly-cleanup',
+  '30 18 28-31 * *',
+  $$select public.monthly_cleanup()
+    where (now() at time zone 'Asia/Kolkata')::date
+        = date_trunc('month', now() at time zone 'Asia/Kolkata')::date$$
+);
