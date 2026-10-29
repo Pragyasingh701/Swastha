@@ -7,6 +7,7 @@ import { validateTimelineReportPayload } from '../utils/timelineValidation.js';
 import { uploadMemory, uploadFileToSupabase, createSignedFileUrl, removeStoredFiles } from '../config/supabaseStorage.js';
 import { decryptMultipartFields } from '../middleware/wireCrypto.js';
 import { getAuthUser } from '../config/jwt.js';
+import { fetchWithTimeout, TIMEOUTS } from '../utils/fetchWithTimeout.js';
 
 const router = express.Router();
 // RAG used to be a separate service/process (RAG_BASE_URL pointed at its
@@ -28,7 +29,7 @@ const RAG_BASE_URL = process.env.RAG_BASE_URL || `http://localhost:${process.env
 // graceful-degradation pattern as AI extraction elsewhere in this app.
 async function generateSummaryResult(authHeader, report) {
   try {
-    const res = await fetch(`${RAG_BASE_URL}/summarize`, {
+    const res = await fetchWithTimeout(`${RAG_BASE_URL}/summarize`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -44,7 +45,7 @@ async function generateSummaryResult(authHeader, report) {
         medicines: report.medicines,
         notes: report.notes,
       }),
-    });
+    }, TIMEOUTS.internalAi);
     const data = await res.json();
     // The user hasn't accepted how Swastha uses AI yet: not an error to hide —
     // callers that can ask the user (the on-demand route) pass it on so the UI
@@ -214,7 +215,7 @@ router.get('/lab-insights', async (req, res) => {
       return res.json({ insights: null, labReportCount: 0 });
     }
 
-    const ragRes = await fetch(`${RAG_BASE_URL}/lab-insights`, {
+    const ragRes = await fetchWithTimeout(`${RAG_BASE_URL}/lab-insights`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -232,7 +233,7 @@ router.get('/lab-insights', async (req, res) => {
           analysis: r.analysis,
         })),
       }),
-    });
+    }, TIMEOUTS.internalAi);
 
     const data = await ragRes.json();
     if (ragRes.status === 403 && data?.code === 'AI_NOTICE_ACK_REQUIRED') {

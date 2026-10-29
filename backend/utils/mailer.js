@@ -1,5 +1,6 @@
 
 import { escapeHtml } from './emailActionPage.js';
+import { fetchWithTimeout, TIMEOUTS } from './fetchWithTimeout.js';
 
 /**
  * Swastha Mailer Utility — Powered by Brevo HTTPS REST API (Port 443)
@@ -16,7 +17,7 @@ async function sendEmailViaBrevo(to, subject, html) {
   const senderEmail = process.env.EMAIL_FROM_ADDRESS || 'swasthaprojectt@gmail.com';
 
   try {
-    const res = await fetch('https://api.brevo.com/v3/smtp/email', {
+    const res = await fetchWithTimeout('https://api.brevo.com/v3/smtp/email', {
       method: 'POST',
       headers: {
         'api-key': apiKey,
@@ -29,7 +30,7 @@ async function sendEmailViaBrevo(to, subject, html) {
         subject,
         htmlContent: html,
       }),
-    });
+    }, TIMEOUTS.email);
 
     if (res.ok) {
       console.log('[Brevo HTTPS Mailer] Email delivered successfully.');

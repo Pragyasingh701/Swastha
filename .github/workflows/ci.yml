@@ -1,0 +1,55 @@
+# Runs on every push to main and on every pull request: the backend and frontend tests and
+# the build. A push to main redeploys the live app, so this is the check that a broken
+# change does not slip through.
+#
+# The tests that talk to the real database (backend/test/live) are left out: CI has no
+# database credentials. Run them locally with `npm test`. The values below are
+# placeholders that only let the app start; nothing here reaches a real service.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      SUPABASE_URL: https://ci.invalid
+      SUPABASE_SERVICE_ROLE_KEY: ci-placeholder
+      JWT_SECRET: ci-placeholder-secret-0123456789abcdef
+      OPENROUTER_API_KEY: ci-placeholder
+      ALLOW_OPENROUTER_FALLBACK: "false"
+      GEMINI_API_KEYS: ci-key-1,ci-key-2,ci-key-3
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - name: Backend tests
+        run: npm run test:ci
+      - name: Frontend tests
+        run: npm run test:frontend
+      - name: Build
+        run: npm run build
+
+  audit:
+    # Known-vulnerable dependencies. Reported, but does not block a merge: a new advisory
+    # in a package we do not control should not stop an unrelated fix.
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm audit --omit=dev --audit-level=high

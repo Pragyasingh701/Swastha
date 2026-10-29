@@ -12,14 +12,14 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { createOrUpdateUser, deleteUserById } from '../db/users.js';
+import { createOrUpdateUser, deleteUserById } from '../../db/users.js';
 import {
   createOrGetFamilyVaultForUser,
   createPendingFamilyMemberAuthorizationRequest,
   deleteFamilyVaultForUser,
   isPatientLinkedToFamilyMember,
-} from '../db/family.js';
-import supabase from '../config/supabase.js';
+} from '../../db/family.js';
+import supabase from '../../config/supabase.js';
 
 test('isPatientLinkedToFamilyMember returns false for a PENDING (not yet accepted) family-member invite', async () => {
   const suffix = Date.now();

@@ -1,3 +1,4 @@
+import './utils/safeLogging.js';
 import './utils/asyncErrors.js';
 import express from 'express';
 import helmet from 'helmet';

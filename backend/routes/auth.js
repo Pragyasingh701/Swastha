@@ -25,11 +25,13 @@ import { verifyAuthToken, signAuthToken, sessionTokenTtl, rememberMeTokenTtl } f
 import { wholeYears } from '../utils/age.js';
 import { isFutureDate } from '../utils/dates.js';
 import { isValidEmailFormat } from '../utils/emailFormat.js';
+import { fetchWithTimeout, TIMEOUTS } from '../utils/fetchWithTimeout.js';
 
 const router = express.Router();
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || '771272691038-s9h707grr3b4ojkgp48aa5vb9tej2sjh.apps.googleusercontent.com';
 const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET || '';
-const googleClient = new OAuth2Client(GOOGLE_CLIENT_ID);
+// transporterOptions.timeout: the ID-token check downloads Google's signing keys, which must not hang a login.
+const googleClient = new OAuth2Client({ clientId: GOOGLE_CLIENT_ID, transporterOptions: { timeout: TIMEOUTS.google } });
 
 if (!global.__otpStoreRaw) {
   global.__otpStoreRaw = new Map();
@@ -528,7 +530,7 @@ router.post('/google/exchange', async (req, res) => {
   }
 
   try {
-    const tokenResponse = await fetch('https://oauth2.googleapis.com/token', {
+    const tokenResponse = await fetchWithTimeout('https://oauth2.googleapis.com/token', {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: new URLSearchParams({
@@ -538,7 +540,7 @@ router.post('/google/exchange', async (req, res) => {
         redirect_uri: redirectUri,
         grant_type: 'authorization_code',
       }),
-    });
+    }, TIMEOUTS.google);
 
     const tokenData = await tokenResponse.json();
     if (!tokenResponse.ok || !tokenData.id_token) {
