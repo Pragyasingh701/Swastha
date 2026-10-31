@@ -1,5 +1,5 @@
 import express from 'express';
-import { listTimelineReports, getTimelineReport, getTimelineReportById, createTimelineReport, updateTimelineReport, deleteTimelineReport } from '../db/reports.js';
+import { listTimelineReports, getTimelineReport, getTimelineReportById, createTimelineReport, updateTimelineReport, deleteTimelineReport, searchTextChanged, clearReportSearchChunks } from '../db/reports.js';
 import { findUserByEmail, findUserById } from '../db/users.js';
 import { isDoctorLinkedToPatient } from '../db/doctorPatients.js';
 import { isPatientLinkedToFamilyMember } from '../db/family.js';
@@ -423,6 +423,17 @@ router.put('/:id', handleReportFileUpload, async (req, res) => {
     }
 
     const { sanitized } = validation;
+
+    // Edited text makes the stored search chunks wrong. The app indexes the report again after
+    // saving, but that is a separate request that can fail or never be sent (tab closed, no AI
+    // consent yet), and the catch-up only looks for reports with NO chunks, so old chunks would
+    // keep answering questions with text that is gone. Cleared first, before anything is saved:
+    // if this fails nothing changed, and if the save below then fails the report is merely
+    // unindexed until the catch-up rebuilds it.
+    if (searchTextChanged(existingReport, sanitized)) {
+      await clearReportSearchChunks(existingReport.id);
+    }
+
     // The file changes only by uploading a new one, or is cleared when the
     // client explicitly sends an empty fileUrl. Any other fileUrl value (a
     // different URL, a script string) is ignored and the stored file kept.

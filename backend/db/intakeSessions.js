@@ -1,4 +1,5 @@
 import supabase from '../config/supabase.js';
+import { selectAll, selectAllIn } from '../utils/pagedSelect.js';
 
 /**
  * Doctor-facing priority queue (Module A, Phase 3 — PRD §6.2/§8). A plain
@@ -33,47 +34,48 @@ export async function getIntakeQueueForPatients(patientIds, doctorId) {
     return [];
   }
 
-  const { data, error } = await supabase
-    .from('intake_sessions')
-    .select('id, patient_id, doctor_id, chief_complaint, priority, red_flag_reason, status, origin, doctor_action, created_at, completed_at')
-    .in('patient_id', patientIds)
-    // Only this doctor's own claimed sessions, or unclaimed (doctor_id null)
-    // ones — see the doctorId-scoping note above.
-    .or(`doctor_id.is.null,doctor_id.eq.${doctorId}`)
-    // What this doctor has Completed or Removed is taken out of THEIR queue below (from their own
-    // rows in intake_session_actions), not by a flag on the shared session row: a patient seen by
-    // two doctors, or a session nobody has claimed, must not vanish for doctor B because doctor A
-    // dismissed it. See getIntakeActionHistoryForDoctor for where it shows up instead.
-    // Issue #10 fix (audit report): 'abandoned' sessions (see
-    // abandonStaleIntakeSessions below) are excluded from the live queue —
-    // the whole point of the sweep is to stop a patient who genuinely
-    // walked away from cluttering the doctor's active view. Not deleted,
-    // and a patient who returns un-abandons it back to in_progress (Issue
-    // #4's resume route), which puts it right back in this result set.
-    .neq('status', 'abandoned')
-    // 'flagged' sorts before 'routine' alphabetically-descending purely by
-    // coincidence of the two literal strings chosen in the PRD's check
-    // constraint — this is NOT relying on alphabetical order by design, it's
-    // verified against the actual constraint values ('routine'/'flagged')
-    // and re-asserted with an explicit CASE below so a future third
-    // priority value can't silently reorder the queue.
-    .order('created_at', { ascending: true });
+  // Read in full, in pages and in chunks of patients: a plain read stops silently at 1000 rows, and
+  // this list is read oldest-first, so on a busy doctor's queue it was the NEWEST sessions (the
+  // ones with a fresh red flag) that fell off the end and never reached the screen.
+  const { data, error } = await selectAllIn(
+    patientIds,
+    (chunk) => supabase
+      .from('intake_sessions')
+      .select('id, patient_id, doctor_id, chief_complaint, priority, red_flag_reason, status, origin, doctor_action, created_at, completed_at')
+      .in('patient_id', chunk)
+      // Only this doctor's own claimed sessions, or unclaimed (doctor_id null)
+      // ones — see the doctorId-scoping note above.
+      .or(`doctor_id.is.null,doctor_id.eq.${doctorId}`)
+      // What this doctor has Completed or Removed is taken out of THEIR queue below (from their own
+      // rows in intake_session_actions), not by a flag on the shared session row: a patient seen by
+      // two doctors, or a session nobody has claimed, must not vanish for doctor B because doctor A
+      // dismissed it. See getIntakeActionHistoryForDoctor for where it shows up instead.
+      // Issue #10 fix (audit report): 'abandoned' sessions (see
+      // abandonStaleIntakeSessions below) are excluded from the live queue —
+      // the whole point of the sweep is to stop a patient who genuinely
+      // walked away from cluttering the doctor's active view. Not deleted,
+      // and a patient who returns un-abandons it back to in_progress (Issue
+      // #4's resume route), which puts it right back in this result set.
+      .neq('status', 'abandoned')
+      .order('created_at', { ascending: true })
+      .order('id', { ascending: true }),
+    { label: 'intake queue' }
+  );
 
   if (error) {
     throw new Error(`getIntakeQueueForPatients: failed to load sessions: ${error.message}`);
   }
 
   const visible = await withoutSessionsThisDoctorHandled(data || [], doctorId);
-  // Explicit priority ordering (flagged first) rather than trusting the
-  // string-sort coincidence above — stable sort keeps created_at ascending
-  // within each priority group.
-  return visible.sort((a, b) => {
-    if (a.priority === b.priority) return 0;
-    return a.priority === 'flagged' ? -1 : 1;
-  });
+  // Explicit ordering, done here rather than left to the database: flagged first (an explicit check,
+  // so a future third priority value cannot silently reorder the queue), then oldest first. The
+  // rows arrive in one run per chunk of patients, so the whole list is sorted again.
+  const rank = (session) => (session.priority === 'flagged' ? 0 : 1);
+  return visible.sort((a, b) =>
+    rank(a) - rank(b)
+    || new Date(a.created_at) - new Date(b.created_at)
+    || String(a.id).localeCompare(String(b.id)));
 }
-
-const ACTION_LOOKUP_CHUNK = 100; // keeps the id list in the request URL short
 
 // Drops the sessions this doctor has already Completed or Removed. A session that carries the old
 // shared `doctor_action` flag but has no action row at all (written before action rows existed)
@@ -83,18 +85,17 @@ async function withoutSessionsThisDoctorHandled(sessions, doctorId) {
 
   const ids = sessions.map((s) => s.id);
   const actionsBySession = new Map(); // session id -> Set of doctor ids who actioned it
-  for (let i = 0; i < ids.length; i += ACTION_LOOKUP_CHUNK) {
-    const { data, error } = await supabase
-      .from('intake_session_actions')
-      .select('session_id, doctor_id')
-      .in('session_id', ids.slice(i, i + ACTION_LOOKUP_CHUNK));
-    if (error) {
-      throw new Error(`getIntakeQueueForPatients: failed to load doctor actions: ${error.message}`);
-    }
-    for (const row of data || []) {
-      if (!actionsBySession.has(row.session_id)) actionsBySession.set(row.session_id, new Set());
-      actionsBySession.get(row.session_id).add(row.doctor_id);
-    }
+  const { data: actionRows, error } = await selectAllIn(ids, (chunk) => supabase
+    .from('intake_session_actions')
+    .select('session_id, doctor_id')
+    .in('session_id', chunk)
+    .order('id', { ascending: true }));
+  if (error) {
+    throw new Error(`getIntakeQueueForPatients: failed to load doctor actions: ${error.message}`);
+  }
+  for (const row of actionRows) {
+    if (!actionsBySession.has(row.session_id)) actionsBySession.set(row.session_id, new Set());
+    actionsBySession.get(row.session_id).add(row.doctor_id);
   }
 
   return sessions.filter((session) => {
@@ -275,14 +276,23 @@ export async function getIntakeActionHistoryForDoctor(doctorId, patientIds = nul
     return [];
   }
 
-  let query = supabase
-    .from('intake_session_actions')
-    .select('id, session_id, patient_id, action, acted_at')
-    .eq('doctor_id', doctorId);
-  if (Array.isArray(patientIds)) {
-    query = query.in('patient_id', patientIds);
+  // Everything this doctor ever did, so it only grows: read in pages (and chunks of patients when
+  // narrowed), or the oldest actions fall off the end of a plain 1000-row read.
+  const historyQuery = (patientChunk) => {
+    let query = supabase
+      .from('intake_session_actions')
+      .select('id, session_id, patient_id, action, acted_at')
+      .eq('doctor_id', doctorId);
+    if (patientChunk) query = query.in('patient_id', patientChunk);
+    return query.order('acted_at', { ascending: false }).order('id', { ascending: false });
+  };
+  const { data: actions, error: actionsError } = Array.isArray(patientIds)
+    ? await selectAllIn(patientIds, historyQuery, { label: 'intake history' })
+    : await selectAll(() => historyQuery(null), { label: 'intake history' });
+  if (!actionsError && Array.isArray(patientIds)) {
+    // Chunks come back one after another, so put the whole list newest-first again.
+    actions.sort((a, b) => new Date(b.acted_at) - new Date(a.acted_at) || String(b.id).localeCompare(String(a.id)));
   }
-  const { data: actions, error: actionsError } = await query.order('acted_at', { ascending: false });
 
   if (actionsError) {
     throw new Error(`getIntakeActionHistoryForDoctor: failed to load actions: ${actionsError.message}`);
@@ -290,10 +300,11 @@ export async function getIntakeActionHistoryForDoctor(doctorId, patientIds = nul
   if (!actions || actions.length === 0) return [];
 
   const sessionIds = [...new Set(actions.map((a) => a.session_id))];
-  const { data: sessions, error: sessionsError } = await supabase
+  const { data: sessions, error: sessionsError } = await selectAllIn(sessionIds, (chunk) => supabase
     .from('intake_sessions')
     .select('id, chief_complaint, priority, red_flag_reason, origin, created_at')
-    .in('id', sessionIds);
+    .in('id', chunk)
+    .order('id', { ascending: true }));
 
   if (sessionsError) {
     throw new Error(`getIntakeActionHistoryForDoctor: failed to load sessions: ${sessionsError.message}`);
@@ -375,7 +386,8 @@ export async function getPatientNamesByIds(patientIds) {
   const ids = [...new Set((patientIds || []).filter(Boolean))];
   if (ids.length === 0 || !supabase) return {};
 
-  const { data, error } = await supabase.from('patients').select('id, name').in('id', ids);
+  const { data, error } = await selectAllIn(ids, (chunk) => supabase
+    .from('patients').select('id, name').in('id', chunk).order('id', { ascending: true }));
   if (error) {
     throw new Error(`getPatientNamesByIds: failed to load names: ${error.message}`);
   }

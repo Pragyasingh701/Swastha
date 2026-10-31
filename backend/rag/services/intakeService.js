@@ -2336,6 +2336,17 @@ export async function startIntakeSession(patientId, { doctorId = null, origin = 
   return { session: data, turn };
 }
 
+// Turns being processed right now, one entry per session and patient. A turn reads the transcript,
+// waits several seconds for the AI, then writes the transcript back, so two turns running together
+// on one session both start from the same transcript and the second write replaces the first: an
+// answer (and the question it led to) is lost. This happens on a double tap, or on a retry sent
+// while the first try is still running. One turn at a time per session; the extra request is
+// refused, not queued, because a queued duplicate would be recorded as a second answer to the NEXT
+// question. The patient is part of the key so a request from anyone else (which the turn itself
+// refuses as not theirs) can never hold up or be mistaken for the owner's turn.
+// In process memory, like the other short-lived state here (one server instance).
+const turnsInFlight = new Set(); // `${patientId}:${sessionId}`
+
 /**
  * Loads the session, runs the next dialogue turn from the patient's answer,
  * and persists the updated structured_history/turns/priority. Ownership
@@ -2344,7 +2355,25 @@ export async function startIntakeSession(patientId, { doctorId = null, origin = 
  *
  * @param {{ sessionId: string, patientId: string, patientMessage: string }} params
  */
-export async function advanceIntakeSession({ sessionId, patientId, patientMessage }) {
+export async function advanceIntakeSession(params) {
+  const { sessionId, patientId } = params || {};
+  if (!sessionId || !patientId) return runIntakeTurnForSession(params || {}); // rejects with its usual message
+
+  const key = `${patientId}:${sessionId}`;
+  if (turnsInFlight.has(key)) {
+    const err = new Error('Your last answer is still being processed. Please wait a moment.');
+    err.status = 409;
+    throw err;
+  }
+  turnsInFlight.add(key);
+  try {
+    return await runIntakeTurnForSession(params);
+  } finally {
+    turnsInFlight.delete(key);
+  }
+}
+
+async function runIntakeTurnForSession({ sessionId, patientId, patientMessage }) {
   if (!sessionId) throw new Error('advanceIntakeSession: sessionId is required');
   if (!patientId) throw new Error('advanceIntakeSession: patientId is required');
   if (!patientMessage || !patientMessage.trim()) {

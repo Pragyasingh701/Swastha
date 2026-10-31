@@ -105,35 +105,57 @@ Respond strictly in JSON format, with all text fields in English only. Example:
   }
 }
 
+// The model is asked for the expiry DATE and for a yes/no "isExpired". It cannot know today's date,
+// so its yes/no is a guess; only the date it read off the page is used, and the comparison is
+// made here. A missing or unreadable date means "no expiry shown", not "expired".
+function readExpiry(value, today = new Date()) {
+  const text = typeof value === 'string' ? value.trim() : '';
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(text);
+  if (!match) return { expiryDate: null, isExpired: false };
+  const date = new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3])));
+  const real = date.getUTCFullYear() === Number(match[1]) && date.getUTCMonth() === Number(match[2]) - 1 && date.getUTCDate() === Number(match[3]);
+  if (!real) return { expiryDate: null, isExpired: false };
+  // Valid through the printed date itself.
+  return { expiryDate: text, isExpired: text < today.toISOString().slice(0, 10) };
+}
+
+// Does the number printed on the certificate match the one typed on the form? Both must carry a
+// real number (at least 4 digits). Letters like "MCI/" or "NMC" are only a prefix and prove
+// nothing alone, and a short fragment is not enough: it used to be, so a certificate showing
+// just "MCI" or "123" matched almost any number. The digits must be the same, or one number must
+// contain the other's digits whole (a form with just "98765" against "NMC/2024/98765").
+function registrationNumbersMatch(formNumber, certificateNumber) {
+  const formDigits = String(formNumber || '').replace(/\D/g, '');
+  const certDigits = String(certificateNumber || '').replace(/\D/g, '');
+  if (formDigits.length < 4 || certDigits.length < 4) return false;
+  return certDigits === formDigits || certDigits.includes(formDigits) || formDigits.includes(certDigits);
+}
+
 /**
- * Evaluate Parsed Vision JSON Result against manually entered Form Registration Number
+ * Evaluate Parsed Vision JSON Result against manually entered Form Registration Number.
+ * What this decides is only whether the scan found what it should; it does not verify the doctor
+ * (there is no check against the official register yet).
  */
-function evaluateParsedCertificate(parsed, doctorData = {}) {
+function evaluateParsedCertificate(parsed, doctorData = {}, today = new Date()) {
   const formRegFull = (doctorData.regNumber || doctorData.licenseNumber || '').trim();
-  const formRegClean = formRegFull.replace(/[^A-Z0-9]/g, '').toUpperCase();
-  const formRegDigits = formRegFull.replace(/[^0-9]/g, '');
+  const ocrRegFull = typeof parsed.regNumber === 'string' ? parsed.regNumber : '';
 
-  const ocrRegFull = (parsed.regNumber || '').toUpperCase();
-  const ocrRegClean = ocrRegFull.replace(/[^A-Z0-9]/g, '');
-  const ocrRegDigits = ocrRegFull.replace(/[^0-9]/g, '');
-
-  const isMedicalCertificate = !!parsed.isMedicalCertificate;
+  const isMedicalCertificate = parsed.isMedicalCertificate === true;
 
   // MANDATORY PRIMARY CHECK: Registration Number must be present on certificate and match entered number
-  const regPresent = !!(parsed.regNumber && ocrRegClean.length >= 3);
-  const regMatches = regPresent && (!formRegClean || 
-                     ocrRegClean.includes(formRegClean) || 
-                     formRegClean.includes(ocrRegClean) || 
-                     (formRegDigits.length >= 3 && ocrRegDigits.includes(formRegDigits)));
+  const regPresent = ocrRegFull.replace(/[^A-Za-z0-9]/g, '').length >= 3;
+  const regMatches = regPresent && registrationNumbersMatch(formRegFull, ocrRegFull);
 
-  const isVerified = isMedicalCertificate && regMatches && !parsed.isExpired;
+  const { expiryDate, isExpired } = readExpiry(parsed.expiryDate, today);
+
+  const isVerified = isMedicalCertificate && regMatches && !isExpired;
 
   let validationError = null;
   if (!isMedicalCertificate) {
     validationError = 'Uploaded document is NOT a Medical Registration Certificate. Please upload an official Medical Council Certificate.';
   } else if (!regPresent || !regMatches) {
     validationError = `Medical Registration Number (${formRegFull}) was NOT found on the uploaded certificate image.`;
-  } else if (parsed.isExpired) {
+  } else if (isExpired) {
     validationError = 'Uploaded Medical Certificate has expired. Please upload an active renewal certificate.';
   }
 
@@ -142,18 +164,20 @@ function evaluateParsedCertificate(parsed, doctorData = {}) {
     engine: 'Google Gemini Vision AI',
     isMedicalCertificate,
     validationError,
+    // Only what was read from the certificate. A blank stays blank: it used to be filled in from
+    // the form, or with "Doctor", "Medical Council" and "MBBS", which then looked like scanned fact.
     extractedData: {
-      doctorName: parsed.doctorName || doctorData.fullName || 'Doctor',
-      regNumber: parsed.regNumber || (regMatches ? formRegFull : 'N/A'),
-      medicalCouncil: parsed.medicalCouncil || doctorData.council || 'Medical Council',
-      qualifications: Array.isArray(parsed.qualifications) && parsed.qualifications.length > 0 ? parsed.qualifications : [doctorData.degree || 'MBBS'],
-      expiryDate: parsed.expiryDate || null,
-      isExpired: !!parsed.isExpired,
+      doctorName: parsed.doctorName || null,
+      regNumber: parsed.regNumber || null,
+      medicalCouncil: parsed.medicalCouncil || null,
+      qualifications: Array.isArray(parsed.qualifications) ? parsed.qualifications : [],
+      expiryDate,
+      isExpired,
     },
     validation: {
       regNumberFound: regPresent,
       regNumberMatchesForm: regMatches,
-      isExpired: !!parsed.isExpired,
+      isExpired,
     },
   };
 }
@@ -204,3 +228,5 @@ export async function processMedicalCertificate(fileInput, doctorData = {}) {
       : 'Vision AI service is currently busy or rate-limited. Please retry in a few seconds.',
   };
 }
+
+export const __testing = { evaluateParsedCertificate, readExpiry, registrationNumbersMatch };

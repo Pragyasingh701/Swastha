@@ -372,6 +372,8 @@ export default function IntakeChat() {
   const [emergency, setEmergency] = useState(null);
 
   const scrollRef = useRef(null);
+  // `sending` is state, so two taps in the same moment both still see it as false. A ref changes at once.
+  const submittingRef = useRef(false);
   const startedRef = useRef(!!preStarted);
   // Holds the currently-playing question audio so a new question can stop
   // the previous one rather than overlapping with it.
@@ -880,7 +882,8 @@ export default function IntakeChat() {
 
   async function submitAnswer(rawText) {
     const trimmed = (rawText || "").trim();
-    if (!trimmed || sending || !sessionId || done) return;
+    if (!trimmed || sending || submittingRef.current || !sessionId || done) return;
+    submittingRef.current = true;
 
     setError(null);
     // Kept so a failed turn can put things back exactly as they were and the same answer can be sent again.
@@ -949,6 +952,7 @@ export default function IntakeChat() {
       setSelectedOptions(answerBeforeSend.selectedOptions);
     } finally {
       clearTimeout(longWaitTimer);
+      submittingRef.current = false;
       setSending(false);
       setSendingLongWait(false);
     }

@@ -862,7 +862,10 @@ router.post('/profile', authenticateToken, async (req, res) => {
       extractedCertMeta = {
         certExtractedData: certAnalysis.extractedData || null,
         licenseExpiryDate: certAnalysis.extractedData?.expiryDate || null,
-        verificationStatus: certAnalysis.success ? 'verified' : 'pending',
+        // The scan only reads the certificate with an AI model; it does not check the official
+        // register, so on its own it cannot call a doctor verified. Verification waits for that
+        // check (see certificateParserService.js), and until then a scanned certificate is pending.
+        verificationStatus: 'pending',
       };
     }
   }

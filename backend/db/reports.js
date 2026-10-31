@@ -1,6 +1,7 @@
 import supabase from '../config/supabase.js';
 import { removeStoredFiles } from '../config/supabaseStorage.js';
 import { splitStoredNotes } from '../utils/reportNotes.js';
+import { selectAll, selectAllIn } from '../utils/pagedSelect.js';
 
 const REPORTS_TABLE = 'reports';
 // reports.patient_id points at `patients`.
@@ -61,11 +62,13 @@ export const listTimelineReports = async (userId) => {
   if (!normalizedUserId || !supabase) throw new Error('Missing userId or database client.');
 
   try {
-    const { data, error } = await supabase
+    // In pages: a plain read stops silently at 1000 reports and drops the oldest.
+    const { data, error } = await selectAll(() => supabase
       .from(REPORTS_TABLE)
       .select('*')
       .eq(REPORTS_USER_ID_COLUMN, normalizedUserId)
-      .order('report_date', { ascending: false });
+      .order('report_date', { ascending: false })
+      .order('id', { ascending: false }), { label: 'timeline reports' });
 
     if (error) {
       throw error;
@@ -217,6 +220,30 @@ export const updateTimelineReport = async (userId, reportId, reportData) => {
   }
 };
 
+// What Ask Swastha searches in a report: the same four fields the indexer embeds (see
+// rag/services/embeddingService.js). The AI summary kept in `notes` is not part of it, and
+// normalizeReport has already split it off.
+function searchableText(report) {
+  return [report?.title, report?.diagnosis, report?.medicines, report?.notes]
+    .map((value) => (typeof value === 'string' ? value.trim() : ''))
+    .join('\u0000');
+}
+
+export const searchTextChanged = (before, after) => searchableText(before) !== searchableText(after);
+
+// Removes a report's search chunks. Used when its text is edited: the chunks hold the OLD text, and
+// until the report is indexed again a question could be answered from words that are no longer on
+// the report. A report with no chunks is simply not searched; the app indexes it again after the
+// edit, and the "index missing reports" catch-up covers it if that did not happen.
+export const clearReportSearchChunks = async (reportId) => {
+  if (!reportId || !supabase) throw new Error('Missing reportId or database client.');
+  const { error } = await supabase.from('report_embeddings').delete().eq('report_id', reportId);
+  if (error) {
+    console.error('Supabase clear report search chunks error:', error.message || error);
+    throw error;
+  }
+};
+
 export const deleteTimelineReport = async (userId, reportId) => {
   const normalizedUserId = String(userId || '').trim();
   const normalizedReportId = String(reportId || '').trim();
@@ -252,10 +279,12 @@ export const listReportActivityForPatients = async (patientIds) => {
   const ids = [...new Set((patientIds || []).map((id) => String(id || '').trim()).filter(Boolean))];
   if (ids.length === 0 || !supabase) return [];
 
-  const { data, error } = await supabase
+  // Every patient a doctor treats, so far more than 1000 rows is normal: chunks of patients, in pages.
+  const { data, error } = await selectAllIn(ids, (chunk) => supabase
     .from(REPORTS_TABLE)
     .select('category, report_date, created_at')
-    .in(REPORTS_USER_ID_COLUMN, ids);
+    .in(REPORTS_USER_ID_COLUMN, chunk)
+    .order('id', { ascending: true }), { label: 'report activity' });
 
   if (error) {
     console.error('Supabase report activity query error:', error.message || error);
