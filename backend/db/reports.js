@@ -220,6 +220,30 @@ export const updateTimelineReport = async (userId, reportId, reportData) => {
   }
 };
 
+// What Ask Swastha searches in a report: the same four fields the indexer embeds (see
+// rag/services/embeddingService.js). The AI summary kept in `notes` is not part of it, and
+// normalizeReport has already split it off.
+function searchableText(report) {
+  return [report?.title, report?.diagnosis, report?.medicines, report?.notes]
+    .map((value) => (typeof value === 'string' ? value.trim() : ''))
+    .join('\u0000');
+}
+
+export const searchTextChanged = (before, after) => searchableText(before) !== searchableText(after);
+
+// Removes a report's search chunks. Used when its text is edited: the chunks hold the OLD text, and
+// until the report is indexed again a question could be answered from words that are no longer on
+// the report. A report with no chunks is simply not searched; the app indexes it again after the
+// edit, and the "index missing reports" catch-up covers it if that did not happen.
+export const clearReportSearchChunks = async (reportId) => {
+  if (!reportId || !supabase) throw new Error('Missing reportId or database client.');
+  const { error } = await supabase.from('report_embeddings').delete().eq('report_id', reportId);
+  if (error) {
+    console.error('Supabase clear report search chunks error:', error.message || error);
+    throw error;
+  }
+};
+
 export const deleteTimelineReport = async (userId, reportId) => {
   const normalizedUserId = String(userId || '').trim();
   const normalizedReportId = String(reportId || '').trim();
