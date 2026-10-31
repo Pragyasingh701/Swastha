@@ -53,6 +53,15 @@ const OPENROUTER_SAFE_DEFAULT = ['openrouter/free'];
 // response (typically well under 12s) a fair shot to complete.
 const TIMEOUT_MS = { embedding: 20000, 'vision-ocr': 45000, generation: 30000, 'intake-dialogue': 12000 };
 
+// The limit above is per attempt. A call can make a great many attempts (4 keys x 2 models x 2
+// tries, then OpenRouter), so with every provider stalling the person waiting could be kept
+// hanging for minutes. This is the limit for the whole call: once it passes, no new attempt
+// starts, the one running is cut short, and the call gives up as it does when everything failed.
+// Set below the 90s our own AI routes allow a caller (see TIMEOUTS.internalAi), so the caller
+// gets this answer instead of timing out first. A healthy call takes a few seconds; these only
+// matter when the providers are failing. (A property of one object so a test can shorten them.)
+const DEADLINE_MS = { embedding: 45000, 'vision-ocr': 90000, generation: 60000, 'intake-dialogue': 30000 };
+
 export const FRIENDLY_FALLBACK =
   "Swastha couldn't process this right now. Please try again shortly.";
 
@@ -254,8 +263,20 @@ async function runAIInner({ task, input, file, json = false, taskType, label = t
   }
 
   const timeout = TIMEOUT_MS[task];
+  const deadlineAt = Date.now() + DEADLINE_MS[task];
+  const timeLeft = () => deadlineAt - Date.now();
   const trail = [];
   let attempts = 0;
+
+  // The ending shared by "every provider failed" and "ran out of time".
+  const giveUp = (code) => {
+    logTrail(label, trail);
+    if (task === 'embedding') {
+      // Deliberate: a silently unindexed report is permanently unfindable (§9).
+      throw new Error(`runAI(embedding) gave up (${code}) after ${attempts} attempts: ${trail.join(' | ')}`);
+    }
+    return degraded(attempts, code, task);
+  };
 
   // ---- Provider 1: Gemini (models outer, keys inner) ----
   for (const model of MODEL_LADDER[task]) {
@@ -264,12 +285,16 @@ async function runAIInner({ task, input, file, json = false, taskType, label = t
 
     for (const { key, index } of liveKeys()) {
       for (let tryNo = 1; tryNo <= 2; tryNo += 1) {
+        if (timeLeft() <= 0) {
+          trail.push(`deadline of ${DEADLINE_MS[task]}ms reached`);
+          return giveUp('DEADLINE_EXCEEDED');
+        }
         attempts += 1;
         const r = await postJson(
           `${GEMINI_BASE}/${path}`,
           { 'x-goog-api-key': key },
           geminiBody(task, { input, file, json, taskType }),
-          timeout
+          Math.min(timeout, timeLeft())
         );
 
         if (r.ok) {
@@ -301,7 +326,7 @@ async function runAIInner({ task, input, file, json = false, taskType, label = t
           break;
         }
         if (cls === 'TRANSIENT' && tryNo === 1) {
-          await sleep(800);
+          await sleep(Math.max(0, Math.min(800, timeLeft())));
           continue; // one same-key retry
         }
         if (cls === 'RATE_LIMIT') {
@@ -338,6 +363,10 @@ async function runAIInner({ task, input, file, json = false, taskType, label = t
     // the cause). If no free vision model is available, openRouterModels
     // returns [] for vision and this loop simply does nothing, falling
     // through to "everything exhausted" below — which is the honest result.
+    if (timeLeft() <= 0) {
+      trail.push(`deadline of ${DEADLINE_MS[task]}ms reached`);
+      return giveUp('DEADLINE_EXCEEDED');
+    }
     const openRouterModels = await freeOpenRouterModels({ vision: isVision });
     // OpenAI-compatible multimodal content: an array of text/image_url
     // parts instead of a bare string. Only built when there's actually an
@@ -351,12 +380,16 @@ async function runAIInner({ task, input, file, json = false, taskType, label = t
       : input;
 
     for (const model of openRouterModels) {
+      if (timeLeft() <= 0) {
+        trail.push(`deadline of ${DEADLINE_MS[task]}ms reached`);
+        return giveUp('DEADLINE_EXCEEDED');
+      }
       attempts += 1;
       const r = await postJson(
         OPENROUTER_URL,
         { Authorization: `Bearer ${OPENROUTER_API_KEY}` },
         { model, messages: [{ role: 'user', content }], temperature: 0 },
-        timeout
+        Math.min(timeout, timeLeft())
       );
 
       if (r.ok) {
@@ -377,12 +410,7 @@ async function runAIInner({ task, input, file, json = false, taskType, label = t
   }
 
   // ---- Everything exhausted ----
-  logTrail(label, trail);
-  if (task === 'embedding') {
-    // Deliberate: a silently unindexed report is permanently unfindable (§9).
-    throw new Error(`runAI(embedding) exhausted all keys after ${attempts} attempts: ${trail.join(' | ')}`);
-  }
-  return degraded(attempts, 'ALL_PROVIDERS_EXHAUSTED', task);
+  return giveUp('ALL_PROVIDERS_EXHAUSTED');
 }
 
 // Public entry point: runs the work, then records which provider/model
@@ -441,4 +469,4 @@ export async function embedTexts(texts, opts) {
   return out;
 }
 
-export const __testing = { classify, deadKeys, rateLimitedUntil, RATE_LIMIT_COOLDOWN_MS, liveKeys, freeOpenRouterModels };
+export const __testing = { DEADLINE_MS, classify, deadKeys, rateLimitedUntil, RATE_LIMIT_COOLDOWN_MS, liveKeys, freeOpenRouterModels };
