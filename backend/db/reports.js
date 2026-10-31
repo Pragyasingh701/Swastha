@@ -1,6 +1,7 @@
 import supabase from '../config/supabase.js';
 import { removeStoredFiles } from '../config/supabaseStorage.js';
 import { splitStoredNotes } from '../utils/reportNotes.js';
+import { selectAll, selectAllIn } from '../utils/pagedSelect.js';
 
 const REPORTS_TABLE = 'reports';
 // reports.patient_id points at `patients`.
@@ -61,11 +62,13 @@ export const listTimelineReports = async (userId) => {
   if (!normalizedUserId || !supabase) throw new Error('Missing userId or database client.');
 
   try {
-    const { data, error } = await supabase
+    // In pages: a plain read stops silently at 1000 reports and drops the oldest.
+    const { data, error } = await selectAll(() => supabase
       .from(REPORTS_TABLE)
       .select('*')
       .eq(REPORTS_USER_ID_COLUMN, normalizedUserId)
-      .order('report_date', { ascending: false });
+      .order('report_date', { ascending: false })
+      .order('id', { ascending: false }), { label: 'timeline reports' });
 
     if (error) {
       throw error;
@@ -252,10 +255,12 @@ export const listReportActivityForPatients = async (patientIds) => {
   const ids = [...new Set((patientIds || []).map((id) => String(id || '').trim()).filter(Boolean))];
   if (ids.length === 0 || !supabase) return [];
 
-  const { data, error } = await supabase
+  // Every patient a doctor treats, so far more than 1000 rows is normal: chunks of patients, in pages.
+  const { data, error } = await selectAllIn(ids, (chunk) => supabase
     .from(REPORTS_TABLE)
     .select('category, report_date, created_at')
-    .in(REPORTS_USER_ID_COLUMN, ids);
+    .in(REPORTS_USER_ID_COLUMN, chunk)
+    .order('id', { ascending: true }), { label: 'report activity' });
 
   if (error) {
     console.error('Supabase report activity query error:', error.message || error);

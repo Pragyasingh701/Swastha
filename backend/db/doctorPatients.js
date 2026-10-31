@@ -2,6 +2,7 @@ import crypto from 'crypto';
 import supabase from '../config/supabase.js';
 import { listReportActivityForPatients } from './reports.js';
 import { ageFromDob } from '../utils/age.js';
+import { selectAll, selectAllIn } from '../utils/pagedSelect.js';
 
 // Doctor -> patient linking is now request-based (status column, added in
 // supabase/migrations_archive/20260820051121_add_status_to_doctor_patient.sql):
@@ -240,12 +241,13 @@ export const getDoctorPatients = async (doctorId) => {
   }
 
   try {
-    const { data: links, error } = await supabase
+    const { data: links, error } = await selectAll(() => supabase
       .from('doctor_patient')
       .select('*')
       .eq('doctor_id', doctorId)
       .eq('hidden_by_doctor', false)
-      .order('created_at', { ascending: false });
+      .order('created_at', { ascending: false })
+      .order('id', { ascending: false }), { label: 'doctor patient list' });
 
     if (error) {
       throw error;
@@ -357,11 +359,12 @@ export const getDoctorLifetimeStats = async (doctorId) => {
   };
   if (!doctorId || !supabase) return empty;
 
-  const { data: links, error } = await supabase
+  const { data: links, error } = await selectAll(() => supabase
     .from('doctor_patient')
     .select('patient_id, created_at, responded_at')
     .eq('doctor_id', doctorId)
-    .eq('status', 'accepted');
+    .eq('status', 'accepted')
+    .order('id', { ascending: true }), { label: 'dashboard links' });
 
   if (error) {
     throw error;
@@ -372,11 +375,12 @@ export const getDoctorLifetimeStats = async (doctorId) => {
 
   const [reportRows, actionsResult] = await Promise.all([
     listReportActivityForPatients(patientIds),
-    supabase
+    selectAllIn(patientIds, (chunk) => supabase
       .from('intake_session_actions')
       .select('session_id, acted_at')
       .eq('doctor_id', doctorId)
-      .in('patient_id', patientIds),
+      .in('patient_id', chunk)
+      .order('id', { ascending: true }), { label: 'dashboard actions' }),
   ]);
 
   if (actionsResult.error) {
@@ -753,11 +757,12 @@ export const getDoctorNotifications = async (doctorId) => {
   if (!doctorId || !supabase) return [];
 
   try {
-    const { data: links, error } = await supabase
+    const { data: links, error } = await selectAll(() => supabase
       .from('doctor_patient')
       .select('*')
       .eq('doctor_id', doctorId)
-      .order('created_at', { ascending: false });
+      .order('created_at', { ascending: false })
+      .order('id', { ascending: false }), { label: 'doctor notifications' });
 
     if (error) throw error;
     if (!Array.isArray(links) || links.length === 0) return [];

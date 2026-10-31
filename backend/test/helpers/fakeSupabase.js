@@ -1,8 +1,11 @@
 // A small in-memory stand-in for the Supabase client, so route tests can run the real
 // db/ and routes/ code without a network or the live project. It implements only the
-// query methods the backend uses (select, insert, update, delete, eq, neq, in, is, not,
-// lt/lte/gt/gte, order, limit, single, maybeSingle) and answers in the same shape,
-// including the error codes the code under test branches on:
+// query methods the backend uses (select, insert, update, delete, eq, neq, in, is, not, or,
+// lt/lte/gt/gte, order, limit, range, single, maybeSingle) and answers in the same shape,
+// including the behaviours the code under test depends on:
+//   a read returns at most 1000 rows, like the real project's max_rows setting, and says
+//   nothing when it cuts the list short (so code that forgets to page loses rows here too)
+// and the error codes it branches on:
 //   PGRST116  .single() / .maybeSingle() matched zero (or several) rows
 //   23505     a unique constraint was violated
 //
@@ -41,9 +44,23 @@ function matchesFilter(row, filter) {
     case 'lte': return actual != null && toComparable(actual) <= toComparable(filter.value);
     case 'gt': return actual != null && toComparable(actual) > toComparable(filter.value);
     case 'gte': return actual != null && toComparable(actual) >= toComparable(filter.value);
+    case 'or': return filter.value.some((part) => matchesFilter(row, part));
     default: throw new Error(`fakeSupabase: unsupported filter ${filter.op}`);
   }
 }
+
+// PostgREST's `or` filter text, e.g. 'doctor_id.is.null,doctor_id.eq.d1' (only is/eq, no nesting).
+function parseOrFilter(text) {
+  return String(text).split(',').map((part) => {
+    const [column, op, ...rest] = part.split('.');
+    const raw = rest.join('.');
+    if (op === 'is') return { op: 'is', column, value: raw === 'null' ? null : raw };
+    if (op === 'eq') return { op: 'eq', column, value: raw };
+    throw new Error(`fakeSupabase: unsupported or() part ${part}`);
+  });
+}
+
+const MAX_ROWS = 1000;
 
 class Query {
   constructor(store, table) {
@@ -53,6 +70,7 @@ class Query {
     this.filters = [];
     this.orders = [];
     this.limitCount = null;
+    this.rangeFrom = 0;
     this.wantRows = true;
     this.shape = 'many';
     this.countMode = null;
@@ -76,8 +94,10 @@ class Query {
   lte(column, value) { this.filters.push({ op: 'lte', column, value }); return this; }
   gt(column, value) { this.filters.push({ op: 'gt', column, value }); return this; }
   gte(column, value) { this.filters.push({ op: 'gte', column, value }); return this; }
+  or(text) { this.filters.push({ op: 'or', value: parseOrFilter(text) }); return this; }
   order(column, { ascending = true } = {}) { this.orders.push({ column, ascending }); return this; }
   limit(count) { this.limitCount = count; return this; }
+  range(from, to) { this.rangeFrom = from; this.limitCount = to - from + 1; return this; }
   single() { this.shape = 'single'; return this; }
   maybeSingle() { this.shape = 'maybe'; return this; }
 
@@ -123,7 +143,8 @@ class Query {
         return (x > y ? 1 : -1) * (ascending ? 1 : -1);
       });
     }
-    if (this.limitCount != null) result = result.slice(0, this.limitCount);
+    const pageSize = Math.min(this.limitCount ?? MAX_ROWS, MAX_ROWS);
+    result = result.slice(this.rangeFrom, this.rangeFrom + pageSize);
     const count = this.countMode ? affected.length : null;
 
     if (this.shape === 'single' || this.shape === 'maybe') {

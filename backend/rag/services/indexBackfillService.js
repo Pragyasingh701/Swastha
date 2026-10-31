@@ -7,6 +7,7 @@
 import { supabase } from '../config/supabase.js';
 import { listTimelineReports } from '../../db/reports.js';
 import { processReportEmbeddings } from './embeddingService.js';
+import { selectAll } from '../../utils/pagedSelect.js';
 
 const MAX_REPORTS_PER_RUN = 200;
 const inFlight = new Set();
@@ -18,10 +19,14 @@ export async function backfillReportIndex(userId) {
     const reports = await listTimelineReports(userId);
     if (reports.length === 0) return { indexed: 0 };
 
-    const { data, error } = await supabase
+    // One row per chunk, several per report, so a user with a few hundred reports passes 1000 rows.
+    // Read short, the list of indexed reports missed some, and they were embedded (paid for) again.
+    const { data, error } = await selectAll(() => supabase
       .from('report_embeddings')
       .select('report_id')
-      .eq('patient_id', userId);
+      .eq('patient_id', userId)
+      .order('report_id', { ascending: true })
+      .order('chunk_index', { ascending: true }), { label: 'indexed reports' });
     if (error) throw error;
     const alreadyIndexed = new Set((data || []).map((row) => String(row.report_id)));
 
