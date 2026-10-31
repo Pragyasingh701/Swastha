@@ -267,6 +267,10 @@ router.post('/turn', requireAuth, async (req, res) => {
     if (err.status === 403) {
       return res.status(403).json({ error: err.message });
     }
+    // Another answer from this session is still being processed (a double tap or an early retry).
+    if (err.status === 409) {
+      return res.status(409).json({ error: err.message });
+    }
     console.error(`[POST /api/intake/turn] failed for patient ${patientId}, session ${sessionId}:`, err);
     return res.status(500).json({ error: 'Could not process intake turn.' });
   }
