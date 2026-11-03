@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "../../../context/AuthContext";
-import { searchReports, submitAnswerFeedback, indexMissingReports } from "../../../api/search";
+import { searchReportsConversational, clearConversation, submitAnswerFeedback, indexMissingReports } from "../../../api/search";
 import { openReportFile } from "../../../api/reports";
 import { getNoticeAckStatus, acknowledgeNotice } from "../../../api/notices";
 
@@ -18,6 +18,7 @@ import {
   ShieldCheck,
   ThumbsUp,
   ThumbsDown,
+  RotateCcw,
 } from "lucide-react";
 
 import AppHeader from "../../../components/common/AppHeader";
@@ -47,6 +48,13 @@ const EXAMPLE_QUESTIONS = [
 
 const MAX_QUERY_LENGTH = 250;
 
+// One conversation per page visit. The server keeps the earlier turns of a session, so a
+// follow-up like "and the one before that?" is understood. randomUUID() output satisfies the
+// session_id pattern the backend checks (letters, numbers, hyphen, underscore; 8-128 chars).
+function newSessionId() {
+  return crypto.randomUUID();
+}
+
 const formatDate = (value) => formatDateText(value, { fallback: null });
 
 export default function AISearch() {
@@ -56,6 +64,7 @@ export default function AISearch() {
   const [messages, setMessages] = useState([]); // { role: 'user'|'assistant', text, sources?, noResultsFound? }
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [sessionId, setSessionId] = useState(newSessionId);
 
   // Server-side enforcement (requireNoticeAck on POST /rag/api/search) is
   // the real gate; this is only so a patient sees the notice up front
@@ -117,7 +126,7 @@ export default function AISearch() {
     setLoading(true);
 
     try {
-      const result = await searchReports(trimmed);
+      const result = await searchReportsConversational(trimmed, sessionId);
       setMessages((prev) => [
         ...prev,
         {
@@ -126,6 +135,10 @@ export default function AISearch() {
           structured: result.structured || null,
           sources: result.sources || [],
           noResultsFound: result.noResultsFound,
+          // The AI provider failed and this is a fallback sentence, not a real answer:
+          // shown as an error with a retry.
+          isDegraded: Boolean(result.degraded),
+          retryQuery: result.degraded ? trimmed : undefined,
           // Carried along only to echo back on a feedback submission
           // (POST /api/search/feedback) — never displayed.
           mode: result.mode || null,
@@ -135,7 +148,13 @@ export default function AISearch() {
       setError(err.message || "Search failed. Please try again.");
       setMessages((prev) => [
         ...prev,
-        { role: "assistant", text: "Something went wrong answering that. Please try again.", sources: [], isError: true },
+        {
+          role: "assistant",
+          text: "Something went wrong answering that. Please try again.",
+          sources: [],
+          isError: true,
+          retryQuery: trimmed,
+        },
       ]);
     } finally {
       setLoading(false);
@@ -145,6 +164,20 @@ export default function AISearch() {
   function handleSubmit(e) {
     e.preventDefault();
     runSearch(query.trim());
+  }
+
+  async function handleNewChat() {
+    if (loading) return;
+    try {
+      await clearConversation(sessionId);
+    } catch {
+      // Clearing the server's copy is best-effort: a new session id already stops the old
+      // conversation from being used.
+    }
+    setSessionId(newSessionId());
+    setMessages([]);
+    setError(null);
+    setQuery("");
   }
 
   // Auto-run a query handed off from elsewhere in the app, e.g. the
@@ -271,7 +304,7 @@ export default function AISearch() {
                 <div className="flex-1 bg-white rounded-2xl border border-slate-100 shadow-sm p-6 mb-4 overflow-y-auto min-h-[320px] max-h-[60vh]">
                   <div className="space-y-4">
                     {messages.map((m, i) => (
-                      <ChatBubble key={i} message={m} />
+                      <ChatBubble key={i} message={m} onRetry={runSearch} disabled={loading} />
                     ))}
                     {loading && (
                       <div className="flex items-center gap-2 text-slate-400 text-sm">
@@ -289,6 +322,16 @@ export default function AISearch() {
                 )}
 
                 <form onSubmit={handleSubmit} className="flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={handleNewChat}
+                    disabled={loading}
+                    className="flex items-center gap-1.5 text-sm text-slate-500 hover:text-blue-700 px-3 py-3 rounded-xl hover:bg-blue-50 transition-colors shrink-0 whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed"
+                    title="Clear this conversation and start fresh"
+                  >
+                    <RotateCcw size={14} />
+                    New chat
+                  </button>
                   <input
                     type="text"
                     value={query}
@@ -318,7 +361,7 @@ export default function AISearch() {
   );
 }
 
-function ChatBubble({ message }) {
+function ChatBubble({ message, onRetry, disabled }) {
   const isUser = message.role === "user";
   // Local to this bubble — feedback doesn't need to survive a reload, and
   // each bubble is a distinct answer, so there's no need to lift this into
@@ -336,7 +379,10 @@ function ChatBubble({ message }) {
     );
   }
 
-  const structured = message.structured;
+  // isDegraded: the AI provider failed and the backend sent a placeholder sentence. Shown as an
+  // error with a retry, so it is not mistaken for an answer from the records.
+  const isErrorLike = message.isError || message.isDegraded;
+  const structured = message.isDegraded ? null : message.structured;
   const hasKeyFacts = structured?.keyFacts && structured.keyFacts.length > 0;
 
   async function handleFeedback(rating) {
@@ -361,7 +407,7 @@ function ChatBubble({ message }) {
     <div className="flex justify-start">
       <div
         className={`text-sm rounded-2xl rounded-bl-sm px-4 py-3 max-w-[85%] ${
-          message.isError
+          isErrorLike
             ? "bg-red-50 text-red-700 border border-red-100 "
             : "bg-slate-50 text-slate-700 border border-slate-100 "
         }`}
@@ -370,6 +416,17 @@ function ChatBubble({ message }) {
         <p className="whitespace-pre-wrap font-medium text-slate-800 ">
           {structured?.headline || message.text}
         </p>
+
+        {isErrorLike && message.retryQuery && (
+          <button
+            type="button"
+            onClick={() => onRetry?.(message.retryQuery)}
+            disabled={disabled}
+            className="mt-2 text-xs font-semibold text-red-700 hover:text-red-800 underline disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            Retry
+          </button>
+        )}
 
         {/* Key facts — structured supporting details, each traceable to a source */}
         {hasKeyFacts && (
@@ -392,7 +449,7 @@ function ChatBubble({ message }) {
           <p className="mt-3 text-xs text-slate-400 italic">{structured.caveat}</p>
         )}
 
-        {message.sources && message.sources.length > 0 && (
+        {!isErrorLike && message.sources && message.sources.length > 0 && (
           <div className="mt-3 pt-3 border-t border-slate-200 space-y-1.5">
             <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide">Sources</p>
             {message.sources.map((s) => (
@@ -401,10 +458,10 @@ function ChatBubble({ message }) {
           </div>
         )}
 
-        {!message.isError && <AiGeneratedNote className="mt-3" />}
+        {!isErrorLike && <AiGeneratedNote className="mt-3" />}
 
         {/* Omitted for an error bubble — there's no real answer to rate. */}
-        {!message.isError && (
+        {!isErrorLike && (
           <div className="mt-3 pt-3 border-t border-slate-200 flex items-center gap-1.5">
             <button
               type="button"
