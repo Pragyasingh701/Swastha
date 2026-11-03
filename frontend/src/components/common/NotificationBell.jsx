@@ -31,13 +31,15 @@ import { formatDateTime } from "../../utils/dateFormat";
 export default function NotificationBell() {
   const [notifications, setNotifications] = useState([]);
   const [isOpen, setIsOpen] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
+  // True only until the first answer arrives. Later refreshes (every 20 s, on focus, on open)
+  // update the list in place: swapping it for "Loading..." each time hid the Accept / Decline
+  // buttons for a moment and a click landing then was lost.
+  const [isLoading, setIsLoading] = useState(true);
   const [busyLinkId, setBusyLinkId] = useState(null);
   const [actionError, setActionError] = useState("");
   const containerRef = useRef(null);
 
   const load = useCallback(async () => {
-    setIsLoading(true);
     try {
       const result = await getDoctorPatientNotifications();
       setNotifications(result);

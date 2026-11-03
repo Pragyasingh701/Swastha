@@ -574,8 +574,8 @@ function DocRow({ doc, onViewDetails }) {
 
 /* --------------------------- Report preview --------------------------- */
 
-/* One modal for both the record and its AI summary. If the report has no
-   summary yet, generation kicks off the moment the modal opens. */
+/* One modal for both the record and its AI summary. A report with no summary yet shows a
+   button to write one: opening a report never sends it to the AI on its own. */
 function ReportPreview({ report, token, onSummaryGenerated, onClose }) {
   const [generating, setGenerating] = useState(false);
   const [genError, setGenError] = useState(null);
@@ -598,13 +598,6 @@ function ReportPreview({ report, token, onSummaryGenerated, onClose }) {
       setGenerating(false);
     }
   }
-
-  useEffect(() => {
-    if (!report.analysis && !generating) {
-      runGenerate();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [report.id]);
 
   // Generation was refused because the AI notice hadn't been accepted; once the
   // global notice (AiNoticeGate) is accepted, try again without a manual retry.
@@ -665,6 +658,20 @@ function ReportPreview({ report, token, onSummaryGenerated, onClose }) {
                   >
                     <RefreshCw size={12} />
                     Retry
+                  </button>
+                </div>
+              ) : !report.analysis ? (
+                <div className="mt-3">
+                  <p className="text-sm text-slate-600">
+                    No summary yet. Writing one sends this report's text to an AI service.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => runGenerate(false)}
+                    className="mt-3 inline-flex items-center gap-1.5 rounded-lg bg-blue-700 px-3 py-2 text-xs font-semibold text-white transition-colors hover:bg-blue-800"
+                  >
+                    <Sparkles size={12} />
+                    Generate AI summary
                   </button>
                 </div>
               ) : (
