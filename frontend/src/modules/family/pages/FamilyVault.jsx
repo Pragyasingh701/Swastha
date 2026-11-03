@@ -304,6 +304,15 @@ export default function FamilyVault() {
     setConditionDraft({ name: '', ageOfOnset: '' });
   }
 
+  // A condition typed in but not yet added with the Add button is still saved, so it is not lost.
+  function conditionsForSave() {
+    const saved = form.conditions || [];
+    const name = conditionDraft.name.trim();
+    if (!name) return saved;
+    const ageOfOnset = conditionDraft.ageOfOnset !== '' ? Number(conditionDraft.ageOfOnset) : null;
+    return [...saved, { name: name.slice(0, 100), ageOfOnset: Number.isInteger(ageOfOnset) ? ageOfOnset : null }];
+  }
+
   function removeConditionDraft(index) {
     setForm((prev) => ({
       ...prev,
@@ -395,7 +404,7 @@ export default function FamilyVault() {
       parentMemberId: form.parentMemberId || null,
       healthOverview: form.healthOverview.trim(),
       notes: finalNotes,
-      conditions: form.conditions || [],
+      conditions: conditionsForSave(),
       lastVisitDate: form.lastVisitDate || undefined,
       nextCheckupDate: form.nextCheckupDate || undefined,
     };
@@ -705,6 +714,74 @@ export default function FamilyVault() {
                     />
                     {fieldErrors.notes ? <p className="text-sm text-rose-600 ">{fieldErrors.notes}</p> : null}
                   </label>
+
+                  <div className="space-y-2">
+                    <span className="text-sm font-medium text-slate-700 ">Health Conditions <span className="text-slate-400">(optional)</span></span>
+                    {(form.conditions || []).length > 0 ? (
+                      <ul className="flex flex-wrap gap-2">
+                        {form.conditions.map((condition, index) => (
+                          <li
+                            key={`${condition.name}-${index}`}
+                            className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 py-1.5 pl-3 pr-2 text-sm text-slate-700"
+                          >
+                            <span>
+                              {condition.name}
+                              {condition.ageOfOnset != null ? ` · onset ${condition.ageOfOnset}` : ''}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => removeConditionDraft(index)}
+                              className="flex h-5 w-5 items-center justify-center rounded-full text-slate-400 transition-colors hover:bg-slate-200 hover:text-slate-700"
+                              aria-label={`Remove ${condition.name}`}
+                            >
+                              &times;
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : null}
+                    <div className="grid gap-3 sm:grid-cols-[1fr_9rem_auto]">
+                      <input
+                        value={conditionDraft.name}
+                        onChange={(event) => setConditionDraft({ ...conditionDraft, name: event.target.value })}
+                        onKeyDown={(event) => {
+                          if (event.key === 'Enter') {
+                            event.preventDefault();
+                            addConditionDraft();
+                          }
+                        }}
+                        maxLength={100}
+                        className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900 outline-none transition-colors focus:border-blue-400 focus:bg-white "
+                        placeholder="e.g. Type 2 diabetes"
+                        aria-label="Condition name"
+                      />
+                      <input
+                        type="number"
+                        min="0"
+                        max="150"
+                        value={conditionDraft.ageOfOnset}
+                        onChange={(event) => setConditionDraft({ ...conditionDraft, ageOfOnset: event.target.value })}
+                        onKeyDown={(event) => {
+                          if (event.key === 'Enter') {
+                            event.preventDefault();
+                            addConditionDraft();
+                          }
+                        }}
+                        className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900 outline-none transition-colors focus:border-blue-400 focus:bg-white "
+                        placeholder="Age of onset"
+                        aria-label="Age when it started"
+                      />
+                      <button
+                        type="button"
+                        onClick={addConditionDraft}
+                        disabled={!conditionDraft.name.trim()}
+                        className="rounded-2xl border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-700 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        Add
+                      </button>
+                    </div>
+                    {fieldErrors.conditions ? <p className="text-sm text-rose-600 ">{fieldErrors.conditions}</p> : null}
+                  </div>
 
                   <div className="grid gap-4 sm:grid-cols-2">
                     <label className="space-y-2">

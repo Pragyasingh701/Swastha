@@ -94,7 +94,7 @@ function StatCard({ icon: Icon, tag, tagColor, value, label, iconBg }) {
   );
 }
 
-function RecentUploads({ reports = [] }) {
+function RecentUploads({ reports = [], loadFailed = false }) {
   const navigate = useNavigate();
   const recentReports = reports.slice(0, 5);
 
@@ -114,7 +114,9 @@ function RecentUploads({ reports = [] }) {
       </div>
 
       <div className="space-y-3">
-        {recentReports.length === 0 ? (
+        {loadFailed ? (
+          <p className="text-sm text-slate-500">Your documents could not be loaded.</p>
+        ) : recentReports.length === 0 ? (
           <p className="text-sm text-slate-500">No documents uploaded yet.</p>
         ) : recentReports.map((report) => {
           const Icon = report.category?.toLowerCase().includes('prescription') ? ClipboardList : FileText;
@@ -157,7 +159,7 @@ function RecentUploads({ reports = [] }) {
   );
 }
 
-function CurrentMedications({ medications = [] }) {
+function CurrentMedications({ medications = [], loadFailed = false }) {
   const [isMedicationModalOpen, setIsMedicationModalOpen] = useState(false);
   const visibleMedications = medications.slice(0, 5);
 
@@ -181,7 +183,9 @@ function CurrentMedications({ medications = [] }) {
       </div>
 
       <div className="space-y-3">
-        {medications.length === 0 ? (
+        {loadFailed ? (
+          <p className="text-sm text-slate-500">Your medicines could not be loaded.</p>
+        ) : medications.length === 0 ? (
           <p className="text-sm text-slate-500">No medicines found in your uploaded prescriptions.</p>
         ) : (
           visibleMedications.map(({ name, schedule, color }) => (
@@ -235,6 +239,11 @@ export default function Dashboard() {
   const [profile, setProfile] = useState(cachedUser);
   const [isProfileLoading, setIsProfileLoading] = useState(false);
   const [vaultReports, setVaultReports] = useState([]);
+  // 'loading' | 'ready' | 'error' for each of the two lists. A list that did not load shows a dash
+  // and an error, never a 0, which would read as "no documents" or "no family members".
+  const [reportsStatus, setReportsStatus] = useState('loading');
+  const [familyStatus, setFamilyStatus] = useState('loading');
+  const [reloadCount, setReloadCount] = useState(0);
   const [familySummary, setFamilySummary] = useState({
     totalMembers: 0,
     upcomingCheckups: 0,
@@ -256,6 +265,7 @@ export default function Dashboard() {
         return;
       }
 
+      setFamilyStatus('loading');
       try {
         const result = await getFamilyDashboard(token);
         if (!isMounted) return;
@@ -265,15 +275,9 @@ export default function Dashboard() {
           relationshipTagCount: 0,
           membersWithHealthNotes: 0,
         });
+        setFamilyStatus('ready');
       } catch {
-        if (isMounted) {
-          setFamilySummary({
-            totalMembers: 0,
-            upcomingCheckups: 0,
-            relationshipTagCount: 0,
-            membersWithHealthNotes: 0,
-          });
-        }
+        if (isMounted) setFamilyStatus('error');
       }
     }
 
@@ -283,15 +287,15 @@ export default function Dashboard() {
         return;
       }
 
+      setReportsStatus('loading');
       try {
         const result = await getTimelineReports(token);
         if (!isMounted) return;
         const list = Array.isArray(result?.reports) ? result.reports : [];
         setVaultReports(list);
+        setReportsStatus('ready');
       } catch {
-        if (isMounted) {
-          setVaultReports([]);
-        }
+        if (isMounted) setReportsStatus('error');
       }
     }
 
@@ -301,8 +305,10 @@ export default function Dashboard() {
     return () => {
       isMounted = false;
     };
-  }, [isAuthenticated, token]);
+  }, [isAuthenticated, token, reloadCount]);
 
+  const reportsFailed = reportsStatus === 'error';
+  const familyFailed = familyStatus === 'error';
   const medications = useMemo(() => parseMedicationEntries(vaultReports), [vaultReports]);
 
   useEffect(() => {
@@ -342,28 +348,28 @@ export default function Dashboard() {
     {
       icon: FileText,
       tag: null,
-      value: String(vaultReports.length || 0),
+      value: reportsStatus === 'ready' ? String(vaultReports.length) : '–',
       label: "Total Documents",
       iconBg: "bg-blue-50 text-blue-600",
     },
     {
       icon: Users,
       tag: null,
-      value: String(familySummary.totalMembers || 0),
+      value: familyStatus === 'ready' ? String(familySummary.totalMembers || 0) : '–',
       label: "Family Members",
       iconBg: "bg-blue-50 text-blue-600",
     },
     {
       icon: Pill,
       tag: medications.length > 0 ? "From your prescriptions" : null,
-      value: String(medications.length || 0),
+      value: reportsStatus === 'ready' ? String(medications.length) : '–',
       label: "Medicines on Record",
       iconBg: "bg-blue-50 text-blue-600",
     },
     {
       icon: ClipboardList,
       tag: familySummary.upcomingCheckups > 0 ? "In next 30 days" : null,
-      value: String(familySummary.upcomingCheckups || 0),
+      value: familyStatus === 'ready' ? String(familySummary.upcomingCheckups || 0) : '–',
       label: "Upcoming Checkups",
       iconBg: "bg-blue-50 text-blue-600",
     },
@@ -411,6 +417,21 @@ export default function Dashboard() {
             </button>
           </div>
 
+          {(reportsFailed || familyFailed) && (
+            <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-red-100 bg-red-50 px-4 py-3">
+              <p className="text-sm text-red-700">
+                Some of your information could not be loaded, so those numbers are not shown.
+              </p>
+              <button
+                type="button"
+                onClick={() => setReloadCount((n) => n + 1)}
+                className="text-sm font-semibold text-red-700 underline hover:text-red-800"
+              >
+                Try again
+              </button>
+            </div>
+          )}
+
           <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 mb-6">
             {statCards.map((card) => (
               <StatCard key={card.label} {...card} />
@@ -419,11 +440,11 @@ export default function Dashboard() {
 
           <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
             <div className="xl:col-span-2 space-y-6">
-              <RecentUploads reports={vaultReports} />
+              <RecentUploads reports={vaultReports} loadFailed={reportsFailed} />
             </div>
 
             <div className="space-y-6">
-              <CurrentMedications medications={medications} />
+              <CurrentMedications medications={medications} loadFailed={reportsFailed} />
             </div>
           </div>
         </main>
