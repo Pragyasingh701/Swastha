@@ -23,6 +23,13 @@ export const AI_NOTICES = {
     title: 'How voice intake uses AI',
     body:
       'Your answers, typed or spoken, are sent to AI services to understand and organise them. If you speak, your voice recording and its transcript are sent to a speech service to convert it to text, and questions are read aloud to you by one.',
+    // Shown instead of the English text in a Hindi intake session. Same meaning; needs the
+    // same legal sign-off as the English copy (see the TODO above).
+    hi: {
+      title: 'वॉइस इंटेक में AI का उपयोग कैसे होता है',
+      body:
+        'आपके उत्तर, चाहे लिखे हों या बोले गए, उन्हें समझने और व्यवस्थित करने के लिए AI सेवाओं को भेजे जाते हैं। अगर आप बोलते हैं, तो आपकी आवाज़ की रिकॉर्डिंग और उसका लिखित रूप आवाज़ को टेक्स्ट में बदलने के लिए एक स्पीच सेवा को भेजा जाता है, और सवाल भी ऐसी ही एक सेवा द्वारा आपको पढ़कर सुनाए जाते हैं।',
+    },
   },
   report_upload: {
     title: 'How report scanning uses AI',

@@ -27,17 +27,11 @@ import PatientSidebar from "../../../components/common/PatientSidebar";
 // Same nav list as Dashboard.jsx / AISearch.jsx / Timeline.jsx / etc.
 const MAX_MESSAGE_LENGTH = 500;
 
-// Section labels shown in the progress strip — order matches the backend
-// state machine (intakeService.js SECTIONS).
-const SECTION_LABELS = {
-  chief_complaint: "Main complaint",
-  hpi: "About your symptoms",
-  drug_allergy: "Medications & allergies",
-  finalize: "Done",
-};
+// Sections shown in the progress strip — order matches the backend state machine
+// (intakeService.js SECTIONS). Their labels are in UI_TEXT, per language.
 const SECTION_ORDER = ["chief_complaint", "hpi", "drug_allergy", "finalize"];
 
-function ChatBubble({ message, onReplay, isSpeaking, isLoading }) {
+function ChatBubble({ message, onReplay, isSpeaking, isLoading, labels }) {
   const isPatient = message.role === "patient";
 
   if (isPatient) {
@@ -74,8 +68,8 @@ function ChatBubble({ message, onReplay, isSpeaking, isLoading }) {
             type="button"
             onClick={() => onReplay(message.text)}
             disabled={isLoading}
-            title={isSpeaking ? "Stop" : "Listen again"}
-            aria-label={isSpeaking ? "Stop this question" : "Listen to this question again"}
+            title={isSpeaking ? labels.stop : labels.listen}
+            aria-label={isSpeaking ? labels.stop : labels.listen}
             className={`mt-1.5 ml-1 inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs transition-colors disabled:opacity-50 ${
               isSpeaking
                 ? "border-blue-300 bg-blue-50 text-blue-700"
@@ -87,7 +81,7 @@ function ChatBubble({ message, onReplay, isSpeaking, isLoading }) {
             ) : (
               <Volume2 size={13} className={isSpeaking ? "animate-pulse" : ""} />
             )}
-            {isSpeaking ? "Playing" : "Listen"}
+            {isSpeaking ? labels.playing : labels.listen}
           </button>
         )}
       </div>
@@ -141,6 +135,42 @@ const UI_TEXT = {
     typeAnswer: "अपना उत्तर लिखें...",
     listening: "सुन रहे हैं...",
     transcribing: "लिखा जा रहा है...",
+    sections: {
+      chief_complaint: "मुख्य समस्या",
+      hpi: "आपके लक्षणों के बारे में",
+      drug_allergy: "दवाएं और एलर्जी",
+    },
+    starting: "आपका इंटेक शुरू हो रहा है...",
+    startFailed: "आपका इंटेक शुरू नहीं हो सका। कृपया दोबारा कोशिश करें।",
+    genericError: "कुछ गड़बड़ हो गई। कृपया दोबारा कोशिश करें।",
+    sendFailed: "माफ़ कीजिए, आपका उत्तर नहीं पहुंचा। कृपया उसे दोबारा भेजें।",
+    audioFailed: "वह सवाल सुनाया नहीं जा सका। कृपया ऊपर लिखा सवाल पढ़ लें।",
+    micUnavailable: "माइक्रोफ़ोन उपलब्ध नहीं है — कृपया अपना उत्तर लिखकर दें।",
+    didntCatch: "आपकी बात समझ नहीं आई — दोबारा बोलें या उत्तर लिखकर दें।",
+    transcribeFailed: "आवाज़ को लिखा नहीं जा सका। कृपया उत्तर लिखकर दें।",
+    explainOther: "कृपया अपनी समस्या लिखने वाली जगह में बताएं।",
+    emergencyTitle: "यह आपातकाल हो सकता है",
+    priorityTitle: "ज़रूरी सूचना",
+    priorityBody: "आपके उत्तर डॉक्टर के लिए ज़रूरी चिह्नित किए गए हैं। इस चैट को कोई लाइव नहीं देख रहा है, इसलिए अगर आपको बहुत तकलीफ़ हो तो इंतज़ार न करें: एम्बुलेंस के लिए 108 या आपातकालीन मदद के लिए 112 पर कॉल करें।",
+    keepAnswering: "आप नीचे उत्तर देना जारी रख सकते हैं।",
+    call: "कॉल करें",
+    complete: "इंटेक पूरा हुआ",
+    answersSaved: "आपके उत्तर सेव हो गए हैं।",
+    finalizeFailed: "हम अभी उन्हें डॉक्टर तक नहीं भेज सके। दोबारा कोशिश करने के लिए \"पूरा करें\" दबाएं।",
+    finish: "पूरा करें",
+    finishing: "पूरा हो रहा है...",
+    send: "भेजें",
+    unmute: "आवाज़ चालू करें — सवाल पढ़कर सुनाए जाएंगे",
+    mute: "आवाज़ बंद करें — सवाल नहीं सुनाए जाएंगे",
+    stopRecording: "रिकॉर्डिंग रोकें",
+    answerByVoice: "बोलकर उत्तर दें",
+    listen: "सुनें",
+    playing: "चल रहा है",
+    stop: "रोकें",
+    visitIntake: "विज़िट इंटेक",
+    introChat: "डॉक्टर से मिलने से पहले कुछ छोटे सवाल — अपने शब्दों में जवाब दें या कोई विकल्प चुनें।",
+    resumed: "आप पहले शुरू किया गया इंटेक जारी रख रहे हैं।",
+    startNew: "नया शुरू करें",
   },
   "en-IN": {
     backToDashboard: "Back to Dashboard",
@@ -150,8 +180,48 @@ const UI_TEXT = {
     typeAnswer: "Type your answer...",
     listening: "Listening...",
     transcribing: "Transcribing...",
+    sections: {
+      chief_complaint: "Main complaint",
+      hpi: "About your symptoms",
+      drug_allergy: "Medications & allergies",
+    },
+    starting: "Starting your intake session...",
+    startFailed: "Could not start your intake session. Please try again.",
+    genericError: "Something went wrong. Please try again.",
+    sendFailed: "Sorry, that didn't go through. Please send your answer again.",
+    audioFailed: "Could not play that question. Please read it above.",
+    micUnavailable: "Microphone unavailable — please type your answer instead.",
+    didntCatch: "Didn't catch that — try again or type your answer.",
+    transcribeFailed: "Could not transcribe. Please type your answer.",
+    explainOther: "Please explain your problem in the type section.",
+    emergencyTitle: "This may be an emergency",
+    priorityTitle: "Priority Alert",
+    priorityBody: "Your answers have been marked urgent for the doctor. No one is watching this chat live, so if you feel very unwell, don't wait: call 108 for an ambulance or 112 for emergency help.",
+    keepAnswering: "You can keep answering below.",
+    call: "Call",
+    complete: "Intake complete",
+    answersSaved: "Your answers are saved.",
+    finalizeFailed: "We couldn't finish sending them to the doctor just now. Tap Finish to try again.",
+    finish: "Finish",
+    finishing: "Finishing...",
+    send: "Send",
+    unmute: "Unmute — read questions aloud",
+    mute: "Mute — stop reading questions aloud",
+    stopRecording: "Stop recording",
+    answerByVoice: "Answer by voice",
+    listen: "Listen",
+    playing: "Playing",
+    stop: "Stop",
+    visitIntake: "Visit Intake",
+    introChat: "A few quick questions before the doctor sees you — answer in your own words or tap an option.",
+    resumed: "You're continuing the intake you started earlier.",
+    startNew: "Start a new one",
   },
 };
+
+// The "none of these" choices, in both languages. Picking one asks the patient to write it out.
+const OTHER_OPTIONS = ["Other", "Other concern", "Other problem", "Something else", "Other / Something else", "अन्य", "अन्य समस्या", "कुछ और"];
+const isOnlyOtherSelected = (selected) => selected.length === 1 && OTHER_OPTIONS.includes(selected[0]);
 
 function uiText(language) {
   return UI_TEXT[language] || UI_TEXT["hi-IN"];
@@ -486,7 +556,7 @@ export default function IntakeChat() {
         setQuickReplies(normalizeQuickReplies(res.quick_reply_options));
         if (!muted) handleReplayQuestion(res.next_question, res.session_id);
       } catch (err) {
-        setError(err.message || "Could not start your intake session. Please try again.");
+        setError(err.message || uiText(language).startFailed);
       } finally {
         setStarting(false);
       }
@@ -626,7 +696,7 @@ export default function IntakeChat() {
       playAudioPayload(payload.base64, payload.mime, text, payload.options);
     } catch {
       // Audio unavailable — the question text is still on screen to read.
-      setVoiceNote("Could not play that question. Please read it above.");
+      setVoiceNote(uiText(language).audioFailed);
     } finally {
       setLoadingAudioText(null);
     }
@@ -730,7 +800,7 @@ export default function IntakeChat() {
     } catch {
       // Permission denied, no mic, or an insecure origin. Text input is
       // untouched and remains the way to answer.
-      setVoiceNote("Microphone unavailable — please type your answer instead.");
+      setVoiceNote(uiText(language).micUnavailable);
       setIsRecording(false);
     }
   }
@@ -777,8 +847,8 @@ export default function IntakeChat() {
       // Never clears what the patient already typed.
       setVoiceNote(
         err.status === 422
-          ? "Didn't catch that — try again or type your answer."
-          : "Could not transcribe. Please type your answer."
+          ? uiText(language).didntCatch
+          : uiText(language).transcribeFailed
       );
     } finally {
       setIsTranscribing(false);
@@ -941,12 +1011,12 @@ export default function IntakeChat() {
           ...withoutAnswer,
           {
             role: "assistant",
-            text: err.message || "Sorry, that didn't go through. Please send your answer again.",
+            text: err.message || uiText(language).sendFailed,
             isError: true,
           },
         ];
       });
-      setError(err.message || "Something went wrong. Please try again.");
+      setError(err.message || uiText(language).genericError);
       setInput(trimmed);
       setQuickReplies(answerBeforeSend.quickReplies);
       setSelectedOptions(answerBeforeSend.selectedOptions);
@@ -1004,15 +1074,15 @@ export default function IntakeChat() {
   }
 
   function isOtherConcernOption(option) {
-    return ["Other", "Other concern", "Something else", "Other / Something else"].includes(option);
+    return OTHER_OPTIONS.includes(option);
   }
 
   function handleSubmit(e) {
     e.preventDefault();
 
-    const otherSelectedAlone = selectedOptions.includes("Other") && selectedOptions.length === 1 && !input.trim();
+    const otherSelectedAlone = isOnlyOtherSelected(selectedOptions) && !input.trim();
     if (otherRequired || otherSelectedAlone) {
-      setOtherPrompt("Please explain your problem in the type section.");
+      setOtherPrompt(uiText(language).explainOther);
       setOtherRequired(true);
       return;
     }
@@ -1025,7 +1095,7 @@ export default function IntakeChat() {
   function handleQuickReplyClick(opt) {
     if (isOtherConcernOption(opt)) {
       setOtherRequired(true);
-      setOtherPrompt("Please explain your problem in the type section.");
+      setOtherPrompt(uiText(language).explainOther);
       return;
     }
 
@@ -1044,10 +1114,10 @@ export default function IntakeChat() {
 
       if (isOtherConcernOption(opt)) {
         const hasInput = !!input.trim();
-        const otherSelectedAlone = next.includes("Other") && next.length === 1 && !hasInput;
+        const otherSelectedAlone = isOnlyOtherSelected(next) && !hasInput;
         if (otherSelectedAlone) {
           setOtherRequired(true);
-          setOtherPrompt("Please explain your problem in the type section.");
+          setOtherPrompt(uiText(language).explainOther);
         } else {
           setOtherRequired(false);
           setOtherPrompt("");
@@ -1058,6 +1128,10 @@ export default function IntakeChat() {
     });
   }
 
+  // The code, confirm and language screens come before the patient has chosen a language, so
+  // they stay in English; everything from the AI notice onward follows the chosen language.
+  const beforeLanguage = [GATE_STEPS.CODE, GATE_STEPS.CONFIRM, GATE_STEPS.LANGUAGE].includes(gateStep);
+
   const currentStepIndex = SECTION_ORDER.indexOf(section);
 
   return (
@@ -1067,6 +1141,7 @@ export default function IntakeChat() {
       {gateStep === GATE_STEPS.ACK && voiceNoticeAcknowledged === false && (
         <AiNoticeAckModal
           feature="voice_intake"
+          language={language}
           onAccept={handleAcknowledgeVoiceNotice}
           accepting={acknowledgingVoiceNotice}
         />
@@ -1079,18 +1154,18 @@ export default function IntakeChat() {
           <div className="mb-6">
             <h1 className="text-2xl font-semibold text-slate-900 flex items-center gap-2">
               <ClipboardList className="text-blue-600" size={24} />
-              Visit Intake
+              {beforeLanguage ? uiText("en-IN").visitIntake : uiText(language).visitIntake}
             </h1>
             <p className="text-slate-500 mt-1">
-              {gateStep === GATE_STEPS.CHAT
-                ? "A few quick questions before the doctor sees you — answer in your own words or tap an option."
-                : "Enter the check-in code shown at your doctor's clinic to begin."}
+              {beforeLanguage
+                ? "Enter the check-in code shown at your doctor's clinic to begin."
+                : uiText(language).introChat}
             </p>
           </div>
 
           {resumed && (
             <div className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-800">
-              <span>You're continuing the intake you started earlier.</span>
+              <span>{uiText(language).resumed}</span>
               <button
                 type="button"
                 onClick={() => {
@@ -1099,7 +1174,7 @@ export default function IntakeChat() {
                 }}
                 className="font-semibold underline underline-offset-2 hover:text-blue-950"
               >
-                Start a new one
+                {uiText(language).startNew}
               </button>
             </div>
           )}
@@ -1261,11 +1336,11 @@ export default function IntakeChat() {
             <div className="mb-4 flex items-start gap-3 rounded-2xl border border-red-200 bg-red-50 px-4 py-3.5 text-red-800" role="alert">
               <AlertTriangle size={20} className="shrink-0 mt-0.5 text-red-600" />
               <div className="text-sm">
-                <p className="font-semibold">{emergency ? "This may be an emergency" : "Priority Alert"}</p>
+                <p className="font-semibold">{emergency ? uiText(language).emergencyTitle : uiText(language).priorityTitle}</p>
                 <p className="mt-0.5 text-red-700">
                   {emergency
                     ? emergency.message
-                    : "Your answers have been marked urgent for the doctor. No one is watching this chat live, so if you feel very unwell, don't wait: call 108 for an ambulance or 112 for emergency help."}
+                    : uiText(language).priorityBody}
                 </p>
                 <p className="mt-2 flex flex-wrap gap-2">
                   {(emergency?.numbers || [{ number: "108", label: "Ambulance" }, { number: "112", label: "Emergency" }]).map((n) => (
@@ -1274,11 +1349,11 @@ export default function IntakeChat() {
                       href={`tel:${n.number}`}
                       className="inline-flex items-center rounded-lg bg-red-600 px-3 py-1.5 text-xs font-bold text-white"
                     >
-                      Call {n.number}
+                      {uiText(language).call} {n.number}
                     </a>
                   ))}
                 </p>
-                <p className="mt-2 text-red-700">You can keep answering below.</p>
+                <p className="mt-2 text-red-700">{uiText(language).keepAnswering}</p>
               </div>
             </div>
           )}
@@ -1296,7 +1371,7 @@ export default function IntakeChat() {
                     : "bg-slate-50 text-slate-400 border-slate-100"
                 }`}
               >
-                {SECTION_LABELS[s]}
+                {uiText(language).sections[s]}
               </span>
             ))}
           </div>
@@ -1309,7 +1384,7 @@ export default function IntakeChat() {
             <div className="flex-1 bg-white rounded-2xl border border-slate-100 shadow-sm p-6 flex items-center justify-center min-h-[320px]">
               <div className="flex items-center gap-2 text-slate-400 text-sm">
                 <Loader2 size={16} className="animate-spin" />
-                Starting your intake session...
+                {uiText(language).starting}
               </div>
             </div>
           ) : (
@@ -1326,6 +1401,7 @@ export default function IntakeChat() {
                       onReplay={handleReplayQuestion}
                       isSpeaking={speakingText === m.text}
                       isLoading={loadingAudioText === m.text}
+                      labels={uiText(language)}
                     />
                   ))}
                   {sending && (
@@ -1356,7 +1432,7 @@ export default function IntakeChat() {
                   {done && (
                     <div className="flex items-center gap-2 text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-xl px-4 py-3 text-sm">
                       <CheckCircle2 size={16} />
-                      {language === "en-IN" ? "Intake complete" : "इंटेक पूरा हुआ"}
+                      {uiText(language).complete}
                     </div>
                   )}
                 </div>
@@ -1370,15 +1446,15 @@ export default function IntakeChat() {
 
               {!done && finalizeFailed && (
                 <div role="alert" className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-4 text-sm text-amber-800">
-                  <p className="font-semibold">Your answers are saved.</p>
-                  <p className="mt-1">We couldn't finish sending them to the doctor just now. Tap Finish to try again.</p>
+                  <p className="font-semibold">{uiText(language).answersSaved}</p>
+                  <p className="mt-1">{uiText(language).finalizeFailed}</p>
                   <button
                     type="button"
                     onClick={finishIntake}
                     disabled={finishing}
                     className="mt-3 inline-flex items-center gap-2 rounded-xl bg-amber-600 px-4 py-2 font-semibold text-white hover:bg-amber-700 disabled:opacity-60"
                   >
-                    {finishing ? "Finishing..." : "Finish"}
+                    {finishing ? uiText(language).finishing : uiText(language).finish}
                   </button>
                 </div>
               )}
@@ -1490,8 +1566,8 @@ export default function IntakeChat() {
                     <button
                       type="button"
                       onClick={handleToggleMute}
-                      title={muted ? "Unmute — read questions aloud" : "Mute — stop reading questions aloud"}
-                      aria-label={muted ? "Unmute question audio" : "Mute question audio"}
+                      title={muted ? uiText(language).unmute : uiText(language).mute}
+                      aria-label={muted ? uiText(language).unmute : uiText(language).mute}
                       aria-pressed={muted}
                       className={`shrink-0 w-11 h-11 flex items-center justify-center rounded-xl border transition-colors ${
                         muted
@@ -1521,9 +1597,9 @@ export default function IntakeChat() {
                           const nextValue = e.target.value.slice(0, MAX_MESSAGE_LENGTH);
                           setInput(nextValue);
 
-                          const otherSelectedAlone = selectedOptions.includes("Other") && selectedOptions.length === 1;
+                          const otherSelectedAlone = isOnlyOtherSelected(selectedOptions);
                           if (otherSelectedAlone && !nextValue.trim()) {
-                            setOtherPrompt("Please explain your problem in the type section.");
+                            setOtherPrompt(uiText(language).explainOther);
                             setOtherRequired(true);
                           } else {
                             setOtherPrompt("");
@@ -1550,8 +1626,8 @@ export default function IntakeChat() {
                       type="button"
                       onClick={isRecording ? stopRecording : startRecording}
                       disabled={sending || isTranscribing}
-                      title={isRecording ? "Stop recording" : "Answer by voice"}
-                      aria-label={isRecording ? "Stop recording" : "Record your answer"}
+                      title={isRecording ? uiText(language).stopRecording : uiText(language).answerByVoice}
+                      aria-label={isRecording ? uiText(language).stopRecording : uiText(language).answerByVoice}
                       aria-pressed={isRecording}
                       className={`shrink-0 w-11 h-11 flex items-center justify-center rounded-xl border transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
                         isRecording
@@ -1573,13 +1649,13 @@ export default function IntakeChat() {
                       disabled={
                         sending ||
                         isRecording ||
-                        ((selectedOptions.includes("Other") && selectedOptions.length === 1 && !input.trim()) || otherRequired) ||
+                        ((isOnlyOtherSelected(selectedOptions) && !input.trim()) || otherRequired) ||
                         (!input.trim() && selectedOptions.length === 0)
                       }
                       className="shrink-0 flex items-center justify-center gap-2 bg-blue-700 hover:bg-blue-800 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-semibold px-5 py-3 rounded-xl transition-colors"
                     >
                       <Send size={16} />
-                      Send
+                      {uiText(language).send}
                     </button>
                   </form>
                 </>

@@ -13,9 +13,9 @@
 // accidents) and 102 (ambulance for pregnant women and newborns).
 
 const NUMBERS = {
-  '112': { number: '112', label: 'Emergency (police, fire, ambulance)' },
-  '108': { number: '108', label: 'Ambulance' },
-  '102': { number: '102', label: 'Pregnancy and newborn ambulance' },
+  '112': { number: '112', label: 'Emergency (police, fire, ambulance)', label_hi: 'आपातकाल (पुलिस, फायर, एम्बुलेंस)' },
+  '108': { number: '108', label: 'Ambulance', label_hi: 'एम्बुलेंस' },
+  '102': { number: '102', label: 'Pregnancy and newborn ambulance', label_hi: 'गर्भवती महिला और नवजात के लिए एम्बुलेंस' },
 };
 
 // "no chest pain", "chest pain nahi hai": a symptom the patient is denying. Only
@@ -41,6 +41,8 @@ const CATEGORIES = [
     numbers: ['112'],
     message:
       "You are not alone, and you deserve help right now. Please call 112 immediately, or ask someone near you to stay with you and take you to the nearest hospital.",
+    message_hi:
+      'आप अकेले नहीं हैं, और आपको अभी मदद मिलनी चाहिए। कृपया तुरंत 112 पर कॉल करें, या अपने पास किसी से कहें कि वे आपके साथ रहें और आपको नज़दीकी अस्पताल ले जाएं।',
     patterns: [
       { re: /suicid/, negatable: true },
       { re: /\bkill(?:ing)? (?:my ?self|me)\b/ },
@@ -59,6 +61,8 @@ const CATEGORIES = [
     numbers: ['102', '108', '112'],
     message:
       "This could be an emergency for you or your baby. Call 102 (pregnancy and newborn ambulance) now. If you can't reach 102, call 108 or 112.",
+    message_hi:
+      'यह आपके या आपके बच्चे के लिए आपातकाल हो सकता है। अभी 102 (गर्भवती महिला और नवजात के लिए एम्बुलेंस) पर कॉल करें। 102 न मिले तो 108 या 112 पर कॉल करें।',
     patterns: [
       { re: /\b(?:pregnan\w*|labou?r)\b.{0,60}\b(?:bleed\w*|severe pain|convuls\w*|fits?|not moving|no movement|water (?:has )?broke|leaking)\b/ },
       { re: /\b(?:baby|fetus|foetus)\b.{0,15}\b(?:is )?(?:not moving|stopped moving|isn'?t moving)\b/ },
@@ -168,6 +172,8 @@ const CATEGORIES = [
 
 const DEFAULT_MESSAGE =
   "This could be a medical emergency. Call 108 for an ambulance now (or 112). Don't wait for the clinic to reply.";
+const DEFAULT_MESSAGE_HI =
+  'यह एक मेडिकल आपातकाल हो सकता है। अभी 108 पर कॉल करके एम्बुलेंस बुलाएं (या 112 पर)। क्लिनिक के जवाब का इंतज़ार न करें।';
 
 // The clause around [start, end): from the nearest break before it to the nearest after.
 function clauseAround(text, start, end) {
@@ -199,14 +205,17 @@ function normalise(text) {
  * Looks for an emergency in what the patient said.
  *
  * @param {string} message
+ * @param {string} [language] The session's language. 'hi-IN' gets the message and number
+ *   labels in Hindi; anything else gets English. What the patient said is matched in both.
  * @returns {null | {
  *   category: string, reason: string, message: string,
  *   numbers: Array<{ number: string, label: string }>
  * }}
  */
-export function detectEmergency(message) {
+export function detectEmergency(message, language) {
   const text = normalise(message);
   if (!text.trim()) return null;
+  const hindi = language === 'hi-IN';
 
   for (const category of CATEGORIES) {
     for (const { re, negatable } of category.patterns) {
@@ -222,8 +231,12 @@ export function detectEmergency(message) {
         return {
           category: category.id,
           reason: `${category.label} (patient's words matched)`,
-          message: category.message || DEFAULT_MESSAGE,
-          numbers: category.numbers.map((n) => NUMBERS[n]),
+          // `reason` stays English: it goes to the doctor. Only what the patient reads is translated.
+          message: hindi ? category.message_hi || DEFAULT_MESSAGE_HI : category.message || DEFAULT_MESSAGE,
+          numbers: category.numbers.map((n) => ({
+            number: NUMBERS[n].number,
+            label: hindi ? NUMBERS[n].label_hi : NUMBERS[n].label,
+          })),
         };
       }
     }
