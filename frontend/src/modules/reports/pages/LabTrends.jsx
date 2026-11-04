@@ -258,20 +258,42 @@ function NoNumericDataCard() {
 
 /* ---------------------------- Stat cards ---------------------------- */
 
+const COLLAPSED_TEST_COUNT = 3;
+
 function StatRow({ series, activeTest, setActiveTest }) {
+  const [showAll, setShowAll] = useState(false);
   if (series.length === 0) return null;
 
+  // Every test with numbers can be charted, not just the first three. A test picked from the
+  // hidden part stays visible after the list is folded again.
+  const activeIndex = series.findIndex((s) => s.testName === activeTest);
+  const visible =
+    showAll || series.length <= COLLAPSED_TEST_COUNT
+      ? series
+      : series.filter((s, i) => i < COLLAPSED_TEST_COUNT || i === activeIndex);
+
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
-      {series.slice(0, 3).map((s) => (
-        <StatCard
-          key={s.testName}
-          series={s}
-          isActive={s.testName === activeTest}
-          onClick={() => setActiveTest(s.testName)}
-        />
-      ))}
-    </div>
+    <>
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
+        {visible.map((s) => (
+          <StatCard
+            key={s.testName}
+            series={s}
+            isActive={s.testName === activeTest}
+            onClick={() => setActiveTest(s.testName)}
+          />
+        ))}
+      </div>
+      {series.length > COLLAPSED_TEST_COUNT && (
+        <button
+          type="button"
+          onClick={() => setShowAll((prev) => !prev)}
+          className="mt-3 text-sm font-medium text-blue-600 hover:text-blue-700"
+        >
+          {showAll ? "Show fewer tests" : `Show all ${series.length} tests`}
+        </button>
+      )}
+    </>
   );
 }
 

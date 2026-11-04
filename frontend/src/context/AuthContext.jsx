@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { authService } from '../api/auth';
+import { skipNextReturnPath } from '../utils/returnPath';
 
 const AuthContext = createContext(null);
 
@@ -207,6 +208,7 @@ export const AuthProvider = ({ children }) => {
   };
 
   const logout = () => {
+    skipNextReturnPath();
     saveAuthSession(null, null, false);
   };
 

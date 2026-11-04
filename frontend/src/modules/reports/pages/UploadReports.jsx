@@ -202,18 +202,16 @@ export default function UploadReports({ onClose, onSubmit, token, initialEvent }
     // handwriting and the patient doesn't know either gets saved blank and
     // flagged, rather than forced to a fake value, so a clinician reviewing
     // it later knows to check the original document instead of trusting it.
-    if (!formData.title.trim()) {
-      alert('Please enter Report Title.');
-      return;
-    }
-
-    if (!formData.date) {
-      alert('Please select Visit Date.');
-      return;
-    }
-
-    if (!formData.category) {
-      alert('Please select Report Category.');
+    // Title, date and category live on the Manual Entry tab. A file saved straight from the
+    // Upload tab (or one the AI scan could not read) would otherwise be refused over a field
+    // that is not on screen, so open the form with the message beside the fields.
+    const missing = [];
+    if (!formData.title.trim()) missing.push('the report title');
+    if (!formData.date) missing.push('the visit date');
+    if (!formData.category) missing.push('the category');
+    if (missing.length > 0) {
+      if (activeTab === 'upload') setActiveTab('manual');
+      setSaveError(`Please fill in ${missing.join(' and ')} before saving.`);
       return;
     }
 

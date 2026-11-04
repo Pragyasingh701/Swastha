@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 import { startGoogleAuth } from "../../utils/googleAuth";
+import { postLoginRoute } from "../../utils/returnPath";
 import Logo from "../../components/common/Logo";
 
 export default function Login() {
@@ -41,7 +42,7 @@ export default function Login() {
       }
       setTimeout(() => {
         if (result?.user?.hasSelectedRole || (result?.user?.role && result?.user?.role !== 'none')) {
-          navigate(result?.user?.role === "doctor" ? "/doctor-dashboard" : "/dashboard", { replace: true });
+          navigate(postLoginRoute(result?.user), { replace: true });
         } else {
           navigate("/role-selection", { replace: true });
         }

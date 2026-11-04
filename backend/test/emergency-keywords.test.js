@@ -120,3 +120,17 @@ test('a symptom far into a very long message is still caught', () => {
   assert.equal(detectEmergency(long).category, 'chest');
   assert.ok(detectEmergency(long.slice(0, 8000) + 'x'.repeat(5000) + ' I want to die'));
 });
+
+test('a Hindi session gets the emergency message and number labels in Hindi, with the same numbers', () => {
+  for (const message of ['severe chest pain', 'I want to die', 'my newborn is not breathing']) {
+    const english = detectEmergency(message);
+    const hindi = detectEmergency(message, 'hi-IN');
+    assert.notEqual(hindi.message, english.message);
+    assert.match(hindi.message, /[ऀ-ॿ]/);
+    assert.deepEqual(numbersOf(hindi), numbersOf(english));
+    assert.equal(hindi.reason, english.reason, 'the reason is for the doctor and stays English');
+    for (const n of hindi.numbers) assert.match(n.label, /[ऀ-ॿ]/);
+    for (const d of hindi.message.match(/\d{2,}/g) || []) assert.ok(['112', '108', '102'].includes(d), `unexpected number ${d}`);
+  }
+  assert.equal(detectEmergency('I want to die', 'en-IN').message, detectEmergency('I want to die').message);
+});

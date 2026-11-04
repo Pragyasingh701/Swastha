@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-route
 import ErrorBoundary from "./components/common/ErrorBoundary";
 import AiNoticeGate from "./components/common/AiNoticeGate";
 import { useAuth } from "./context/AuthContext";
+import { rememberReturnPath } from "./utils/returnPath";
 
 // Landing Page
 import LandingPage from "./modules/landing/pages/LandingPage";
@@ -40,6 +41,12 @@ import IntakeChat from "./modules/intake/pages/IntakeChat";
 // Timeline
 import Timeline from "./modules/timeline/pages/Timeline";
 import MedicalVault from "./modules/vault/pages/MedicalVault";
+
+// Sends a signed-out visitor to the sign-in page and remembers where they were headed.
+function LoginRedirect({ from }) {
+  rememberReturnPath(from);
+  return <Navigate to="/login" state={{ from }} replace />;
+}
 
 function LoadingSpinner() {
   return (
@@ -127,28 +134,8 @@ function OTPRoute({ children }) {
   return children;
 }
 
-// ProtectedRoute: Restricted to authenticated users who have completed role setup.
-// Unauthenticated users -> redirect to /login.
-// Authenticated users without role -> redirect to /role-selection.
-function ProtectedRoute({ children }) {
-  const { isAuthenticated, user, authReady } = useAuth();
-  const location = useLocation();
-
-  if (!authReady) {
-    return <LoadingSpinner />;
-  }
-
-  if (!isAuthenticated) {
-    return <Navigate to="/login" state={{ from: location }} replace />;
-  }
-
-  if (!hasCompletedRole(user)) {
-    return <Navigate to="/role-selection" replace />;
-  }
-
-  return children;
-}
-// PatientRoute: same as ProtectedRoute, but also requires the user to be a patient.
+// PatientRoute: Restricted to signed-in users who have completed role setup AND are patients.
+// Unauthenticated users -> /login (the page they wanted is remembered); no role -> /role-selection.
 // Doctors who are logged in and try to access this get bounced to /doctor-dashboard.
 function PatientRoute({ children }) {
   const { isAuthenticated, user, authReady } = useAuth();
@@ -159,7 +146,7 @@ function PatientRoute({ children }) {
   }
 
   if (!isAuthenticated) {
-    return <Navigate to="/login" state={{ from: location }} replace />;
+    return <LoginRedirect from={location} />;
   }
 
   if (!hasCompletedRole(user)) {
@@ -173,7 +160,7 @@ function PatientRoute({ children }) {
   return children;
 }
 
-// DoctorRoute: same as ProtectedRoute, but also requires role === "doctor".
+// DoctorRoute: same checks as PatientRoute, but requires role === "doctor".
 // Patients who are logged in and try to access this get bounced to /dashboard.
 function DoctorRoute({ children }) {
   const { isAuthenticated, user, authReady } = useAuth();
@@ -184,7 +171,7 @@ function DoctorRoute({ children }) {
   }
 
   if (!isAuthenticated) {
-    return <Navigate to="/login" state={{ from: location }} replace />;
+    return <LoginRedirect from={location} />;
   }
 
   if (!hasCompletedRole(user)) {
@@ -254,27 +241,27 @@ export default function App() {
         <Route
           path="/vault"
           element={
-            <ProtectedRoute>
+            <PatientRoute>
               <MedicalVault />
-            </ProtectedRoute>
+            </PatientRoute>
           }
         />
 
         <Route
           path="/family-vault"
           element={
-            <ProtectedRoute>
+            <PatientRoute>
               <FamilyVault />
-            </ProtectedRoute>
+            </PatientRoute>
           }
         />
 
         <Route
           path="/timeline"
           element={
-            <ProtectedRoute>
+            <PatientRoute>
               <Timeline />
-            </ProtectedRoute>
+            </PatientRoute>
           }
         />
 
@@ -326,18 +313,18 @@ export default function App() {
         <Route
           path="/lab-trends"
           element={
-            <ProtectedRoute>
+            <PatientRoute>
               <LabTrends />
-            </ProtectedRoute>
+            </PatientRoute>
           }
         />
 
         <Route
           path="/search"
           element={
-            <ProtectedRoute>
+            <PatientRoute>
               <AISearch />
-            </ProtectedRoute>
+            </PatientRoute>
           }
         />
 

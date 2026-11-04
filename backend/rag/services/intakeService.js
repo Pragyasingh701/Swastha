@@ -2450,7 +2450,7 @@ async function runIntakeTurnForSession({ sessionId, patientId, patientMessage })
 
   // A plain keyword check on the patient's own words, run whatever the AI does with
   // them (it can miss a message, fail, or come back degraded). See emergencyKeywords.js.
-  const emergency = detectEmergency(patientMessage);
+  const emergency = detectEmergency(patientMessage, session.language || 'hi-IN');
 
   const turn = await runIntakeTurn({
     section: currentSection,

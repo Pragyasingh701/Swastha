@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 import { getGoogleRedirectUri, consumeGoogleOAuthContext } from "../../utils/googleAuth";
+import { postLoginRoute } from "../../utils/returnPath";
 
 export default function GoogleCallback() {
   const navigate = useNavigate();
@@ -51,7 +52,7 @@ export default function GoogleCallback() {
         }
 
         if (result?.user?.hasSelectedRole || (result?.user?.role && result?.user?.role !== "none")) {
-          navigate(result?.user?.role === "doctor" ? "/doctor-dashboard" : "/dashboard", { replace: true });
+          navigate(postLoginRoute(result?.user), { replace: true });
         } else {
           navigate("/role-selection", { replace: true });
         }

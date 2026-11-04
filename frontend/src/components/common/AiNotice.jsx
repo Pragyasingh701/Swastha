@@ -81,9 +81,12 @@ export function AiNoticeInfoLink({ feature }) {
  * intake.js's POST /start) is the real, server-side enforcement — this
  * modal only exists so the caller doesn't hit a confusing 403 on first use.
  */
-export function AiNoticeAckModal({ feature, onAccept, accepting }) {
-  const notice = AI_NOTICES[feature];
-  if (!notice) return null;
+export function AiNoticeAckModal({ feature, onAccept, accepting, language }) {
+  const base = AI_NOTICES[feature];
+  if (!base) return null;
+  // A notice can carry a Hindi version (`hi`), used when the page is in a Hindi session.
+  const hindi = language === "hi-IN" && base.hi;
+  const notice = hindi ? base.hi : base;
 
   return (
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
@@ -99,7 +102,9 @@ export function AiNoticeAckModal({ feature, onAccept, accepting }) {
           disabled={accepting}
           className="w-full h-11 flex items-center justify-center gap-2 bg-blue-700 hover:bg-blue-800 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-semibold rounded-xl transition-colors"
         >
-          {accepting ? "Continuing..." : "I understand, continue"}
+          {hindi
+            ? accepting ? "जारी है..." : "मैं समझ गया/गई हूं, आगे बढ़ें"
+            : accepting ? "Continuing..." : "I understand, continue"}
         </button>
       </div>
     </div>

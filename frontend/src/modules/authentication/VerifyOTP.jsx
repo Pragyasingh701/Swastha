@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 import OtpInput from "../../components/common/OtpInput";
+import { postLoginRoute } from "../../utils/returnPath";
 
 export default function VerifyOTP() {
   const navigate = useNavigate();
@@ -51,7 +52,7 @@ export default function VerifyOTP() {
       const result = await verifyOTP(email, otpString, location.state?.rememberMe ?? true, location.state?.rememberMe === true);
       setIsLoading(false);
       if (result?.user?.hasSelectedRole) {
-        navigate(result?.user?.role === 'doctor' ? "/doctor-dashboard" : "/dashboard", { replace: true });
+        navigate(postLoginRoute(result?.user), { replace: true });
       } else {
         navigate("/role-selection", { replace: true });
       }
