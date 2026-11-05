@@ -700,25 +700,19 @@ export default function DoctorPatients() {
 
                       {getAvailableCategories().length > 0 && (
                         <div className="relative">
-                          <button
-                            type="button"
-                            onClick={() => setCategoryFilter(categoryFilter ? '' : getAvailableCategories()[0])}
-                            className={`flex items-center gap-2 text-sm px-3 py-2 rounded-xl transition-all duration-200 ${
+                          <select
+                            value={categoryFilter}
+                            onChange={(e) => setCategoryFilter(e.target.value)}
+                            aria-label="Filter by category"
+                            className={`text-sm px-3 py-2 rounded-xl transition-all duration-200 border-0 focus:ring-2 focus:ring-blue-500 ${
                               categoryFilter ? "bg-blue-50 text-blue-600 font-medium" : "text-slate-600 bg-slate-50 hover:bg-slate-100 "
                             }`}
                           >
-                            {categoryFilter || "All categories"}
-                          </button>
-
-                          {categoryFilter && (
-                            <button
-                              type="button"
-                              onClick={() => setCategoryFilter('')}
-                              className="text-slate-400 hover:text-slate-600 text-xs"
-                            >
-                              ✕
-                            </button>
-                          )}
+                            <option value="">All categories</option>
+                            {getAvailableCategories().map((category) => (
+                              <option key={category} value={category}>{category}</option>
+                            ))}
+                          </select>
                         </div>
                       )}
                     </div>
@@ -855,7 +849,19 @@ export default function DoctorPatients() {
                         const Icon = meta.icon;
 
                         return (
-                          <div key={report.id} className={`rounded-2xl border border-slate-200 p-5 transition-all duration-200 hover:shadow-md ${meta.tone}`}>
+                          <div
+                            key={report.id}
+                            role="button"
+                            tabIndex={0}
+                            onClick={() => setSelectedEvent(mapEventToDisplay(report))}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter' || e.key === ' ') {
+                                e.preventDefault();
+                                setSelectedEvent(mapEventToDisplay(report));
+                              }
+                            }}
+                            className={`cursor-pointer rounded-2xl border border-slate-200 p-5 transition-all duration-200 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${meta.tone}`}
+                          >
                             <div className="flex flex-col-reverse sm:flex-row items-start justify-between gap-3 sm:gap-4">
                               <div className="flex items-start gap-4 flex-1 min-w-0 w-full">
                                 <Icon size={20} className="shrink-0 mt-1" />
