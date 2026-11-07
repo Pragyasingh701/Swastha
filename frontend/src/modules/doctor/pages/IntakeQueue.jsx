@@ -11,6 +11,7 @@ import {
   CheckCircle2,
   Trash2,
   History,
+  Clock,
 } from "lucide-react";
 import {
   getIntakeQueue,
@@ -176,7 +177,7 @@ function PageHeader({ count, isLoading, view, onChangeView }) {
         <p className="text-slate-500">
           {view === "queue"
             ? "Patient visit intakes from your linked patients — flagged sessions sort to the top. Click a patient to see their structured summary."
-            : "Sessions you've marked Completed or Removed from the active queue."}
+            : "Sessions you've marked Completed or Removed, and sessions whose access ended before you reviewed them."}
         </p>
       </div>
       {!isLoading && (
@@ -386,45 +387,70 @@ function IntakeHistoryList({ history, isLoading, error, onSelect }) {
         <div className="px-5 py-6 text-sm text-slate-400">Loading history…</div>
       ) : history.length === 0 ? (
         <div className="px-5 py-6 text-sm text-slate-400">
-          No completed or removed sessions yet. Actions you take from the Active Queue tab show up here.
+          No completed, removed or expired sessions yet. Actions you take from the Active Queue tab show up here, and so do sessions whose access ended before you reviewed them.
         </div>
       ) : (
         <ul className="divide-y divide-slate-100">
-          {history.map((h) => (
-            <li
-              key={h.session_id}
-              onClick={() => onSelect?.(h.session_id)}
-              className="flex items-center justify-between gap-4 px-5 py-4 cursor-pointer hover:bg-slate-50 transition-colors"
-            >
-              <div className="flex items-center gap-3 min-w-0">
-                <span
-                  className={`shrink-0 w-9 h-9 rounded-lg flex items-center justify-center ${
-                    h.action === "completed" ? "bg-emerald-100 text-emerald-600" : "bg-slate-100 text-slate-500"
-                  }`}
-                >
-                  {h.action === "completed" ? <CheckCircle2 size={17} /> : <Trash2 size={17} />}
-                </span>
-                <div className="min-w-0">
-                  <p className="text-sm font-semibold text-slate-900 truncate">{h.patient_name}</p>
-                  <p className="text-sm text-slate-500 truncate flex items-center gap-2">
-                    <span className="truncate">{h.chief_complaint || "No chief complaint recorded"}</span>
-                  </p>
+          {history.map((h) => {
+            // An expired row is a session the patient's access ended before the doctor reviewed it.
+            // It carries no clinical text and cannot be opened: the doctor no longer has access.
+            const expired = h.action === "expired";
+            const completed = h.action === "completed";
+            return (
+              <li
+                key={h.session_id}
+                onClick={expired ? undefined : () => onSelect?.(h.session_id)}
+                className={`flex items-center justify-between gap-4 px-5 py-4 transition-colors ${
+                  expired ? "" : "cursor-pointer hover:bg-slate-50"
+                }`}
+              >
+                <div className="flex items-center gap-3 min-w-0">
+                  <span
+                    className={`shrink-0 w-9 h-9 rounded-lg flex items-center justify-center ${
+                      completed
+                        ? "bg-emerald-100 text-emerald-600"
+                        : expired
+                          ? "bg-amber-100 text-amber-600"
+                          : "bg-slate-100 text-slate-500"
+                    }`}
+                  >
+                    {completed ? <CheckCircle2 size={17} /> : expired ? <Clock size={17} /> : <Trash2 size={17} />}
+                  </span>
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold text-slate-900 truncate">{h.patient_name}</p>
+                    <p className="text-sm text-slate-500 truncate flex items-center gap-2">
+                      {expired ? (
+                        <>
+                          <span className="truncate">Access ended before this was reviewed</span>
+                          {h.priority === "flagged" && (
+                            <span className="shrink-0 inline-flex items-center gap-1 text-xs font-medium text-red-600">
+                              <AlertTriangle size={12} /> Flagged
+                            </span>
+                          )}
+                        </>
+                      ) : (
+                        <span className="truncate">{h.chief_complaint || "No chief complaint recorded"}</span>
+                      )}
+                    </p>
+                  </div>
                 </div>
-              </div>
-              <div className="shrink-0 text-right">
-                <span
-                  className={`inline-block text-xs font-medium px-2.5 py-1 rounded-full ${
-                    h.action === "completed"
-                      ? "bg-emerald-50 text-emerald-700"
-                      : "bg-slate-100 text-slate-600"
-                  }`}
-                >
-                  {h.action === "completed" ? "Completed" : "Removed"}
-                </span>
-                <p className="text-xs text-slate-400 mt-1">{formatDateTime(h.acted_at, { withYear: false })}</p>
-              </div>
-            </li>
-          ))}
+                <div className="shrink-0 text-right">
+                  <span
+                    className={`inline-block text-xs font-medium px-2.5 py-1 rounded-full ${
+                      completed
+                        ? "bg-emerald-50 text-emerald-700"
+                        : expired
+                          ? "bg-amber-50 text-amber-700"
+                          : "bg-slate-100 text-slate-600"
+                    }`}
+                  >
+                    {completed ? "Completed" : expired ? "Expired" : "Removed"}
+                  </span>
+                  <p className="text-xs text-slate-400 mt-1">{formatDateTime(h.acted_at, { withYear: false })}</p>
+                </div>
+              </li>
+            );
+          })}
         </ul>
       )}
     </div>

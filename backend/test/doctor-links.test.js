@@ -374,3 +374,38 @@ test('an emailed link for a request that expired no longer works', async () => {
   assert.match(String(late.body), /expired/i);
   assert.equal(linkRow().status, 'pending');
 });
+
+// ── an intake the doctor never reviewed before access ended ──────────────
+
+test('an unreviewed intake shows in the doctor\'s History as expired once access ends, without its content', async () => {
+  const linkId = await grantAccess();
+  db.insert('intake_sessions', {
+    id: 'sess1', patient_id: patient.id, doctor_id: null, status: 'completed', priority: 'flagged',
+    chief_complaint: 'crushing chest pain', red_flag_reason: 'chest pain', structured_history: { hpi: { onset: 'today' } },
+    created_at: new Date(Date.now() - HOUR).toISOString(),
+  });
+  const historyOf = () => app.api('GET', '/api/doctor-patients/intake-queue/history', { token: tokens.doctorA });
+
+  // While access lasts it is in the live queue and nothing is expired.
+  assert.deepEqual((await app.api('GET', '/api/doctor-patients/intake-queue', { token: tokens.doctorA })).body.sessions.map((s) => s.session_id), ['sess1']);
+  assert.deepEqual((await historyOf()).body.history, []);
+
+  await update(linkId, { access_expires_at: new Date(Date.now() - 1000).toISOString() });
+
+  // Access ended: gone from the live queue, and listed as expired instead of just vanishing.
+  assert.deepEqual((await app.api('GET', '/api/doctor-patients/intake-queue', { token: tokens.doctorA })).body.sessions, []);
+  const { body } = await historyOf();
+  assert.equal(body.history.length, 1);
+  assert.equal(body.history[0].session_id, 'sess1');
+  assert.equal(body.history[0].action, 'expired');
+  assert.equal(body.history[0].patient_name, patient.name);
+  assert.equal(body.history[0].priority, 'flagged');
+  const serialized = JSON.stringify(body);
+  for (const secret of ['crushing chest pain', 'chest pain', 'onset']) {
+    assert.equal(serialized.includes(secret), false, `History leaked "${secret}"`);
+  }
+  // It cannot be opened: the doctor no longer has access to this patient.
+  assert.equal((await app.api('GET', '/api/doctor-patients/intake-queue/sess1', { token: tokens.doctorA })).status, 404);
+  // Another doctor never sees it.
+  assert.deepEqual((await app.api('GET', '/api/doctor-patients/intake-queue/history', { token: tokens.doctorB })).body.history, []);
+});

@@ -111,11 +111,15 @@ export default function NotificationBell() {
   // A 'request' row's own type never changes once resolved — the resolved
   // status is a SECOND row (type 'accepted'/'declined') sharing the same
   // linkId, so "still pending" means no such partner row exists yet.
+  // The doctor's side has its own pair of partner types ('patient-accepted' / 'patient-declined');
+  // leaving them out kept a doctor's red dot on forever for requests the patient had already answered.
   const resolvedLinkIds = new Set(
-    notifications.filter((n) => n.type === "accepted" || n.type === "declined").map((n) => n.linkId)
+    notifications
+      .filter((n) => ["accepted", "declined", "patient-accepted", "patient-declined"].includes(n.type))
+      .map((n) => n.linkId)
   );
   const pendingCount = notifications.filter(
-    (n) => n.type === "request-sent" || (n.type === "request" && !resolvedLinkIds.has(n.linkId))
+    (n) => (n.type === "request-sent" || n.type === "request") && !resolvedLinkIds.has(n.linkId)
   ).length;
 
   return (

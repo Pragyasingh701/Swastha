@@ -193,3 +193,31 @@ test('indexing catches up only the reports with no search chunks, however many c
   assert.deepEqual(indexed, [401]);
   assert.equal(result.indexed, 1);
 });
+
+// ── sessions that expired unreviewed ─────────────────────────────────────
+
+const { getExpiredUnreviewedSessions } = await import('../db/intakeSessions.js');
+
+test('a session the doctor never reviewed is listed as expired once access ended, with no clinical text', async () => {
+  reset();
+  const ended = day(10);
+  db.insert('intake_sessions', { id: 'missed', patient_id: 'pat_1', doctor_id: null, status: 'completed', priority: 'flagged', chief_complaint: 'chest pain', red_flag_reason: 'chest pain', structured_history: { secret: 1 }, created_at: day(9) });
+  db.insert('intake_sessions', { id: 'after', patient_id: 'pat_1', doctor_id: null, status: 'completed', priority: 'routine', created_at: day(11) });
+  db.insert('intake_sessions', { id: 'handled', patient_id: 'pat_1', doctor_id: null, status: 'completed', priority: 'routine', created_at: day(8) });
+  db.insert('intake_session_actions', { session_id: 'handled', doctor_id: DOCTOR, patient_id: 'pat_1', action: 'completed' });
+  db.insert('intake_sessions', { id: 'walked-away', patient_id: 'pat_1', doctor_id: null, status: 'abandoned', priority: 'routine', created_at: day(7) });
+  db.insert('intake_sessions', { id: 'other-doctors', patient_id: 'pat_1', doctor_id: 'doc_2', status: 'completed', priority: 'routine', created_at: day(6) });
+  db.insert('intake_sessions', { id: 'other-patient', patient_id: 'pat_2', doctor_id: null, status: 'completed', priority: 'routine', created_at: day(5) });
+
+  const rowsOut = await getExpiredUnreviewedSessions(DOCTOR, [{ patientId: 'pat_1', accessEndedAt: ended }]);
+  assert.deepEqual(rowsOut.map((r) => r.session_id), ['missed']);
+  assert.equal(rowsOut[0].priority, 'flagged');
+  assert.equal(rowsOut[0].expired_at, new Date(ended).toISOString());
+  assert.deepEqual(Object.keys(rowsOut[0]).sort(), ['created_at', 'expired_at', 'origin', 'patient_id', 'priority', 'session_id']);
+});
+
+test('nothing expires when no access has lapsed', async () => {
+  reset();
+  db.insert('intake_sessions', { id: 's1', patient_id: 'pat_1', doctor_id: null, status: 'completed', priority: 'routine', created_at: day(1) });
+  assert.deepEqual(await getExpiredUnreviewedSessions(DOCTOR, []), []);
+});
