@@ -23,11 +23,15 @@ import {
   setIntakeSessionDoctorAction,
   getIntakeActionHistoryForDoctor,
   getIntakeSessionActionedByDoctor,
+  getExpiredUnreviewedSessions,
   getPatientNamesByIds,
 } from '../db/intakeSessions.js';
 import { getAuthUser } from '../config/jwt.js';
 import { renderMessagePage, renderConfirmPage } from '../utils/emailActionPage.js';
 import { fetchWithTimeout, TIMEOUTS } from '../utils/fetchWithTimeout.js';
+
+// How far back History lists sessions that expired without being reviewed.
+const EXPIRED_HISTORY_DAYS = 30;
 
 const router = express.Router();
 // RAG used to be a separate service/process (RAG_BASE_URL pointed at its
@@ -284,8 +288,22 @@ router.get('/intake-queue/history', requireDoctor, async (req, res) => {
     const history = await getIntakeActionHistoryForDoctor(authUser.userId);
     const names = await getPatientNamesByIds(history.map((h) => h.patient_id));
 
-    return res.json({
-      history: history.map((h) => ({
+    // Sessions whose patient's access ended before this doctor got to them. They left the live queue
+    // with access, so without this they would just disappear. Only recent ones (the last
+    // EXPIRED_HISTORY_DAYS days), so the list does not grow for ever.
+    const sinceMs = Date.now() - EXPIRED_HISTORY_DAYS * 24 * 60 * 60 * 1000;
+    const patients = await getDoctorPatients(authUser.userId);
+    const lapsed = patients.filter(
+      (p) => p.linkStatus === 'expired' && p.accessExpiresAt && new Date(p.accessExpiresAt).getTime() >= sinceMs
+    );
+    const expired = await getExpiredUnreviewedSessions(
+      authUser.userId,
+      lapsed.map((p) => ({ patientId: p.patientUserId, accessEndedAt: p.accessExpiresAt }))
+    );
+    const lapsedNameById = new Map(lapsed.map((p) => [p.patientUserId, p.patient_name]));
+
+    const entries = [
+      ...history.map((h) => ({
         session_id: h.session_id,
         patient_id: h.patient_id,
         patient_name: names[h.patient_id] || 'Patient',
@@ -297,7 +315,21 @@ router.get('/intake-queue/history', requireDoctor, async (req, res) => {
         acted_at: h.acted_at,
         created_at: h.created_at,
       })),
-    });
+      // No complaint or red-flag text: access to this patient has ended, so it only says that a
+      // session was missed. The page does not open it.
+      ...expired.map((e) => ({
+        session_id: e.session_id,
+        patient_id: e.patient_id,
+        patient_name: lapsedNameById.get(e.patient_id) || 'Patient',
+        priority: e.priority,
+        origin: e.origin,
+        action: 'expired',
+        acted_at: e.expired_at,
+        created_at: e.created_at,
+      })),
+    ].sort((a, b) => new Date(b.acted_at) - new Date(a.acted_at));
+
+    return res.json({ history: entries });
   } catch (error) {
     console.error('Intake queue history fetch error:', error);
     return res.status(500).json({ message: 'Unable to load intake queue history.' });

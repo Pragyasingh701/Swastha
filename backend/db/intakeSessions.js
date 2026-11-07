@@ -108,6 +108,56 @@ async function withoutSessionsThisDoctorHandled(sessions, doctorId) {
 }
 
 /**
+ * Sessions the doctor never got to: the patient's 24 hour access ended while they were still in this
+ * doctor's queue, so they dropped out of it without being Completed or Removed. They are listed in
+ * the doctor's History as "expired" so they do not just disappear.
+ *
+ * Only what the doctor could see while access lasted: the session must have started before access
+ * ended, and be this doctor's own or unclaimed (same scoping as the queue). Sessions the patient
+ * walked away from ('abandoned') are left out, as in the queue, and so is anything this doctor
+ * already handled. Nothing clinical is returned (no complaint, no red-flag text): the doctor no
+ * longer has access to this patient's records, so this says only that a session was missed, who it
+ * was and whether it was flagged.
+ *
+ * @param {string} doctorId
+ * @param {Array<{ patientId: string, accessEndedAt: string }>} lapsedLinks - links whose access has ended
+ * @returns {Promise<Array<{ session_id, patient_id, priority, origin, created_at, expired_at }>>}
+ */
+export async function getExpiredUnreviewedSessions(doctorId, lapsedLinks) {
+  if (!doctorId || !supabase || !Array.isArray(lapsedLinks) || lapsedLinks.length === 0) return [];
+
+  const endedAtByPatient = new Map(lapsedLinks.map((l) => [l.patientId, new Date(l.accessEndedAt).getTime()]));
+  const { data, error } = await selectAllIn(
+    [...endedAtByPatient.keys()],
+    (chunk) => supabase
+      .from('intake_sessions')
+      .select('id, patient_id, doctor_id, priority, origin, status, doctor_action, created_at')
+      .in('patient_id', chunk)
+      .or(`doctor_id.is.null,doctor_id.eq.${doctorId}`)
+      .neq('status', 'abandoned')
+      .order('created_at', { ascending: true })
+      .order('id', { ascending: true }),
+    { label: 'expired intake sessions' }
+  );
+  if (error) {
+    throw new Error(`getExpiredUnreviewedSessions: failed to load sessions: ${error.message}`);
+  }
+
+  const startedWhileAccessLasted = (data || []).filter(
+    (s) => new Date(s.created_at).getTime() <= endedAtByPatient.get(s.patient_id)
+  );
+  const unreviewed = await withoutSessionsThisDoctorHandled(startedWhileAccessLasted, doctorId);
+  return unreviewed.map((s) => ({
+    session_id: s.id,
+    patient_id: s.patient_id,
+    priority: s.priority,
+    origin: s.origin,
+    created_at: s.created_at,
+    expired_at: new Date(endedAtByPatient.get(s.patient_id)).toISOString(),
+  }));
+}
+
+/**
  * Single session detail (doctor clicking into a queue row) — full
  * structured_history (SOCRATES fields, drug/allergy) for the structured
  * summary view. Ownership (patient_id belongs to an 'accepted'-linked
