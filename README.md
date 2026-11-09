@@ -21,14 +21,16 @@ the **Frontend SPA** (Vite/React, `:5173`).
 ## 🌟 Key features
 
 - **Accounts:** patient and doctor sign-up, email or Google login with a 6-digit email code, password reset.
-- **Timeline & vault:** upload reports (OCR reads the file; unclear fields are flagged), a chronological health timeline, a medical vault, and lab trend charts.
-- **Ask Swastha:** natural-language questions answered from the patient's own records, with sources.
+- **Timeline & vault:** upload reports (OCR reads the file; unclear fields are flagged), a chronological health timeline, a medical vault, and lab trend charts for every test. AI summaries are written only when you ask for one.
+- **Ask Swastha:** natural-language questions answered from the patient's own records, with sources. It remembers the conversation, so a follow-up question is understood; "New chat" starts over, and a failed or degraded answer can be retried.
 - **Family vault:** manage family members and link adult members through an email consent request.
 - **Doctor access:** a doctor links a patient by patient code, the patient approves, access lasts 24 hours and the patient can end it sooner. Declined or unanswered requests follow retry and cool-down rules.
-- **Intake:** a Hindi/English voice or text intake collects a structured history before the visit. Doctors work from a priority queue with red-flag highlighting and keep a history of what they handled. **Clinic check-in** codes rotate daily.
+- **Intake:** a Hindi/English voice or text intake collects a structured history before the visit. Hindi applies to everything after the language is chosen (the AI notice, the chat and the emergency message); the rest of the app is English. Doctors work from a priority queue with red-flag highlighting and keep a history of what they handled. A session whose access ended before the doctor reviewed it is listed in History as **Expired** (without its content). **Clinic check-in** codes rotate daily.
 - **AI consent & transparency:** an AI notice must be accepted before records go to an AI provider, every AI request logs which provider handled it, and AI output is labelled as AI-generated.
 
-> Doctor registration certificates are scanned but **not yet verified** against an official register.
+> Doctor registration certificates are scanned but **not yet verified** against an official register: a scan can leave a doctor `pending`, never `verified`.
+>
+> All AI notice text, including the Hindi version, is placeholder copy that still needs legal sign-off (see the TODO in `frontend/src/config/aiNotices.js`).
 
 ---
 
@@ -39,8 +41,13 @@ npm install        # one install for the whole repo
 npm run dev        # backend on :5001 and frontend on :5173
 ```
 
-Separately: `npm run dev:backend` and `npm run dev:frontend`. Tests: `npm test` (backend, node:test) and
-`npm run test:frontend` (vitest). Several backend tests use the real Supabase project in `backend/.env`.
+Separately: `npm run dev:backend` and `npm run dev:frontend`. Tests:
+
+- `npm run test:ci` runs the backend tests (node:test) against an in-memory database. This is what CI runs, and it needs no credentials.
+- `npm test` also runs `backend/test/live`, which uses the real Supabase project in `backend/.env`.
+- `npm run test:frontend` runs the frontend tests (vitest).
+
+`.github/workflows/ci.yml` runs the backend and frontend tests and the build on every pull request and every push to `main`.
 
 ### Environment
 
@@ -65,7 +72,8 @@ Optional tuning variables are listed in `backend/.env.example` (rate limits, COR
 
 - **Frontend (Vercel):** `vercel.json` rewrites to `index.html` and sends security headers, including an enforced
   Content-Security-Policy. Allow any new external script, font, image host or API origin there.
-- **Backend (e.g. Render):** set the variables above.
+- **Backend (e.g. Render):** set the variables above and use `npm start` as the start command. Run **one instance**: the per-session double-tap lock on the intake and the Ask Swastha conversation memory are kept in the server's memory, so with several instances a lock can be missed and a follow-up can lose its context (a restart also clears them).
+- **AI time limits:** each AI call has an overall deadline (intake dialogue 30 s, summaries and answers 60 s, embeddings 45 s, reading a document or certificate 90 s). When it passes, the call gives up the same way it does when every provider has failed. The values are in `backend/rag/config/aiClient.js`.
 - **Database:** run `supabase/schema/00000000000000_baseline_schema.sql` in the Supabase SQL editor on a new project and keep the `reports` bucket private.
   The baseline also schedules `public.monthly_cleanup()` (pg_cron, midnight India time at the end of every month). It
   removes check-in codes from earlier days and sign-ups that never chose a role for 30 days, and marks intake sessions
@@ -79,20 +87,22 @@ Optional tuning variables are listed in `backend/.env.example` (rate limits, COR
 backend/
   app.js, server.js     Express app (CORS, helmet, rate limits) and entry point
   config/               JWT, Supabase, storage, wire-encryption field list
+  crypto/, services/    Wire-encryption sessions and helpers; the certificate scan
   db/                   One persistence file per area (users, reports, family, doctorPatients, intake, ...)
   routes/               auth, family, reports, doctorPatients, clinic, crypto
-  middleware/, utils/   CORS, rate limits, wire encryption; mailer, password policy, validation
+  middleware/, utils/   CORS, rate limits, wire encryption; mailer, password policy, validation, paged reads
   rag/                  AI sub-app: search, extraction, summaries, intake dialogue, voice, evals
   test/                 node:test suites
 frontend/src/
   api/                  Backend call wrappers + wire encryption
   components/common/    Shared UI (AppHeader, PatientSidebar, AI notice, ...)
-  config/, utils/       Report categories, AI notice text; date and form helpers
+  config/, utils/       Report categories, AI notice text; date and form helpers, return-to-page after sign-in
   modules/              authentication, dashboard, doctor, family, intake, landing, reports, search, settings, timeline, vault
 supabase/
   schema/               The full database schema, kept up to date
   migrations_archive/   Every migration script, kept as history
 scripts/                purge-audit-log.js (scheduled)
+.github/workflows/      CI: backend and frontend tests, build
 vercel.json             Frontend hosting and security headers
 ```
 
@@ -110,6 +120,10 @@ the same commit.
 | Doctor ↔ patient | `doctor_patient`, `clinic_checkin_codes` |
 | Intake | `intake_sessions`, `intake_session_actions` |
 | AI privacy | `ai_notice_acknowledgements`, `ask_swastha_access_log`, `ask_swastha_feedback`, `ai_request_log` |
+
+Supabase answers any read with at most 1000 rows (`max_rows` in `supabase/config.toml`) and says nothing when it cuts a
+list short. Any query that can return more must read in pages with `selectAll` / `selectAllIn` from
+`backend/utils/pagedSelect.js` and end its `order` with a unique column such as `id`.
 
 Row Level Security is on for every table with **no policies** (deny-all to the public keys). The backend uses the
 service-role key, so every query must filter by `patient_id` / `recipient_id` itself. Report files live in a private
